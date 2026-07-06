@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptionStylePanel } from "@/components/editor/caption-style-panel";
+import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { VideoPreview } from "@/components/editor/video-preview";
@@ -228,6 +229,7 @@ export function ClipEditor({
             layout={state.layout}
             onChange={(layout) => updateState((prev) => ({ ...prev, layout }))}
           />
+          <ExportPanel clipId={clipId} />
         </div>
       </div>
     </div>

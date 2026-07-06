@@ -1,3 +1,4 @@
+import { runOnePendingExportJob } from "@/lib/exports/runner";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
@@ -12,6 +13,9 @@ async function loop() {
     let processed = false;
     try {
       processed = await runOnePendingJob();
+      // export_jobs is a separate table/queue from processing_jobs (guide §6) — poll it too so
+      // one worker process drains both.
+      processed = (await runOnePendingExportJob()) || processed;
     } catch (error) {
       console.error("[worker] unexpected error while polling for jobs", error);
     }

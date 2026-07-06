@@ -94,6 +94,12 @@ enum GeneratedClipStatus {
   @@map("generated_clip_status")
 }
 
+enum ExportPreset {
+  MP4_1080 @map("mp4_1080")
+
+  @@map("export_preset")
+}
+
 model User {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String       @unique
@@ -129,6 +135,7 @@ model Workspace {
   usageLedger    UsageLedger[]
   generatedClips GeneratedClip[]
   clipScores     ClipScore[]
+  exportJobs     ExportJob[]
 
   @@index([ownerId])
   @@map("workspaces")
@@ -301,10 +308,11 @@ model GeneratedClip {
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
-  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  score     ClipScore?
-  edits     ClipEdit[]
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  score      ClipScore?
+  edits      ClipEdit[]
+  exportJobs ExportJob[]
 
   @@unique([projectId, rank])
   @@index([workspaceId])
@@ -349,4 +357,51 @@ model ClipScore {
 
   @@index([workspaceId])
   @@map("clip_scores")
+}
+
+// Deliberately a separate table from processing_jobs (guide §6): exports are per-clip, and a
+// project's several clips can each have independent, concurrent export histories. state reuses
+// ProcessingJobState per the guide's "(same enum as processing_jobs)" note rather than a new enum.
+model ExportJob {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clipId           String             @map("clip_id") @db.Uuid
+  workspaceId      String             @map("workspace_id") @db.Uuid
+  preset           ExportPreset       @default(MP4_1080)
+  state            ProcessingJobState @default(QUEUED)
+  progress         Int                @default(0)
+  attempt          Int                @default(0)
+  idempotencyKey   String             @unique @map("idempotency_key")
+  filename         String
+  errorCode        String?            @map("error_code")
+  errorMessageUser String?            @map("error_message_user")
+  minutesCharged   Decimal?           @map("minutes_charged") @db.Decimal(10, 2)
+  outputFileId     String?            @unique @map("output_file_id") @db.Uuid
+  startedAt        DateTime?          @map("started_at")
+  finishedAt       DateTime?          @map("finished_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  clip       GeneratedClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  workspace  Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  outputFile ExportedFile? @relation(fields: [outputFileId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([clipId])
+  @@map("export_jobs")
+}
+
+model ExportedFile {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  storageKey        String   @map("storage_key")
+  bytes             BigInt
+  width             Int
+  height            Int
+  checksum          String
+  downloadExpiresAt DateTime @map("download_expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  exportJob ExportJob?
+
+  @@map("exported_files")
 }

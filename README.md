@@ -1,6 +1,6 @@
 # Sermon Clipper
 
-Standalone Phase 1-5 foundation for a church-focused long-video-to-short-clips product.
+Standalone Phase 1-6 foundation for a church-focused long-video-to-short-clips product.
 
 This repository is intentionally separate from Pulpit Engine. It does not import Pulpit Engine code, connect to Pulpit Engine databases, reuse Railway services, or require live provider credentials.
 
@@ -31,11 +31,19 @@ Implemented:
   center/face/manual layout with a manual crop box, a DOM/CSS preview (real video playback,
   caption overlay, word-skip over deletions, safe-zone guide), and versioned autosave + explicit
   save with optimistic-concurrency conflict detection
+- Real export rendering (`/app/clips/:id/editor` → Export, `/app/exports` history): a real
+  multi-pass FFmpeg pipeline (frame-accurate sub-range extraction + concat for word-deletes, crop
+  resolved from layout mode, scale-to-fill 1080×1920, `.ass` caption burn-in via libass matching
+  the editor's presets/overrides, `loudnorm` audio, x264/AAC encode); a separate `export_jobs`
+  queue (own DB table, same worker process) with automatic retry-twice-then-fail and a
+  reuses-the-same-job "try again"; session-authenticated download links with a 7-day expiry and
+  re-sign action
 - Seeded demo workspace, source video, project, stub job, usage ledger, and sample clip
 - Unit tests for workspace scoping, draft project creation, ffprobe parsing, ledger math, the
   whisper.cpp output parser, SRT parsing, filler detection, transcript chunking/dedup, the
-  heuristic clip scorer, editor state/word helpers, and caption-line derivation; a separate
-  real-database integration suite for the ledger (`npm run test:integration`)
+  heuristic clip scorer, editor state/word helpers, caption-line derivation, export crop
+  resolution, kept-range/timeline mapping, ASS subtitle generation, and the export filename
+  builder; a separate real-database integration suite for the ledger (`npm run test:integration`)
 - CI workflow for lint, typecheck, tests, Prisma validation, and build
 
 Stubbed by design:
@@ -45,7 +53,10 @@ Stubbed by design:
   `TRANSCRIBE_PROVIDER_UNAVAILABLE` rather than faking a transcript — see DECISIONS.md)
 - Real AI-scored clip analysis when no `ANTHROPIC_API_KEY` is configured (falls back to the
   heuristic scorer rather than faking an LLM verdict — see DECISIONS.md)
-- Rendering, billing, and publishing providers
+- Face-tracking layout mode (falls back to the same center crop as "center" mode — no per-frame
+  face detection yet, per guide §14's own Phase 8 deferral)
+- Per-word karaoke caption animation (all presets burn in at the line level — see DECISIONS.md)
+- Billing and publishing providers
 - Production OTP or Google OAuth
 - Pulpit Engine bridge
 
@@ -87,10 +98,11 @@ npm run dev
 npm run worker
 ```
 
-`npm run worker` polls the database for queued processing jobs (FINALIZE, PROBE) and runs them
-with real ffmpeg/ffprobe. Uploading a video also kicks off a few inline processing attempts
-right after project creation, so a real upload usually finishes without the worker running — but
-the worker is the durable path and is required for anything the inline kick doesn't finish.
+`npm run worker` polls the database for queued processing jobs (FINALIZE, PROBE, ...) and export
+jobs (a separate table/queue it polls in the same loop), running both with real ffmpeg/ffprobe.
+Uploading a video also kicks off a few inline processing attempts right after project creation,
+so a real upload usually finishes without the worker running — but the worker is the durable
+path and is required for anything the inline kick doesn't finish, and it's required for exports.
 
 Open [http://localhost:3000](http://localhost:3000). Use `demo@sermonclipper.local` on the dev login screen.
 
@@ -113,13 +125,16 @@ npm run test:integration
 ## Notes
 
 - `.env.example` contains only local development placeholders.
-- Rendering, billing, and publishing providers are intentionally absent — see DECISIONS.md for
-  what's stubbed and why. Video upload/probing (Phase 2), transcription (Phase 3), AI clip
-  generation (Phase 4), and the clip editor (Phase 5) are real.
+- Billing and publishing providers are intentionally absent — see DECISIONS.md for what's stubbed
+  and why. Video upload/probing (Phase 2), transcription (Phase 3), AI clip generation (Phase 4),
+  the clip editor (Phase 5), and export rendering (Phase 6) are all real.
 - The editor's video preview streams the original source file directly (with HTTP Range support)
   rather than a separate low-res proxy — no extra render step needed for a real, scrubbable
-  preview. Crop/caption rendering is a DOM/CSS approximation; the server render (Phase 6) is the
-  source of truth for the final export, per guide §12.
+  preview. Crop/caption rendering in the browser is a DOM/CSS approximation; the FFmpeg export
+  render is the actual source of truth, per guide §12, and uses the same pure crop/caption-line
+  helpers as the preview so the two can't silently drift apart.
+- Exports need the ffmpeg binary built with libass (`ffmpeg -filters | grep subtitles`) for
+  caption burn-in; Homebrew's `ffmpeg` on macOS includes it by default.
 - Transcription needs a local whisper.cpp setup: install the `whisper-cli` binary (e.g.
   `brew install whisper-cpp`) and download a ggml model (see whisper.cpp's
   `models/download-ggml-model.sh`, or fetch one directly from

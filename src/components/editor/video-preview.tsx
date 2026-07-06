@@ -2,19 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
-import { getCaptionPreset, type CaptionStyle } from "@/lib/editor/caption-presets";
+import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
 import type { EditorWordWithDeletion } from "@/lib/editor/words";
-
-function resolveStyle(presetId: string, overrides: EditorState["captions"]["overrides"]): CaptionStyle {
-  const preset = getCaptionPreset(presetId);
-  const style: CaptionStyle = { ...preset.style };
-  if (overrides.sizePx !== undefined) style.sizePx = overrides.sizePx;
-  if (overrides.position !== undefined) style.position = overrides.position;
-  if (overrides.uppercase !== undefined) style.uppercase = overrides.uppercase;
-  if (overrides.highlightColor !== undefined) style.highlightColor = overrides.highlightColor;
-  return style;
-}
 
 export function VideoPreview({
   sourceVideoId,
@@ -44,7 +34,7 @@ export function VideoPreview({
     state.captions.textOverrides,
   );
 
-  const style = resolveStyle(state.captions.presetId, state.captions.overrides);
+  const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
   const currentLine = captionLines.find(
     (line) => currentMs >= line.startMs && currentMs < line.endMs,
   );

@@ -209,3 +209,63 @@ Why: Caught in real browser testing. `editorState.version` (duplicated inside th
 Tradeoff: None — this is a pure bug fix. Worth noting for Phase 6+: any future comparison between a client-held editor state and a server-returned one needs the same version-field exclusion, or the same sync-after-save discipline.
 
 Status: Active.
+
+## 2026-07-06 - Export Rendering Is A Real Multi-Pass FFmpeg Pipeline
+
+Decision: Phase 6 exports render for real: `src/lib/export/kept-ranges.ts` computes surviving sub-ranges from deleted-word spans, `src/lib/export/crop.ts` resolves the effective crop rect per layout mode, `src/lib/export/ass-generator.ts` emits a real `.ass` file from the same caption-line/style helpers the editor preview uses, and `src/lib/export/render.ts` runs three ffmpeg passes: (1) frame-accurate re-encode + extract of each kept sub-range, (2) concat-demuxer stitch of those segments, (3) one final pass applying crop → scale-to-fill → re-crop-to-exact-size → `subtitles=` burn-in → `loudnorm` → x264/AAC encode. Verified against two real clips from the Phase 3-5 fixture (one with a real word deletion + manual crop + Bold Serif captions, one on default center-crop/Clean-preset/auto-filler-removal): both produced real 1080×1920 MP4s with correctly styled burned-in captions (confirmed by extracting and viewing frames) and the expected shortened duration.
+
+Why: Three simpler ffmpeg passes over one large `filter_complex` graph is much easier to get right and debug — each pass has one job, and intermediate files can be inspected independently while building it. The cost (one extra full encode) is negligible for clip-length (seconds-to-minutes) exports.
+
+Tradeoff: Frame-accurate cuts are bounded by the source's frame rate (25fps fixture ⇒ up to ~40ms drift per cut boundary vs. the theoretical exact millisecond), consistent with guide §13's own "(±1 frame)" caption-drift allowance extended to cut boundaries. Two full ffmpeg encodes per export instead of one costs some render time, deemed acceptable at MVP scale.
+
+Status: Active.
+
+## 2026-07-06 - No Per-Word Karaoke Caption Animation At Render Time
+
+Decision: All four caption presets — including "Karaoke" — burn in at the line level (one `Dialogue` event per caption line) rather than using ASS `\k` tags for a progressive per-word color wipe.
+
+Why: `\k` timing requires getting libass's SecondaryColour/PrimaryColour wipe-direction semantics exactly right and is easy to get subtly wrong without extensive manual playback verification; the "Karaoke" preset's differentiation (pill background, uppercase, distinct highlight color, middle-screen position) still renders correctly and looks visually distinct without it.
+
+Tradeoff: The "Karaoke" preset doesn't actually animate word-by-word like its name implies — it's a static styling variant for now. Revisit if a future pass wants true word-highlight timing; `CaptionLine.words` already carries per-word start/end timestamps, so the data needed is already there.
+
+Status: Active — deferred, not abandoned.
+
+## 2026-07-06 - Center/Face Crop Is Computed At Render Time, Not Read From Editor State
+
+Decision: `resolveCropRect` (guide §14) only reads the stored `layout.crop` for `manual` mode. For `center` mode it computes a fresh center-crop rectangle from the source video's real width/height (crop the wider dimension to hit exactly 9:16). `face` mode uses the identical center-crop computation — there's no face-tracking implementation, so it falls back exactly the way guide §14 already describes low-confidence tracking falling back ("fall back to center when confidence low").
+
+Why: The editor's default `layout.crop` is always `{x:0,y:0,w:1,h:1}` regardless of mode (Phase 5's preview achieves the "center" look via CSS `object-fit: cover`, not by writing real crop numbers into state) — reading it literally for center mode at render time would render the full uncropped source instead of a 9:16 center crop. Recomputing from real pixel dimensions at render time is also the only way the crop is correct across source videos of different resolutions/aspect ratios.
+
+Tradeoff: If a workspace's source videos are ever letterboxed or have unusual aspect ratios, the computed center crop might not match user expectations as well as a manually placed one would — `manual` mode remains the escape hatch. Full per-frame face tracking is still Phase 8 polish, unchanged from the guide.
+
+Status: Active.
+
+## 2026-07-06 - `export_jobs` Is A Separate Queue From `processing_jobs`, Exports Are Free At MVP
+
+Decision: `ExportJob`/`ExportedFile` are new tables (own idempotency key, own claim/retry logic in `src/lib/exports/queue.ts`), not `ProcessingJob` rows with `type=EXPORT` — matching guide §6's explicit separate schema. `src/worker/run-jobs.ts` polls both tables in the same loop rather than running a second worker process. Export jobs retry automatically up to 2 times on failure before landing in `FAILED` (guide §15 step 6); a user-triggered "try again" (`POST /api/exports/:id/retry`) resets and reuses the *same* job row rather than creating a new one. No `usage_ledger` row is written for exports and `ExportJob.minutesCharged` is always stored as `0` — the guide's own §15 step 2 says "MVP: exports free, processing minutes already paid," and `usage_ledger.job_id` only has an FK to `processing_jobs`, so wiring a real export charge would need a schema change anyway; better done when exports actually cost something.
+
+Why: Exports are naturally per-clip (a project's several clips can each have independent, concurrent export histories) rather than per-project like the FINALIZE→PROBE→TRANSCRIBE→ANALYZE pipeline, so a distinct table with its own lifecycle fields (`filename`, `outputFileId`, `minutesCharged`) is a cleaner fit than overloading `ProcessingJob`. Retry-then-fail was verified for real: temporarily hid the source file, watched the job exhaust 3 attempts and land in `FAILED` with `RENDER_FAILED`, restored the file, called the retry endpoint, and watched the same job row succeed.
+
+Tradeoff: The unused `EXPORT` value in the `ProcessingJobType` enum (from Phase 1's schema) is now dead — left in place rather than removed, since dropping an enum value is a more invasive migration than the value being unused is a problem. A workspace-level ledger audit trail for exports doesn't exist yet; add an `ADJUSTMENT`-kind row (or extend the FK) if/when exports gain a real cost.
+
+Status: Active.
+
+## 2026-07-06 - Export Download Links Are Session-Gated, Not Cryptographically Signed
+
+Decision: `GET /api/exports/:id/download` is an authenticated, workspace-scoped route (same pattern as `/api/videos/:id/source` and `/api/storage/[...key]`) rather than a URL bearing an HMAC-signed token. `ExportedFile.downloadExpiresAt` is still a real stored 7-day expiry per guide §15 step 4/§17 — the download route checks it and returns `DOWNLOAD_LINK_EXPIRED` past that point — and `POST /api/exports/:id/resign` extends it by another 7 days, giving a real, testable implementation of guide §20's "auto re-sign" recovery path.
+
+Why: A cryptographically signed URL exists to allow access *without* an active session (e.g., a link pasted into an email, or fetched by a background job) — meaningful for a real S3/CDN deployment, but this MVP's storage and auth are both dev-mode stand-ins (local disk, httpOnly cookie session) where every other file route already relies on session auth rather than tokens. Adding a second, parallel signing mechanism here would be inconsistent with the rest of the codebase for no real security benefit at this stage.
+
+Tradeoff: A download link can't be shared with someone outside the workspace's session (arguably a feature, not a bug, for church-internal videos) and doesn't survive a session logout the way a true signed URL would. Revisit if exports need to support unauthenticated sharing (e.g., a public link a pastor can text to someone).
+
+Status: Active.
+
+## 2026-07-06 - Export Idempotency Key Is Scoped To (Clip, Edit Version, Filename)
+
+Decision: `POST /api/clips/:id/exports` derives its idempotency key as `export:${clipId}:v${currentEditVersion}:${filename}` rather than a fixed per-clip key, and the client doesn't supply it.
+
+Why: Guide §15 step 2 requires "re-submitting the same job id must not double-charge" — but unlike `ProcessingJob` stages (at most one per project, ever), a clip's export is something a user legitimately wants to redo after further edits. A fixed `export:${clipId}` key would silently return a stale export forever after the first one. Scoping by edit version means a retried/double-clicked request against the *same* saved state returns the same job (true idempotency), while editing the clip further and re-exporting naturally mints a new job.
+
+Tradeoff: Two exports of the same clip state with two different filenames create two separate render jobs rather than reusing one — an accepted minor inefficiency in exchange for keeping the idempotency key derivation simple and not requiring a client-supplied key.
+
+Status: Active.
