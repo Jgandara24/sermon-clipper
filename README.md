@@ -1,6 +1,6 @@
 # Sermon Clipper
 
-Standalone Phase 1-4 foundation for a church-focused long-video-to-short-clips product.
+Standalone Phase 1-5 foundation for a church-focused long-video-to-short-clips product.
 
 This repository is intentionally separate from Pulpit Engine. It does not import Pulpit Engine code, connect to Pulpit Engine databases, reuse Railway services, or require live provider credentials.
 
@@ -26,11 +26,16 @@ Implemented:
   hook cues, emotional-language density, topic overlap — clearly labeled non-AI) by default;
   ranked clip list UI with score breakdowns and like/dislike
 - Usage ledger reserve/settle/release primitives with an atomic, idempotent balance mutation
+- Editor MVP (`/app/clips/:id/editor`): transcript-based script editor (click-to-delete words,
+  filler-word chips, extend before/after), 4 original caption presets with live style overrides,
+  center/face/manual layout with a manual crop box, a DOM/CSS preview (real video playback,
+  caption overlay, word-skip over deletions, safe-zone guide), and versioned autosave + explicit
+  save with optimistic-concurrency conflict detection
 - Seeded demo workspace, source video, project, stub job, usage ledger, and sample clip
 - Unit tests for workspace scoping, draft project creation, ffprobe parsing, ledger math, the
-  whisper.cpp output parser, SRT parsing, filler detection, transcript chunking/dedup, and the
-  heuristic clip scorer; a separate real-database integration suite for the ledger
-  (`npm run test:integration`)
+  whisper.cpp output parser, SRT parsing, filler detection, transcript chunking/dedup, the
+  heuristic clip scorer, editor state/word helpers, and caption-line derivation; a separate
+  real-database integration suite for the ledger (`npm run test:integration`)
 - CI workflow for lint, typecheck, tests, Prisma validation, and build
 
 Stubbed by design:
@@ -109,8 +114,12 @@ npm run test:integration
 
 - `.env.example` contains only local development placeholders.
 - Rendering, billing, and publishing providers are intentionally absent — see DECISIONS.md for
-  what's stubbed and why. Video upload/probing (Phase 2), transcription (Phase 3), and AI clip
-  generation (Phase 4) are real.
+  what's stubbed and why. Video upload/probing (Phase 2), transcription (Phase 3), AI clip
+  generation (Phase 4), and the clip editor (Phase 5) are real.
+- The editor's video preview streams the original source file directly (with HTTP Range support)
+  rather than a separate low-res proxy — no extra render step needed for a real, scrubbable
+  preview. Crop/caption rendering is a DOM/CSS approximation; the server render (Phase 6) is the
+  source of truth for the final export, per guide §12.
 - Transcription needs a local whisper.cpp setup: install the `whisper-cli` binary (e.g.
   `brew install whisper-cpp`) and download a ggml model (see whisper.cpp's
   `models/download-ggml-model.sh`, or fetch one directly from

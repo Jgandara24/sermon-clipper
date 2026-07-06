@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown, ChevronUp, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, ThumbsDown, ThumbsUp } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 type Subscore = { score: number; letter: string; note: string };
@@ -107,6 +108,13 @@ function ClipCard({
             </div>
           ) : null}
           <div className="flex gap-1">
+            <Link
+              href={`/app/clips/${clip.id}/editor`}
+              className="rounded-md border border-stone-300 p-1.5 text-stone-500 hover:bg-stone-50"
+              aria-label="Edit this clip"
+            >
+              <Pencil size={14} />
+            </Link>
             <button
               type="button"
               disabled={isSaving}

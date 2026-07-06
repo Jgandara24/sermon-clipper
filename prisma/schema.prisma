@@ -105,6 +105,7 @@ model User {
 
   ownedWorkspaces Workspace[]       @relation("WorkspaceOwner")
   memberships     WorkspaceMember[]
+  clipEdits       ClipEdit[]
 
   @@map("users")
 }
@@ -303,11 +304,33 @@ model GeneratedClip {
   workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   score     ClipScore?
+  edits     ClipEdit[]
 
   @@unique([projectId, rank])
   @@index([workspaceId])
   @@index([projectId])
   @@map("generated_clips")
+}
+
+// Editor state is one versioned JSON document per save (guide §12). Each save creates a new
+// row rather than updating in place, so the full edit history is preserved and optimistic
+// concurrency (reject a save whose baseVersion is stale) is just "does this version already
+// exist" — no separate locking needed.
+model ClipEdit {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clipId      String   @map("clip_id") @db.Uuid
+  version     Int
+  editorState Json     @map("editor_state")
+  isAutosave  Boolean  @default(false) @map("is_autosave")
+  savedBy     String?  @map("saved_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  clip        GeneratedClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  savedByUser User?         @relation(fields: [savedBy], references: [id], onDelete: SetNull)
+
+  @@unique([clipId, version])
+  @@map("clip_edits")
 }
 
 model ClipScore {
