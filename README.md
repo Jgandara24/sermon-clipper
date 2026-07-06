@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sermon Clipper
 
-## Getting Started
+Standalone Phase 1 foundation for a church-focused long-video-to-short-clips product.
 
-First, run the development server:
+This repository is intentionally separate from Pulpit Engine. It does not import Pulpit Engine code, connect to Pulpit Engine databases, reuse Railway services, or require live provider credentials.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Current Scope
+
+Implemented:
+
+- Next.js App Router, TypeScript, Tailwind
+- Prisma schema and ordered migrations for the Phase 1 data model
+- Local Postgres dev path via Docker Compose
+- Development-only cookie auth
+- Onboarding, dashboard, project detail, settings, and billing routes
+- Seeded demo workspace, source video, project, stub job, usage ledger, and sample clip
+- Unit tests for workspace scoping and draft project creation data
+- CI workflow for lint, typecheck, tests, Prisma validation, and build
+
+Stubbed by design:
+
+- Video upload and URL import
+- Provider calls for ASR, AI analysis, rendering, storage, billing, and publishing
+- Production OTP or Google OAuth
+- Pulpit Engine bridge
+
+## Local Setup
+
+1. Install dependencies:
+
+```sh
+npm ci
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Create a local env file:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```sh
+cp .env.example .env
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Start Postgres.
 
-## Learn More
+Preferred path:
 
-To learn more about Next.js, take a look at the following resources:
+```sh
+docker compose up -d
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+If Docker is not available, run any local PostgreSQL 17-compatible service and set `DATABASE_URL` to a fresh database that belongs only to this product.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. Apply migrations and seed:
 
-## Deploy on Vercel
+```sh
+npm run db:migrate
+npm run db:seed
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+5. Start the app:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```sh
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Use `demo@sermonclipper.local` on the dev login screen.
+
+## Verification
+
+```sh
+npm run verify
+```
+
+This runs Prisma validation, ESLint, TypeScript, Vitest, and the production Next build. It does not require external provider credentials.
+
+## Notes
+
+- `.env.example` contains only local development placeholders.
+- Real upload, ASR, AI, storage, render, and billing providers are intentionally absent in Phase 1.
+- The reserved `POST /api/integrations/pulpit-engine/webhook` endpoint returns HTTP 501.

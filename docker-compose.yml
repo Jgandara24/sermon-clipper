@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: sermon-clipper-postgres
+    environment:
+      POSTGRES_USER: sermon_clipper
+      POSTGRES_PASSWORD: sermon_clipper
+      POSTGRES_DB: sermon_clipper
+    ports:
+      - "5432:5432"
+    volumes:
+      - sermon_clipper_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sermon_clipper -d sermon_clipper"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  sermon_clipper_postgres:

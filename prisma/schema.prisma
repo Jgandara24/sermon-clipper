@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  DEV       @map("dev")
+  EMAIL_OTP @map("email_otp")
+  GOOGLE    @map("google")
+
+  @@map("auth_provider")
+}
+
+enum WorkspaceRole {
+  OWNER    @map("owner")
+  ADMIN    @map("admin")
+  EDITOR   @map("editor")
+  APPROVER @map("approver")
+  VIEWER   @map("viewer")
+
+  @@map("workspace_role")
+}
+
+enum MemberStatus {
+  ACTIVE  @map("active")
+  INVITED @map("invited")
+
+  @@map("member_status")
+}
+
+enum SourceOrigin {
+  UPLOAD @map("upload")
+  URL    @map("url")
+
+  @@map("source_origin")
+}
+
+enum ProjectStatus {
+  DRAFT      @map("draft")
+  QUEUED     @map("queued")
+  PROCESSING @map("processing")
+  READY      @map("ready")
+  FAILED     @map("failed")
+  CANCELED   @map("canceled")
+
+  @@map("project_status")
+}
+
+enum ProcessingJobType {
+  FINALIZE       @map("finalize")
+  PROBE          @map("probe")
+  TRANSCRIBE     @map("transcribe")
+  ANALYZE        @map("analyze")
+  GENERATE_CLIPS @map("generate_clips")
+  PREVIEW_RENDER @map("preview_render")
+  EXPORT         @map("export")
+  CLEANUP        @map("cleanup")
+
+  @@map("processing_job_type")
+}
+
+enum ProcessingJobState {
+  QUEUED    @map("queued")
+  RUNNING   @map("running")
+  WAITING   @map("waiting")
+  SUCCEEDED @map("succeeded")
+  FAILED    @map("failed")
+  CANCELED  @map("canceled")
+  RETRYING  @map("retrying")
+  EXPIRED   @map("expired")
+
+  @@map("processing_job_state")
+}
+
+enum LedgerKind {
+  GRANT      @map("grant")
+  PROCESSING @map("processing")
+  EXPORT     @map("export")
+  REFUND     @map("refund")
+  ADJUSTMENT @map("adjustment")
+
+  @@map("ledger_kind")
+}
+
+enum GeneratedClipStatus {
+  SUGGESTED @map("suggested")
+  KEPT      @map("kept")
+  HIDDEN    @map("hidden")
+
+  @@map("generated_clip_status")
+}
+
+model User {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String       @unique
+  name         String?
+  authProvider AuthProvider @default(DEV) @map("auth_provider")
+  locale       String       @default("en")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  ownedWorkspaces Workspace[]       @relation("WorkspaceOwner")
+  memberships     WorkspaceMember[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String
+  ownerId          String   @map("owner_id") @db.Uuid
+  planCode         String   @default("free") @map("plan_code")
+  minuteBalance    Int      @default(60) @map("minute_balance")
+  storageUsedBytes BigInt   @default(0) @map("storage_used_bytes")
+  settings         Json     @default("{}")
+  externalRefs     Json     @default("{}") @map("external_refs")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  owner          User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members        WorkspaceMember[]
+  sourceVideos   SourceVideo[]
+  projects       Project[]
+  usageLedger    UsageLedger[]
+  generatedClips GeneratedClip[]
+  clipScores     ClipScore[]
+
+  @@index([ownerId])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  userId      String       @map("user_id") @db.Uuid
+  role        WorkspaceRole
+  status      MemberStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model SourceVideo {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId    String       @map("workspace_id") @db.Uuid
+  origin         SourceOrigin
+  originUrl      String?      @map("origin_url")
+  filename       String?
+  durationS      Decimal?     @map("duration_s") @db.Decimal(10, 2)
+  sizeBytes      BigInt?      @map("size_bytes")
+  width          Int?
+  height         Int?
+  fps            Decimal?     @db.Decimal(8, 3)
+  storageKey     String?      @map("storage_key")
+  audioKey       String?      @map("audio_key")
+  thumbnailKey   String?      @map("thumbnail_key")
+  language       String?
+  srtOverrideKey String?      @map("srt_override_key")
+  copyrightAckAt DateTime?    @map("copyright_ack_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projects  Project[]
+
+  @@index([workspaceId])
+  @@map("source_videos")
+}
+
+model Project {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String        @map("workspace_id") @db.Uuid
+  name             String
+  sourceVideoId    String?       @map("source_video_id") @db.Uuid
+  status           ProjectStatus @default(DRAFT)
+  processingConfig Json          @default("{}") @map("processing_config")
+  folder           String?
+  series           String?
+  speaker          String?
+  expiresAt        DateTime?     @map("expires_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceVideo    SourceVideo?    @relation(fields: [sourceVideoId], references: [id], onDelete: SetNull)
+  processingJobs ProcessingJob[]
+  usageLedger    UsageLedger[]
+  generatedClips GeneratedClip[]
+
+  @@index([workspaceId])
+  @@index([sourceVideoId])
+  @@map("projects")
+}
+
+model ProcessingJob {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId         String             @map("project_id") @db.Uuid
+  type              ProcessingJobType
+  state             ProcessingJobState @default(QUEUED)
+  progress          Int                @default(0)
+  attempt           Int                @default(0)
+  idempotencyKey    String             @unique @map("idempotency_key")
+  errorCode         String?            @map("error_code")
+  errorMessageUser  String?            @map("error_message_user")
+  minutesReserved   Decimal?           @map("minutes_reserved") @db.Decimal(10, 2)
+  startedAt         DateTime?          @map("started_at")
+  finishedAt        DateTime?          @map("finished_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  usageLedger UsageLedger[]
+
+  @@index([state, type])
+  @@index([projectId])
+  @@map("processing_jobs")
+}
+
+model UsageLedger {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId   String      @map("workspace_id") @db.Uuid
+  kind          LedgerKind
+  projectId     String?     @map("project_id") @db.Uuid
+  minutesDelta  Decimal     @map("minutes_delta") @db.Decimal(10, 2)
+  balanceAfter  Decimal     @map("balance_after") @db.Decimal(10, 2)
+  jobId         String?     @map("job_id") @db.Uuid
+  note          String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  job       ProcessingJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([projectId])
+  @@map("usage_ledger")
+}
+
+model GeneratedClip {
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String              @map("workspace_id") @db.Uuid
+  projectId   String              @map("project_id") @db.Uuid
+  rank        Int
+  startMs     Int                 @map("start_ms")
+  endMs       Int                 @map("end_ms")
+  title       String
+  hookText    String?             @map("hook_text")
+  summary     String
+  status      GeneratedClipStatus @default(SUGGESTED)
+  liked       Boolean?
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  score     ClipScore?
+
+  @@unique([projectId, rank])
+  @@index([workspaceId])
+  @@index([projectId])
+  @@map("generated_clips")
+}
+
+model ClipScore {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  clipId       String   @unique @map("clip_id") @db.Uuid
+  total        Int
+  subscores    Json
+  modelVersion String   @map("model_version")
+  excerpt      String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clip      GeneratedClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("clip_scores")
+}
