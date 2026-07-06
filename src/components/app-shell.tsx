@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { CreditCard, FolderOpen, Home, LogOut, Settings } from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/app/actions/auth";
@@ -7,7 +8,7 @@ type AppShellProps = {
   children: React.ReactNode;
   workspace: {
     name: string;
-    minuteBalance: number;
+    minuteBalance: number | Prisma.Decimal;
     planCode: string;
   };
   user: {

@@ -44,7 +44,6 @@ export function buildDefaultProcessingConfig() {
     timeframe: null,
     genre: "sermon",
     mode: "clip",
-    phase: "phase-1-stub",
   };
 }
 
@@ -64,6 +63,12 @@ export function buildDraftProjectRecord(
   };
 }
 
+/**
+ * URL-based import (paste a YouTube/link). The yt-dlp fetch adapter isn't wired up yet (see
+ * DECISIONS.md), so this still only records the intent: a source_videos row with the pasted URL
+ * and a WAITING job that's honest in the UI about not running yet. Real upload goes through
+ * createProjectFromUploadedSourceVideo instead, which enqueues a real FINALIZE job.
+ */
 export async function createDraftProjectForWorkspace(
   client: PrismaClient,
   workspaceId: string,
@@ -100,14 +105,64 @@ export async function createDraftProjectForWorkspace(
       data: buildDraftProjectRecord(workspaceId, input, sourceVideo?.id),
     });
 
+    if (sourceVideo) {
+      await tx.processingJob.create({
+        data: {
+          projectId: project.id,
+          type: ProcessingJobType.FINALIZE,
+          state: ProcessingJobState.WAITING,
+          idempotencyKey: `url-import-unavailable:${project.id}`,
+          errorCode: "URL_IMPORT_UNAVAILABLE",
+          errorMessageUser: "Importing from a link isn't available yet — upload the file directly.",
+        },
+      });
+    }
+
+    return project;
+  });
+}
+
+export type UploadedProjectInput = {
+  name: string;
+  sourceVideoId: string;
+  series?: string;
+  speaker?: string;
+};
+
+/**
+ * Creates a project from an already-uploaded source video (see the /api/uploads/* routes) and
+ * enqueues the real FINALIZE job, which probes the file and hands off to PROBE on success.
+ */
+export async function createProjectFromUploadedSourceVideo(
+  client: PrismaClient,
+  workspaceId: string,
+  input: UploadedProjectInput,
+  userId: string,
+) {
+  return client.$transaction(async (tx) => {
+    const membership = await tx.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+    });
+    if (!membership) {
+      throw new Error("Workspace access denied for project creation.");
+    }
+
+    const sourceVideo = await tx.sourceVideo.findUniqueOrThrow({ where: { id: input.sourceVideoId } });
+    assertWorkspaceScope(sourceVideo.workspaceId, workspaceId, "source video");
+
+    const project = await tx.project.create({
+      data: {
+        ...buildDraftProjectRecord(workspaceId, input, sourceVideo.id),
+        status: ProjectStatus.QUEUED,
+      },
+    });
+
     await tx.processingJob.create({
       data: {
         projectId: project.id,
-        type: ProcessingJobType.PROBE,
-        state: ProcessingJobState.WAITING,
-        idempotencyKey: `phase1:${project.id}:probe-stub`,
-        errorMessageUser: "Video processing is intentionally stubbed in Phase 1.",
-        minutesReserved: new Prisma.Decimal("0.00"),
+        type: ProcessingJobType.FINALIZE,
+        state: ProcessingJobState.QUEUED,
+        idempotencyKey: `finalize:${project.id}`,
       },
     });
 

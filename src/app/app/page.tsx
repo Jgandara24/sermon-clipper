@@ -1,6 +1,7 @@
-import { Plus, UploadCloud } from "lucide-react";
+import { Link2, UploadCloud } from "lucide-react";
 import { createDraftProjectAction } from "@/app/actions/projects";
 import { ProjectCard } from "@/components/project-card";
+import { UploadDropzone } from "@/components/upload-dropzone";
 import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -30,19 +31,16 @@ export default async function DashboardPage() {
               <UploadCloud size={20} aria-hidden="true" />
             </div>
             <div>
-              <p className="text-sm font-medium text-teal-800">Import shell</p>
+              <p className="text-sm font-medium text-teal-800">Upload</p>
               <h1 className="mt-1 text-2xl font-semibold">Sermon projects</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
-                Upload, URL import, transcription, AI scoring, and export are visible as Phase
-                1 stubs only. No external provider calls are wired.
+                Upload a video to probe it for duration, resolution, and a thumbnail. Transcription
+                and AI clip scoring are still stubbed until later phases.
               </p>
             </div>
           </div>
-          <div className="mt-5 rounded-md border border-dashed border-stone-300 bg-stone-50 p-5">
-            <p className="text-sm font-medium">Video intake is stubbed</p>
-            <p className="mt-1 text-sm text-stone-500">
-              The next phase will attach local uploads and URL probes to this surface.
-            </p>
+          <div className="mt-5">
+            <UploadDropzone />
           </div>
         </div>
 
@@ -51,9 +49,13 @@ export default async function DashboardPage() {
           className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm"
         >
           <div className="flex items-center gap-2">
-            <Plus size={18} aria-hidden="true" className="text-teal-800" />
-            <h2 className="text-lg font-semibold">Create draft project</h2>
+            <Link2 size={18} aria-hidden="true" className="text-teal-800" />
+            <h2 className="text-lg font-semibold">Or paste a link</h2>
           </div>
+          <p className="mt-2 text-sm text-stone-500">
+            Fetching from a URL isn&apos;t available yet — this creates a draft record you can
+            revisit once URL import ships.
+          </p>
           <div className="mt-5 grid gap-4">
             <div>
               <label htmlFor="name" className="text-sm font-medium">
@@ -78,7 +80,7 @@ export default async function DashboardPage() {
                 placeholder="https://youtube.com/watch?v=..."
                 className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
               />
-              <p className="mt-1 text-xs text-stone-500">Metadata fetch is stubbed in Phase 1.</p>
+              <p className="mt-1 text-xs text-stone-500">Metadata fetch is stubbed.</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <input
@@ -94,7 +96,7 @@ export default async function DashboardPage() {
             </div>
             <button
               type="submit"
-              className="rounded-md bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800"
+              className="rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
             >
               Create draft
             </button>

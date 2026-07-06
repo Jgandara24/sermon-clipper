@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local-disk storage provider (dev-only stand-in for S3/R2)
+/.data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

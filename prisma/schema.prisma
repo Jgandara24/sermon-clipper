@@ -114,7 +114,7 @@ model Workspace {
   name             String
   ownerId          String   @map("owner_id") @db.Uuid
   planCode         String   @default("free") @map("plan_code")
-  minuteBalance    Int      @default(60) @map("minute_balance")
+  minuteBalance    Decimal  @default(60) @map("minute_balance") @db.Decimal(10, 2)
   storageUsedBytes BigInt   @default(0) @map("storage_used_bytes")
   settings         Json     @default("{}")
   externalRefs     Json     @default("{}") @map("external_refs")

@@ -1,5 +1,7 @@
-import { Clock, FileVideo, Sparkles } from "lucide-react";
+import { FileVideo, Sparkles } from "lucide-react";
+import Image from "next/image";
 import { notFound } from "next/navigation";
+import { ProcessingStatusTracker } from "@/components/processing-status-tracker";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDate, titleCaseStatus } from "@/lib/format";
 import { assertWorkspaceScope } from "@/lib/project-service";
@@ -71,36 +73,41 @@ export default async function ProjectPage({
                 {project.sourceVideo?.originUrl ?? project.sourceVideo?.filename ?? "Draft only"}
               </dd>
             </div>
+            {project.sourceVideo?.durationS ? (
+              <div>
+                <dt className="text-stone-500">Duration / resolution</dt>
+                <dd className="mt-1 font-medium">
+                  {Math.round(project.sourceVideo.durationS.toNumber())}s
+                  {project.sourceVideo.width && project.sourceVideo.height
+                    ? ` · ${project.sourceVideo.width}×${project.sourceVideo.height}`
+                    : ""}
+                </dd>
+              </div>
+            ) : null}
           </dl>
+          {project.sourceVideo?.thumbnailKey ? (
+            <Image
+              src={`/api/storage/${project.sourceVideo.thumbnailKey}`}
+              alt=""
+              width={640}
+              height={360}
+              unoptimized
+              className="mt-4 aspect-video w-full rounded-md object-cover"
+            />
+          ) : null}
         </div>
 
-        <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <div className="flex items-center gap-2">
-            <Clock size={18} aria-hidden="true" className="text-teal-800" />
-            <h2 className="font-semibold">Processing stages</h2>
-          </div>
-          <div className="mt-4 grid gap-3">
-            {project.processingJobs.map((job) => (
-              <div
-                key={job.id}
-                className="flex items-center justify-between rounded-md border border-stone-200 px-3 py-2"
-              >
-                <div>
-                  <p className="text-sm font-medium">{titleCaseStatus(job.type)}</p>
-                  <p className="text-xs text-stone-500">
-                    {job.errorMessageUser ?? "Waiting for later phase wiring."}
-                  </p>
-                </div>
-                <StatusBadge status={job.state} />
-              </div>
-            ))}
-            {project.processingJobs.length === 0 ? (
-              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Processing jobs are stubbed until upload and queue plumbing begins.
-              </p>
-            ) : null}
-          </div>
-        </div>
+        <ProcessingStatusTracker
+          projectId={project.id}
+          initialStatus={project.status}
+          initialJobs={project.processingJobs.map((job) => ({
+            id: job.id,
+            type: job.type,
+            state: job.state,
+            errorCode: job.errorCode,
+            errorMessageUser: job.errorMessageUser,
+          }))}
+        />
       </section>
 
       <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
