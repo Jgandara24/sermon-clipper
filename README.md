@@ -1,6 +1,6 @@
 # Sermon Clipper
 
-Standalone Phase 1-3 foundation for a church-focused long-video-to-short-clips product.
+Standalone Phase 1-4 foundation for a church-focused long-video-to-short-clips product.
 
 This repository is intentionally separate from Pulpit Engine. It does not import Pulpit Engine code, connect to Pulpit Engine databases, reuse Railway services, or require live provider credentials.
 
@@ -20,11 +20,17 @@ Implemented:
   filler detection) when `WHISPER_MODEL_PATH` is configured; an SRT upload path that skips ASR
   entirely and re-runs the TRANSCRIBE stage; a read-only, searchable transcript viewer with
   Postgres full-text search indexing ready for later phases
+- AI clip generation: real chunking/boundary-refinement/dedup over the transcript, scored by a
+  real `ClaudeAnalysisProvider` (Haiku classification pass + Sonnet scoring/rationale pass) when
+  `ANTHROPIC_API_KEY` is configured, or a real deterministic `HeuristicAnalysisProvider` (pacing,
+  hook cues, emotional-language density, topic overlap — clearly labeled non-AI) by default;
+  ranked clip list UI with score breakdowns and like/dislike
 - Usage ledger reserve/settle/release primitives with an atomic, idempotent balance mutation
 - Seeded demo workspace, source video, project, stub job, usage ledger, and sample clip
 - Unit tests for workspace scoping, draft project creation, ffprobe parsing, ledger math, the
-  whisper.cpp output parser, SRT parsing, and filler detection; a separate real-database
-  integration suite for the ledger (`npm run test:integration`)
+  whisper.cpp output parser, SRT parsing, filler detection, transcript chunking/dedup, and the
+  heuristic clip scorer; a separate real-database integration suite for the ledger
+  (`npm run test:integration`)
 - CI workflow for lint, typecheck, tests, Prisma validation, and build
 
 Stubbed by design:
@@ -32,7 +38,9 @@ Stubbed by design:
 - URL import (yt-dlp fetch adapter not wired up yet — pasting a link creates a draft record only)
 - Real transcription when no local whisper.cpp model is configured (fails clearly with
   `TRANSCRIBE_PROVIDER_UNAVAILABLE` rather than faking a transcript — see DECISIONS.md)
-- Provider calls for AI analysis, rendering, billing, and publishing
+- Real AI-scored clip analysis when no `ANTHROPIC_API_KEY` is configured (falls back to the
+  heuristic scorer rather than faking an LLM verdict — see DECISIONS.md)
+- Rendering, billing, and publishing providers
 - Production OTP or Google OAuth
 - Pulpit Engine bridge
 
@@ -100,15 +108,19 @@ npm run test:integration
 ## Notes
 
 - `.env.example` contains only local development placeholders.
-- Real AI analysis, rendering, billing, and publishing providers are intentionally absent — see
-  DECISIONS.md for what's stubbed and why. Video upload/probing (Phase 2) and transcription
-  (Phase 3) are real.
+- Rendering, billing, and publishing providers are intentionally absent — see DECISIONS.md for
+  what's stubbed and why. Video upload/probing (Phase 2), transcription (Phase 3), and AI clip
+  generation (Phase 4) are real.
 - Transcription needs a local whisper.cpp setup: install the `whisper-cli` binary (e.g.
   `brew install whisper-cpp`) and download a ggml model (see whisper.cpp's
   `models/download-ggml-model.sh`, or fetch one directly from
   `https://huggingface.co/ggerganov/whisper.cpp`), then set `WHISPER_MODEL_PATH` to its path in
   `.env`. Without it, TRANSCRIBE jobs fail clearly with `TRANSCRIBE_PROVIDER_UNAVAILABLE` instead
   of faking a transcript. Uploading an SRT file always works regardless, since it skips ASR.
+- Clip scoring needs a real `ANTHROPIC_API_KEY` in `.env` for AI-scored clips (`claude-haiku-4-5`
+  classification + `claude-sonnet-5` scoring/rationale). Without it, ANALYZE jobs still succeed —
+  they use the deterministic heuristic scorer instead, which is clearly labeled `heuristic-v1`
+  in the UI and never presented as AI-scored.
 - The local-disk storage provider under `STORAGE_LOCAL_ROOT` (default `.data/storage`) stands in
   for S3/R2 until a cloud bucket is wired up; swap the `StorageProvider` implementation, not its
   callers.

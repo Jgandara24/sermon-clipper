@@ -1,3 +1,5 @@
+import { ProcessingJobType } from "@prisma/client";
+import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import { getStorageProvider } from "@/lib/storage";
 import { applyFillerDetection } from "@/lib/transcription/filler-detection";
@@ -89,5 +91,14 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         },
       });
     }
+  });
+
+  // Keyed by this TRANSCRIBE job's own id (not just the project) so a re-run — e.g. after an
+  // SRT override upload — always enqueues a fresh ANALYZE pass instead of reusing an already-
+  // succeeded one.
+  await enqueueJob(prisma, {
+    projectId: project.id,
+    type: ProcessingJobType.ANALYZE,
+    idempotencyKey: `analyze:${project.id}:${job.id}`,
   });
 };

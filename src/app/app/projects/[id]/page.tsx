@@ -1,6 +1,7 @@
 import { FileVideo, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { ClipList } from "@/components/clip-list";
 import { ProcessingStatusTracker } from "@/components/processing-status-tracker";
 import { StatusBadge } from "@/components/status-badge";
 import { TranscriptViewer } from "@/components/transcript-viewer";
@@ -118,31 +119,31 @@ export default async function ProjectPage({
           <Sparkles size={18} aria-hidden="true" className="text-teal-800" />
           <h2 className="font-semibold">Suggested clips</h2>
         </div>
-        <div className="mt-4 grid gap-3">
-          {project.generatedClips.map((clip) => (
-            <article key={clip.id} className="rounded-lg border border-stone-200 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
-                    Rank {clip.rank}
-                  </p>
-                  <h3 className="mt-1 text-base font-semibold">{clip.title}</h3>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{clip.summary}</p>
-                </div>
-                {clip.score ? (
-                  <div className="rounded-lg bg-teal-700 px-4 py-3 text-center text-white">
-                    <p className="text-xs">Score</p>
-                    <p className="text-2xl font-semibold">{clip.score.total}</p>
-                  </div>
-                ) : null}
-              </div>
-            </article>
-          ))}
-          {project.generatedClips.length === 0 ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              Clip generation is intentionally stubbed in Phase 1.
-            </p>
-          ) : null}
+        <div className="mt-4">
+          <ClipList
+            initialClips={project.generatedClips.map((clip) => ({
+              id: clip.id,
+              rank: clip.rank,
+              startMs: clip.startMs,
+              endMs: clip.endMs,
+              title: clip.title,
+              hookText: clip.hookText,
+              summary: clip.summary,
+              status: clip.status,
+              liked: clip.liked,
+              score: clip.score
+                ? {
+                    total: clip.score.total,
+                    subscores: clip.score.subscores as Record<
+                      string,
+                      { score: number; letter: string; note: string }
+                    >,
+                    modelVersion: clip.score.modelVersion,
+                    excerpt: clip.score.excerpt,
+                  }
+                : null,
+            }))}
+          />
         </div>
       </section>
     </div>

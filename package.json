@@ -19,6 +19,7 @@
     "worker": "tsx watch src/worker/run-jobs.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@prisma/client": "^6.19.3",
     "lucide-react": "^1.23.0",
     "next": "16.2.10",
