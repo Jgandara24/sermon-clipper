@@ -32,10 +32,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     status: project.status,
     sourceVideo: project.sourceVideo
       ? {
+          id: project.sourceVideo.id,
           durationS: project.sourceVideo.durationS?.toString() ?? null,
           width: project.sourceVideo.width,
           height: project.sourceVideo.height,
           thumbnailKey: project.sourceVideo.thumbnailKey,
+          hasSrtOverride: Boolean(project.sourceVideo.srtOverrideKey),
         }
       : null,
     processingJobs: project.processingJobs.map((job) => ({

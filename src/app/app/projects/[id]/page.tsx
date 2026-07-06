@@ -3,6 +3,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { ProcessingStatusTracker } from "@/components/processing-status-tracker";
 import { StatusBadge } from "@/components/status-badge";
+import { TranscriptViewer } from "@/components/transcript-viewer";
 import { formatDate, titleCaseStatus } from "@/lib/format";
 import { assertWorkspaceScope } from "@/lib/project-service";
 import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
@@ -109,6 +110,8 @@ export default async function ProjectPage({
           }))}
         />
       </section>
+
+      {project.sourceVideo ? <TranscriptViewer sourceVideoId={project.sourceVideo.id} /> : null}
 
       <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-2">

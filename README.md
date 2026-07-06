@@ -1,6 +1,6 @@
 # Sermon Clipper
 
-Standalone Phase 1-2 foundation for a church-focused long-video-to-short-clips product.
+Standalone Phase 1-3 foundation for a church-focused long-video-to-short-clips product.
 
 This repository is intentionally separate from Pulpit Engine. It does not import Pulpit Engine code, connect to Pulpit Engine databases, reuse Railway services, or require live provider credentials.
 
@@ -16,16 +16,23 @@ Implemented:
 - Real video upload (presigned-style direct upload to local disk), FINALIZE + PROBE processing
   jobs (real ffprobe/ffmpeg metadata, thumbnail, and audio extraction), a DB-polling job queue
   and worker, live processing-status UI, and cancel (with usage-ledger release)
+- Real transcription via a self-hosted whisper.cpp `TranscriptionProvider` (word-level timestamps,
+  filler detection) when `WHISPER_MODEL_PATH` is configured; an SRT upload path that skips ASR
+  entirely and re-runs the TRANSCRIBE stage; a read-only, searchable transcript viewer with
+  Postgres full-text search indexing ready for later phases
 - Usage ledger reserve/settle/release primitives with an atomic, idempotent balance mutation
 - Seeded demo workspace, source video, project, stub job, usage ledger, and sample clip
-- Unit tests for workspace scoping, draft project creation, ffprobe parsing, and ledger math;
-  a separate real-database integration suite for the ledger (`npm run test:integration`)
+- Unit tests for workspace scoping, draft project creation, ffprobe parsing, ledger math, the
+  whisper.cpp output parser, SRT parsing, and filler detection; a separate real-database
+  integration suite for the ledger (`npm run test:integration`)
 - CI workflow for lint, typecheck, tests, Prisma validation, and build
 
 Stubbed by design:
 
 - URL import (yt-dlp fetch adapter not wired up yet — pasting a link creates a draft record only)
-- Provider calls for ASR, AI analysis, rendering, billing, and publishing
+- Real transcription when no local whisper.cpp model is configured (fails clearly with
+  `TRANSCRIBE_PROVIDER_UNAVAILABLE` rather than faking a transcript — see DECISIONS.md)
+- Provider calls for AI analysis, rendering, billing, and publishing
 - Production OTP or Google OAuth
 - Pulpit Engine bridge
 
@@ -93,8 +100,15 @@ npm run test:integration
 ## Notes
 
 - `.env.example` contains only local development placeholders.
-- Real ASR, AI analysis, rendering, billing, and publishing providers are intentionally absent —
-  see DECISIONS.md for what's stubbed and why. Video upload and probing are real as of Phase 2.
+- Real AI analysis, rendering, billing, and publishing providers are intentionally absent — see
+  DECISIONS.md for what's stubbed and why. Video upload/probing (Phase 2) and transcription
+  (Phase 3) are real.
+- Transcription needs a local whisper.cpp setup: install the `whisper-cli` binary (e.g.
+  `brew install whisper-cpp`) and download a ggml model (see whisper.cpp's
+  `models/download-ggml-model.sh`, or fetch one directly from
+  `https://huggingface.co/ggerganov/whisper.cpp`), then set `WHISPER_MODEL_PATH` to its path in
+  `.env`. Without it, TRANSCRIBE jobs fail clearly with `TRANSCRIBE_PROVIDER_UNAVAILABLE` instead
+  of faking a transcript. Uploading an SRT file always works regardless, since it skips ASR.
 - The local-disk storage provider under `STORAGE_LOCAL_ROOT` (default `.data/storage`) stands in
   for S3/R2 until a cloud bucket is wired up; swap the `StorageProvider` implementation, not its
   callers.

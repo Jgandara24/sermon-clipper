@@ -170,11 +170,49 @@ model SourceVideo {
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  projects  Project[]
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projects   Project[]
+  transcript Transcript?
 
   @@index([workspaceId])
   @@map("source_videos")
+}
+
+model Transcript {
+  id            String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceVideoId String                 @unique @map("source_video_id") @db.Uuid
+  language      String
+  provider      String
+  fullText      String                 @map("full_text")
+  // Generated column (to_tsvector over full_text) + GIN index, added via raw SQL in the migration.
+  searchVector  Unsupported("tsvector")? @map("search_vector")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+
+  sourceVideo SourceVideo         @relation(fields: [sourceVideoId], references: [id], onDelete: Cascade)
+  segments    TranscriptSegment[]
+
+  @@map("transcripts")
+}
+
+// word_timestamps modeled as `words` jsonb on the segment (guide §6 MVP alternative) rather than
+// a separate table — see DECISIONS.md.
+model TranscriptSegment {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transcriptId String   @map("transcript_id") @db.Uuid
+  idx          Int
+  startMs      Int      @map("start_ms")
+  endMs        Int      @map("end_ms")
+  text         String
+  speakerLabel String?  @map("speaker_label")
+  words        Json     @default("[]")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  transcript Transcript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+
+  @@index([transcriptId, startMs])
+  @@map("transcript_segments")
 }
 
 model Project {

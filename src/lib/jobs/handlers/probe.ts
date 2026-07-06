@@ -1,3 +1,5 @@
+import { ProcessingJobType } from "@prisma/client";
+import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import { extractAudio, extractThumbnail } from "@/lib/media/probe";
 import { getStorageProvider } from "@/lib/storage";
@@ -32,5 +34,11 @@ export const runProbeJob: JobHandler = async ({ job, prisma }) => {
   await prisma.sourceVideo.update({
     where: { id: sourceVideo.id },
     data: { thumbnailKey, audioKey },
+  });
+
+  await enqueueJob(prisma, {
+    projectId: project.id,
+    type: ProcessingJobType.TRANSCRIBE,
+    idempotencyKey: `transcribe:${project.id}`,
   });
 };
