@@ -15,6 +15,29 @@ function fetchFor(routes: Record<string, Response>): typeof fetch {
   };
 }
 
+function healthPayload(overrides: Record<string, unknown> = {}) {
+  const checks = [
+    "DATABASE_URL",
+    "NEXT_PUBLIC_APP_URL",
+    "MEDIA_URL_SECRET",
+    "SENDGRID_API_KEY",
+    "AUTH_EMAIL_FROM",
+    "approval_notifications",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "STRIPE_PRICE_STARTER",
+    "STRIPE_PRICE_PRO",
+    "WHISPER_MODEL_PATH",
+    "ANTHROPIC_API_KEY",
+    "STORAGE_PROVIDER",
+    "storage",
+    "database",
+    "migrations",
+  ].map((name) => ({ name, status: "ok", message: `${name} ok` }));
+
+  return { status: "ok", deployment: { commitSha: "abc1234" }, checks, ...overrides };
+}
+
 describe("production smoke checks", () => {
   it("fails production smoke when base URL is not HTTPS", async () => {
     const result = await runProductionSmoke({
@@ -32,7 +55,7 @@ describe("production smoke checks", () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
-        "/api/health": response({ status: "ok", checks: [] }, { status: 200 }),
+        "/api/health": response(healthPayload(), { status: 200 }),
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
@@ -48,13 +71,42 @@ describe("production smoke checks", () => {
     expect(result.checks.every((check) => check.status === "ok")).toBe(true);
   });
 
+  it("fails when health omits production-critical readiness checks", async () => {
+    const shallowHealth = healthPayload({
+      checks: [
+        { name: "DATABASE_URL", status: "ok", message: "DATABASE_URL ok" },
+        { name: "NEXT_PUBLIC_APP_URL", status: "ok", message: "NEXT_PUBLIC_APP_URL ok" },
+      ],
+    });
+
+    const result = await runProductionSmoke({
+      baseUrl: "https://clips.example.com",
+      fetchImpl: fetchFor({
+        "/api/health": response(shallowHealth, { status: 200 }),
+        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/app": response("", { status: 307, headers: { location: "/login" } }),
+        "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
+        "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/uploads/smoke-invalid-upload": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/storage/thumbs/smoke-workspace/smoke.jpg": response({ error: { code: "PERMISSION_DENIED" } }, { status: 401 }),
+        "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
+      }),
+    });
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "health", status: "fail" })]),
+    );
+  });
+
   it("passes when expected commit matches health deployment metadata", async () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
       expectedCommitSha: "abc1234",
       fetchImpl: fetchFor({
         "/api/health": response(
-          { status: "ok", deployment: { commitSha: "abc1234def5678" }, checks: [] },
+          healthPayload({ deployment: { commitSha: "abc1234def5678" } }),
           { status: 200 },
         ),
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
@@ -77,7 +129,7 @@ describe("production smoke checks", () => {
       expectedCommitSha: "abc1234",
       fetchImpl: fetchFor({
         "/api/health": response(
-          { status: "ok", deployment: { commitSha: "fffffff" }, checks: [] },
+          healthPayload({ deployment: { commitSha: "fffffff" } }),
           { status: 200 },
         ),
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
@@ -123,7 +175,7 @@ describe("production smoke checks", () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
-        "/api/health": response({ status: "ok", checks: [] }, { status: 200 }),
+        "/api/health": response(healthPayload(), { status: 200 }),
         "/login": response("Sermon Clipper Email me a sign-in code Use development login", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
@@ -145,7 +197,7 @@ describe("production smoke checks", () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
-        "/api/health": response({ status: "ok", checks: [] }, { status: 200 }),
+        "/api/health": response(healthPayload(), { status: 200 }),
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
@@ -167,7 +219,7 @@ describe("production smoke checks", () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
-        "/api/health": response({ status: "ok", checks: [] }, { status: 200 }),
+        "/api/health": response(healthPayload(), { status: 200 }),
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
@@ -188,7 +240,7 @@ describe("production smoke checks", () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
-        "/api/health": response({ status: "ok", checks: [] }, { status: 200 }),
+        "/api/health": response(healthPayload(), { status: 200 }),
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
@@ -212,7 +264,7 @@ describe("production smoke checks", () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
-        "/api/health": response({ status: "ok", checks: [] }, { status: 200 }),
+        "/api/health": response(healthPayload(), { status: 200 }),
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),

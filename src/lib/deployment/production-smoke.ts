@@ -21,6 +21,25 @@ export type ProductionSmokeOptions = {
 
 type SmokeFetchInit = RequestInit & { signal?: AbortSignal };
 
+const REQUIRED_HEALTH_CHECKS = [
+  "DATABASE_URL",
+  "NEXT_PUBLIC_APP_URL",
+  "MEDIA_URL_SECRET",
+  "SENDGRID_API_KEY",
+  "AUTH_EMAIL_FROM",
+  "approval_notifications",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_PRICE_STARTER",
+  "STRIPE_PRICE_PRO",
+  "WHISPER_MODEL_PATH",
+  "ANTHROPIC_API_KEY",
+  "STORAGE_PROVIDER",
+  "storage",
+  "database",
+  "migrations",
+];
+
 function summarizeSmoke(checks: SmokeCheck[]): SmokeStatus {
   if (checks.some((check) => check.status === "fail")) return "fail";
   if (checks.some((check) => check.status === "warning")) return "warning";
@@ -85,6 +104,21 @@ async function runCheck(name: string, check: () => Promise<SmokeCheck>): Promise
   }
 }
 
+function healthCheckNames(checks: unknown[]) {
+  return new Set(
+    checks
+      .map((check) => (check && typeof check === "object" && "name" in check ? check.name : null))
+      .filter((name): name is string => typeof name === "string" && name.length > 0),
+  );
+}
+
+function healthHasNonOkCheck(checks: unknown[]) {
+  return checks.some((check) => {
+    if (!check || typeof check !== "object" || !("status" in check)) return true;
+    return check.status !== "ok";
+  });
+}
+
 export async function runProductionSmoke(options: ProductionSmokeOptions): Promise<SmokeResult> {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
   const timeoutMs = options.timeoutMs ?? 15_000;
@@ -120,6 +154,22 @@ export async function runProductionSmoke(options: ProductionSmokeOptions): Promi
       }
       if (payload.status === "degraded") {
         return { name: "health", status: "warning", message: "Deployment readiness is degraded." };
+      }
+      const names = healthCheckNames(payload.checks);
+      const missing = REQUIRED_HEALTH_CHECKS.filter((name) => !names.has(name));
+      if (missing.length > 0) {
+        return {
+          name: "health",
+          status: "fail",
+          message: `/api/health is missing required readiness check(s): ${missing.join(", ")}.`,
+        };
+      }
+      if (healthHasNonOkCheck(payload.checks)) {
+        return {
+          name: "health",
+          status: "fail",
+          message: "/api/health reported status ok but included a non-ok readiness check.",
+        };
       }
       if (expectedCommitSha) {
         const actualCommitSha = payload.deployment?.commitSha;

@@ -121,7 +121,9 @@ health endpoint reads commit metadata
 from `SERMON_CLIPPER_COMMIT_SHA` first, then common provider variables such as
 `VERCEL_GIT_COMMIT_SHA` or `RAILWAY_GIT_COMMIT_SHA`.
 
-`npm run smoke:production` checks the deployed app's health payload, login/OTP surface,
+`npm run smoke:production` checks the deployed app's health payload, including the required
+production readiness checks for auth email, approval notifications, Stripe, S3 storage,
+transcription, analysis, database, migrations, and storage initialization. It also checks the login/OTP surface,
 unauthenticated app redirect, invalid join-token handling, invalid review-token handling,
 signed-media rejection, signed-upload rejection, storage-shim auth rejection, and Stripe webhook signature enforcement. When `--commit-sha` or
 `SMOKE_COMMIT_SHA` is set, it also verifies that `/api/health` reports matching deployment commit
