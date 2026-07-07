@@ -1,20 +1,35 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { AUTH_SESSION_COOKIE, hashSecret } from "@/lib/auth/email-otp";
 import { prisma } from "@/lib/prisma";
 
 export const DEV_SESSION_COOKIE = "sermon_clipper_dev_user";
 
 export async function getCurrentUser() {
   const cookieStore = await cookies();
-  const userId = cookieStore.get(DEV_SESSION_COOKIE)?.value;
+  const sessionToken = cookieStore.get(AUTH_SESSION_COOKIE)?.value;
 
-  if (!userId) {
-    return null;
+  if (sessionToken) {
+    const session = await prisma.authSession.findUnique({
+      where: { tokenHash: hashSecret(sessionToken) },
+      include: { user: true },
+    });
+
+    if (session && !session.revokedAt && session.expiresAt > new Date()) {
+      return session.user;
+    }
   }
 
-  return prisma.user.findUnique({
-    where: { id: userId },
-  });
+  if (process.env.NODE_ENV !== "production") {
+    const userId = cookieStore.get(DEV_SESSION_COOKIE)?.value;
+    if (userId) {
+      return prisma.user.findUnique({
+        where: { id: userId },
+      });
+    }
+  }
+
+  return null;
 }
 
 export async function requireCurrentUser() {

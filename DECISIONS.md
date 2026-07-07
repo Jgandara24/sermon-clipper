@@ -10,6 +10,27 @@ Tradeoff: The UI can exercise login and workspace routing locally, but productio
 
 Status: Active.
 
+## 2026-07-07 - Phase 8 Auth Starts With Email OTP And DB Sessions
+
+Decision: Phase 8 replaces the raw user-id session as the primary auth mechanism with a real email
+OTP flow. `email_otp_challenges` stores hashed six-digit codes with expiry, consumed timestamps,
+and attempt counts; `auth_sessions` stores hashed opaque session tokens with expiry/revocation.
+`getCurrentUser()` now prefers the DB-backed session cookie and only falls back to the
+development-only user-id cookie outside production. The login page requests and verifies email OTP
+codes; dev login remains visible only in non-production environments for local fixtures.
+
+Why: This moves the product from "any email can become a dev cookie" toward deployable auth while
+keeping the existing local demo/test path intact. Storing only hashes for OTP codes and session
+tokens avoids putting bearer secrets in the database. Server Actions handle validation and cookie
+setting, matching the Next.js App Router auth guidance.
+
+Tradeoff: OTP delivery is not wired to a production email provider yet; codes are printed to server
+logs so the auth flow can be verified locally and in tests without pretending email delivery exists.
+The next hardening slice should add a delivery provider, rate limiting, and audit events around
+OTP sends/verifications.
+
+Status: Active — authentication/session foundation is real; notification delivery remains open.
+
 ## 2026-07-06 - No External Provider Calls In Foundation
 
 Decision: Upload, URL import, transcription, AI analysis, rendering, storage, billing, and publishing are visible as stubs only.

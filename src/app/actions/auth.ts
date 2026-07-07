@@ -5,10 +5,21 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { DEV_SESSION_COOKIE, getPrimaryWorkspaceForUser, requireCurrentUser } from "@/lib/auth";
+import {
+  AUTH_SESSION_COOKIE,
+  consumeEmailOtpChallenge,
+  createEmailOtpChallenge,
+  revokeSessionToken,
+} from "@/lib/auth/email-otp";
 import { prisma } from "@/lib/prisma";
 
 const loginSchema = z.object({
   email: z.string().email().toLowerCase(),
+});
+
+const otpVerifySchema = z.object({
+  email: z.string().email().toLowerCase(),
+  code: z.string().trim().regex(/^\d{6}$/),
 });
 
 const onboardingSchema = z.object({
@@ -18,6 +29,10 @@ const onboardingSchema = z.object({
 });
 
 export async function devLoginAction(formData: FormData) {
+  if (process.env.NODE_ENV === "production") {
+    redirect("/login?error=dev-disabled");
+  }
+
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
   });
@@ -40,7 +55,7 @@ export async function devLoginAction(formData: FormData) {
   cookieStore.set(DEV_SESSION_COOKIE, user.id, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: false,
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
@@ -49,8 +64,66 @@ export async function devLoginAction(formData: FormData) {
   redirect(workspace ? "/app" : "/onboarding");
 }
 
+function setAuthSessionCookie(token: string, expiresAt: Date) {
+  return {
+    name: AUTH_SESSION_COOKIE,
+    value: token,
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: expiresAt,
+  };
+}
+
+export async function requestEmailOtpAction(formData: FormData) {
+  const parsed = loginSchema.safeParse({
+    email: formData.get("email"),
+  });
+
+  if (!parsed.success) {
+    redirect("/login?error=invalid-email");
+  }
+
+  const challenge = await createEmailOtpChallenge(prisma, { email: parsed.data.email });
+
+  // Phase 8 foundation: this is a real OTP challenge/session flow. Until a production email
+  // provider is configured, local/dev delivery is explicit and auditable in server logs.
+  console.info(`[auth] OTP for ${challenge.email}: ${challenge.code} (expires ${challenge.expiresAt.toISOString()})`);
+
+  redirect(`/login?otp=sent&email=${encodeURIComponent(challenge.email)}`);
+}
+
+export async function verifyEmailOtpAction(formData: FormData) {
+  const parsed = otpVerifySchema.safeParse({
+    email: formData.get("email"),
+    code: formData.get("code"),
+  });
+
+  if (!parsed.success) {
+    redirect("/login?error=invalid-code");
+  }
+
+  const result = await consumeEmailOtpChallenge(prisma, parsed.data);
+  if (!result.ok) {
+    redirect(`/login?error=${result.reason}&email=${encodeURIComponent(parsed.data.email)}`);
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set(setAuthSessionCookie(result.token, result.expiresAt));
+  cookieStore.delete(DEV_SESSION_COOKIE);
+
+  const workspace = await getPrimaryWorkspaceForUser(result.userId);
+  redirect(workspace ? "/app" : "/onboarding");
+}
+
 export async function logoutAction() {
   const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(AUTH_SESSION_COOKIE)?.value;
+  if (sessionToken) {
+    await revokeSessionToken(prisma, sessionToken);
+  }
+  cookieStore.delete(AUTH_SESSION_COOKIE);
   cookieStore.delete(DEV_SESSION_COOKIE);
   redirect("/login");
 }

@@ -11,7 +11,8 @@ Implemented:
 - Next.js App Router, TypeScript, Tailwind
 - Prisma schema and ordered migrations for the Phase 1-2 data model
 - Local Postgres dev path via Docker Compose
-- Development-only cookie auth
+- Email OTP auth foundation with hashed one-time codes and DB-backed opaque session tokens; a
+  development-only login button remains available outside production for local fixtures
 - Onboarding, dashboard, project detail, settings, and billing routes
 - Real video upload (presigned-style direct upload to local disk), FINALIZE + PROBE processing
   jobs (real ffprobe/ffmpeg metadata, thumbnail, and audio extraction), a DB-polling job queue
@@ -68,7 +69,9 @@ Stubbed by design:
   face detection yet, per guide §14's own Phase 8 deferral)
 - Per-word karaoke caption animation (all presets burn in at the line level — see DECISIONS.md)
 - Billing and publishing providers
-- Production OTP or Google OAuth
+- Production email/SMS delivery provider for OTP and approval notifications (OTP codes are printed
+  to server logs until a provider is configured)
+- Google OAuth
 - Pulpit Engine bridge
 
 ## Local Setup
