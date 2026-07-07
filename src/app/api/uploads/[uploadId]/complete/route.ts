@@ -2,6 +2,7 @@ import { SourceOrigin } from "@prisma/client";
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
 import { getStorageProvider } from "@/lib/storage";
 
@@ -34,11 +35,32 @@ export async function POST(
   const tempKey = `tmp/${workspace.id}/${uploadId}`;
 
   if (!(await storage.exists(tempKey))) {
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: workspace.id,
+      category: "upload",
+      eventType: "upload_complete_missing_temp",
+      severity: "warning",
+      message: "Upload completion failed because temporary storage object was missing.",
+      metadata: { uploadId, filename: parsed.data.filename },
+    });
     return apiError("UPLOAD_INTERRUPTED", "Upload lost connection — resume?");
   }
 
   const actualSize = await storage.size(tempKey);
   if (actualSize !== parsed.data.size) {
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: workspace.id,
+      category: "upload",
+      eventType: "upload_complete_size_mismatch",
+      severity: "warning",
+      message: "Upload completion failed because reported size did not match stored size.",
+      metadata: {
+        uploadId,
+        filename: parsed.data.filename,
+        reportedBytes: parsed.data.size,
+        actualBytes: actualSize,
+      },
+    });
     return apiError("UPLOAD_INTERRUPTED", "Upload lost connection — resume?");
   }
 
@@ -53,6 +75,19 @@ export async function POST(
       sizeBytes: BigInt(actualSize),
       storageKey: permanentKey,
       language: "en",
+    },
+  });
+  await recordOperationalEventSafely(prisma, {
+    workspaceId: workspace.id,
+    category: "upload",
+    eventType: "upload_completed",
+    message: "Upload completed and source video was created.",
+    metadata: {
+      uploadId,
+      sourceVideoId: sourceVideo.id,
+      filename: parsed.data.filename,
+      bytes: actualSize,
+      storageKey: permanentKey,
     },
   });
 

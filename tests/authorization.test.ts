@@ -16,6 +16,7 @@ const allPermissions: WorkspacePermission[] = [
   "REVIEW_CLIP",
   "MANAGE_TEMPLATES",
   "MANAGE_BILLING",
+  "MANAGE_OPERATIONS",
   "CANCEL_PROJECT",
 ];
 
@@ -38,6 +39,7 @@ describe("workspace role permissions", () => {
     expect(hasWorkspacePermission(WorkspaceRole.EDITOR, "REVIEW_CLIP")).toBe(false);
     expect(hasWorkspacePermission(WorkspaceRole.EDITOR, "MANAGE_TEMPLATES")).toBe(false);
     expect(hasWorkspacePermission(WorkspaceRole.EDITOR, "MANAGE_BILLING")).toBe(false);
+    expect(hasWorkspacePermission(WorkspaceRole.EDITOR, "MANAGE_OPERATIONS")).toBe(false);
   });
 
   it("limits approvers to viewing and reviewing clips", () => {
@@ -49,6 +51,7 @@ describe("workspace role permissions", () => {
     expect(hasWorkspacePermission(WorkspaceRole.APPROVER, "REQUEST_APPROVAL")).toBe(false);
     expect(hasWorkspacePermission(WorkspaceRole.APPROVER, "MANAGE_TEMPLATES")).toBe(false);
     expect(hasWorkspacePermission(WorkspaceRole.APPROVER, "MANAGE_BILLING")).toBe(false);
+    expect(hasWorkspacePermission(WorkspaceRole.APPROVER, "MANAGE_OPERATIONS")).toBe(false);
     expect(hasWorkspacePermission(WorkspaceRole.APPROVER, "CANCEL_PROJECT")).toBe(false);
   });
 

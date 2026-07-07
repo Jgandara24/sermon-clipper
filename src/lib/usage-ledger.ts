@@ -1,4 +1,5 @@
 import { LedgerKind, Prisma, type PrismaClient } from "@prisma/client";
+import { recordOperationalEvent } from "@/lib/observability/operational-events";
 
 export class InsufficientBalanceError extends Error {}
 export class InvalidLedgerAmountError extends Error {}
@@ -46,7 +47,7 @@ async function applyLedgerMutation(client: PrismaClient, params: LedgerMutationP
       );
     }
 
-    return tx.usageLedger.create({
+    const ledger = await tx.usageLedger.create({
       data: {
         workspaceId: params.workspaceId,
         kind: params.kind,
@@ -57,6 +58,22 @@ async function applyLedgerMutation(client: PrismaClient, params: LedgerMutationP
         note: params.note ?? undefined,
       },
     });
+    await recordOperationalEvent(tx, {
+      workspaceId: params.workspaceId,
+      category: "billing",
+      eventType: `ledger_${params.kind.toLowerCase()}`,
+      severity: params.kind === LedgerKind.REFUND ? "info" : "info",
+      message: `Usage ledger ${params.kind.toLowerCase()} recorded.`,
+      projectId: params.projectId ?? null,
+      jobId: params.jobId ?? null,
+      metadata: {
+        ledgerId: ledger.id,
+        minutesDelta: params.minutesDelta.toString(),
+        balanceAfter: ledger.balanceAfter.toString(),
+        note: params.note ?? null,
+      },
+    });
+    return ledger;
   });
 }
 

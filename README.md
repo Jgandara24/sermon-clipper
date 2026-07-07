@@ -40,6 +40,10 @@ Implemented:
   estimated processing minutes from real ffprobe duration before transcription/analysis can run,
   insufficient balances stop the pipeline with a billing error, and project failures/cancels
   refund reserved processing minutes
+- Production observability foundation: workspace-scoped operational events record uploads, billing
+  ledger mutations, processing/transcription/analysis/export outcomes, approval notification
+  delivery, and stale-worker recovery, with an owner/admin Operations page at
+  `/app/settings/operations`
 - Editor MVP (`/app/clips/:id/editor`): transcript-based script editor (click-to-delete words,
   filler-word chips, extend before/after), 4 original caption presets with live style overrides,
   center/face/manual layout with a manual crop box, a DOM/CSS preview (real video playback,
@@ -147,9 +151,9 @@ This runs Prisma validation, ESLint, TypeScript, Vitest, and the production Next
 
 A separate integration suite exercises the usage ledger against a real, migrated Postgres
 database (reserve/settle/release, idempotency, the balance-never-negative invariant), worker
-reliability (delayed retries, heartbeats, stale-job recovery), and the Phase 6/7
-reviewed-brand-export workflow (approved clip + brand lower-third + word delete → real 1080×1920
-MP4 rendered by FFmpeg/libass). If `.data/models/ggml-tiny.en.bin` exists, it also proves
+reliability (delayed retries, heartbeats, stale-job recovery), operational event persistence, and
+the Phase 6/7 reviewed-brand-export workflow (approved clip + brand lower-third + word delete →
+real 1080×1920 MP4 rendered by FFmpeg/libass). If `.data/models/ggml-tiny.en.bin` exists, it also proves
 upload-video-only ASR by running a spoken sermon MP4 through whisper.cpp and generating ranked
 scripture-aware clips without an SRT override. It's intentionally not part of `verify`/CI — run it
 manually once Postgres is up:

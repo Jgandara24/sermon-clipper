@@ -155,6 +155,28 @@ webhook-driven minute grants remains a follow-up Phase 8 billing slice.
 Status: Active — usage limits and reservations are enforced; Stripe payment collection remains
 open.
 
+## 2026-07-07 - Operational Events Provide Production Observability
+
+Decision: Phase 8 adds a workspace-scoped `operational_events` table plus
+`recordOperationalEvent*` helpers. Upload presign/write/complete paths, processing and export job
+success/failure/retry paths, stale-worker recovery, approval notification delivery, and usage-ledger
+mutations now write durable events. Owners/admins can view the latest workspace events at
+`/app/settings/operations`.
+
+Why: Console logs are not enough for a real church workflow. Operators need a durable, queryable
+feed that ties upload failures, billing-limit stops, transcription/analysis/export failures,
+notification delivery, and worker recovery back to a workspace and relevant job/project/export IDs.
+This table creates that cross-cutting incident trail without overloading domain records like
+`usage_ledger` or `clip_approval_audit_events`.
+
+Tradeoff: This is not a full external observability stack. There is no alert routing, tracing, log
+shipping, or metrics dashboard yet; those can be added by forwarding `operational_events` or
+emitting provider-specific telemetry later. For MVP production operation, the database-backed
+event feed gives support staff a reliable first diagnostic surface.
+
+Status: Active — durable workspace-level operational event feed is in place; external alerting and
+metrics remain open.
+
 ## 2026-07-06 - No External Provider Calls In Foundation
 
 Decision: Upload, URL import, transcription, AI analysis, rendering, storage, billing, and publishing are visible as stubs only.

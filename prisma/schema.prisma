@@ -199,6 +199,7 @@ model Workspace {
   clipApprovals           ClipApproval[]
   approvalNotifications   ApprovalNotification[]
   clipApprovalAuditEvents ClipApprovalAuditEvent[]
+  operationalEvents       OperationalEvent[]
 
   @@index([ownerId])
   @@map("workspaces")
@@ -600,4 +601,28 @@ model ClipApprovalAuditEvent {
   @@index([workspaceId])
   @@index([eventType])
   @@map("clip_approval_audit_events")
+}
+
+model OperationalEvent {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String?  @map("workspace_id") @db.Uuid
+  category    String
+  eventType   String   @map("event_type")
+  severity    String   @default("info")
+  message     String
+  projectId   String?  @map("project_id") @db.Uuid
+  jobId       String?  @map("job_id") @db.Uuid
+  exportJobId String?  @map("export_job_id") @db.Uuid
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([category, createdAt])
+  @@index([severity, createdAt])
+  @@index([projectId])
+  @@index([jobId])
+  @@index([exportJobId])
+  @@map("operational_events")
 }

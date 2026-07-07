@@ -1,5 +1,6 @@
 import { type ProcessingJobType, ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { releaseReservationsForProject } from "@/lib/usage-ledger";
 import { withHeartbeat } from "@/lib/worker/reliability";
 import { jobHandlers } from "./handlers";
@@ -14,12 +15,26 @@ export async function runOnePendingJob(): Promise<boolean> {
   if (!job) {
     return false;
   }
+  const project = await prisma.project.findUnique({
+    where: { id: job.projectId },
+    select: { workspaceId: true },
+  });
 
   const handler = jobHandlers[job.type];
   if (!handler) {
     await markJobFailed(prisma, job.id, {
       code: "UNSUPPORTED_JOB_TYPE",
       message: "This processing stage isn't wired up yet.",
+    });
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: project?.workspaceId,
+      category: "processing",
+      eventType: "processing_job_failed",
+      severity: "error",
+      message: "Processing job failed because its type is unsupported.",
+      projectId: job.projectId,
+      jobId: job.id,
+      metadata: { type: job.type, errorCode: "UNSUPPORTED_JOB_TYPE" },
     });
     return true;
   }
@@ -30,6 +45,15 @@ export async function runOnePendingJob(): Promise<boolean> {
       () => handler({ job, prisma }),
     );
     await markJobSucceeded(prisma, job.id);
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: project?.workspaceId,
+      category: job.type === "TRANSCRIBE" ? "transcription" : job.type === "ANALYZE" ? "analysis" : "processing",
+      eventType: "processing_job_succeeded",
+      message: `${job.type} job succeeded.`,
+      projectId: job.projectId,
+      jobId: job.id,
+      metadata: { type: job.type, attempt: job.attempt },
+    });
   } catch (error) {
     const failure =
       error instanceof JobFailureError
@@ -53,6 +77,21 @@ export async function runOnePendingJob(): Promise<boolean> {
         .update({ where: { id: job.projectId }, data: { status: ProjectStatus.FAILED } })
         .catch(() => {});
     }
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: project?.workspaceId,
+      category: job.type === "TRANSCRIBE" ? "transcription" : job.type === "ANALYZE" ? "analysis" : "processing",
+      eventType: updatedJob.state === "FAILED" ? "processing_job_failed" : "processing_job_retrying",
+      severity: updatedJob.state === "FAILED" ? "error" : "warning",
+      message: `${job.type} job ${updatedJob.state === "FAILED" ? "failed" : "will retry"}.`,
+      projectId: job.projectId,
+      jobId: job.id,
+      metadata: {
+        type: job.type,
+        attempt: job.attempt,
+        errorCode: failure.code,
+        retryable: failure.retryable ?? true,
+      },
+    });
   }
 
   return true;

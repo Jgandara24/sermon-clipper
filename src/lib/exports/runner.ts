@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { withHeartbeat } from "@/lib/worker/reliability";
 import { ExportFailureError, runExportJob } from "./handler";
 import {
@@ -21,6 +22,14 @@ export async function runOnePendingExportJob(): Promise<boolean> {
       () => runExportJob(prisma, job),
     );
     await markExportJobSucceeded(prisma, job.id, outputFileId);
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: job.workspaceId,
+      category: "export",
+      eventType: "export_job_succeeded",
+      message: "Export job succeeded.",
+      exportJobId: job.id,
+      metadata: { clipId: job.clipId, outputFileId, filename: job.filename, attempt: job.attempt },
+    });
   } catch (error) {
     const failure =
       error instanceof ExportFailureError
@@ -31,7 +40,21 @@ export async function runOnePendingExportJob(): Promise<boolean> {
       console.error(`[worker] export job ${job.id} failed unexpectedly`, error);
     }
 
-    await markExportJobFailedOrRetry(prisma, job, failure);
+    const updatedJob = await markExportJobFailedOrRetry(prisma, job, failure);
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: job.workspaceId,
+      category: "export",
+      eventType: updatedJob.state === "FAILED" ? "export_job_failed" : "export_job_retrying",
+      severity: updatedJob.state === "FAILED" ? "error" : "warning",
+      message: `Export job ${updatedJob.state === "FAILED" ? "failed" : "will retry"}.`,
+      exportJobId: job.id,
+      metadata: {
+        clipId: job.clipId,
+        filename: job.filename,
+        attempt: job.attempt,
+        errorCode: failure.code,
+      },
+    });
   }
 
   return true;

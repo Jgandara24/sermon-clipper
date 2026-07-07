@@ -7,6 +7,7 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import { sendApprovalNotification } from "@/lib/notifications/approval";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 
 const REVIEW_TOKEN_TTL_DAYS = 14;
 
@@ -169,6 +170,37 @@ export async function requestClipApproval(params: {
           },
         },
       });
+      await tx.operationalEvent.create({
+        data: {
+          workspaceId: approval.workspaceId,
+          category: "approval",
+          eventType:
+            result.status === NotificationStatus.SENT
+              ? "approval_notification_sent"
+              : result.status === NotificationStatus.FAILED
+                ? "approval_notification_failed"
+                : "approval_notification_skipped",
+          severity: result.status === NotificationStatus.FAILED ? "error" : "info",
+          message: `Approval notification ${result.status.toLowerCase()}.`,
+          metadata: {
+            approvalId: approval.id,
+            clipId: params.clipId,
+            channel: recipient.channel,
+            provider: result.provider,
+            errorMessage: result.errorMessage ?? null,
+          },
+        },
+      });
+    });
+  }
+  if (recipients.length === 0) {
+    await recordOperationalEventSafely(params.prisma, {
+      workspaceId: approval.workspaceId,
+      category: "approval",
+      eventType: "approval_requested_without_notification",
+      severity: "warning",
+      message: "Approval was requested without an email or SMS reviewer recipient.",
+      metadata: { approvalId: approval.id, clipId: params.clipId },
     });
   }
 

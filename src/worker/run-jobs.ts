@@ -3,6 +3,7 @@ import { recoverStaleExportJobs } from "@/lib/exports/queue";
 import { recoverStaleProcessingJobs } from "@/lib/jobs/queue";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { jobHandlers } from "@/lib/jobs/handlers";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
 import { releaseReservationForJob } from "@/lib/usage-ledger";
 import { ProjectStatus, type ProcessingJobType } from "@prisma/client";
@@ -41,6 +42,13 @@ async function loop() {
         }
         if (processingRecovery.recovered || processingRecovery.failed || exportRecovery.recovered || exportRecovery.failed) {
           console.warn("[worker] recovered stale jobs", { processingRecovery, exportRecovery });
+          await recordOperationalEventSafely(prisma, {
+            category: "worker",
+            eventType: "stale_jobs_recovered",
+            severity: processingRecovery.failed || exportRecovery.failed ? "error" : "warning",
+            message: "Worker recovered stale running jobs.",
+            metadata: { processingRecovery, exportRecovery },
+          });
         }
         lastRecoveryAt = now;
       }
@@ -51,6 +59,13 @@ async function loop() {
       processed = (await runOnePendingExportJob()) || processed;
     } catch (error) {
       console.error("[worker] unexpected error while polling for jobs", error);
+      await recordOperationalEventSafely(prisma, {
+        category: "worker",
+        eventType: "worker_poll_error",
+        severity: "error",
+        message: "Worker polling loop threw an unexpected error.",
+        metadata: { error: error instanceof Error ? error.message : String(error) },
+      });
     }
 
     if (!processed && !shuttingDown) {

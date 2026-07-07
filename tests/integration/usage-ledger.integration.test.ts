@@ -67,6 +67,14 @@ describe("usage ledger against a real database", () => {
       minutes: 4,
     });
     expect(reservation.balanceAfter.toString()).toBe("6");
+    const event = await prisma.operationalEvent.findFirstOrThrow({
+      where: { workspaceId, eventType: "ledger_processing", jobId: job.id },
+    });
+    expect(event.metadata).toMatchObject({
+      ledgerId: reservation.id,
+      minutesDelta: "-4",
+      balanceAfter: "6",
+    });
 
     const settled = await settleReservationForJob(prisma, job.id);
     expect(settled?.id).toBe(reservation.id);
