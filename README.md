@@ -15,6 +15,8 @@ Implemented:
   development-only login button remains available outside production for local fixtures
 - Workspace role-permission enforcement for upload/import, clip editing, exports, approval
   requests, project cancellation, brand-template management, billing pages, and guarded navigation
+- Short-lived HMAC-signed upload, source-video, thumbnail, and export download URLs for the local
+  storage provider; legacy session media routes now redirect to signed URLs
 - Onboarding, dashboard, project detail, settings, and billing routes
 - Real video upload (presigned-style direct upload to local disk), FINALIZE + PROBE processing
   jobs (real ffprobe/ffmpeg metadata, thumbnail, and audio extraction), a DB-polling job queue
@@ -175,6 +177,7 @@ npm run test:e2e
   they use the deterministic heuristic scorer instead, which is clearly labeled `heuristic-v1`
   in the UI and never presented as AI-scored.
 - The local-disk storage provider under `STORAGE_LOCAL_ROOT` (default `.data/storage`) stands in
-  for S3/R2 until a cloud bucket is wired up; swap the `StorageProvider` implementation, not its
-  callers.
+  for S3/R2 until a cloud bucket is wired up. Browser-facing upload/media access already goes
+  through expiring signed URLs using `MEDIA_URL_SECRET`; swap the presigner/storage implementation,
+  not its callers.
 - The reserved `POST /api/integrations/pulpit-engine/webhook` endpoint returns HTTP 501.

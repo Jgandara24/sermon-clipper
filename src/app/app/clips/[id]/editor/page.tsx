@@ -4,6 +4,7 @@ import { approvalExportBlockMessage, isClipApprovedForExport } from "@/lib/appro
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { parseLowerThird } from "@/lib/brand-template";
 import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
+import { createSignedMediaUrl } from "@/lib/media/signed-url";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
 
@@ -37,7 +38,7 @@ export default async function ClipEditorPage({ params }: { params: Promise<{ id:
   assertWorkspaceScope(clip.workspaceId, workspace.id, "clip");
 
   const sourceVideo = clip.project.sourceVideo;
-  if (!sourceVideo) {
+  if (!sourceVideo?.storageKey) {
     notFound();
   }
 
@@ -65,12 +66,20 @@ export default async function ClipEditorPage({ params }: { params: Promise<{ id:
   const sourceDurationMs = sourceVideo.durationS
     ? Math.round(sourceVideo.durationS.toNumber() * 1000)
     : clip.endMs;
+  const sourceContentType = sourceVideo.filename?.toLowerCase().endsWith(".mov")
+    ? "video/quicktime"
+    : "video/mp4";
 
   return (
     <ClipEditor
       clipId={clip.id}
       clipTitle={clip.title}
-      sourceVideoId={sourceVideo.id}
+      sourceVideoUrl={createSignedMediaUrl({
+        key: sourceVideo.storageKey,
+        workspaceId: workspace.id,
+        contentType: sourceContentType,
+        filename: sourceVideo.filename ?? undefined,
+      })}
       sourceDurationMs={sourceDurationMs}
       segments={(sourceVideo.transcript?.segments ?? []).map((segment) => ({
         id: segment.id,

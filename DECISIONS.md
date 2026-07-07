@@ -51,6 +51,26 @@ There is not yet a workspace member management UI for owners/admins to assign ro
 Status: Active — core role checks are enforced; review-link hardening and member administration
 remain open.
 
+## 2026-07-07 - Browser Media Access Uses Short-Lived Signed URLs
+
+Decision: Upload URLs, source-video preview URLs, thumbnails, and export downloads now use
+short-lived HMAC-signed URLs generated with `MEDIA_URL_SECRET`. The local-disk provider still backs
+storage, but browser-facing access goes through `/api/media/signed` or a signed `/api/uploads/:id`
+URL instead of stable raw storage/session routes. Existing session-authenticated media routes remain
+as compatibility shims that authorize the user and redirect to a signed URL.
+
+Why: Phase 8 requires uploads, source video access, thumbnails, exports, and downloads to use secure
+short-lived URLs. This gives the app the same contract that a future S3/R2 presigner will expose
+without blocking on bucket credentials, and it removes long-lived predictable media URLs from UI
+and API responses.
+
+Tradeoff: The signed media endpoint still streams from local disk, so production storage is not
+complete yet. Export availability still uses the database `download_expires_at` window, while each
+actual returned download URL has a much shorter cryptographic expiry. The next storage slice should
+add an S3/R2-compatible provider and eliminate local filesystem path dependencies from workers.
+
+Status: Active — signed URL hardening is in place; cloud object storage remains open.
+
 ## 2026-07-06 - No External Provider Calls In Foundation
 
 Decision: Upload, URL import, transcription, AI analysis, rendering, storage, billing, and publishing are visible as stubs only.

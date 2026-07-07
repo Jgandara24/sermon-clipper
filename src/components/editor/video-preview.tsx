@@ -8,13 +8,13 @@ import type { EditorWordWithDeletion } from "@/lib/editor/words";
 import type { EditorBrandTemplate } from "@/components/editor/brand-template-panel";
 
 export function VideoPreview({
-  sourceVideoId,
+  sourceVideoUrl,
   state,
   words,
   showSafeZones,
   brandTemplate,
 }: {
-  sourceVideoId: string;
+  sourceVideoUrl: string;
   state: EditorState;
   words: EditorWordWithDeletion[];
   showSafeZones: boolean;
@@ -94,7 +94,7 @@ export function VideoPreview({
       <div className="relative aspect-[9/16] w-full overflow-hidden bg-black">
         <video
           ref={videoRef}
-          src={`/api/videos/${sourceVideoId}/source`}
+          src={sourceVideoUrl}
           onTimeUpdate={handleTimeUpdate}
           controls
           playsInline

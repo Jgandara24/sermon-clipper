@@ -1,5 +1,6 @@
 import { ExportTable } from "@/components/export-table";
 import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
+import { createSignedMediaUrl } from "@/lib/media/signed-url";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,13 @@ export default async function ExportsPage() {
           createdAt: job.createdAt.toISOString(),
           downloadUrl:
             job.outputFile && job.outputFile.downloadExpiresAt > now
-              ? `/api/exports/${job.id}/download`
+              ? createSignedMediaUrl({
+                  key: job.outputFile.storageKey,
+                  workspaceId: workspace.id,
+                  contentType: "video/mp4",
+                  filename: job.filename,
+                  disposition: "attachment",
+                })
               : null,
           linkExpired: Boolean(job.outputFile) && job.outputFile!.downloadExpiresAt <= now,
         }))}

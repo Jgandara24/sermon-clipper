@@ -1,5 +1,6 @@
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
+import { createSignedMediaUrl } from "@/lib/media/signed-url";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
 
@@ -29,5 +30,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     data: { downloadExpiresAt: new Date(Date.now() + DOWNLOAD_TTL_MS) },
   });
 
-  return apiData({ downloadUrl: `/api/exports/${job.id}/download` });
+  return apiData({
+    downloadUrl: createSignedMediaUrl({
+      key: job.outputFile.storageKey,
+      workspaceId: auth.workspace.id,
+      contentType: "video/mp4",
+      filename: job.filename,
+      disposition: "attachment",
+    }),
+  });
 }

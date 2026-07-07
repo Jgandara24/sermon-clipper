@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
+import { createSignedUploadUrl, DEFAULT_UPLOAD_URL_TTL_SECONDS } from "@/lib/media/signed-url";
 
 const bodySchema = z.object({
   filename: z.string().trim().min(1).max(255),
@@ -35,12 +36,11 @@ export async function POST(request: Request) {
 
   const uploadId = randomUUID();
 
-  // MVP simplification: a single direct PUT rather than true presigned multipart (see §19).
-  // Documented in DECISIONS.md; swap for real presigned S3/R2 URLs when a cloud bucket is wired up.
   return apiData({
     uploadId,
-    uploadUrl: `/api/uploads/${uploadId}`,
+    uploadUrl: createSignedUploadUrl({ uploadId, workspaceId: workspace.id }),
     method: "PUT",
     maxBytes: MAX_UPLOAD_BYTES,
+    expiresInSeconds: DEFAULT_UPLOAD_URL_TTL_SECONDS,
   });
 }

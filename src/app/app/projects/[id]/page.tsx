@@ -5,9 +5,10 @@ import { ClipList } from "@/components/clip-list";
 import { ProcessingStatusTracker } from "@/components/processing-status-tracker";
 import { StatusBadge } from "@/components/status-badge";
 import { TranscriptViewer } from "@/components/transcript-viewer";
-import { formatDate, titleCaseStatus } from "@/lib/format";
-import { assertWorkspaceScope } from "@/lib/project-service";
 import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
+import { formatDate, titleCaseStatus } from "@/lib/format";
+import { createSignedMediaUrl } from "@/lib/media/signed-url";
+import { assertWorkspaceScope } from "@/lib/project-service";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -98,7 +99,11 @@ export default async function ProjectPage({
           </dl>
           {project.sourceVideo?.thumbnailKey ? (
             <Image
-              src={`/api/storage/${project.sourceVideo.thumbnailKey}`}
+              src={createSignedMediaUrl({
+                key: project.sourceVideo.thumbnailKey,
+                workspaceId: workspace.id,
+                contentType: "image/jpeg",
+              })}
               alt=""
               width={640}
               height={360}

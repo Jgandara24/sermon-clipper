@@ -1,20 +1,26 @@
-import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
+import { verifySignedUploadUrl } from "@/lib/media/signed-url";
 import { getStorageProvider, StorageLimitExceededError } from "@/lib/storage";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ uploadId: string }> }) {
-  const auth = await requireApiWorkspace("IMPORT_MEDIA");
-  if ("error" in auth) return auth.error;
-  const { workspace } = auth;
-
   const { uploadId } = await params;
+  const url = new URL(request.url);
+  const verified = verifySignedUploadUrl(uploadId, url.searchParams);
+  if (!verified.ok) {
+    return apiError(
+      verified.reason === "expired" ? "SIGNED_URL_EXPIRED" : "PERMISSION_DENIED",
+      verified.reason === "expired" ? "This upload link expired. Request a fresh upload." : "Invalid upload link.",
+      { status: verified.reason === "expired" ? 410 : 403, retryable: verified.reason === "expired" },
+    );
+  }
+
   if (!request.body) {
     return apiError("UPLOAD_INTERRUPTED", "Upload lost connection — resume?");
   }
 
   const storage = getStorageProvider();
-  const tempKey = `tmp/${workspace.id}/${uploadId}`;
+  const tempKey = `tmp/${verified.workspaceId}/${uploadId}`;
 
   try {
     const bytesWritten = await storage.writeFromWebStream(tempKey, request.body, MAX_UPLOAD_BYTES);

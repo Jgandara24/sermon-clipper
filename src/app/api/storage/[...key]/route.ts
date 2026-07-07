@@ -1,9 +1,10 @@
+import { redirect } from "next/navigation";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiError } from "@/lib/api/response";
-import { getStorageProvider } from "@/lib/storage";
+import { createSignedMediaUrl } from "@/lib/media/signed-url";
 
-// Only thumbnails are browser-servable for now — originals/audio stay off-limits to this route.
-export async function GET(request: Request, { params }: { params: Promise<{ key: string[] }> }) {
+// Authenticated compatibility shim. Only thumbnails are browser-servable from this route.
+export async function GET(_request: Request, { params }: { params: Promise<{ key: string[] }> }) {
   const auth = await requireApiWorkspace();
   if ("error" in auth) return auth.error;
   const { workspace } = auth;
@@ -15,13 +16,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ key:
     return apiError("PERMISSION_DENIED", "You don't have access to that workspace.", { status: 403 });
   }
 
-  const storage = getStorageProvider();
-  if (!(await storage.exists(key))) {
-    return apiError("STORAGE_UNAVAILABLE", "Storage hiccup — try again in a minute.", { status: 404 });
-  }
-
-  const buffer = await storage.readAsBuffer(key);
-  return new Response(new Uint8Array(buffer), {
-    headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=300" },
-  });
+  redirect(createSignedMediaUrl({ key, workspaceId: workspace.id, contentType: "image/jpeg" }));
 }

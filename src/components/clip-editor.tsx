@@ -29,7 +29,7 @@ type SaveStatus = "idle" | "saving" | "saved" | "error" | "conflict";
 export function ClipEditor({
   clipId,
   clipTitle,
-  sourceVideoId,
+  sourceVideoUrl,
   sourceDurationMs,
   segments,
   initialVersion,
@@ -40,7 +40,7 @@ export function ClipEditor({
 }: {
   clipId: string;
   clipTitle: string;
-  sourceVideoId: string;
+  sourceVideoUrl: string;
   sourceDurationMs: number;
   segments: TranscriptSegmentInput[];
   initialVersion: number;
@@ -221,7 +221,7 @@ export function ClipEditor({
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <div className="grid gap-3">
           <VideoPreview
-            sourceVideoId={sourceVideoId}
+            sourceVideoUrl={sourceVideoUrl}
             state={state}
             words={wordsInClip}
             showSafeZones={showSafeZones}
