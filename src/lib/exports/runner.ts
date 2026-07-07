@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import { withHeartbeat } from "@/lib/worker/reliability";
 import { ExportFailureError, runExportJob } from "./handler";
-import { claimNextExportJob, markExportJobFailedOrRetry, markExportJobSucceeded } from "./queue";
+import {
+  claimNextExportJob,
+  heartbeatExportJob,
+  markExportJobFailedOrRetry,
+  markExportJobSucceeded,
+} from "./queue";
 
 /** Claims and runs a single pending export job, if one is available. Returns whether it found work. */
 export async function runOnePendingExportJob(): Promise<boolean> {
@@ -10,7 +16,10 @@ export async function runOnePendingExportJob(): Promise<boolean> {
   }
 
   try {
-    const outputFileId = await runExportJob(prisma, job);
+    const outputFileId = await withHeartbeat(
+      () => heartbeatExportJob(prisma, job.id),
+      () => runExportJob(prisma, job),
+    );
     await markExportJobSucceeded(prisma, job.id, outputFileId);
   } catch (error) {
     const failure =

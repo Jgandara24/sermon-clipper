@@ -113,6 +113,25 @@ queue with retry/backoff and provider webhooks.
 Status: Active — provider-backed approval notifications and link auditability are in place;
 background notification retry/webhook handling remains open.
 
+## 2026-07-07 - DB Worker Heartbeats Recover Stale Jobs
+
+Decision: Processing and export workers now stamp claimed jobs with `worker_id` and `heartbeat_at`
+while work is running. Transient failures move to delayed `RETRYING`; the worker loop periodically
+scans RUNNING processing/export jobs for stale heartbeats, clears dead worker claims, retries jobs
+that still have attempts remaining, and marks exhausted jobs FAILED with explicit user-facing
+timeout messages.
+
+Why: Phase 8 needs failures to be observable and recoverable. A worker process can crash after
+claiming a DB job but before writing a terminal state; without a heartbeat and stale recovery pass,
+that job would remain RUNNING forever and the church would have no honest next step.
+
+Tradeoff: This keeps the Postgres-polling queue instead of adding Redis/BullMQ now. Recovery is
+coarse-grained and timeout-based (`WORKER_STALE_JOB_TIMEOUT_MS`, default 15 minutes), so a very slow
+but healthy job must keep heartbeating. This is acceptable for MVP worker processes and still leaves
+BullMQ/Redis as the future queue transport if volume demands it.
+
+Status: Active.
+
 ## 2026-07-06 - No External Provider Calls In Foundation
 
 Decision: Upload, URL import, transcription, AI analysis, rendering, storage, billing, and publishing are visible as stubs only.
@@ -157,13 +176,13 @@ active for development.
 
 ## 2026-07-06 - DB-Polling Job Queue Instead Of BullMQ + Redis
 
-Decision: `src/lib/jobs/queue.ts` implements the job queue as conditional-UPDATE claims against the existing `processing_jobs` Postgres table (QUEUED -> RUNNING only if still QUEUED), polled by `src/worker/run-jobs.ts` (`npm run worker`). No Redis/BullMQ dependency yet, though the guide's tech stack (§3) and job queue design (§18) call for Redis + BullMQ.
+Decision: `src/lib/jobs/queue.ts` implements the job queue as conditional-UPDATE claims against the existing `processing_jobs` Postgres table (QUEUED/RETRYING -> RUNNING only if still claimable), polled by `src/worker/run-jobs.ts` (`npm run worker`). No Redis/BullMQ dependency yet, though the guide's tech stack (§3) and job queue design (§18) call for Redis + BullMQ. Phase 8 hardening added worker IDs, heartbeats, delayed retry scheduling (`run_after`), max attempts, and stale-running-job recovery for both `processing_jobs` and `export_jobs`.
 
 Why: Redis isn't provisioned locally and adds a second piece of local infrastructure (beyond Postgres) before it's earned its keep at MVP scale. Postgres already has the durable job state (`processing_jobs`); a conditional UPDATE is a well-understood, race-safe claim pattern that needs zero extra services. Per guide §26 ("prefer simple working implementations over premature generality") — the provider-interface carve-out in that same sentence names ASR/LLM/storage specifically, not the queue transport.
 
-Tradeoff: No priority lanes, no built-in backoff/retry scheduling, and polling (default every 2s, `WORKER_POLL_INTERVAL_MS`) adds latency BullMQ's pub/sub wake-up wouldn't have. Fine at single-workspace MVP volume; revisit if concurrent job volume or multi-region workers make polling latency or DB load a real problem.
+Tradeoff: Still no priority lanes, and polling (default every 2s, `WORKER_POLL_INTERVAL_MS`) adds latency BullMQ's pub/sub wake-up wouldn't have. The queue now has enough production safety for MVP operation: failed attempts move to `RETRYING` with backoff, active workers update `heartbeat_at`, and the worker periodically requeues or terminally fails stale jobs after `WORKER_STALE_JOB_TIMEOUT_MS`.
 
-Status: Active.
+Status: Active — keep Postgres polling until queue volume, multi-region needs, or priority scheduling justify Redis/BullMQ.
 
 ## 2026-07-06 - No Ledger Reservation For FINALIZE/PROBE
 

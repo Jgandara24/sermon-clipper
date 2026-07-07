@@ -26,6 +26,9 @@ export async function GET() {
       progress: job.progress,
       errorCode: job.errorCode,
       errorMessageUser: job.errorMessageUser,
+      workerId: job.workerId,
+      heartbeatAt: job.heartbeatAt,
+      staleRecoveredAt: job.staleRecoveredAt,
       createdAt: job.createdAt,
       downloadUrl:
         job.outputFile && job.outputFile.downloadExpiresAt > now

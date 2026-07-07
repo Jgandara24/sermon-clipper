@@ -126,6 +126,10 @@ jobs (a separate table/queue it polls in the same loop), running both with real 
 Uploading a video also kicks off a few inline processing attempts right after project creation,
 so a real upload usually finishes without the worker running — but the worker is the durable
 path and is required for anything the inline kick doesn't finish, and it's required for exports.
+The worker records heartbeats while a job is running, retries transient failures with delayed
+`RETRYING` state, and periodically recovers stale running jobs if a worker dies. Tune
+`WORKER_POLL_INTERVAL_MS`, `WORKER_HEARTBEAT_INTERVAL_MS`, `WORKER_STALE_JOB_TIMEOUT_MS`,
+`WORKER_RECOVERY_INTERVAL_MS`, and `WORKER_ID` in production.
 
 Open [http://localhost:3000](http://localhost:3000). Use `demo@sermonclipper.local` on the dev login screen.
 
@@ -138,12 +142,13 @@ npm run verify
 This runs Prisma validation, ESLint, TypeScript, Vitest, and the production Next build. It does not require external provider credentials, a running Postgres, or a running worker.
 
 A separate integration suite exercises the usage ledger against a real, migrated Postgres
-database (reserve/settle/release, idempotency, the balance-never-negative invariant) and the
-Phase 6/7 reviewed-brand-export workflow (approved clip + brand lower-third + word delete → real
-1080×1920 MP4 rendered by FFmpeg/libass). If `.data/models/ggml-tiny.en.bin` exists, it also
-proves upload-video-only ASR by running a spoken sermon MP4 through whisper.cpp and generating
-ranked scripture-aware clips without an SRT override. It's intentionally not part of `verify`/CI —
-run it manually once Postgres is up:
+database (reserve/settle/release, idempotency, the balance-never-negative invariant), worker
+reliability (delayed retries, heartbeats, stale-job recovery), and the Phase 6/7
+reviewed-brand-export workflow (approved clip + brand lower-third + word delete → real 1080×1920
+MP4 rendered by FFmpeg/libass). If `.data/models/ggml-tiny.en.bin` exists, it also proves
+upload-video-only ASR by running a spoken sermon MP4 through whisper.cpp and generating ranked
+scripture-aware clips without an SRT override. It's intentionally not part of `verify`/CI — run it
+manually once Postgres is up:
 
 ```sh
 npm run test:integration

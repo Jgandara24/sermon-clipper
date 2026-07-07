@@ -29,6 +29,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     progress: job.progress,
     errorCode: job.errorCode,
     errorMessageUser: job.errorMessageUser,
+    workerId: job.workerId,
+    heartbeatAt: job.heartbeatAt,
+    staleRecoveredAt: job.staleRecoveredAt,
     downloadUrl:
       job.outputFile && !linkExpired
         ? createSignedMediaUrl({

@@ -1,8 +1,9 @@
 import { type ProcessingJobType, ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { releaseReservationForJob } from "@/lib/usage-ledger";
+import { withHeartbeat } from "@/lib/worker/reliability";
 import { jobHandlers } from "./handlers";
-import { claimNextJob, markJobFailed, markJobSucceeded } from "./queue";
+import { claimNextJob, heartbeatJob, markJobFailed, markJobFailedOrRetry, markJobSucceeded } from "./queue";
 import { JobFailureError } from "./types";
 
 const SUPPORTED_TYPES = Object.keys(jobHandlers) as ProcessingJobType[];
@@ -24,7 +25,10 @@ export async function runOnePendingJob(): Promise<boolean> {
   }
 
   try {
-    await handler({ job, prisma });
+    await withHeartbeat(
+      () => heartbeatJob(prisma, job.id),
+      () => handler({ job, prisma }),
+    );
     await markJobSucceeded(prisma, job.id);
   } catch (error) {
     const failure =
@@ -36,14 +40,16 @@ export async function runOnePendingJob(): Promise<boolean> {
       console.error(`[worker] job ${job.id} (${job.type}) failed unexpectedly`, error);
     }
 
-    await markJobFailed(prisma, job.id, failure);
-    await releaseReservationForJob(prisma, {
-      jobId: job.id,
-      note: `Released after failure: ${failure.code}`,
-    });
-    await prisma.project
-      .update({ where: { id: job.projectId }, data: { status: ProjectStatus.FAILED } })
-      .catch(() => {});
+    const updatedJob = await markJobFailedOrRetry(prisma, job, failure);
+    if (updatedJob.state === "FAILED") {
+      await releaseReservationForJob(prisma, {
+        jobId: job.id,
+        note: `Released after failure: ${failure.code}`,
+      });
+      await prisma.project
+        .update({ where: { id: job.projectId }, data: { status: ProjectStatus.FAILED } })
+        .catch(() => {});
+    }
   }
 
   return true;

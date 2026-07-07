@@ -323,6 +323,12 @@ model ProcessingJob {
   errorCode        String?            @map("error_code")
   errorMessageUser String?            @map("error_message_user")
   minutesReserved  Decimal?           @map("minutes_reserved") @db.Decimal(10, 2)
+  runAfter         DateTime           @default(now()) @map("run_after")
+  workerId         String?            @map("worker_id")
+  heartbeatAt      DateTime?          @map("heartbeat_at")
+  maxAttempts      Int                @default(3) @map("max_attempts")
+  lastErrorAt      DateTime?          @map("last_error_at")
+  staleRecoveredAt DateTime?          @map("stale_recovered_at")
   startedAt        DateTime?          @map("started_at")
   finishedAt       DateTime?          @map("finished_at")
   createdAt        DateTime           @default(now()) @map("created_at")
@@ -331,7 +337,8 @@ model ProcessingJob {
   project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   usageLedger UsageLedger[]
 
-  @@index([state, type])
+  @@index([state, type, runAfter])
+  @@index([state, heartbeatAt])
   @@index([projectId])
   @@map("processing_jobs")
 }
@@ -442,6 +449,12 @@ model ExportJob {
   errorMessageUser String?            @map("error_message_user")
   minutesCharged   Decimal?           @map("minutes_charged") @db.Decimal(10, 2)
   outputFileId     String?            @unique @map("output_file_id") @db.Uuid
+  runAfter         DateTime           @default(now()) @map("run_after")
+  workerId         String?            @map("worker_id")
+  heartbeatAt      DateTime?          @map("heartbeat_at")
+  maxAttempts      Int                @default(3) @map("max_attempts")
+  lastErrorAt      DateTime?          @map("last_error_at")
+  staleRecoveredAt DateTime?          @map("stale_recovered_at")
   startedAt        DateTime?          @map("started_at")
   finishedAt       DateTime?          @map("finished_at")
   createdAt        DateTime           @default(now()) @map("created_at")
@@ -452,6 +465,8 @@ model ExportJob {
   outputFile ExportedFile? @relation(fields: [outputFileId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, createdAt])
+  @@index([state, runAfter])
+  @@index([state, heartbeatAt])
   @@index([clipId])
   @@map("export_jobs")
 }
