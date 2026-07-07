@@ -1,4 +1,6 @@
 import os from "node:os";
+import { accessSync, constants } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 export const PROCESSING_MAX_ATTEMPTS = 3;
 export const EXPORT_MAX_ATTEMPTS = 3;
@@ -11,17 +13,41 @@ export type WorkerReadinessCheck = {
 };
 
 type EnvLike = Record<string, string | undefined>;
+type CommandAvailable = (command: string) => boolean;
+type FileReadable = (filePath: string) => boolean;
+
+function defaultCommandAvailable(command: string): boolean {
+  const result = spawnSync(command, ["-version"], { stdio: "ignore" });
+  return result.status === 0;
+}
+
+function defaultFileReadable(filePath: string): boolean {
+  try {
+    accessSync(filePath, constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function workerId(): string {
   return process.env.WORKER_ID ?? `${os.hostname()}:${process.pid}`;
 }
 
-export function checkWorkerRuntimeEnvironment(env: EnvLike = process.env): WorkerReadinessCheck[] {
+export function checkWorkerRuntimeEnvironment(
+  env: EnvLike = process.env,
+  commandAvailable: CommandAvailable = defaultCommandAvailable,
+  fileReadable: FileReadable = defaultFileReadable,
+): WorkerReadinessCheck[] {
   if (env.NODE_ENV !== "production") {
     return [{ name: "WORKER_ID", status: "ok", message: "WORKER_ID is optional outside production." }];
   }
 
-  return [
+  const ffmpegPath = env.FFMPEG_PATH || "ffmpeg";
+  const ffprobePath = env.FFPROBE_PATH || "ffprobe";
+  const whisperBinary = env.WHISPER_CPP_BINARY || "whisper-cli";
+
+  const checks: WorkerReadinessCheck[] = [
     env.WORKER_ID?.trim()
       ? { name: "WORKER_ID", status: "ok", message: "Stable worker identity is configured." }
       : {
@@ -29,11 +55,45 @@ export function checkWorkerRuntimeEnvironment(env: EnvLike = process.env): Worke
           status: "fail",
           message: "WORKER_ID is required in production so worker heartbeats and recovery are auditable.",
         },
+    commandAvailable(ffmpegPath)
+      ? { name: "FFMPEG_PATH", status: "ok", message: `ffmpeg is available at ${ffmpegPath}.` }
+      : {
+          name: "FFMPEG_PATH",
+          status: "fail",
+          message: `ffmpeg is required on production workers. Checked: ${ffmpegPath}.`,
+        },
+    commandAvailable(ffprobePath)
+      ? { name: "FFPROBE_PATH", status: "ok", message: `ffprobe is available at ${ffprobePath}.` }
+      : {
+          name: "FFPROBE_PATH",
+          status: "fail",
+          message: `ffprobe is required on production workers. Checked: ${ffprobePath}.`,
+        },
+    commandAvailable(whisperBinary)
+      ? { name: "WHISPER_CPP_BINARY", status: "ok", message: `Whisper binary is available at ${whisperBinary}.` }
+      : {
+          name: "WHISPER_CPP_BINARY",
+          status: "fail",
+          message: `whisper.cpp binary is required on production workers. Checked: ${whisperBinary}.`,
+        },
+    env.WHISPER_MODEL_PATH && fileReadable(env.WHISPER_MODEL_PATH)
+      ? { name: "WHISPER_MODEL_PATH", status: "ok", message: "Whisper model file is readable." }
+      : {
+          name: "WHISPER_MODEL_PATH",
+          status: "fail",
+          message: "WHISPER_MODEL_PATH must point to a readable model file on production workers.",
+        },
   ];
+
+  return checks;
 }
 
-export function assertWorkerRuntimeReady(env: EnvLike = process.env) {
-  const checks = checkWorkerRuntimeEnvironment(env);
+export function assertWorkerRuntimeReady(
+  env: EnvLike = process.env,
+  commandAvailable: CommandAvailable = defaultCommandAvailable,
+  fileReadable: FileReadable = defaultFileReadable,
+) {
+  const checks = checkWorkerRuntimeEnvironment(env, commandAvailable, fileReadable);
   const failures = checks.filter((check) => check.status === "fail");
   if (failures.length > 0) {
     throw new Error(failures.map((check) => check.message).join(" "));

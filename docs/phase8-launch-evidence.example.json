@@ -18,7 +18,7 @@
     },
     "workerProcess": {
       "status": "failed",
-      "evidence": "Deployment platform shows at least one worker process running with stable WORKER_ID."
+      "evidence": "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, whisper-cli, and readable WHISPER_MODEL_PATH."
     },
     "databaseMigrations": {
       "status": "failed",

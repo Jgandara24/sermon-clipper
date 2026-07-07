@@ -35,7 +35,7 @@ Record the following before declaring Phase 8 complete:
 | Health check | Output from `curl -fsS <url>/api/health` showing readiness status `ok`, all checks `ok`, and the deployed commit SHA. |
 | Production smoke | Output from `npm run smoke:production -- --base-url <url> --commit-sha <sha>` showing status `ok`. |
 | Web process | Deployment platform confirms the web process is running the deployed commit. |
-| Worker process | At least one separate worker process is running with stable `WORKER_ID`. |
+| Worker process | At least one separate worker process is running with stable `WORKER_ID`, available `ffmpeg`/`ffprobe`, available `whisper-cli`, and readable `WHISPER_MODEL_PATH`. |
 | Database | `npm run db:migrate:deploy` applied successfully against production. |
 | Auth email | A real user receives and verifies an email OTP through SendGrid. |
 | Workspace create | The real user creates a workspace. |

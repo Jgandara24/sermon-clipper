@@ -23,15 +23,60 @@ describe("worker reliability helpers", () => {
   });
 
   it("requires a stable worker id in production", () => {
-    const checks = checkWorkerRuntimeEnvironment({ NODE_ENV: "production" });
+    const checks = checkWorkerRuntimeEnvironment({ NODE_ENV: "production" }, () => true, () => true);
 
     expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "WORKER_ID", status: "fail" })]));
-    expect(() => assertWorkerRuntimeReady({ NODE_ENV: "production" })).toThrow("WORKER_ID is required");
+    expect(() => assertWorkerRuntimeReady({ NODE_ENV: "production" }, () => true, () => true)).toThrow(
+      "WORKER_ID is required",
+    );
   });
 
-  it("accepts configured production worker identity", () => {
-    const checks = assertWorkerRuntimeReady({ NODE_ENV: "production", WORKER_ID: "worker-1" });
+  it("requires production media and transcription binaries", () => {
+    const checks = checkWorkerRuntimeEnvironment(
+      {
+        NODE_ENV: "production",
+        WORKER_ID: "worker-1",
+        FFMPEG_PATH: "missing-ffmpeg",
+        FFPROBE_PATH: "missing-ffprobe",
+        WHISPER_CPP_BINARY: "missing-whisper",
+        WHISPER_MODEL_PATH: "/models/missing.bin",
+      },
+      () => false,
+      () => false,
+    );
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "FFMPEG_PATH", status: "fail" }),
+        expect.objectContaining({ name: "FFPROBE_PATH", status: "fail" }),
+        expect.objectContaining({ name: "WHISPER_CPP_BINARY", status: "fail" }),
+        expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "fail" }),
+      ]),
+    );
+  });
+
+  it("accepts configured production worker runtime", () => {
+    const checks = assertWorkerRuntimeReady(
+      {
+        NODE_ENV: "production",
+        WORKER_ID: "worker-1",
+        FFMPEG_PATH: "ffmpeg",
+        FFPROBE_PATH: "ffprobe",
+        WHISPER_CPP_BINARY: "whisper-cli",
+        WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+      },
+      () => true,
+      () => true,
+    );
 
     expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "WORKER_ID", status: "ok" })]));
+    expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "FFMPEG_PATH", status: "ok" })]));
+    expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "FFPROBE_PATH", status: "ok" })]));
+    expect(checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "WHISPER_CPP_BINARY", status: "ok" })]),
+    );
+    expect(checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "ok" })]),
+    );
   });
 });

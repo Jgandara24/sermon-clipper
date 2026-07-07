@@ -46,7 +46,8 @@ export const launchEvidenceItems = [
   {
     key: "workerProcess",
     label: "Worker process",
-    proof: "Deployment platform shows at least one worker process running with stable WORKER_ID.",
+    proof:
+      "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, whisper-cli, and readable WHISPER_MODEL_PATH.",
   },
   {
     key: "databaseMigrations",

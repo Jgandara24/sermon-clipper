@@ -160,6 +160,9 @@ degraded or warning.
 - Run workers in the same region as object storage when possible.
 - Give each process a stable `WORKER_ID`; production workers fail startup when it is missing so
   job heartbeats and stale recovery are auditable.
+- Production workers also fail startup when `ffmpeg`, `ffprobe`, `WHISPER_CPP_BINARY`, or the
+  readable model file at `WHISPER_MODEL_PATH` are missing. Set `FFMPEG_PATH`,
+  `FFPROBE_PATH`, or `WHISPER_CPP_BINARY` if those binaries are not on `PATH`.
 - Install `whisper-cli` and mount the same model file path referenced by `WHISPER_MODEL_PATH` on
   every worker. The readiness gate proves the path is configured; the launch workflow must still
   prove a real sermon was transcribed by the deployed worker.
