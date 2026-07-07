@@ -33,7 +33,7 @@ Record the following before declaring Phase 8 complete:
 | Deployment URL | Production URL using HTTPS and the intended domain. |
 | Commit SHA | Git commit deployed to production. |
 | Health check | Output from `curl -fsS <url>/api/health` showing no failed readiness checks and the deployed commit SHA. |
-| Production smoke | Output from `npm run smoke:production -- --base-url <url>` showing `ok` or only accepted warnings. |
+| Production smoke | Output from `npm run smoke:production -- --base-url <url> --commit-sha <sha>` showing `ok` or only accepted warnings. |
 | Web process | Deployment platform confirms the web process is running the deployed commit. |
 | Worker process | At least one separate worker process is running with stable `WORKER_ID`. |
 | Database | `npm run db:migrate:deploy` applied successfully against production. |

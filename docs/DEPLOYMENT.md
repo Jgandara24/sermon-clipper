@@ -104,7 +104,7 @@ npm run worker:prod
 
 ```sh
 curl -fsS https://clips.example.org/api/health
-npm run smoke:production -- --base-url https://clips.example.org
+npm run smoke:production -- --base-url https://clips.example.org --commit-sha <deployed-git-sha>
 ```
 
 The health endpoint returns HTTP 200 for `ok` or `degraded` and HTTP 503 for failed critical checks.
@@ -119,8 +119,9 @@ from `SERMON_CLIPPER_COMMIT_SHA` first, then common provider variables such as
 
 `npm run smoke:production` checks the deployed app's health payload, login/OTP surface,
 unauthenticated app redirect, invalid join-token handling, signed-media rejection, and Stripe
-webhook signature enforcement. It exits non-zero on hard failures and reports degraded readiness as
-a warning.
+webhook signature enforcement. When `--commit-sha` or `SMOKE_COMMIT_SHA` is set, it also verifies
+that `/api/health` reports matching deployment commit metadata. It exits non-zero on hard failures
+and reports degraded readiness as a warning.
 
 ## Stripe Billing
 
@@ -156,7 +157,7 @@ a warning.
 
 After deploy:
 
-1. Run `npm run smoke:production -- --base-url https://clips.example.org`.
+1. Run `npm run smoke:production -- --base-url https://clips.example.org --commit-sha <deployed-git-sha>`.
 2. Sign in with email OTP.
 3. Create a workspace or invite a second user from `/app/settings` and accept the `/join/:token`
    link after signing in as the invited email.

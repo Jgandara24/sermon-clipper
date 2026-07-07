@@ -15,6 +15,7 @@ export type ProductionSmokeOptions = {
   baseUrl: string;
   timeoutMs?: number;
   expectProduction?: boolean;
+  expectedCommitSha?: string;
   fetchImpl?: typeof fetch;
 };
 
@@ -28,6 +29,16 @@ function summarizeSmoke(checks: SmokeCheck[]): SmokeStatus {
 
 function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/$/, "");
+}
+
+function commitsMatch(actual: string, expected: string) {
+  const normalizedActual = actual.trim().toLowerCase();
+  const normalizedExpected = expected.trim().toLowerCase();
+  return (
+    normalizedActual.length > 0 &&
+    normalizedExpected.length > 0 &&
+    (normalizedActual.startsWith(normalizedExpected) || normalizedExpected.startsWith(normalizedActual))
+  );
 }
 
 async function fetchWithTimeout(
@@ -67,11 +78,16 @@ export async function runProductionSmoke(options: ProductionSmokeOptions): Promi
   const timeoutMs = options.timeoutMs ?? 15_000;
   const fetchImpl = options.fetchImpl ?? fetch;
   const expectProduction = options.expectProduction ?? true;
+  const expectedCommitSha = options.expectedCommitSha?.trim();
 
   const checks = await Promise.all([
     runCheck("health", async () => {
       const response = await fetchWithTimeout(fetchImpl, `${baseUrl}/api/health`, { cache: "no-store" }, timeoutMs);
-      const payload = (await response.json().catch(() => null)) as { status?: string; checks?: unknown[] } | null;
+      const payload = (await response.json().catch(() => null)) as {
+        status?: string;
+        checks?: unknown[];
+        deployment?: { commitSha?: string | null };
+      } | null;
       if (!response.ok) {
         return {
           name: "health",
@@ -87,6 +103,19 @@ export async function runProductionSmoke(options: ProductionSmokeOptions): Promi
       }
       if (payload.status === "degraded") {
         return { name: "health", status: "warning", message: "Deployment readiness is degraded." };
+      }
+      if (expectedCommitSha) {
+        const actualCommitSha = payload.deployment?.commitSha;
+        if (!actualCommitSha) {
+          return { name: "health", status: "fail", message: "/api/health did not include deployment commit metadata." };
+        }
+        if (!commitsMatch(actualCommitSha, expectedCommitSha)) {
+          return {
+            name: "health",
+            status: "fail",
+            message: `/api/health commit ${actualCommitSha} does not match expected commit ${expectedCommitSha}.`,
+          };
+        }
       }
       return { name: "health", status: "ok", message: "Deployment readiness is ok." };
     }),

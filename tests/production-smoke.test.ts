@@ -33,6 +33,49 @@ describe("production smoke checks", () => {
     expect(result.checks.every((check) => check.status === "ok")).toBe(true);
   });
 
+  it("passes when expected commit matches health deployment metadata", async () => {
+    const result = await runProductionSmoke({
+      baseUrl: "https://clips.example.com",
+      expectedCommitSha: "abc1234",
+      fetchImpl: fetchFor({
+        "/api/health": response(
+          { status: "ok", deployment: { commitSha: "abc1234def5678" }, checks: [] },
+          { status: 200 },
+        ),
+        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/app": response("", { status: 307, headers: { location: "/login" } }),
+        "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
+      }),
+    });
+
+    expect(result.status).toBe("ok");
+  });
+
+  it("fails when expected commit does not match health deployment metadata", async () => {
+    const result = await runProductionSmoke({
+      baseUrl: "https://clips.example.com",
+      expectedCommitSha: "abc1234",
+      fetchImpl: fetchFor({
+        "/api/health": response(
+          { status: "ok", deployment: { commitSha: "fffffff" }, checks: [] },
+          { status: 200 },
+        ),
+        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/app": response("", { status: 307, headers: { location: "/login" } }),
+        "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
+      }),
+    });
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "health", status: "fail" })]),
+    );
+  });
+
   it("warns when health is degraded", async () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",

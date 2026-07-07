@@ -7,6 +7,7 @@ function argValue(name: string) {
 
 const baseUrl = argValue("--base-url") ?? process.env.SMOKE_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
 const timeoutMs = Number(argValue("--timeout-ms") ?? process.env.SMOKE_TIMEOUT_MS ?? 15_000);
+const expectedCommitSha = argValue("--commit-sha") ?? process.env.SMOKE_COMMIT_SHA;
 const expectProduction = !process.argv.includes("--allow-dev-login");
 
 async function main() {
@@ -19,6 +20,7 @@ async function main() {
     baseUrl,
     timeoutMs,
     expectProduction,
+    expectedCommitSha,
   });
 
   for (const check of result.checks) {
