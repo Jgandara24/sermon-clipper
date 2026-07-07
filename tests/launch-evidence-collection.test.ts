@@ -63,6 +63,54 @@ describe("launch evidence collection", () => {
     expect(evidence.items.productionSmoke?.status).toBe("failed");
   });
 
+  it("marks health failed when readiness is degraded", () => {
+    const evidence = applyAutomatedLaunchEvidence({
+      evidence: template(),
+      collectedAt: "2026-07-07T21:00:00Z",
+      health: {
+        baseUrl: "https://clips.example.org",
+        httpStatus: 200,
+        ok: true,
+        payload: {
+          status: "degraded",
+          deployment: { commitSha: "abc1234", commitSource: "SERMON_CLIPPER_COMMIT_SHA" },
+          checks: [{ name: "deployment_commit", status: "warning", message: "Commit metadata missing." }],
+        },
+      },
+      smoke: {
+        status: "ok",
+        checks: [{ name: "health", status: "ok", message: "Deployment readiness is ok." }],
+      },
+    });
+
+    expect(evidence.items.healthCheck?.status).toBe("failed");
+    expect(evidence.items.healthCheck?.evidence).toContain("Readiness status: degraded");
+  });
+
+  it("marks production smoke failed when smoke reports warnings", () => {
+    const evidence = applyAutomatedLaunchEvidence({
+      evidence: template(),
+      collectedAt: "2026-07-07T21:00:00Z",
+      health: {
+        baseUrl: "https://clips.example.org",
+        httpStatus: 200,
+        ok: true,
+        payload: {
+          status: "ok",
+          deployment: { commitSha: "abc1234", commitSource: "SERMON_CLIPPER_COMMIT_SHA" },
+          checks: [{ name: "database", status: "ok", message: "Database is reachable." }],
+        },
+      },
+      smoke: {
+        status: "warning",
+        checks: [{ name: "health", status: "warning", message: "Deployment readiness is degraded." }],
+      },
+    });
+
+    expect(evidence.items.productionSmoke?.status).toBe("failed");
+    expect(evidence.items.productionSmoke?.evidence).toContain("Production smoke status: warning");
+  });
+
   it("marks health failed when deployment commit is missing", () => {
     const evidence = applyAutomatedLaunchEvidence({
       evidence: template(),

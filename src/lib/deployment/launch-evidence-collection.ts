@@ -58,11 +58,10 @@ function commitsMatch(actual: string | null | undefined, expected: string) {
 function healthPassed(health: HealthEvidencePayload, expectedCommitSha: string) {
   return (
     health.ok &&
-    !!health.payload?.status &&
-    health.payload.status !== "fail" &&
+    health.payload?.status === "ok" &&
     commitsMatch(health.payload.deployment?.commitSha, expectedCommitSha) &&
     Array.isArray(health.payload.checks) &&
-    !health.payload.checks.some((check) => check.status === "fail")
+    health.payload.checks.every((check) => check.status === "ok")
   );
 }
 
@@ -77,7 +76,7 @@ export function applyAutomatedLaunchEvidence(input: AutomatedLaunchEvidenceInput
         formatHealthEvidence(input.health),
       ),
       productionSmoke: automatedItem(
-        input.smoke.status === "fail" ? "failed" : "passed",
+        input.smoke.status === "ok" ? "passed" : "failed",
         formatSmokeEvidence(input.smoke),
       ),
     },
