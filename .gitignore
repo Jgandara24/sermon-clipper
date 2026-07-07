@@ -42,6 +42,9 @@ yarn-error.log*
 # local-disk storage provider (dev-only stand-in for S3/R2)
 /.data/
 
+# production launch evidence may contain real user/provider/operational details
+/docs/phase8-launch-evidence.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

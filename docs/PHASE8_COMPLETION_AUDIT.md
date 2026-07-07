@@ -59,8 +59,10 @@ Generate a launch-specific evidence file with the deployed URL and current commi
 npm run create:launch-evidence -- --base-url https://clips.example.org --verified-by "Launch operator"
 ```
 
-Then fill every item in `docs/phase8-launch-evidence.json` with real production evidence, change
-each status to `passed`, and verify it:
+`docs/phase8-launch-evidence.json` is ignored by Git because it may contain real user emails,
+provider output, production URLs, or operational details. Keep the tracked
+`docs/phase8-launch-evidence.example.json` as the reusable template. Then fill every item in the
+local evidence file with real production evidence, change each status to `passed`, and verify it:
 
 ```sh
 npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json
