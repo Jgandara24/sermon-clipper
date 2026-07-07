@@ -6,6 +6,7 @@ import { jobHandlers } from "@/lib/jobs/handlers";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
 import { releaseReservationForJob } from "@/lib/usage-ledger";
+import { assertWorkerRuntimeReady } from "@/lib/worker/reliability";
 import { ProjectStatus, type ProcessingJobType } from "@prisma/client";
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
@@ -80,6 +81,13 @@ process.on("SIGINT", () => {
 process.on("SIGTERM", () => {
   shuttingDown = true;
 });
+
+try {
+  assertWorkerRuntimeReady();
+} catch (error) {
+  console.error("[worker] runtime readiness failed", error instanceof Error ? error.message : error);
+  process.exit(1);
+}
 
 console.log(`[worker] polling for processing jobs every ${POLL_INTERVAL_MS}ms`);
 loop().then(() => {

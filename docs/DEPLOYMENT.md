@@ -147,7 +147,8 @@ health and smoke evidence must both be `ok`, not degraded or warning.
 ## Worker Operations
 
 - Run workers in the same region as object storage when possible.
-- Give each process a stable `WORKER_ID`.
+- Give each process a stable `WORKER_ID`; production workers fail startup when it is missing so
+  job heartbeats and stale recovery are auditable.
 - Monitor `/app/settings/operations` for `worker`, `processing`, `transcription`, `analysis`, and
   `export` events.
 - If a worker dies mid-job, another worker will recover stale `RUNNING` jobs after

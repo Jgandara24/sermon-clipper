@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { retryDelayMsForAttempt, retryRunAfter, staleCutoff } from "@/lib/worker/reliability";
+import {
+  assertWorkerRuntimeReady,
+  checkWorkerRuntimeEnvironment,
+  retryDelayMsForAttempt,
+  retryRunAfter,
+  staleCutoff,
+} from "@/lib/worker/reliability";
 
 describe("worker reliability helpers", () => {
   it("uses bounded retry delays by attempt", () => {
@@ -14,5 +20,18 @@ describe("worker reliability helpers", () => {
 
     expect(retryRunAfter(2, now).toISOString()).toBe("2026-07-07T15:01:00.000Z");
     expect(staleCutoff(now, 10 * 60_000).toISOString()).toBe("2026-07-07T14:50:00.000Z");
+  });
+
+  it("requires a stable worker id in production", () => {
+    const checks = checkWorkerRuntimeEnvironment({ NODE_ENV: "production" });
+
+    expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "WORKER_ID", status: "fail" })]));
+    expect(() => assertWorkerRuntimeReady({ NODE_ENV: "production" })).toThrow("WORKER_ID is required");
+  });
+
+  it("accepts configured production worker identity", () => {
+    const checks = assertWorkerRuntimeReady({ NODE_ENV: "production", WORKER_ID: "worker-1" });
+
+    expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "WORKER_ID", status: "ok" })]));
   });
 });
