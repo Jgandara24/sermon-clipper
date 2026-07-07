@@ -1,11 +1,26 @@
 import { CheckCircle2, MessageSquareWarning } from "lucide-react";
-import { notFound } from "next/navigation";
 import { decideClipReviewAction } from "@/app/actions/review";
 import { isReviewLinkActive, recordReviewLinkViewed, reviewLinkUnavailableReason } from "@/lib/approval";
 import { formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+
+function UnavailableReviewLink() {
+  return (
+    <main className="min-h-screen bg-[#f6f5f0] px-4 py-6 text-stone-950">
+      <div className="mx-auto max-w-xl">
+        <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-teal-800">Clip review</p>
+          <h1 className="mt-1 text-2xl font-semibold">Review link unavailable</h1>
+          <p className="mt-4 rounded-lg bg-stone-50 p-3 text-sm leading-6 text-stone-700">
+            This review link is not available. Ask the media team to send a fresh review link.
+          </p>
+        </section>
+      </div>
+    </main>
+  );
+}
 
 export default async function ClipReviewPage({
   params,
@@ -31,7 +46,7 @@ export default async function ClipReviewPage({
   });
 
   if (!approval) {
-    notFound();
+    return <UnavailableReviewLink />;
   }
   const inactiveReason = reviewLinkUnavailableReason(approval);
   const isActive = isReviewLinkActive(approval);

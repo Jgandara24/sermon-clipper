@@ -190,6 +190,22 @@ export async function runProductionSmoke(options: ProductionSmokeOptions): Promi
       }
       return { name: "join-invalid", status: "ok", message: "Invalid join token is handled safely." };
     }),
+    runCheck("review-invalid", async () => {
+      const response = await fetchWithTimeout(
+        fetchImpl,
+        `${baseUrl}/review/smoke-invalid-token`,
+        { cache: "no-store" },
+        timeoutMs,
+      );
+      const html = await readText(response);
+      if (!response.ok) {
+        return { name: "review-invalid", status: "fail", message: `/review invalid returned HTTP ${response.status}.` };
+      }
+      if (!html.includes("Review link unavailable")) {
+        return { name: "review-invalid", status: "fail", message: "Invalid review token did not show safe fallback UI." };
+      }
+      return { name: "review-invalid", status: "ok", message: "Invalid review token is handled safely." };
+    }),
     runCheck("signed-media-rejects-invalid", async () => {
       const response = await fetchWithTimeout(
         fetchImpl,

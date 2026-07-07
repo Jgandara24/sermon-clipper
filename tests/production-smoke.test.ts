@@ -36,6 +36,7 @@ describe("production smoke checks", () => {
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
@@ -57,6 +58,7 @@ describe("production smoke checks", () => {
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
@@ -77,6 +79,7 @@ describe("production smoke checks", () => {
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
@@ -96,6 +99,7 @@ describe("production smoke checks", () => {
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
@@ -115,6 +119,7 @@ describe("production smoke checks", () => {
         "/login": response("Sermon Clipper Email me a sign-in code Use development login", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
@@ -126,6 +131,26 @@ describe("production smoke checks", () => {
     );
   });
 
+  it("fails when invalid review tokens do not render safe fallback UI", async () => {
+    const result = await runProductionSmoke({
+      baseUrl: "https://clips.example.com",
+      fetchImpl: fetchFor({
+        "/api/health": response({ status: "ok", checks: [] }, { status: 200 }),
+        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/app": response("", { status: 307, headers: { location: "/login" } }),
+        "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/review/smoke-invalid-token": response("not found", { status: 404 }),
+        "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
+      }),
+    });
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "review-invalid", status: "fail" })]),
+    );
+  });
+
   it("fails when Stripe webhook configuration is missing", async () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
@@ -134,6 +159,7 @@ describe("production smoke checks", () => {
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 503 }),
       }),
