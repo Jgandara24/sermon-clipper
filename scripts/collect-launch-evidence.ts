@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import type { LaunchEvidence } from "../src/lib/deployment/launch-evidence";
+import { validateLaunchEvidence, type LaunchEvidence } from "../src/lib/deployment/launch-evidence";
 import { applyAutomatedLaunchEvidence } from "../src/lib/deployment/launch-evidence-collection";
 import { runProductionSmoke } from "../src/lib/deployment/production-smoke";
 
@@ -13,6 +13,7 @@ const baseUrl = argValue("--base-url") ?? process.env.SMOKE_BASE_URL ?? process.
 const timeoutMs = Number(argValue("--timeout-ms") ?? process.env.SMOKE_TIMEOUT_MS ?? 15_000);
 const expectedCommitShaOverride = argValue("--commit-sha") ?? process.env.SMOKE_COMMIT_SHA;
 const expectProduction = !process.argv.includes("--allow-dev-login");
+const requireComplete = process.argv.includes("--require-complete");
 
 if (!baseUrl) {
   console.error("Missing base URL. Use --base-url https://clips.example.org or SMOKE_BASE_URL.");
@@ -55,7 +56,14 @@ async function main() {
   console.log(`\nUpdated ${filePath}`);
   console.log(`Production smoke status: ${smoke.status}`);
 
-  if (smoke.status === "fail" || !healthResponse.ok) {
+  const validation = validateLaunchEvidence(updated, { expectedCommitSha });
+  for (const check of validation.checks) {
+    const label = check.status.toUpperCase().padEnd(5);
+    console.log(`${label} launch-evidence ${check.name}: ${check.message}`);
+  }
+  console.log(`\nLaunch evidence status after collection: ${validation.status}`);
+
+  if (smoke.status === "fail" || !healthResponse.ok || (requireComplete && validation.status === "fail")) {
     process.exit(1);
   }
 }

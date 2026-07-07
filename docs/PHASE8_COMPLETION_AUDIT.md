@@ -73,7 +73,9 @@ npm run collect:launch-evidence -- --base-url https://clips.example.org --commit
 ```
 
 If `--commit-sha` is omitted, the collector uses the evidence file's top-level `commitSha` for the
-smoke check.
+smoke check. The collector prints the full launch-evidence validation result after writing automated
+health and smoke evidence. Add `--require-complete` during final launch verification if the command
+should exit non-zero while any evidence item is still missing or failed.
 
 By default, verification also checks that the evidence file's `commitSha` matches the current Git
 `HEAD`. Use `--commit-sha <sha>` when verifying evidence for a specific deployed revision from a
