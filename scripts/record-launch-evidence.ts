@@ -4,6 +4,7 @@ import {
   launchEvidenceItems,
   recordLaunchEvidenceItem,
   validateLaunchEvidence,
+  validateLaunchEvidenceItemProof,
   type LaunchEvidence,
   type LaunchEvidenceItem,
 } from "../src/lib/deployment/launch-evidence";
@@ -49,6 +50,13 @@ if (!existsSync(filePath)) {
   console.error(`${filePath} does not exist.`);
   console.error('Create it first with: npm run create:launch-evidence -- --base-url https://clips.example.org --verified-by "Launch operator"');
   process.exit(2);
+}
+
+const itemValidation = validateLaunchEvidenceItemProof(itemKey, proof, status);
+if (status === "passed" && itemValidation.status === "fail") {
+  console.error(`Invalid ${itemKey} evidence: ${itemValidation.message}`);
+  console.error("The evidence file was not changed.");
+  process.exit(1);
 }
 
 const evidence = JSON.parse(readFileSync(filePath, "utf8")) as LaunchEvidence;

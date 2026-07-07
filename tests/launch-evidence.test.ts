@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -6,6 +8,7 @@ import {
   launchEvidenceItems,
   recordLaunchEvidenceItem,
   validateLaunchEvidence,
+  validateLaunchEvidenceItemProof,
   type LaunchEvidence,
 } from "@/lib/deployment/launch-evidence";
 
@@ -562,6 +565,57 @@ describe("launch evidence validation", () => {
       evidence: "Created workspace sc_prod_123 as owner@example.org.",
     });
     expect(updated.items.workspaceJoin?.status).toBe("failed");
+  });
+
+  it("validates a single item proof before launch evidence recording writes it", () => {
+    const valid = validateLaunchEvidenceItemProof(
+      "download",
+      "MP4 prod_export_123 downloaded through a short-lived signed URL from Cloudflare R2 production storage.",
+    );
+    const invalid = validateLaunchEvidenceItemProof("download", "Download worked.");
+
+    expect(valid).toEqual(expect.objectContaining({ name: "download", status: "ok" }));
+    expect(invalid).toEqual(expect.objectContaining({ name: "download", status: "fail" }));
+  });
+
+  it("fails single item proof validation for unknown keys", () => {
+    const result = validateLaunchEvidenceItemProof("downloadn", "Typo should fail.");
+
+    expect(result).toEqual(expect.objectContaining({ name: "downloadn", status: "fail" }));
+  });
+
+  it("does not write invalid passed evidence through the record CLI", () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), "launch-evidence-"));
+    const evidencePath = path.join(tmpDir, "phase8-launch-evidence.json");
+    const template = createLaunchEvidenceTemplate({
+      deploymentUrl: "https://clips.example.org",
+      commitSha: "40aa4ff",
+      verifiedAt: "2026-07-07T20:00:00Z",
+      verifiedBy: "Launch operator",
+    });
+    writeFileSync(evidencePath, `${JSON.stringify(template, null, 2)}\n`);
+    const before = readFileSync(evidencePath, "utf-8");
+
+    try {
+      expect(() =>
+        execFileSync(
+          path.join(process.cwd(), "node_modules", ".bin", "tsx"),
+          [
+            "scripts/record-launch-evidence.ts",
+            "--file",
+            evidencePath,
+            "--item",
+            "download",
+            "--evidence",
+            "Download worked.",
+          ],
+          { cwd: process.cwd(), encoding: "utf-8", stdio: "pipe" },
+        ),
+      ).toThrow();
+      expect(readFileSync(evidencePath, "utf-8")).toBe(before);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it("rejects unknown launch evidence item keys when recording evidence", () => {

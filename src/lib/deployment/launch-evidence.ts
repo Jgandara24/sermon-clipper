@@ -451,6 +451,38 @@ export function recordLaunchEvidenceItem(options: RecordLaunchEvidenceItemOption
   };
 }
 
+export function validateLaunchEvidenceItemProof(
+  itemKey: string,
+  proof: string,
+  status: LaunchEvidenceItem["status"] = "passed",
+): LaunchEvidenceCheck {
+  if (!isLaunchEvidenceItemKey(itemKey)) {
+    return {
+      name: itemKey,
+      status: "fail",
+      message: `Unknown launch evidence item: ${itemKey}.`,
+    };
+  }
+
+  const item = launchEvidenceItems.find((candidate) => candidate.key === itemKey);
+  return checkEvidenceItem(
+    {
+      deploymentUrl: "https://launch-evidence.local",
+      commitSha: "0000000",
+      verifiedAt: new Date(0).toISOString(),
+      verifiedBy: "Launch evidence validator",
+      items: {
+        [itemKey]: {
+          status,
+          evidence: proof,
+        },
+      },
+    },
+    itemKey,
+    item?.label ?? itemKey,
+  );
+}
+
 function checkString(name: string, value: unknown): LaunchEvidenceCheck {
   return typeof value === "string" && value.trim()
     ? { name, status: "ok", message: `${name} is present.` }

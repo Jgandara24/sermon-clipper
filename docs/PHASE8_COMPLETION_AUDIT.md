@@ -94,6 +94,10 @@ npm run record:launch-evidence -- --list
 npm run record:launch-evidence -- --item workspaceCreate --evidence "Created production workspace as owner@example.org."
 ```
 
+Recording a `passed` item validates that item's required proof terms before writing the evidence
+file. If the proof is too vague, the command exits non-zero and leaves the existing evidence file
+unchanged.
+
 When `--base-url` is supplied, verification checks that the evidence file's `deploymentUrl` matches
 the deployment being verified. By default, verification also checks that the evidence file's
 `commitSha` matches the current Git `HEAD`. Use `--commit-sha <sha>` when verifying evidence for a
