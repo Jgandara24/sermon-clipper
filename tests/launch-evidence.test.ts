@@ -26,10 +26,20 @@ function completeEvidence(): LaunchEvidence {
       "Operations metadata shows provider claude-sonnet-5 with ANTHROPIC_API_KEY-backed scoring, not the heuristic fallback.",
     clipRanking:
       "Ranked clips appeared with church-aware scoring, scripture relevance, biblical_usefulness, theological_clarity, and pastoral_tone subscores.",
+    branding: "Brand template Sunday Lower Third was applied in the production editor to the ranked clip.",
+    approvalNotification:
+      "Real approval email was sent through SendGrid and delivered to approver@example.org for project prod_project_123.",
+    reviewApproval:
+      "Secure /review/prod-review-token link was viewed by approver@example.org and approved for export.",
+    export: "Approved clip prod_clip_123 exported through worker-1 as MP4 export prod_export_123.",
+    download:
+      "MP4 prod_export_123 downloaded through a short-lived signed URL from Cloudflare R2 production storage.",
     billing:
       "Stripe Checkout and Portal were opened, Stripe webhook updated the workspace plan, and granted minutes appeared in the ledger.",
     usageLimits:
       "Insufficient minutes upload was blocked without negative balance; operations showed rejected billing-limit event.",
+    observability:
+      "/app/settings/operations showed upload, processing, approval, export, billing, and worker events for project prod_project_123.",
     ci: "CI passed verify, integration, and e2e jobs for commit fe09434.",
   };
 
@@ -268,6 +278,79 @@ describe("launch evidence validation", () => {
     );
   });
 
+  it("fails when branding proof does not mention applying a brand template in the editor", () => {
+    const evidence = completeEvidence();
+    evidence.items.branding = {
+      status: "passed",
+      evidence: "Branding worked in production.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "branding", status: "fail" })]),
+    );
+  });
+
+  it("fails when approval notification proof does not mention real delivery through a provider", () => {
+    const evidence = completeEvidence();
+    evidence.items.approvalNotification = {
+      status: "passed",
+      evidence: "The approver was notified.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "approvalNotification", status: "fail" })]),
+    );
+  });
+
+  it("fails when review approval proof does not mention viewing and approving the review link", () => {
+    const evidence = completeEvidence();
+    evidence.items.reviewApproval = {
+      status: "passed",
+      evidence: "The review workflow worked.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "reviewApproval", status: "fail" })]),
+    );
+  });
+
+  it("fails when export proof does not mention an approved clip exported by the worker as MP4", () => {
+    const evidence = completeEvidence();
+    evidence.items.export = {
+      status: "passed",
+      evidence: "Export completed.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "export", status: "fail" })]));
+  });
+
+  it("fails when download proof does not mention MP4 download through a short-lived signed storage URL", () => {
+    const evidence = completeEvidence();
+    evidence.items.download = {
+      status: "passed",
+      evidence: "Download worked from production.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "download", status: "fail" })]),
+    );
+  });
+
   it("fails when CI proof does not mention every required gate", () => {
     const evidence = completeEvidence();
     evidence.items.ci = {
@@ -310,6 +393,21 @@ describe("launch evidence validation", () => {
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "usageLimits", status: "fail" })]),
+    );
+  });
+
+  it("fails when observability proof does not mention all required operations categories", () => {
+    const evidence = completeEvidence();
+    evidence.items.observability = {
+      status: "passed",
+      evidence: "/app/settings/operations showed events.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "observability", status: "fail" })]),
     );
   });
 

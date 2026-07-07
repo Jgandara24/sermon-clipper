@@ -45,14 +45,14 @@ Record the following before declaring Phase 8 complete:
 | Transcription provider | Operations metadata proves production transcription used `whisper_cpp`/whisper.cpp and the configured `WHISPER_MODEL_PATH`. |
 | AI analysis provider | Operations metadata proves production scoring used Claude with `ANTHROPIC_API_KEY`, not the heuristic fallback. |
 | Clip ranking | Ranked church-aware clips appear with scripture/church scoring where applicable; the evidence text must name ranked clips, church-aware scoring, and scripture or church subscores. |
-| Branding | A brand template is applied in the editor. |
-| Approval notification | A real approval email and/or SMS is delivered. |
-| Review approval | The secure `/review/:token` link is viewed and approved. |
-| Export | An approved clip exports through the worker. |
-| Download | The MP4 downloads through a short-lived signed URL from production storage. |
+| Branding | A brand template is applied in the editor; the evidence text must name brand template, applied/apply, and editor. |
+| Approval notification | A real approval email and/or SMS is delivered; the evidence text must name the approval email/SMS, delivered/sent state, and SendGrid or Twilio. |
+| Review approval | The secure `/review/:token` link is viewed and approved; the evidence text must name the review link, viewed/opened state, and approval. |
+| Export | An approved clip exports through the worker; the evidence text must name approved clip, export, worker, and MP4. |
+| Download | The MP4 downloads through a short-lived signed URL from production storage; the evidence text must name MP4, download, short-lived signed URL, and production storage/S3/R2. |
 | Billing | Stripe Checkout/Portal and webhook handling update the workspace plan and grant minutes; the evidence text must name Stripe, Checkout, Portal, webhook, workspace plan, and granted minutes. |
 | Usage limits | Insufficient minutes or plan limit conditions are blocked without negative balances; the evidence text must name insufficient minutes, blocked/rejected behavior, and no negative balance. |
-| Observability | `/app/settings/operations` shows upload, processing, approval, export, billing, and worker events. |
+| Observability | `/app/settings/operations` shows upload, processing, approval, export, billing, and worker events; the evidence text must name each category. |
 | CI | `verify`, `integration`, and `e2e` jobs pass for the deployed commit; the evidence text must name each gate. |
 
 Generate a launch-specific evidence file with the deployed URL and current commit:

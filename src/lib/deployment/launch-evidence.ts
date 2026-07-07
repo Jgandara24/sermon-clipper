@@ -234,6 +234,84 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
     }
     return null;
   },
+  branding: (proof) => {
+    const required = [
+      { label: "brand template", pattern: /\bbrand\b.*\btemplate\b|\btemplate\b.*\bbrand\b/i },
+      { label: "applied", pattern: /\bapplied\b|\bapply\b/i },
+      { label: "editor", pattern: /\beditor\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Branding proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  approvalNotification: (proof) => {
+    const required = [
+      { label: "real approval email or SMS", pattern: /\breal\b.*\bapproval\b.*\b(?:email|SMS)\b|\bapproval\b.*\b(?:email|SMS)\b/i },
+      { label: "delivered", pattern: /\bdelivered\b|\bsent\b/i },
+      { label: "SendGrid or Twilio", pattern: /\bsendgrid\b|\btwilio\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Approval notification proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  reviewApproval: (proof) => {
+    const required = [
+      { label: "secure /review/:token link", pattern: /\bsecure\b.*\/review\/(?::token|[^\s]+)|\/review\/(?::token|[^\s]+)/i },
+      { label: "viewed", pattern: /\bviewed\b|\bopened\b/i },
+      { label: "approved", pattern: /\bapproved\b|\bapproval\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Review approval proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  export: (proof) => {
+    const required = [
+      { label: "approved clip", pattern: /\bapproved\b.*\bclip\b|\bclip\b.*\bapproved\b/i },
+      { label: "exported", pattern: /\bexport(?:ed)?\b/i },
+      { label: "worker", pattern: /\bworker\b/i },
+      { label: "MP4", pattern: /\bMP4\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Export proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  download: (proof) => {
+    const required = [
+      { label: "MP4", pattern: /\bMP4\b/i },
+      { label: "downloaded", pattern: /\bdownload(?:ed)?\b/i },
+      { label: "short-lived signed URL", pattern: /\bshort[- ]lived\b.*\bsigned\b.*\bURL\b|\bsigned\b.*\bURL\b.*\bshort[- ]lived\b/i },
+      { label: "production storage", pattern: /\bproduction\b.*\bstorage\b|\b(?:S3|R2)\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Download proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  observability: (proof) => {
+    const required = [
+      { label: "/app/settings/operations", pattern: /\/app\/settings\/operations/i },
+      { label: "upload", pattern: /\bupload\b/i },
+      { label: "processing", pattern: /\bprocessing\b|\btranscription\b|\banalysis\b/i },
+      { label: "approval", pattern: /\bapproval\b/i },
+      { label: "export", pattern: /\bexport\b/i },
+      { label: "billing", pattern: /\bbilling\b/i },
+      { label: "worker", pattern: /\bworker\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Observability proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
   ci: (proof) => {
     const required = [
       { label: "verify", pattern: /\bverify\b/i },
