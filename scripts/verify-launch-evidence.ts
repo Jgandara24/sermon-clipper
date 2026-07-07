@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { validateLaunchEvidence } from "../src/lib/deployment/launch-evidence";
 
@@ -17,6 +17,12 @@ const expectedCommitSha =
 
 if (!filePath) {
   console.error("Missing evidence file. Use --file docs/phase8-launch-evidence.json.");
+  process.exit(2);
+}
+
+if (!existsSync(filePath)) {
+  console.error(`${filePath} does not exist.`);
+  console.error('Create it first with: npm run create:launch-evidence -- --base-url https://clips.example.org --verified-by "Launch operator"');
   process.exit(2);
 }
 

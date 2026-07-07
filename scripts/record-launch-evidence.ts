@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
   isLaunchEvidenceItemKey,
   launchEvidenceItems,
@@ -42,6 +42,12 @@ if (!["passed", "failed", "not_applicable"].includes(status)) {
 
 if (!proof?.trim()) {
   console.error("Missing evidence. Use --evidence \"proof text\".");
+  process.exit(2);
+}
+
+if (!existsSync(filePath)) {
+  console.error(`${filePath} does not exist.`);
+  console.error('Create it first with: npm run create:launch-evidence -- --base-url https://clips.example.org --verified-by "Launch operator"');
   process.exit(2);
 }
 

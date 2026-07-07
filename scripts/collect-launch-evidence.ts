@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { validateLaunchEvidence, type LaunchEvidence } from "../src/lib/deployment/launch-evidence";
 import { applyAutomatedLaunchEvidence } from "../src/lib/deployment/launch-evidence-collection";
 import { runProductionSmoke } from "../src/lib/deployment/production-smoke";
@@ -22,8 +22,17 @@ if (!baseUrl) {
 
 const resolvedBaseUrl = baseUrl;
 
+function readEvidenceFile(path: string) {
+  if (!existsSync(path)) {
+    console.error(`${path} does not exist.`);
+    console.error('Create it first with: npm run create:launch-evidence -- --base-url https://clips.example.org --verified-by "Launch operator"');
+    process.exit(2);
+  }
+  return JSON.parse(readFileSync(path, "utf8")) as LaunchEvidence;
+}
+
 async function main() {
-  const evidence = JSON.parse(readFileSync(filePath, "utf8")) as LaunchEvidence;
+  const evidence = readEvidenceFile(filePath);
   const expectedCommitSha = expectedCommitShaOverride ?? evidence.commitSha;
   const normalizedBaseUrl = resolvedBaseUrl.replace(/\/$/, "");
   const healthResponse = await fetch(`${normalizedBaseUrl}/api/health`, { cache: "no-store" });
