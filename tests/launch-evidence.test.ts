@@ -74,6 +74,18 @@ describe("launch evidence validation", () => {
     expect(result.checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "export", status: "fail" })]));
   });
 
+  it("fails when an evidence item proof is too short to be useful", () => {
+    const evidence = completeEvidence();
+    evidence.items.download = { status: "passed", evidence: "done" };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "download", status: "fail" })]),
+    );
+  });
+
   it("fails when an evidence item is not marked passed", () => {
     const evidence = completeEvidence();
     evidence.items.billing = { status: "failed", evidence: "Stripe webhook did not arrive." };

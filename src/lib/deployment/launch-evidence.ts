@@ -111,6 +111,7 @@ export type LaunchEvidenceTemplateOptions = {
 export type LaunchEvidenceItemKey = (typeof launchEvidenceItems)[number]["key"];
 
 const launchEvidenceItemKeys = new Set<string>(launchEvidenceItems.map((item) => item.key));
+const minimumEvidenceLength = 20;
 
 export function isLaunchEvidenceItemKey(key: string): key is LaunchEvidenceItemKey {
   return launchEvidenceItemKeys.has(key);
@@ -247,6 +248,13 @@ function checkEvidenceItem(evidence: LaunchEvidence, key: string, label: string)
   }
   if (!item.evidence?.trim()) {
     return { name: key, status: "fail", message: `${label} needs non-empty proof.` };
+  }
+  if (item.evidence.trim().length < minimumEvidenceLength) {
+    return {
+      name: key,
+      status: "fail",
+      message: `${label} proof is too short to be useful launch evidence.`,
+    };
   }
   if (/^\s*(todo|paste|placeholder|example)\b/i.test(item.evidence)) {
     return { name: key, status: "fail", message: `${label} proof still looks like placeholder text.` };
