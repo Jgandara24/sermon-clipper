@@ -27,6 +27,7 @@ DATABASE_URL=postgresql://...
 NEXT_PUBLIC_APP_URL=https://clips.example.org
 MEDIA_URL_SECRET=<long-random-secret>
 NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=<stable-32-byte-base64-key>
+SERMON_CLIPPER_COMMIT_SHA=<deployed-git-sha>
 
 SENDGRID_API_KEY=SG...
 AUTH_EMAIL_FROM=auth@example.org
@@ -109,9 +110,12 @@ npm run smoke:production -- --base-url https://clips.example.org
 The health endpoint returns HTTP 200 for `ok` or `degraded` and HTTP 503 for failed critical checks.
 Production readiness fails if `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, auth email
 delivery config, Stripe billing config, S3 storage configuration, database connectivity,
-migrations, or storage configuration are broken. A missing `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is
-reported as degraded because single-instance deployments can still run, but rolling or
-multi-instance deployments should set it.
+migrations, or storage configuration are broken. Missing `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` or
+deployment commit metadata is reported as degraded because single-instance deployments can still
+run, but rolling or multi-instance deployments should set the encryption key and Phase 8 launch
+evidence should tie `/api/health` to the deployed commit. The health endpoint reads commit metadata
+from `SERMON_CLIPPER_COMMIT_SHA` first, then common provider variables such as
+`VERCEL_GIT_COMMIT_SHA` or `RAILWAY_GIT_COMMIT_SHA`.
 
 `npm run smoke:production` checks the deployed app's health payload, login/OTP surface,
 unauthenticated app redirect, invalid join-token handling, signed-media rejection, and Stripe

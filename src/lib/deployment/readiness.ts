@@ -11,10 +11,35 @@ export type ReadinessCheck = {
 
 export type DeploymentReadiness = {
   status: "ok" | "degraded" | "fail";
+  deployment: DeploymentMetadata;
   checks: ReadinessCheck[];
 };
 
 type EnvLike = Record<string, string | undefined>;
+
+export type DeploymentMetadata = {
+  commitSha: string | null;
+  commitSource: string | null;
+};
+
+const DEPLOYMENT_COMMIT_ENV_NAMES = [
+  "SERMON_CLIPPER_COMMIT_SHA",
+  "VERCEL_GIT_COMMIT_SHA",
+  "RAILWAY_GIT_COMMIT_SHA",
+  "RENDER_GIT_COMMIT",
+  "HEROKU_SLUG_COMMIT",
+  "GIT_COMMIT_SHA",
+  "COMMIT_SHA",
+  "SOURCE_VERSION",
+];
+
+export function getDeploymentMetadata(env: EnvLike = process.env): DeploymentMetadata {
+  const source = DEPLOYMENT_COMMIT_ENV_NAMES.find((name) => env[name]?.trim());
+  return {
+    commitSha: source ? env[source]?.trim() ?? null : null,
+    commitSource: source ?? null,
+  };
+}
 
 function checkRequiredEnv(env: EnvLike, name: string): ReadinessCheck {
   return env[name]
@@ -131,6 +156,21 @@ export function checkDeploymentEnvironment(env: EnvLike = process.env): Readines
         },
   );
 
+  const deployment = getDeploymentMetadata(env);
+  checks.push(
+    deployment.commitSha
+      ? {
+          name: "deployment_commit",
+          status: "ok",
+          message: `Deployment commit is ${deployment.commitSha}.`,
+        }
+      : {
+          name: "deployment_commit",
+          status: env.NODE_ENV === "production" ? "warning" : "ok",
+          message: "Set SERMON_CLIPPER_COMMIT_SHA or provider commit metadata for launch evidence.",
+        },
+  );
+
   return checks;
 }
 
@@ -196,10 +236,11 @@ export async function checkDeploymentReadiness(
   client: PrismaClient,
   env: EnvLike = process.env,
 ): Promise<DeploymentReadiness> {
+  const deployment = getDeploymentMetadata(env);
   const checks = [
     ...checkDeploymentEnvironment(env),
     ...(await checkDatabaseReadiness(client)),
     checkStorageReadiness(),
   ];
-  return { status: summarizeReadiness(checks), checks };
+  return { status: summarizeReadiness(checks), deployment, checks };
 }

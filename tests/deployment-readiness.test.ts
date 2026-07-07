@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkDeploymentEnvironment, summarizeReadiness } from "@/lib/deployment/readiness";
+import { checkDeploymentEnvironment, getDeploymentMetadata, summarizeReadiness } from "@/lib/deployment/readiness";
 
 describe("deployment readiness", () => {
   it("fails production readiness without S3 storage and required secrets", () => {
@@ -47,7 +47,31 @@ describe("deployment readiness", () => {
       expect.arrayContaining([
         expect.objectContaining({ name: "STORAGE_PROVIDER", status: "ok" }),
         expect.objectContaining({ name: "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY", status: "warning" }),
+        expect.objectContaining({ name: "deployment_commit", status: "warning" }),
       ]),
     );
+  });
+
+  it("reports deployment commit metadata when configured", () => {
+    const metadata = getDeploymentMetadata({
+      VERCEL_GIT_COMMIT_SHA: "abcdef1234567890",
+    });
+
+    expect(metadata).toEqual({
+      commitSha: "abcdef1234567890",
+      commitSource: "VERCEL_GIT_COMMIT_SHA",
+    });
+  });
+
+  it("prefers explicit app commit metadata over provider defaults", () => {
+    const metadata = getDeploymentMetadata({
+      SERMON_CLIPPER_COMMIT_SHA: "1111111",
+      VERCEL_GIT_COMMIT_SHA: "2222222",
+    });
+
+    expect(metadata).toEqual({
+      commitSha: "1111111",
+      commitSource: "SERMON_CLIPPER_COMMIT_SHA",
+    });
   });
 });
