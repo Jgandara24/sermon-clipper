@@ -62,4 +62,51 @@ describe("launch evidence collection", () => {
     expect(evidence.items.healthCheck?.evidence).toContain("Failed readiness checks: 1");
     expect(evidence.items.productionSmoke?.status).toBe("failed");
   });
+
+  it("marks health failed when deployment commit is missing", () => {
+    const evidence = applyAutomatedLaunchEvidence({
+      evidence: template(),
+      collectedAt: "2026-07-07T21:00:00Z",
+      health: {
+        baseUrl: "https://clips.example.org",
+        httpStatus: 200,
+        ok: true,
+        payload: {
+          status: "ok",
+          checks: [{ name: "database", status: "ok", message: "Database is reachable." }],
+        },
+      },
+      smoke: {
+        status: "ok",
+        checks: [{ name: "health", status: "ok", message: "Deployment readiness is ok." }],
+      },
+    });
+
+    expect(evidence.items.healthCheck?.status).toBe("failed");
+    expect(evidence.items.healthCheck?.evidence).toContain("Deployment commit: missing");
+  });
+
+  it("marks health failed when deployment commit does not match evidence commit", () => {
+    const evidence = applyAutomatedLaunchEvidence({
+      evidence: template(),
+      collectedAt: "2026-07-07T21:00:00Z",
+      health: {
+        baseUrl: "https://clips.example.org",
+        httpStatus: 200,
+        ok: true,
+        payload: {
+          status: "ok",
+          deployment: { commitSha: "fffffff", commitSource: "SERMON_CLIPPER_COMMIT_SHA" },
+          checks: [{ name: "database", status: "ok", message: "Database is reachable." }],
+        },
+      },
+      smoke: {
+        status: "ok",
+        checks: [{ name: "health", status: "ok", message: "Deployment readiness is ok." }],
+      },
+    });
+
+    expect(evidence.items.healthCheck?.status).toBe("failed");
+    expect(evidence.items.healthCheck?.evidence).toContain("Deployment commit: fffffff");
+  });
 });

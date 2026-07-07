@@ -45,11 +45,22 @@ function automatedItem(status: LaunchEvidenceItem["status"], evidence: string): 
   return { status, evidence };
 }
 
-function healthPassed(health: HealthEvidencePayload) {
+function commitsMatch(actual: string | null | undefined, expected: string) {
+  const normalizedActual = actual?.trim().toLowerCase() ?? "";
+  const normalizedExpected = expected.trim().toLowerCase();
+  return (
+    normalizedActual.length > 0 &&
+    normalizedExpected.length > 0 &&
+    (normalizedActual.startsWith(normalizedExpected) || normalizedExpected.startsWith(normalizedActual))
+  );
+}
+
+function healthPassed(health: HealthEvidencePayload, expectedCommitSha: string) {
   return (
     health.ok &&
     !!health.payload?.status &&
     health.payload.status !== "fail" &&
+    commitsMatch(health.payload.deployment?.commitSha, expectedCommitSha) &&
     Array.isArray(health.payload.checks) &&
     !health.payload.checks.some((check) => check.status === "fail")
   );
@@ -61,7 +72,10 @@ export function applyAutomatedLaunchEvidence(input: AutomatedLaunchEvidenceInput
     verifiedAt: input.collectedAt,
     items: {
       ...input.evidence.items,
-      healthCheck: automatedItem(healthPassed(input.health) ? "passed" : "failed", formatHealthEvidence(input.health)),
+      healthCheck: automatedItem(
+        healthPassed(input.health, input.evidence.commitSha) ? "passed" : "failed",
+        formatHealthEvidence(input.health),
+      ),
       productionSmoke: automatedItem(
         input.smoke.status === "fail" ? "failed" : "passed",
         formatSmokeEvidence(input.smoke),
