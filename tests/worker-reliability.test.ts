@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertWorkerRuntimeReady,
   checkWorkerRuntimeEnvironment,
+  recordWorkerProcessHeartbeat,
   retryDelayMsForAttempt,
   retryRunAfter,
   staleCutoff,
@@ -78,5 +79,44 @@ describe("worker reliability helpers", () => {
     expect(checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "ok" })]),
     );
+  });
+
+  it("upserts durable worker process heartbeats by worker id", async () => {
+    const originalWorkerId = process.env.WORKER_ID;
+    process.env.WORKER_ID = "worker-test-1";
+    const upsertCalls: unknown[] = [];
+    const client = {
+      workerHeartbeat: {
+        upsert: async (args: unknown) => {
+          upsertCalls.push(args);
+          return args;
+        },
+      },
+    };
+
+    try {
+      const now = new Date("2026-07-07T20:00:00.000Z");
+      await recordWorkerProcessHeartbeat(client as never, { pollIntervalMs: 2000 }, now);
+
+      expect(upsertCalls).toHaveLength(1);
+      expect(upsertCalls[0]).toEqual(
+        expect.objectContaining({
+          where: { workerId: "worker-test-1" },
+          create: expect.objectContaining({
+            workerId: "worker-test-1",
+            startedAt: now,
+            lastSeenAt: now,
+            metadata: { pollIntervalMs: 2000 },
+          }),
+          update: expect.objectContaining({
+            lastSeenAt: now,
+            metadata: { pollIntervalMs: 2000 },
+          }),
+        }),
+      );
+    } finally {
+      if (originalWorkerId === undefined) delete process.env.WORKER_ID;
+      else process.env.WORKER_ID = originalWorkerId;
+    }
   });
 });

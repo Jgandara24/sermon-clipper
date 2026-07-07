@@ -33,6 +33,7 @@ function healthPayload(overrides: Record<string, unknown> = {}) {
     "storage",
     "database",
     "migrations",
+    "worker_heartbeat",
   ].map((name) => ({ name, status: "ok", message: `${name} ok` }));
 
   return { status: "ok", deployment: { commitSha: "abc1234" }, checks, ...overrides };

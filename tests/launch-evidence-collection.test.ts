@@ -23,7 +23,10 @@ describe("launch evidence collection", () => {
         payload: {
           status: "ok",
           deployment: { commitSha: "abc1234", commitSource: "SERMON_CLIPPER_COMMIT_SHA" },
-          checks: [{ name: "database", status: "ok", message: "Database is reachable." }],
+          checks: [
+            { name: "database", status: "ok", message: "Database is reachable." },
+            { name: "worker_heartbeat", status: "ok", message: "Worker worker-1 heartbeat is recent." },
+          ],
         },
       },
       smoke: {
@@ -107,7 +110,10 @@ describe("launch evidence collection", () => {
         payload: {
           status: "ok",
           deployment: { commitSha: "abc1234", commitSource: "SERMON_CLIPPER_COMMIT_SHA" },
-          checks: [{ name: "database", status: "ok", message: "Database is reachable." }],
+          checks: [
+            { name: "database", status: "ok", message: "Database is reachable." },
+            { name: "worker_heartbeat", status: "ok", message: "Worker worker-1 heartbeat is recent." },
+          ],
         },
       },
       smoke: {
@@ -130,7 +136,10 @@ describe("launch evidence collection", () => {
         ok: true,
         payload: {
           status: "ok",
-          checks: [{ name: "database", status: "ok", message: "Database is reachable." }],
+          checks: [
+            { name: "database", status: "ok", message: "Database is reachable." },
+            { name: "worker_heartbeat", status: "ok", message: "Worker worker-1 heartbeat is recent." },
+          ],
         },
       },
       smoke: {
@@ -154,7 +163,10 @@ describe("launch evidence collection", () => {
         payload: {
           status: "ok",
           deployment: { commitSha: "fffffff", commitSource: "SERMON_CLIPPER_COMMIT_SHA" },
-          checks: [{ name: "database", status: "ok", message: "Database is reachable." }],
+          checks: [
+            { name: "database", status: "ok", message: "Database is reachable." },
+            { name: "worker_heartbeat", status: "ok", message: "Worker worker-1 heartbeat is recent." },
+          ],
         },
       },
       smoke: {

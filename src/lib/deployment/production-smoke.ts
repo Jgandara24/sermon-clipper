@@ -38,6 +38,7 @@ const REQUIRED_HEALTH_CHECKS = [
   "storage",
   "database",
   "migrations",
+  "worker_heartbeat",
 ];
 
 function summarizeSmoke(checks: SmokeCheck[]): SmokeStatus {

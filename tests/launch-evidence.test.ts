@@ -15,7 +15,7 @@ import {
 function completeEvidence(): LaunchEvidence {
   const evidenceByKey: Record<string, string> = {
     healthCheck:
-      "curl -fsS https://clips.example.org/api/health returned status ok, all checks ok, and commitSha fe09434.",
+      "curl -fsS https://clips.example.org/api/health returned status ok, all checks ok including worker_heartbeat ok, and commitSha fe09434.",
     productionSmoke:
       "npm run smoke:production -- --base-url https://clips.example.org --commit-sha fe09434 returned status ok.",
     webProcess: "Vercel deployment platform shows the web process running deployed commit SHA fe09434.",
@@ -29,7 +29,7 @@ function completeEvidence(): LaunchEvidence {
     processing:
       "Operations events show FINALIZE, PROBE, TRANSCRIBE, and ANALYZE completed successfully for project prod_project_123.",
     workerProcess:
-      "Deployment platform shows worker-1 running with WORKER_ID=worker-1, ffmpeg, ffprobe, whisper-cli, and readable WHISPER_MODEL_PATH /models/ggml-base.en.bin.",
+      "Deployment platform shows worker-1 running with WORKER_ID=worker-1, ffmpeg, ffprobe, whisper-cli, readable WHISPER_MODEL_PATH /models/ggml-base.en.bin, and worker_heartbeat ok.",
     transcriptionProvider:
       "Operations metadata shows provider whisper_cpp, source audio, and configured WHISPER_MODEL_PATH /models/ggml-base.en.bin in production.",
     analysisProvider:

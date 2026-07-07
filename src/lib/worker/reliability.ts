@@ -1,6 +1,7 @@
 import os from "node:os";
 import { accessSync, constants } from "node:fs";
 import { spawnSync } from "node:child_process";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 export const PROCESSING_MAX_ATTEMPTS = 3;
 export const EXPORT_MAX_ATTEMPTS = 3;
@@ -105,8 +106,37 @@ export function heartbeatIntervalMs(): number {
   return Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 30_000);
 }
 
+export function workerProcessHeartbeatIntervalMs(): number {
+  return Number(process.env.WORKER_PROCESS_HEARTBEAT_INTERVAL_MS ?? 30_000);
+}
+
 export function staleJobTimeoutMs(): number {
   return Number(process.env.WORKER_STALE_JOB_TIMEOUT_MS ?? 15 * 60_000);
+}
+
+export async function recordWorkerProcessHeartbeat(
+  client: PrismaClient,
+  metadata: Prisma.InputJsonObject = {},
+  now = new Date(),
+) {
+  const id = workerId();
+  return client.workerHeartbeat.upsert({
+    where: { workerId: id },
+    create: {
+      workerId: id,
+      hostname: os.hostname(),
+      pid: process.pid,
+      startedAt: now,
+      lastSeenAt: now,
+      metadata,
+    },
+    update: {
+      hostname: os.hostname(),
+      pid: process.pid,
+      lastSeenAt: now,
+      metadata,
+    },
+  });
 }
 
 export async function withHeartbeat<T>(

@@ -565,6 +565,21 @@ model ExportedFile {
   @@map("exported_files")
 }
 
+model WorkerHeartbeat {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workerId    String   @unique @map("worker_id")
+  hostname    String?
+  pid         Int?
+  startedAt   DateTime @map("started_at")
+  lastSeenAt  DateTime @map("last_seen_at")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([lastSeenAt])
+  @@map("worker_heartbeats")
+}
+
 model ScriptureReference {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId  String   @map("workspace_id") @db.Uuid

@@ -6,13 +6,19 @@ import { jobHandlers } from "@/lib/jobs/handlers";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
 import { releaseReservationForJob } from "@/lib/usage-ledger";
-import { assertWorkerRuntimeReady } from "@/lib/worker/reliability";
+import {
+  assertWorkerRuntimeReady,
+  recordWorkerProcessHeartbeat,
+  workerProcessHeartbeatIntervalMs,
+} from "@/lib/worker/reliability";
 import { ProjectStatus, type ProcessingJobType } from "@prisma/client";
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
 const RECOVERY_INTERVAL_MS = Number(process.env.WORKER_RECOVERY_INTERVAL_MS ?? 60_000);
+const WORKER_PROCESS_HEARTBEAT_INTERVAL_MS = workerProcessHeartbeatIntervalMs();
 let shuttingDown = false;
 let lastRecoveryAt = 0;
+let lastWorkerHeartbeatAt = 0;
 const SUPPORTED_TYPES = Object.keys(jobHandlers) as ProcessingJobType[];
 
 function sleep(ms: number) {
@@ -24,6 +30,14 @@ async function loop() {
     let processed = false;
     try {
       const now = Date.now();
+      if (now - lastWorkerHeartbeatAt >= WORKER_PROCESS_HEARTBEAT_INTERVAL_MS) {
+        await recordWorkerProcessHeartbeat(prisma, {
+          supportedProcessingTypes: SUPPORTED_TYPES,
+          pollIntervalMs: POLL_INTERVAL_MS,
+          recoveryIntervalMs: RECOVERY_INTERVAL_MS,
+        });
+        lastWorkerHeartbeatAt = now;
+      }
       if (now - lastRecoveryAt >= RECOVERY_INTERVAL_MS) {
         const [processingRecovery, exportRecovery] = await Promise.all([
           recoverStaleProcessingJobs(prisma, SUPPORTED_TYPES),
@@ -90,6 +104,13 @@ try {
 }
 
 console.log(`[worker] polling for processing jobs every ${POLL_INTERVAL_MS}ms`);
+recordWorkerProcessHeartbeat(prisma, {
+  supportedProcessingTypes: SUPPORTED_TYPES,
+  pollIntervalMs: POLL_INTERVAL_MS,
+  recoveryIntervalMs: RECOVERY_INTERVAL_MS,
+}).catch((error) => {
+  console.error("[worker] failed to record startup heartbeat", error instanceof Error ? error.message : error);
+});
 loop().then(() => {
   console.log("[worker] shutting down");
   process.exit(0);

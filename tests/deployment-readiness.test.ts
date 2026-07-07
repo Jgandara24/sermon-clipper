@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { checkDeploymentEnvironment, getDeploymentMetadata, summarizeReadiness } from "@/lib/deployment/readiness";
+import {
+  checkDeploymentEnvironment,
+  checkWorkerHeartbeatReadiness,
+  getDeploymentMetadata,
+  summarizeReadiness,
+} from "@/lib/deployment/readiness";
 
 describe("deployment readiness", () => {
   it("fails production readiness without S3 storage and required secrets", () => {
@@ -252,5 +257,61 @@ describe("deployment readiness", () => {
       commitSha: "1111111",
       commitSource: "SERMON_CLIPPER_COMMIT_SHA",
     });
+  });
+
+  it("fails production readiness when no worker heartbeat has been recorded", async () => {
+    const client = {
+      workerHeartbeat: {
+        findFirst: async () => null,
+      },
+    };
+
+    const checks = await checkWorkerHeartbeatReadiness(client as never, { NODE_ENV: "production" });
+
+    expect(checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "worker_heartbeat", status: "fail" })]),
+    );
+  });
+
+  it("fails production readiness when the latest worker heartbeat is stale", async () => {
+    const client = {
+      workerHeartbeat: {
+        findFirst: async () => ({
+          workerId: "worker-1",
+          lastSeenAt: new Date("2026-07-07T20:00:00.000Z"),
+        }),
+      },
+    };
+
+    const checks = await checkWorkerHeartbeatReadiness(
+      client as never,
+      { NODE_ENV: "production", WORKER_HEARTBEAT_MAX_AGE_MS: "60000" },
+      new Date("2026-07-07T20:02:00.000Z"),
+    );
+
+    expect(checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "worker_heartbeat", status: "fail" })]),
+    );
+  });
+
+  it("accepts a recent production worker heartbeat", async () => {
+    const client = {
+      workerHeartbeat: {
+        findFirst: async () => ({
+          workerId: "worker-1",
+          lastSeenAt: new Date("2026-07-07T20:00:30.000Z"),
+        }),
+      },
+    };
+
+    const checks = await checkWorkerHeartbeatReadiness(
+      client as never,
+      { NODE_ENV: "production", WORKER_HEARTBEAT_MAX_AGE_MS: "60000" },
+      new Date("2026-07-07T20:01:00.000Z"),
+    );
+
+    expect(checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "worker_heartbeat", status: "ok" })]),
+    );
   });
 });

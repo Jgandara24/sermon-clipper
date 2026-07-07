@@ -49,6 +49,8 @@ STORAGE_S3_FORCE_PATH_STYLE=true
 
 WORKER_ID=worker-1
 WORKER_POLL_INTERVAL_MS=2000
+WORKER_PROCESS_HEARTBEAT_INTERVAL_MS=30000
+WORKER_HEARTBEAT_MAX_AGE_MS=900000
 WORKER_HEARTBEAT_INTERVAL_MS=30000
 WORKER_STALE_JOB_TIMEOUT_MS=900000
 WORKER_RECOVERY_INTERVAL_MS=60000
@@ -113,7 +115,8 @@ The health endpoint returns HTTP 200 for `ok` or `degraded` and HTTP 503 for fai
 Production readiness fails if `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, auth email
 delivery config, approval notification config, Stripe billing config, S3 storage configuration,
 provider-backed transcription/analysis config, database connectivity, migrations, or storage
-configuration are broken. Missing
+configuration are broken. Production readiness also fails if no worker process has written a recent
+database heartbeat to `worker_heartbeats`. Missing
 `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` or deployment commit metadata is reported as degraded because
 single-instance deployments can still run, but rolling or multi-instance deployments should set the
 encryption key and Phase 8 launch evidence should tie `/api/health` to the deployed commit. The
@@ -160,6 +163,10 @@ degraded or warning.
 - Run workers in the same region as object storage when possible.
 - Give each process a stable `WORKER_ID`; production workers fail startup when it is missing so
   job heartbeats and stale recovery are auditable.
+- Each worker writes an idle process heartbeat to the `worker_heartbeats` table. `/api/health` fails
+  production readiness when the latest heartbeat is older than `WORKER_HEARTBEAT_MAX_AGE_MS`
+  (defaults to `WORKER_STALE_JOB_TIMEOUT_MS`), so run at least one `worker:prod` process before
+  final smoke or launch evidence collection.
 - Production workers also fail startup when `ffmpeg`, `ffprobe`, `WHISPER_CPP_BINARY`, or the
   readable model file at `WHISPER_MODEL_PATH` are missing. Set `FFMPEG_PATH`,
   `FFPROBE_PATH`, or `WHISPER_CPP_BINARY` if those binaries are not on `PATH`.

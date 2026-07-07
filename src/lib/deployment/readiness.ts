@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { MIN_MEDIA_URL_SECRET_LENGTH } from "@/lib/media/signed-url";
 import { getStorageProvider } from "@/lib/storage";
+import { staleJobTimeoutMs } from "@/lib/worker/reliability";
 
 export type ReadinessStatus = "ok" | "warning" | "fail";
 
@@ -331,6 +332,47 @@ export function checkStorageReadiness(): ReadinessCheck {
   }
 }
 
+export async function checkWorkerHeartbeatReadiness(
+  client: PrismaClient,
+  env: EnvLike = process.env,
+  now = new Date(),
+): Promise<ReadinessCheck[]> {
+  if (env.NODE_ENV !== "production") {
+    return [{ name: "worker_heartbeat", status: "ok", message: "Worker heartbeat is required only in production." }];
+  }
+
+  const maxAgeMs = Number(env.WORKER_HEARTBEAT_MAX_AGE_MS ?? staleJobTimeoutMs());
+  const latest = await client.workerHeartbeat.findFirst({ orderBy: { lastSeenAt: "desc" } });
+  if (!latest) {
+    return [
+      {
+        name: "worker_heartbeat",
+        status: "fail",
+        message: "No worker heartbeat has been recorded. Start at least one npm run worker:prod process.",
+      },
+    ];
+  }
+
+  const ageMs = now.getTime() - latest.lastSeenAt.getTime();
+  if (ageMs > maxAgeMs) {
+    return [
+      {
+        name: "worker_heartbeat",
+        status: "fail",
+        message: `Latest worker heartbeat from ${latest.workerId} is stale (${Math.round(ageMs / 1000)}s old).`,
+      },
+    ];
+  }
+
+  return [
+    {
+      name: "worker_heartbeat",
+      status: "ok",
+      message: `Worker ${latest.workerId} heartbeat is recent (${Math.round(ageMs / 1000)}s old).`,
+    },
+  ];
+}
+
 export function summarizeReadiness(checks: ReadinessCheck[]): DeploymentReadiness["status"] {
   if (checks.some((check) => check.status === "fail")) return "fail";
   if (checks.some((check) => check.status === "warning")) return "degraded";
@@ -345,6 +387,7 @@ export async function checkDeploymentReadiness(
   const checks = [
     ...checkDeploymentEnvironment(env),
     ...(await checkDatabaseReadiness(client)),
+    ...(await checkWorkerHeartbeatReadiness(client, env)),
     checkStorageReadiness(),
   ];
   return { status: summarizeReadiness(checks), deployment, checks };

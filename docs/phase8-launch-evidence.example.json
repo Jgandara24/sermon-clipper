@@ -6,11 +6,11 @@
   "items": {
     "healthCheck": {
       "status": "failed",
-      "evidence": "Paste curl -fsS https://clips.example.org/api/health output showing no failed readiness checks."
+      "evidence": "Paste curl -fsS https://clips.example.org/api/health output showing status ok, all checks ok, worker_heartbeat ok, and deployed commit SHA."
     },
     "productionSmoke": {
       "status": "failed",
-      "evidence": "Paste npm run smoke:production -- --base-url https://clips.example.org output."
+      "evidence": "Paste npm run smoke:production -- --base-url https://clips.example.org --commit-sha <sha> output showing status ok."
     },
     "webProcess": {
       "status": "failed",
@@ -18,7 +18,7 @@
     },
     "workerProcess": {
       "status": "failed",
-      "evidence": "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, whisper-cli, and readable WHISPER_MODEL_PATH."
+      "evidence": "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, whisper-cli, readable WHISPER_MODEL_PATH, and recent worker_heartbeat."
     },
     "databaseMigrations": {
       "status": "failed",

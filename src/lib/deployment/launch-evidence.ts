@@ -31,12 +31,13 @@ export const launchEvidenceItems = [
   {
     key: "healthCheck",
     label: "Health check",
-    proof: "Paste curl -fsS <deploymentUrl>/api/health output showing no failed readiness checks.",
+    proof:
+      "Paste curl -fsS <deploymentUrl>/api/health output showing status ok, all checks ok, worker_heartbeat ok, and deployed commit SHA.",
   },
   {
     key: "productionSmoke",
     label: "Production smoke",
-    proof: "Paste npm run smoke:production -- --base-url <deploymentUrl> output.",
+    proof: "Paste npm run smoke:production -- --base-url <deploymentUrl> --commit-sha <sha> output showing status ok.",
   },
   {
     key: "webProcess",
@@ -47,7 +48,7 @@ export const launchEvidenceItems = [
     key: "workerProcess",
     label: "Worker process",
     proof:
-      "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, whisper-cli, and readable WHISPER_MODEL_PATH.",
+      "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, whisper-cli, readable WHISPER_MODEL_PATH, and recent worker_heartbeat.",
   },
   {
     key: "databaseMigrations",
@@ -130,6 +131,7 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
       { label: "/api/health", pattern: /\/api\/health/i },
       { label: "status ok", pattern: /\bstatus\b.*\bok\b|\bok\b.*\bstatus\b/i },
       { label: "all checks ok", pattern: /\ball\b.*\bchecks\b.*\bok\b|\bchecks\b.*\bok\b/i },
+      { label: "worker_heartbeat", pattern: /\bworker_heartbeat\b/i },
       { label: "commit SHA", pattern: /\bcommit(?:Sha| SHA)?\b|[0-9a-f]{7,40}/i },
     ];
     const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
@@ -245,6 +247,7 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
       { label: "ffprobe", pattern: /\bffprobe\b/i },
       { label: "whisper-cli or whisper.cpp", pattern: /\b(?:whisper-cli|whisper\.cpp|whisper_cpp)\b/i },
       { label: "WHISPER_MODEL_PATH", pattern: /\bWHISPER_MODEL_PATH\b/ },
+      { label: "worker_heartbeat", pattern: /\bworker_heartbeat\b/i },
     ];
     const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
     if (missing.length > 0) {
