@@ -11,6 +11,8 @@ import {
 
 function completeEvidence(): LaunchEvidence {
   const evidenceByKey: Record<string, string> = {
+    workerProcess:
+      "Deployment platform shows worker-1 running with WORKER_ID=worker-1, ffmpeg, ffprobe, whisper-cli, and readable WHISPER_MODEL_PATH /models/ggml-base.en.bin.",
     transcriptionProvider:
       "Operations metadata shows provider whisper_cpp, source audio, and configured WHISPER_MODEL_PATH /models/ggml-base.en.bin in production.",
     analysisProvider:
@@ -114,6 +116,21 @@ describe("launch evidence validation", () => {
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "healthCheck", status: "fail" })]),
+    );
+  });
+
+  it("fails when worker process proof does not mention runtime prerequisites", () => {
+    const evidence = completeEvidence();
+    evidence.items.workerProcess = {
+      status: "passed",
+      evidence: "Deployment platform shows one worker process is running.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "workerProcess", status: "fail" })]),
     );
   });
 

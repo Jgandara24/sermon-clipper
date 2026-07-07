@@ -125,6 +125,20 @@ export type LaunchEvidenceItemKey = (typeof launchEvidenceItems)[number]["key"];
 const launchEvidenceItemKeys = new Set<string>(launchEvidenceItems.map((item) => item.key));
 const minimumEvidenceLength = 20;
 const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: string) => string | null>> = {
+  workerProcess: (proof) => {
+    const required = [
+      { label: "WORKER_ID", pattern: /\bWORKER_ID\b/ },
+      { label: "ffmpeg", pattern: /\bffmpeg\b/i },
+      { label: "ffprobe", pattern: /\bffprobe\b/i },
+      { label: "whisper-cli or whisper.cpp", pattern: /\b(?:whisper-cli|whisper\.cpp|whisper_cpp)\b/i },
+      { label: "WHISPER_MODEL_PATH", pattern: /\bWHISPER_MODEL_PATH\b/ },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Worker process proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
   transcriptionProvider: (proof) => {
     if (!/\bwhisper(?:\.cpp|_cpp|-cpp)?\b/i.test(proof)) {
       return "Transcription provider proof must mention whisper.cpp or whisper_cpp.";
