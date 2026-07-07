@@ -120,7 +120,7 @@ from `SERMON_CLIPPER_COMMIT_SHA` first, then common provider variables such as
 
 `npm run smoke:production` checks the deployed app's health payload, login/OTP surface,
 unauthenticated app redirect, invalid join-token handling, invalid review-token handling,
-signed-media rejection, signed-upload rejection, and Stripe webhook signature enforcement. When `--commit-sha` or
+signed-media rejection, signed-upload rejection, storage-shim auth rejection, and Stripe webhook signature enforcement. When `--commit-sha` or
 `SMOKE_COMMIT_SHA` is set, it also verifies that `/api/health` reports matching deployment commit
 metadata. It exits non-zero on hard failures and reports degraded readiness as a warning. Final
 Phase 8 launch evidence is stricter: automated health and smoke evidence must both be `ok`, not

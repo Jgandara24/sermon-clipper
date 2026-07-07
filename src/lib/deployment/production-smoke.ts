@@ -246,6 +246,26 @@ export async function runProductionSmoke(options: ProductionSmokeOptions): Promi
         message: "Unsigned upload requests are rejected.",
       };
     }),
+    runCheck("storage-shim-rejects-unauthenticated", async () => {
+      const response = await fetchWithTimeout(
+        fetchImpl,
+        `${baseUrl}/api/storage/thumbs/smoke-workspace/smoke.jpg`,
+        { cache: "no-store", redirect: "manual" },
+        timeoutMs,
+      );
+      if (response.status !== 401 && response.status !== 403) {
+        return {
+          name: "storage-shim-rejects-unauthenticated",
+          status: "fail",
+          message: `Unauthenticated storage shim request returned HTTP ${response.status}, expected 401 or 403.`,
+        };
+      }
+      return {
+        name: "storage-shim-rejects-unauthenticated",
+        status: "ok",
+        message: "Unauthenticated storage shim requests are rejected.",
+      };
+    }),
     runCheck("stripe-webhook-signature", async () => {
       const response = await fetchWithTimeout(
         fetchImpl,
