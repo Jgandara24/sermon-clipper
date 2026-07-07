@@ -72,6 +72,9 @@ The health and production smoke items can be collected automatically:
 npm run collect:launch-evidence -- --base-url https://clips.example.org --commit-sha <deployed-git-sha>
 ```
 
+If `--commit-sha` is omitted, the collector uses the evidence file's top-level `commitSha` for the
+smoke check.
+
 By default, verification also checks that the evidence file's `commitSha` matches the current Git
 `HEAD`. Use `--commit-sha <sha>` when verifying evidence for a specific deployed revision from a
 different local checkout.

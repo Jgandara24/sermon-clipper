@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import type { LaunchEvidence } from "../src/lib/deployment/launch-evidence";
 import { applyAutomatedLaunchEvidence } from "../src/lib/deployment/launch-evidence-collection";
 import { runProductionSmoke } from "../src/lib/deployment/production-smoke";
 
@@ -10,7 +11,7 @@ function argValue(name: string) {
 const filePath = argValue("--file") ?? process.env.LAUNCH_EVIDENCE_FILE ?? "docs/phase8-launch-evidence.json";
 const baseUrl = argValue("--base-url") ?? process.env.SMOKE_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
 const timeoutMs = Number(argValue("--timeout-ms") ?? process.env.SMOKE_TIMEOUT_MS ?? 15_000);
-const expectedCommitSha = argValue("--commit-sha") ?? process.env.SMOKE_COMMIT_SHA;
+const expectedCommitShaOverride = argValue("--commit-sha") ?? process.env.SMOKE_COMMIT_SHA;
 const expectProduction = !process.argv.includes("--allow-dev-login");
 
 if (!baseUrl) {
@@ -21,7 +22,8 @@ if (!baseUrl) {
 const resolvedBaseUrl = baseUrl;
 
 async function main() {
-  const evidence = JSON.parse(readFileSync(filePath, "utf8"));
+  const evidence = JSON.parse(readFileSync(filePath, "utf8")) as LaunchEvidence;
+  const expectedCommitSha = expectedCommitShaOverride ?? evidence.commitSha;
   const normalizedBaseUrl = resolvedBaseUrl.replace(/\/$/, "");
   const healthResponse = await fetch(`${normalizedBaseUrl}/api/health`, { cache: "no-store" });
   const healthPayload = await healthResponse.json().catch(() => null);
