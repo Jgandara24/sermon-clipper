@@ -53,7 +53,7 @@ Record the following before declaring Phase 8 complete:
 | Billing | Stripe Checkout/Portal and webhook handling update the workspace plan and grant minutes. |
 | Usage limits | Insufficient minutes or plan limit conditions are blocked without negative balances. |
 | Observability | `/app/settings/operations` shows upload, processing, approval, export, billing, and worker events. |
-| CI | `verify`, `integration`, and `e2e` jobs pass for the deployed commit. |
+| CI | `verify`, `integration`, and `e2e` jobs pass for the deployed commit; the evidence text must name each gate. |
 
 Generate a launch-specific evidence file with the deployed URL and current commit:
 

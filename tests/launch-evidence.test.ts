@@ -17,6 +17,7 @@ function completeEvidence(): LaunchEvidence {
       "Operations metadata shows provider whisper_cpp, source audio, and configured WHISPER_MODEL_PATH /models/ggml-base.en.bin in production.",
     analysisProvider:
       "Operations metadata shows provider claude-sonnet-5 with ANTHROPIC_API_KEY-backed scoring, not the heuristic fallback.",
+    ci: "CI passed verify, integration, and e2e jobs for commit fe09434.",
   };
 
   return {
@@ -161,6 +162,21 @@ describe("launch evidence validation", () => {
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "analysisProvider", status: "fail" })]),
+    );
+  });
+
+  it("fails when CI proof does not mention every required gate", () => {
+    const evidence = completeEvidence();
+    evidence.items.ci = {
+      status: "passed",
+      evidence: "CI passed for this commit.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "ci", status: "fail" })]),
     );
   });
 

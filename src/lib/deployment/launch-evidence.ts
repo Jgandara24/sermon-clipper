@@ -160,6 +160,18 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
     }
     return null;
   },
+  ci: (proof) => {
+    const required = [
+      { label: "verify", pattern: /\bverify\b/i },
+      { label: "integration", pattern: /\bintegration\b/i },
+      { label: "e2e", pattern: /\be2e\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `CI proof must mention passing ${missing.join(", ")} gate(s).`;
+    }
+    return null;
+  },
 };
 
 export function isLaunchEvidenceItemKey(key: string): key is LaunchEvidenceItemKey {
