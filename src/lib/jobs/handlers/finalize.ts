@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { Prisma, ProcessingJobType, ProjectStatus } from "@prisma/client";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
@@ -17,15 +20,19 @@ export const runFinalizeJob: JobHandler = async ({ job, prisma }) => {
   }
 
   const storage = getStorageProvider();
-  const filePath = storage.absolutePath(project.sourceVideo.storageKey);
+  const workDir = await mkdtemp(path.join(os.tmpdir(), "sermon-finalize-"));
+  const filePath = path.join(workDir, "source-video");
 
   let probeResult;
   try {
+    await storage.downloadToFile(project.sourceVideo.storageKey, filePath);
     probeResult = await probeVideoFile(filePath);
   } catch (error) {
     throw new JobFailureError("INVALID_FILE_TYPE", "That file isn't a video we can read.", {
       cause: error,
     });
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
   }
 
   if (probeResult.durationS > MAX_VIDEO_DURATION_S) {

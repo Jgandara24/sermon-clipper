@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { ExportJob, PrismaClient } from "@prisma/client";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
@@ -144,11 +147,16 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   );
 
   const storage = getStorageProvider();
-  const sourceFilePath = storage.absolutePath(sourceVideo.storageKey);
   const exportsKey = `exports/${job.workspaceId}/${job.id}.mp4`;
-  const outputPath = storage.absolutePath(exportsKey);
+  const workDir = await mkdtemp(path.join(os.tmpdir(), "sermon-export-"));
+  const sourceFilePath = path.join(workDir, "source-video");
+  const outputPath = path.join(workDir, "output.mp4");
+  let probeResult: Awaited<ReturnType<typeof probeVideoFile>> | null;
+  let bytes: number;
+  let checksum: string;
 
   try {
+    await storage.downloadToFile(sourceVideo.storageKey, sourceFilePath);
     await renderClipExport({
       sourceFilePath,
       keptRanges,
@@ -158,17 +166,19 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       outputWidth: OUTPUT_WIDTH,
       outputHeight: OUTPUT_HEIGHT,
     });
+    await storage.uploadFile(exportsKey, outputPath, "video/mp4");
+    [probeResult, bytes, checksum] = await Promise.all([
+      probeVideoFile(outputPath).catch(() => null),
+      storage.size(exportsKey),
+      hashFile(outputPath),
+    ]);
   } catch (error) {
     throw new ExportFailureError("RENDER_FAILED", "Export failed on our side — your clip is safe.", {
       cause: error,
     });
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
   }
-
-  const [probeResult, bytes, checksum] = await Promise.all([
-    probeVideoFile(outputPath).catch(() => null),
-    storage.size(exportsKey),
-    hashFile(outputPath),
-  ]);
 
   const exportedFile = await prisma.exportedFile.create({
     data: {

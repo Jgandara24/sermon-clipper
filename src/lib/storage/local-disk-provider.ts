@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { once } from "node:events";
 import { Readable } from "node:stream";
@@ -65,6 +65,17 @@ export class LocalDiskStorageProvider implements StorageProvider {
     }
 
     return bytesWritten;
+  }
+
+  async downloadToFile(key: string, destinationPath: string): Promise<void> {
+    await mkdir(path.dirname(destinationPath), { recursive: true });
+    await copyFile(this.absolutePath(key), destinationPath);
+  }
+
+  async uploadFile(key: string, sourcePath: string): Promise<void> {
+    const target = this.absolutePath(key);
+    await mkdir(path.dirname(target), { recursive: true });
+    await copyFile(sourcePath, target);
   }
 
   async move(fromKey: string, toKey: string): Promise<void> {

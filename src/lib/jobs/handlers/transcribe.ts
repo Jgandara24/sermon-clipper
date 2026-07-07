@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { ProcessingJobType } from "@prisma/client";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
@@ -45,9 +48,12 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
       throw new JobFailureError("STORAGE_UNAVAILABLE", "Storage hiccup — try again in a minute.");
     }
     const provider = await getTranscriptionProvider();
+    const workDir = await mkdtemp(path.join(os.tmpdir(), "sermon-transcribe-"));
+    const audioPath = path.join(workDir, "audio.wav");
     try {
+      await storage.downloadToFile(sourceVideo.audioKey, audioPath);
       result = await provider.transcribe({
-        audioPath: storage.absolutePath(sourceVideo.audioKey),
+        audioPath,
         language: sourceVideo.language ?? undefined,
       });
     } catch (error) {
@@ -61,6 +67,8 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
       throw new JobFailureError("TRANSCRIBE_FAILED", "We couldn't transcribe the audio.", {
         cause: error,
       });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
     }
     providerName = provider.name;
   }

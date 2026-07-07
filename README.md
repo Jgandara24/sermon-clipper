@@ -15,10 +15,11 @@ Implemented:
   development-only login button remains available outside production for local fixtures
 - Workspace role-permission enforcement for upload/import, clip editing, exports, approval
   requests, project cancellation, brand-template management, billing pages, and guarded navigation
-- Short-lived HMAC-signed upload, source-video, thumbnail, and export download URLs for the local
-  storage provider; legacy session media routes now redirect to signed URLs
+- Short-lived HMAC-signed upload, source-video, thumbnail, and export download URLs; S3/R2 mode
+  redirects signed media links to presigned object URLs, while legacy session media routes redirect
+  to signed URLs
 - Onboarding, dashboard, project detail, settings, and billing routes
-- Real video upload (presigned-style direct upload to local disk), FINALIZE + PROBE processing
+- Real video upload to the configured storage provider, FINALIZE + PROBE processing
   jobs (real ffprobe/ffmpeg metadata, thumbnail, and audio extraction), a DB-polling job queue
   and worker, live processing-status UI, and cancel (with usage-ledger release)
 - Real transcription via a self-hosted whisper.cpp `TranscriptionProvider` (word-level timestamps,
@@ -176,8 +177,9 @@ npm run test:e2e
   classification + `claude-sonnet-5` scoring/rationale). Without it, ANALYZE jobs still succeed —
   they use the deterministic heuristic scorer instead, which is clearly labeled `heuristic-v1`
   in the UI and never presented as AI-scored.
-- The local-disk storage provider under `STORAGE_LOCAL_ROOT` (default `.data/storage`) stands in
-  for S3/R2 until a cloud bucket is wired up. Browser-facing upload/media access already goes
-  through expiring signed URLs using `MEDIA_URL_SECRET`; swap the presigner/storage implementation,
-  not its callers.
+- Storage supports `STORAGE_PROVIDER=local` for development and `STORAGE_PROVIDER=s3` for AWS S3,
+  Cloudflare R2, or another S3-compatible object store. Browser-facing upload/media access goes
+  through expiring signed URLs using `MEDIA_URL_SECRET`; when S3/R2 is active, signed media links
+  redirect to presigned object URLs. Workers download objects to temp files for ffmpeg/whisper and
+  upload derived thumbnails/audio/exports back to object storage.
 - The reserved `POST /api/integrations/pulpit-engine/webhook` endpoint returns HTTP 501.

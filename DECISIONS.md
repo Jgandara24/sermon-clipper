@@ -8,7 +8,8 @@ Why: The first goal is repository, schema, app shell, seeded workspace, and dash
 
 Tradeoff: The UI can exercise login and workspace routing locally, but production auth remains unimplemented until a later phase.
 
-Status: Active.
+Status: Superseded by the 2026-07-07 email OTP and DB session decision; dev cookie fallback remains
+active outside production.
 
 ## 2026-07-07 - Phase 8 Auth Starts With Email OTP And DB Sessions
 
@@ -64,12 +65,32 @@ short-lived URLs. This gives the app the same contract that a future S3/R2 presi
 without blocking on bucket credentials, and it removes long-lived predictable media URLs from UI
 and API responses.
 
-Tradeoff: The signed media endpoint still streams from local disk, so production storage is not
-complete yet. Export availability still uses the database `download_expires_at` window, while each
-actual returned download URL has a much shorter cryptographic expiry. The next storage slice should
-add an S3/R2-compatible provider and eliminate local filesystem path dependencies from workers.
+Tradeoff: Export availability still uses the database `download_expires_at` window, while each
+actual returned download URL has a much shorter cryptographic expiry. S3/R2 storage is available in
+the next decision; local disk remains the default for development.
 
-Status: Active — signed URL hardening is in place; cloud object storage remains open.
+Status: Active — signed URL hardening is in place.
+
+## 2026-07-07 - S3/R2 Storage Provider For Production Objects
+
+Decision: `StorageProvider` now supports `STORAGE_PROVIDER=s3` using the AWS SDK S3 client and
+multipart upload helper. The same provider works for AWS S3 and S3-compatible services such as
+Cloudflare R2 via `STORAGE_S3_ENDPOINT`, `STORAGE_S3_REGION`, and credentials. Worker and export
+code no longer assumes storage keys are local filesystem paths: source media/audio are downloaded
+to per-job temp directories for ffmpeg/whisper, and thumbnails, audio, SRT overrides, uploads, and
+exports are written back through the provider. Signed media URLs redirect to S3/R2 presigned object
+URLs when the provider supports them.
+
+Why: Phase 8 requires production S3/R2-compatible storage, not just a local-disk stand-in. External
+media tools still need local file paths, so the safest bridge is explicit temp-file materialization
+at worker boundaries rather than leaking `absolutePath()` through business logic.
+
+Tradeoff: Browser uploads still stream through the app's signed upload endpoint before landing in
+S3/R2, rather than issuing browser-direct multipart S3 uploads. That is production-safe for moderate
+traffic but not the final high-scale upload path. A future upload slice should add direct multipart
+presigning/resume support.
+
+Status: Active — object storage is supported; direct browser multipart uploads remain open.
 
 ## 2026-07-06 - No External Provider Calls In Foundation
 
@@ -79,7 +100,8 @@ Why: The goal explicitly forbids paid providers, Pulpit Engine infrastructure, a
 
 Tradeoff: The dashboard is useful for project records and seeded data, but it does not process video yet.
 
-Status: Active.
+Status: Superseded by later phases; specific provider and storage decisions below document the
+current production behavior.
 
 ## 2026-07-06 - Postgres Is The Only Database Target
 
@@ -109,7 +131,8 @@ Why: No cloud bucket is provisioned yet, and the spec forbids paid providers bef
 
 Tradeoff: No true resumable/chunked upload yet (a dropped connection mid-upload must restart from zero), and the 5GB/3h caps in `src/lib/limits.ts` are enforced but not battle-tested against real multi-GB files. Revisit when a Marketplace storage integration (R2/S3/Supabase Storage) is wired up.
 
-Status: Active.
+Status: Superseded for production by the 2026-07-07 S3/R2 provider decision; local disk remains
+active for development.
 
 ## 2026-07-06 - DB-Polling Job Queue Instead Of BullMQ + Redis
 
@@ -368,7 +391,7 @@ Why: A cryptographically signed URL exists to allow access *without* an active s
 
 Tradeoff: A download link can't be shared with someone outside the workspace's session (arguably a feature, not a bug, for church-internal videos) and doesn't survive a session logout the way a true signed URL would. Revisit if exports need to support unauthenticated sharing (e.g., a public link a pastor can text to someone).
 
-Status: Active.
+Status: Superseded by the 2026-07-07 signed media URL and S3/R2 provider decisions.
 
 ## 2026-07-06 - Export Idempotency Key Is Scoped To (Clip, Edit Version, Filename)
 

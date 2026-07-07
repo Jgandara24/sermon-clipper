@@ -35,6 +35,17 @@ export async function GET(request: Request) {
   }
 
   const storage = getStorageProvider();
+  if (storage.createSignedReadUrl) {
+    const expiresInSeconds = Math.max(1, verified.expiresAt - Math.floor(Date.now() / 1000));
+    const signedObjectUrl = await storage.createSignedReadUrl(verified.key, {
+      expiresInSeconds,
+      contentType: verified.contentType,
+      filename: verified.filename,
+      disposition: verified.disposition,
+    });
+    return Response.redirect(signedObjectUrl, 307);
+  }
+
   const filePath = storage.absolutePath(verified.key);
 
   let fileSize: number;
