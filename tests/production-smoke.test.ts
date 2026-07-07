@@ -38,6 +38,7 @@ describe("production smoke checks", () => {
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/uploads/smoke-invalid-upload": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
     });
@@ -60,6 +61,7 @@ describe("production smoke checks", () => {
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/uploads/smoke-invalid-upload": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
     });
@@ -81,6 +83,7 @@ describe("production smoke checks", () => {
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/uploads/smoke-invalid-upload": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
     });
@@ -101,6 +104,7 @@ describe("production smoke checks", () => {
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/uploads/smoke-invalid-upload": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
     });
@@ -121,6 +125,7 @@ describe("production smoke checks", () => {
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/uploads/smoke-invalid-upload": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
     });
@@ -141,6 +146,7 @@ describe("production smoke checks", () => {
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("not found", { status: 404 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/uploads/smoke-invalid-upload": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
       }),
     });
@@ -148,6 +154,27 @@ describe("production smoke checks", () => {
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "review-invalid", status: "fail" })]),
+    );
+  });
+
+  it("fails when unsigned upload requests are not rejected", async () => {
+    const result = await runProductionSmoke({
+      baseUrl: "https://clips.example.com",
+      fetchImpl: fetchFor({
+        "/api/health": response({ status: "ok", checks: [] }, { status: 200 }),
+        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/app": response("", { status: 307, headers: { location: "/login" } }),
+        "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
+        "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
+        "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/uploads/smoke-invalid-upload": response("accepted", { status: 200 }),
+        "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 400 }),
+      }),
+    });
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "signed-upload-rejects-invalid", status: "fail" })]),
     );
   });
 
@@ -161,6 +188,7 @@ describe("production smoke checks", () => {
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
         "/api/media/signed": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
+        "/api/uploads/smoke-invalid-upload": response({ error: { code: "PERMISSION_DENIED" } }, { status: 403 }),
         "/api/stripe/webhook": response({ error: { code: "STRIPE_WEBHOOK_INVALID" } }, { status: 503 }),
       }),
     });

@@ -226,6 +226,26 @@ export async function runProductionSmoke(options: ProductionSmokeOptions): Promi
         message: "Unsigned media requests are rejected.",
       };
     }),
+    runCheck("signed-upload-rejects-invalid", async () => {
+      const response = await fetchWithTimeout(
+        fetchImpl,
+        `${baseUrl}/api/uploads/smoke-invalid-upload`,
+        { method: "PUT", cache: "no-store" },
+        timeoutMs,
+      );
+      if (response.status !== 403) {
+        return {
+          name: "signed-upload-rejects-invalid",
+          status: "fail",
+          message: `Unsigned upload request returned HTTP ${response.status}, expected 403.`,
+        };
+      }
+      return {
+        name: "signed-upload-rejects-invalid",
+        status: "ok",
+        message: "Unsigned upload requests are rejected.",
+      };
+    }),
     runCheck("stripe-webhook-signature", async () => {
       const response = await fetchWithTimeout(
         fetchImpl,
