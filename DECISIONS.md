@@ -177,6 +177,25 @@ event feed gives support staff a reliable first diagnostic surface.
 Status: Active — durable workspace-level operational event feed is in place; external alerting and
 metrics remain open.
 
+## 2026-07-07 - Deployment Readiness Is Checked In App
+
+Decision: Phase 8 adds `GET /api/health`, a deployment readiness helper, `worker:prod`, and
+`docs/DEPLOYMENT.md`. The health endpoint verifies required environment variables, production S3
+storage configuration, database connectivity, incomplete Prisma migrations, and storage-provider
+construction. The deployment runbook documents required services, secrets, database migration order,
+web and worker processes, storage bucket setup, smoke testing, and rollback guidance.
+
+Why: Production readiness must be repeatable and externally verifiable. A runbook alone can drift;
+a health endpoint gives the deployment platform and operators an executable check that the live
+process has the critical configuration needed for the Phase 6/7 workflow.
+
+Tradeoff: `/api/health` does not prove external providers such as SendGrid, Twilio, Anthropic, or
+whisper.cpp will successfully complete a real job. Those are verified by the smoke test and
+operational events after deployment. The endpoint intentionally avoids performing write operations
+against storage or paid providers.
+
+Status: Active.
+
 ## 2026-07-06 - No External Provider Calls In Foundation
 
 Decision: Upload, URL import, transcription, AI analysis, rendering, storage, billing, and publishing are visible as stubs only.

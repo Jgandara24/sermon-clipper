@@ -17,7 +17,8 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "worker": "tsx watch src/worker/run-jobs.ts"
+    "worker": "tsx watch src/worker/run-jobs.ts",
+    "worker:prod": "tsx src/worker/run-jobs.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -29,6 +30,7 @@
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "tsx": "^4.23.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -41,7 +43,6 @@
     "eslint-config-next": "16.2.10",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
-    "tsx": "^4.23.0",
     "typescript": "^5",
     "vitest": "^4.1.9"
   }

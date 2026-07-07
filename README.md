@@ -171,6 +171,12 @@ an MP4. Install the browser once with `npx playwright install chromium`, then ru
 npm run test:e2e
 ```
 
+## Production Deployment
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the Phase 8 production runbook covering required
+environment variables, database migrations, web and worker processes, S3/R2 storage, domain/secrets,
+health checks, and smoke testing.
+
 ## Notes
 
 - `.env.example` contains only local development placeholders.
@@ -205,3 +211,5 @@ npm run test:e2e
   Messaging (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_FROM`) when configured.
   Local development records skipped notification attempts instead of pretending delivery happened.
 - The reserved `POST /api/integrations/pulpit-engine/webhook` endpoint returns HTTP 501.
+- `GET /api/health` is the production readiness endpoint. It checks required environment variables,
+  database connectivity, Prisma migration state, and storage configuration.
