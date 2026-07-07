@@ -158,6 +158,8 @@ and reports degraded readiness as a warning.
 After deploy:
 
 1. Run `npm run smoke:production -- --base-url https://clips.example.org --commit-sha <deployed-git-sha>`.
+   To write the health and smoke results into `docs/phase8-launch-evidence.json`, run
+   `npm run collect:launch-evidence -- --base-url https://clips.example.org --commit-sha <deployed-git-sha>`.
 2. Sign in with email OTP.
 3. Create a workspace or invite a second user from `/app/settings` and accept the `/join/:token`
    link after signing in as the invited email.

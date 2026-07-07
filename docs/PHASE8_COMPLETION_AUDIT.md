@@ -66,6 +66,12 @@ each status to `passed`, and verify it:
 npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json
 ```
 
+The health and production smoke items can be collected automatically:
+
+```sh
+npm run collect:launch-evidence -- --base-url https://clips.example.org --commit-sha <deployed-git-sha>
+```
+
 By default, verification also checks that the evidence file's `commitSha` matches the current Git
 `HEAD`. Use `--commit-sha <sha>` when verifying evidence for a specific deployed revision from a
 different local checkout.
