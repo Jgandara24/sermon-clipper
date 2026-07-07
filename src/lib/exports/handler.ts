@@ -6,6 +6,7 @@ import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
 import { applyEditorDeletions, flattenWords, wordsInRange } from "@/lib/editor/words";
 import { generateAssSubtitles } from "@/lib/export/ass-generator";
+import { parseLowerThird } from "@/lib/brand-template";
 import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
 import { computeKeptRanges, mapToKeptTimeline } from "@/lib/export/kept-ranges";
 import { renderClipExport } from "@/lib/export/render";
@@ -119,7 +120,28 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   }));
 
   const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
-  const assContent = generateAssSubtitles(captionLines, style, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+  const brandTemplate = state.brandTemplateId
+    ? await prisma.brandTemplate.findFirst({
+        where: { id: state.brandTemplateId, workspaceId: job.workspaceId },
+      })
+    : null;
+  const lowerThird = brandTemplate ? parseLowerThird(brandTemplate.lowerThird) : null;
+  const assContent = generateAssSubtitles(
+    captionLines,
+    style,
+    OUTPUT_WIDTH,
+    OUTPUT_HEIGHT,
+    brandTemplate && lowerThird
+      ? {
+          headline: lowerThird.headline || brandTemplate.churchName,
+          subhead: lowerThird.subhead || brandTemplate.speakerName || "",
+          primaryColor: brandTemplate.primaryColor,
+          accentColor: brandTemplate.accentColor,
+          startMs: 0,
+          endMs: Math.min(4000, Math.max(1000, state.source.endMs - state.source.startMs)),
+        }
+      : null,
+  );
 
   const storage = getStorageProvider();
   const sourceFilePath = storage.absolutePath(sourceVideo.storageKey);

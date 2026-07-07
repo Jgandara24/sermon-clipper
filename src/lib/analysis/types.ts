@@ -15,6 +15,16 @@ export type ScoredCandidate = {
   total: number;
   subscores: Record<string, Subscore>;
   modelVersion: string;
+  scriptureReferences?: Array<{
+    detectedText: string;
+    normalized: string;
+    book: string;
+    chapterStart: number;
+    verseStart: number | null;
+    chapterEnd: number | null;
+    verseEnd: number | null;
+    confidence: number;
+  }>;
 };
 
 export type AnalysisCandidate = {

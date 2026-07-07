@@ -51,6 +51,14 @@ export function generateAssSubtitles(
   style: CaptionStyle,
   videoWidth: number,
   videoHeight: number,
+  lowerThird?: {
+    headline: string;
+    subhead: string;
+    primaryColor: string;
+    accentColor: string;
+    startMs: number;
+    endMs: number;
+  } | null,
 ): string {
   const alignment = resolveAlignment(style.position, style.alignment);
   const marginV = marginVForPosition(style.position, videoHeight);
@@ -72,6 +80,7 @@ export function generateAssSubtitles(
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
     `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},0,0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
+    `Style: LowerThird,${fontName},38,${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},1,0,0,0,100,100,0,0,3,8,1,1,70,70,400,1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -83,6 +92,9 @@ export function generateAssSubtitles(
       return `Dialogue: 0,${msToAssTime(line.startMs)},${msToAssTime(line.endMs)},Default,,0,0,0,,${escapeAssText(text)}`;
     })
     .join("\n");
+  const lowerThirdEvent = lowerThird
+    ? `Dialogue: 1,${msToAssTime(lowerThird.startMs)},${msToAssTime(lowerThird.endMs)},LowerThird,,0,0,0,,${escapeAssText(`${lowerThird.headline}\\N${lowerThird.subhead}`)}`
+    : "";
 
-  return `${header}\n${events}\n`;
+  return `${header}\n${events}${lowerThirdEvent ? `\n${lowerThirdEvent}` : ""}\n`;
 }

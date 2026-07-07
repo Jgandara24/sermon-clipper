@@ -9,13 +9,13 @@ describe("HeuristicAnalysisProvider", () => {
     expect(await provider.isAvailable()).toBe(true);
   });
 
-  it("scores every candidate with all 8 general subscores", async () => {
+  it("scores sermon candidates with church-specific subscores", async () => {
     const provider = new HeuristicAnalysisProvider();
     const candidates = [
       {
         startMs: 0,
         endMs: 45_000,
-        text: "Peace is not the absence of trouble. It is the presence of a steady God.",
+        text: "John 14 says peace is not the absence of trouble. It is the presence of a steady God.",
       },
     ];
 
@@ -28,6 +28,38 @@ describe("HeuristicAnalysisProvider", () => {
       [
         "clarity",
         "completeness",
+        "biblical_usefulness",
+        "emotional_impact",
+        "pastoral_tone",
+        "platform_fit",
+        "shareability",
+        "speaker_energy",
+        "scripture_relevance",
+        "theological_clarity",
+      ].sort(),
+    );
+    expect(result.scriptureReferences?.map((ref) => ref.normalized)).toEqual(["John 14"]);
+    expect(result.total).toBeGreaterThan(0);
+    expect(result.title.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the generic rubric for non-sermon genres", async () => {
+    const provider = new HeuristicAnalysisProvider();
+    const [result] = await provider.scoreCandidates(
+      [
+        {
+          startMs: 0,
+          endMs: 45_000,
+          text: "Peace is not the absence of trouble. It is the presence of a steady God.",
+        },
+      ],
+      { fullText: CONTEXT.fullText, genre: "talk" },
+    );
+
+    expect(Object.keys(result.subscores).sort()).toEqual(
+      [
+        "clarity",
+        "completeness",
         "emotional_impact",
         "hook_strength",
         "platform_fit",
@@ -36,8 +68,6 @@ describe("HeuristicAnalysisProvider", () => {
         "topic_relevance",
       ].sort(),
     );
-    expect(result.total).toBeGreaterThan(0);
-    expect(result.title.length).toBeGreaterThan(0);
   });
 
   it("scores a clip with emotional language higher on shareability than a flat one", async () => {

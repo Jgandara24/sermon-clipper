@@ -1,6 +1,7 @@
 import { GeneratedClipStatus, ProjectStatus } from "@prisma/client";
 import { getAnalysisProvider } from "@/lib/analysis";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
+import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 
@@ -43,6 +44,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
     text: segment.text,
   }));
 
+  const genre = readGenre(project.processingConfig);
   const candidates = buildCandidateWindows(segments, {
     minMs: MIN_CANDIDATE_MS,
     maxMs: MAX_CANDIDATE_MS,
@@ -63,9 +65,14 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
 
   let scored;
   try {
+    const scoreableCandidates =
+      genre.toLowerCase() === "sermon"
+        ? filterSermonCandidates(candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text })))
+        : candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text }));
+
     scored = await provider.scoreCandidates(
-      candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text })),
-      { fullText: transcript.fullText, genre: readGenre(project.processingConfig) },
+      scoreableCandidates,
+      { fullText: transcript.fullText, genre },
     );
   } catch (error) {
     if (error instanceof AnalysisProviderUnavailableError) {
@@ -95,6 +102,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
   const kept = deduped.sort((a, b) => b.total - a.total).slice(0, TARGET_CLIP_COUNT);
 
   await prisma.$transaction(async (tx) => {
+    await tx.scriptureReference.deleteMany({ where: { projectId: project.id } });
     await tx.generatedClip.deleteMany({ where: { projectId: project.id } });
 
     for (const [idx, clip] of kept.entries()) {
@@ -122,6 +130,24 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
           excerpt: clip.excerpt,
         },
       });
+
+      if (clip.scriptureReferences && clip.scriptureReferences.length > 0) {
+        await tx.scriptureReference.createMany({
+          data: clip.scriptureReferences.map((ref) => ({
+            workspaceId: project.workspaceId,
+            projectId: project.id,
+            clipId: created.id,
+            detectedText: ref.detectedText,
+            normalized: ref.normalized,
+            book: ref.book,
+            chapterStart: ref.chapterStart,
+            verseStart: ref.verseStart,
+            chapterEnd: ref.chapterEnd,
+            verseEnd: ref.verseEnd,
+            confidence: ref.confidence,
+          })),
+        });
+      }
     }
 
     await tx.project.update({ where: { id: project.id }, data: { status: ProjectStatus.READY } });

@@ -110,6 +110,11 @@ export function ProcessingStatusTracker({
   }
 
   const hasActiveJob = snapshot.processingJobs.some((job) => ACTIVE_JOB_STATES.has(job.state));
+  const hasTranscriptionUnavailable = snapshot.processingJobs.some(
+    (job) =>
+      job.errorCode === "TRANSCRIBE_PROVIDER_UNAVAILABLE" ||
+      job.errorMessageUser?.toLowerCase().includes("transcription isn't configured"),
+  );
   const canCancel = ACTIVE_PROJECT_STATUSES.has(snapshot.status) && hasActiveJob;
 
   return (
@@ -134,6 +139,13 @@ export function ProcessingStatusTracker({
       {cancelError ? (
         <p className="mt-3 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-800">
           {cancelError}
+        </p>
+      ) : null}
+
+      {hasTranscriptionUnavailable ? (
+        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Local speech-to-text is not configured for this environment. Upload an SRT file in the
+          transcript panel below to keep going with clip analysis.
         </p>
       ) : null}
 

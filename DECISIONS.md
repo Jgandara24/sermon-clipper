@@ -220,6 +220,55 @@ Tradeoff: Frame-accurate cuts are bounded by the source's frame rate (25fps fixt
 
 Status: Active.
 
+## 2026-07-07 - Phase 7 Starts With Deterministic Church Intelligence
+
+Decision: Phase 7 now has a deterministic first slice before adding heavier AI/product workflow
+surfaces: sermon candidate filtering removes obvious worship/announcement/offering windows when
+other sermon windows remain; scripture references are detected and normalized into a first-class
+`scripture_references` table; and sermon clips use church-specific scoring categories
+(`biblical_usefulness`, `theological_clarity`, `pastoral_tone`, `scripture_relevance`) instead of
+the generic hook/topic categories. The review UI surfaces normalized scripture badges on clip cards.
+
+Why: These are core church-specific differentiators from guide §10/§11/§23 and can be made true
+without waiting on new providers or approval UI. They also make the heuristic fallback more honest:
+a no-key local run can demonstrate sermon-aware ranking and visible scripture handling instead of
+showing generic creator scoring.
+
+Tradeoff: This is not full scripture verification against a Bible text database and not full
+music-vs-speech audio classification. The boundary filter is conservative text heuristics with a
+fallback to the original candidates if everything is flagged, so it avoids catastrophic "no clips"
+failures but will miss some service-section boundaries. LLM scoring still receives the existing
+generic prompt, then the app overlays deterministic church rubric fields; prompt-native sermon
+rubric scoring remains a follow-up.
+
+Status: Active — brand templates, lower-thirds, approval state machine, and phone review links
+landed in the next Phase 7 slice. Stronger scripture verification and audio-aware boundary
+detection remain future hardening.
+
+## 2026-07-07 - Brand Templates And Approval Links Are MVP-Depth, Not Full Collaboration
+
+Decision: Phase 7 now persists `brand_templates` and `clip_approvals`. `/app/templates` manages a
+workspace's church identity, caption preset, colors, and lower-third copy. The editor can apply a
+template into `editor_state.brandTemplateId`, preview the lower-third, and export burns that
+lower-third into the ASS subtitle file as a second style/event. Clip cards can create/reopen an
+approval record and expose `/review/:token`; that public token page lets an approver approve or
+request changes from a phone without loading the editor.
+
+Why: The Phase 7 acceptance path requires reviewed, branded clips. This implementation makes that
+workflow real without jumping ahead to full teams, comments, notification delivery, or direct
+publishing. The review token is opaque and tied to one clip approval, giving a simple URL that is
+good enough for local/demo workflow and easy to replace with authenticated invitations later.
+
+Tradeoff: This is not a full collaboration system. There are no threaded comments, role-specific
+approval permissions beyond possession of the token, or email/SMS notifications. Exports are now
+approval-gated, and any successful editor save after approval returns the approval to `DRAFT` so
+the clip must be reviewed again before export. Lower-thirds are text-only ASS overlays, not
+logo/image assets or animated brand packages. The model and editor state shape leave room for those
+upgrades.
+
+Status: Active — adequate for the MVP review-and-branding path; production collaboration and asset
+management remain Phase 8+/V1 hardening.
+
 ## 2026-07-06 - No Per-Word Karaoke Caption Animation At Render Time
 
 Decision: All four caption presets — including "Karaoke" — burn in at the line level (one `Dialogue` event per caption line) rather than using ASS `\k` tags for a progressive per-word color wipe.

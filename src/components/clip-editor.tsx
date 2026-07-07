@@ -4,6 +4,11 @@ import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptionStylePanel } from "@/components/editor/caption-style-panel";
+import {
+  applyBrandTemplateToState,
+  BrandTemplatePanel,
+  type EditorBrandTemplate,
+} from "@/components/editor/brand-template-panel";
 import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
@@ -29,6 +34,9 @@ export function ClipEditor({
   segments,
   initialVersion,
   initialState,
+  brandTemplates,
+  canExport,
+  exportBlockedReason,
 }: {
   clipId: string;
   clipTitle: string;
@@ -37,20 +45,30 @@ export function ClipEditor({
   segments: TranscriptSegmentInput[];
   initialVersion: number;
   initialState: EditorState;
+  brandTemplates: EditorBrandTemplate[];
+  canExport: boolean;
+  exportBlockedReason: string | null;
 }) {
   const [state, setState] = useState<EditorState>(initialState);
   const [version, setVersion] = useState(initialVersion);
   const [savedState, setSavedState] = useState<EditorState>(initialState);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [showSafeZones, setShowSafeZones] = useState(false);
+  const [exportAllowed, setExportAllowed] = useState(canExport);
+  const [exportReason, setExportReason] = useState(exportBlockedReason);
+  const stateRef = useRef(initialState);
+  const clientRevisionRef = useRef(0);
   const versionRef = useRef(initialVersion);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const allWords = useMemo(() => flattenWords(segments), [segments]);
+  const selectedBrandTemplate =
+    brandTemplates.find((template) => template.id === state.brandTemplateId) ?? null;
 
   const save = useCallback(
     async (nextState: EditorState, isAutosave: boolean) => {
       setSaveStatus("saving");
+      const revisionAtRequest = clientRevisionRef.current;
       try {
         const res = await fetch(`/api/clips/${clipId}/edit-state`, {
           method: "PUT",
@@ -69,6 +87,14 @@ export function ClipEditor({
         versionRef.current = json.data.version;
         setVersion(json.data.version);
         setSavedState(json.data.state);
+        if (clientRevisionRef.current === revisionAtRequest) {
+          stateRef.current = json.data.state;
+          setState(json.data.state);
+        }
+        if (json.data.approvalState) {
+          setExportAllowed(false);
+          setExportReason(json.data.approvalBlockReason ?? "Send this clip for approval before exporting.");
+        }
         setSaveStatus("saved");
       } catch {
         setSaveStatus("error");
@@ -81,6 +107,8 @@ export function ClipEditor({
     (updater: (prev: EditorState) => EditorState) => {
       setState((prev) => {
         const next = updater(prev);
+        clientRevisionRef.current += 1;
+        stateRef.current = next;
         if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
         autosaveTimerRef.current = setTimeout(() => {
           save(next, true);
@@ -99,7 +127,7 @@ export function ClipEditor({
 
   function handleSaveNow() {
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    save(state, false);
+    save(stateRef.current, false);
   }
 
   function toggleWord(word: { id: string; isFiller: boolean }) {
@@ -197,6 +225,7 @@ export function ClipEditor({
             state={state}
             words={wordsInClip}
             showSafeZones={showSafeZones}
+            brandTemplate={selectedBrandTemplate}
           />
           <label className="flex items-center gap-2 text-sm text-stone-600">
             <input
@@ -225,11 +254,22 @@ export function ClipEditor({
             captions={state.captions}
             onChange={(captions) => updateState((prev) => ({ ...prev, captions }))}
           />
+          <BrandTemplatePanel
+            templates={brandTemplates}
+            selectedId={state.brandTemplateId}
+            onApply={(template) =>
+              updateState((prev) => applyBrandTemplateToState(prev, template))
+            }
+          />
           <LayoutPanel
             layout={state.layout}
             onChange={(layout) => updateState((prev) => ({ ...prev, layout }))}
           />
-          <ExportPanel clipId={clipId} />
+          <ExportPanel
+            clipId={clipId}
+            canExport={exportAllowed}
+            blockedReason={exportReason}
+          />
         </div>
       </div>
     </div>

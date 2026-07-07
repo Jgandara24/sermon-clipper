@@ -29,7 +29,13 @@ async function fetchTranscript(sourceVideoId: string): Promise<TranscriptState |
   return json.data as TranscriptState;
 }
 
-export function TranscriptViewer({ sourceVideoId }: { sourceVideoId: string }) {
+export function TranscriptViewer({
+  sourceVideoId,
+  transcriptionUnavailable,
+}: {
+  sourceVideoId: string;
+  transcriptionUnavailable?: boolean;
+}) {
   const [state, setState] = useState<TranscriptState>({ transcript: null, segments: [] });
   const [search, setSearch] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -117,6 +123,13 @@ export function TranscriptViewer({ sourceVideoId }: { sourceVideoId: string }) {
       {uploadError ? (
         <p className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-800">
           {uploadError}
+        </p>
+      ) : null}
+
+      {transcriptionUnavailable && !state.transcript ? (
+        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Local speech-to-text is not configured for this environment. Upload an SRT file here to
+          keep going with clip analysis.
         </p>
       ) : null}
 

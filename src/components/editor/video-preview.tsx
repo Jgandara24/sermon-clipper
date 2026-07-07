@@ -5,17 +5,20 @@ import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/capti
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
 import type { EditorWordWithDeletion } from "@/lib/editor/words";
+import type { EditorBrandTemplate } from "@/components/editor/brand-template-panel";
 
 export function VideoPreview({
   sourceVideoId,
   state,
   words,
   showSafeZones,
+  brandTemplate,
 }: {
   sourceVideoId: string;
   state: EditorState;
   words: EditorWordWithDeletion[];
   showSafeZones: boolean;
+  brandTemplate: EditorBrandTemplate | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentMs, setCurrentMs] = useState(state.source.startMs);
@@ -129,6 +132,22 @@ export function VideoPreview({
             >
               {currentLine.text}
             </span>
+          </div>
+        ) : null}
+
+        {brandTemplate ? (
+          <div className="pointer-events-none absolute left-[6%] right-[6%] bottom-[22%] flex justify-start">
+            <div
+              className="max-w-[88%] rounded-md px-3 py-2 text-white shadow-lg"
+              style={{ backgroundColor: `${brandTemplate.primaryColor}E6` }}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: brandTemplate.accentColor }}>
+                {brandTemplate.lowerThird.headline || brandTemplate.churchName}
+              </p>
+              <p className="mt-0.5 text-[10px] text-white/90">
+                {brandTemplate.lowerThird.subhead || brandTemplate.speakerName || "Sermon clip"}
+              </p>
+            </div>
           </div>
         ) : null}
       </div>

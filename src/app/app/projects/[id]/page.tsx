@@ -28,7 +28,11 @@ export default async function ProjectPage({
       processingJobs: { orderBy: { createdAt: "asc" } },
       generatedClips: {
         orderBy: { rank: "asc" },
-        include: { score: true },
+        include: {
+          score: true,
+          scriptureReferences: { orderBy: { createdAt: "asc" } },
+          approvals: { orderBy: { createdAt: "desc" }, take: 1 },
+        },
       },
     },
   });
@@ -38,6 +42,11 @@ export default async function ProjectPage({
   }
 
   assertWorkspaceScope(project.workspaceId, workspace.id, "project");
+  const transcriptionUnavailable = project.processingJobs.some(
+    (job) =>
+      job.errorCode === "TRANSCRIBE_PROVIDER_UNAVAILABLE" ||
+      job.errorMessageUser?.toLowerCase().includes("transcription isn't configured"),
+  );
 
   return (
     <div className="grid gap-6">
@@ -112,7 +121,19 @@ export default async function ProjectPage({
         />
       </section>
 
-      {project.sourceVideo ? <TranscriptViewer sourceVideoId={project.sourceVideo.id} /> : null}
+      {transcriptionUnavailable ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+          Local speech-to-text is not configured for this environment. Upload an SRT file in the
+          transcript panel below to keep going with clip analysis.
+        </p>
+      ) : null}
+
+      {project.sourceVideo ? (
+        <TranscriptViewer
+          sourceVideoId={project.sourceVideo.id}
+          transcriptionUnavailable={transcriptionUnavailable}
+        />
+      ) : null}
 
       <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-2">
@@ -140,6 +161,17 @@ export default async function ProjectPage({
                     >,
                     modelVersion: clip.score.modelVersion,
                     excerpt: clip.score.excerpt,
+                  }
+                : null,
+              scriptureReferences: clip.scriptureReferences.map((ref) => ({
+                id: ref.id,
+                normalized: ref.normalized,
+                detectedText: ref.detectedText,
+              })),
+              approval: clip.approvals[0]
+                ? {
+                    state: clip.approvals[0].state,
+                    reviewUrl: `/review/${clip.approvals[0].reviewToken}`,
                   }
                 : null,
             }))}

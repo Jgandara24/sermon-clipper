@@ -47,9 +47,18 @@ function StatusLine({ status }: { status: ExportStatus }) {
   return null;
 }
 
-export function ExportPanel({ clipId }: { clipId: string }) {
+export function ExportPanel({
+  clipId,
+  canExport,
+  blockedReason,
+}: {
+  clipId: string;
+  canExport: boolean;
+  blockedReason: string | null;
+}) {
   const [status, setStatus] = useState<ExportStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -72,15 +81,23 @@ export function ExportPanel({ clipId }: { clipId: string }) {
   }
 
   async function handleExport() {
+    if (!canExport) {
+      setStartError(blockedReason ?? "This clip is not ready to export.");
+      return;
+    }
     setIsStarting(true);
+    setStartError(null);
     try {
       const res = await fetch(`/api/clips/${clipId}/exports`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      if (!res.ok) return;
       const json = await res.json();
+      if (!res.ok) {
+        setStartError(json.error?.message ?? "That export could not be started.");
+        return;
+      }
       const exportJobId = json.data.exportJobId as string;
       setStatus({ id: exportJobId, state: "QUEUED", progress: 0, errorMessageUser: null, downloadUrl: null, linkExpired: false });
       pollJob(exportJobId);
@@ -117,7 +134,7 @@ export function ExportPanel({ clipId }: { clipId: string }) {
         <button
           type="button"
           onClick={handleExport}
-          disabled={isStarting}
+          disabled={isStarting || !canExport}
           className="inline-flex w-fit items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
         >
           <Download size={14} aria-hidden="true" />
@@ -127,8 +144,15 @@ export function ExportPanel({ clipId }: { clipId: string }) {
         <StatusLine status={status} />
       )}
 
+      {startError || (!canExport && blockedReason) ? (
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          {startError ?? blockedReason}
+        </p>
+      ) : null}
+
       <p className="text-xs text-stone-500">
-        Renders your current saved edit — crop, captions, and word cuts — into a downloadable MP4.
+        Renders your approved saved edit — crop, captions, lower-third, and word cuts — into a
+        downloadable MP4.
       </p>
     </div>
   );

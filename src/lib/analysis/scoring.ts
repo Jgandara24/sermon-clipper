@@ -26,6 +26,19 @@ export const DEFAULT_WEIGHTS: Record<string, number> = {
   platform_fit: 0.05,
 };
 
+export const SERMON_WEIGHTS: Record<string, number> = {
+  clarity: 0.12,
+  emotional_impact: 0.1,
+  completeness: 0.12,
+  shareability: 0.1,
+  speaker_energy: 0.05,
+  platform_fit: 0.04,
+  biblical_usefulness: 0.18,
+  theological_clarity: 0.14,
+  pastoral_tone: 0.1,
+  scripture_relevance: 0.05,
+};
+
 /** total = round(sum(weight_i * score_i)) per guide §11. */
 export function computeTotal(
   subscores: Record<string, Subscore>,

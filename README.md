@@ -1,6 +1,6 @@
 # Sermon Clipper
 
-Standalone Phase 1-6 foundation for a church-focused long-video-to-short-clips product.
+Standalone Phase 1-7 foundation for a church-focused long-video-to-short-clips product.
 
 This repository is intentionally separate from Pulpit Engine. It does not import Pulpit Engine code, connect to Pulpit Engine databases, reuse Railway services, or require live provider credentials.
 
@@ -38,6 +38,17 @@ Implemented:
   queue (own DB table, same worker process) with automatic retry-twice-then-fail and a
   reuses-the-same-job "try again"; session-authenticated download links with a 7-day expiry and
   re-sign action
+- Phase 7 church-intelligence backbone: sermon candidate filtering that avoids obvious
+  worship/announcement/offering windows where possible, scripture reference detection and
+  normalization (`scripture_references`), sermon-specific scoring categories
+  (`biblical_usefulness`, `theological_clarity`, `pastoral_tone`, `scripture_relevance`), and
+  scripture badges surfaced in clip review
+- Brand templates (`/app/templates`) for church identity, caption defaults, colors, and lower-third
+  text; templates can be applied in the editor, previewed as lower-thirds, stored in editor state,
+  and burned into exports via ASS overlay events
+- Approval workflow: clip cards can send a clip for review, creating a phone-friendly
+  `/review/:token` link where an approver can approve or request changes without entering the full
+  editor; export is blocked until the clip is approved
 - Seeded demo workspace, source video, project, stub job, usage ledger, and sample clip
 - Unit tests for workspace scoping, draft project creation, ffprobe parsing, ledger math, the
   whisper.cpp output parser, SRT parsing, filler detection, transcript chunking/dedup, the
@@ -115,11 +126,24 @@ npm run verify
 This runs Prisma validation, ESLint, TypeScript, Vitest, and the production Next build. It does not require external provider credentials, a running Postgres, or a running worker.
 
 A separate integration suite exercises the usage ledger against a real, migrated Postgres
-database (reserve/settle/release, idempotency, the balance-never-negative invariant). It's
-intentionally not part of `verify`/CI — run it manually once Postgres is up:
+database (reserve/settle/release, idempotency, the balance-never-negative invariant) and the
+Phase 6/7 reviewed-brand-export workflow (approved clip + brand lower-third + word delete → real
+1080×1920 MP4 rendered by FFmpeg/libass). If `.data/models/ggml-tiny.en.bin` exists, it also
+proves upload-video-only ASR by running a spoken sermon MP4 through whisper.cpp and generating
+ranked scripture-aware clips without an SRT override. It's intentionally not part of `verify`/CI —
+run it manually once Postgres is up:
 
 ```sh
 npm run test:integration
+```
+
+A Playwright browser test covers the Phase 6/7 reviewed export path through the UI: a ranked
+sermon clip with scripture is opened in the editor, a brand template is applied, export is blocked
+until approval, the phone review link approves the clip, and the approved clip exports/downloads as
+an MP4. Install the browser once with `npx playwright install chromium`, then run:
+
+```sh
+npm run test:e2e
 ```
 
 ## Notes

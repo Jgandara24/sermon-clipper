@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Pencil, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -21,6 +21,15 @@ export type Clip = {
     subscores: Record<string, Subscore>;
     modelVersion: string;
     excerpt: string;
+  } | null;
+  scriptureReferences: Array<{
+    id: string;
+    normalized: string;
+    detectedText: string;
+  }>;
+  approval: {
+    state: string;
+    reviewUrl: string | null;
   } | null;
 };
 
@@ -47,6 +56,7 @@ function ClipCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [approval, setApproval] = useState(clip.approval);
 
   async function handleLike(nextLiked: boolean | null) {
     setIsSaving(true);
@@ -57,6 +67,19 @@ function ClipCard({
         body: JSON.stringify({ liked: nextLiked }),
       });
       if (res.ok) onLike(clip.id, nextLiked);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleRequestReview() {
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/clips/${clip.id}/approval`, { method: "POST" });
+      const json = await res.json();
+      if (res.ok) {
+        setApproval({ state: json.data.state, reviewUrl: json.data.reviewUrl });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -74,6 +97,31 @@ function ClipCard({
             <p className="mt-1 text-sm italic text-stone-500">&quot;{clip.hookText}&quot;</p>
           ) : null}
           <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{clip.summary}</p>
+          {clip.scriptureReferences.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {clip.scriptureReferences.map((ref) => (
+                <span
+                  key={ref.id}
+                  title={`Detected from "${ref.detectedText}"`}
+                  className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-900"
+                >
+                  {ref.normalized}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {approval ? (
+            <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
+              <p>
+                Approval: <span className="font-medium text-stone-800">{approval.state.replace(/_/g, " ")}</span>
+              </p>
+              {approval.reviewUrl ? (
+                <Link href={approval.reviewUrl} className="mt-1 inline-block text-teal-800 hover:underline">
+                  Open phone review link
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
           {clip.score ? (
             <button
               type="button"
@@ -115,6 +163,15 @@ function ClipCard({
             >
               <Pencil size={14} />
             </Link>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={handleRequestReview}
+              className="rounded-md border border-stone-300 p-1.5 text-stone-500 hover:bg-stone-50 disabled:opacity-50"
+              aria-label="Send this clip for approval"
+            >
+              <Send size={14} />
+            </button>
             <button
               type="button"
               disabled={isSaving}

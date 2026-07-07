@@ -1,7 +1,9 @@
 import type { Prisma } from "@prisma/client";
+import { ClipApprovalState } from "@prisma/client";
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
+import { approvalExportBlockMessage, approvalStateAfterEditorSave } from "@/lib/approval";
 import { buildDefaultEditorState, editorStateSchema } from "@/lib/editor/types";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
@@ -98,16 +100,42 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     );
   }
 
+  const currentApproval = await prisma.clipApproval.findUnique({
+    where: { clipId: id },
+    select: { state: true },
+  });
+  const nextApprovalState = approvalStateAfterEditorSave(currentApproval?.state);
+
   const nextVersion = currentVersion + 1;
-  const created = await prisma.clipEdit.create({
-    data: {
-      clipId: id,
-      version: nextVersion,
-      editorState: { ...parsed.data.state, version: nextVersion } as Prisma.InputJsonValue,
-      isAutosave: parsed.data.isAutosave ?? false,
-      savedBy: auth.user.id,
-    },
+  const created = await prisma.$transaction(async (tx) => {
+    const edit = await tx.clipEdit.create({
+      data: {
+        clipId: id,
+        version: nextVersion,
+        editorState: { ...parsed.data.state, version: nextVersion } as Prisma.InputJsonValue,
+        isAutosave: parsed.data.isAutosave ?? false,
+        savedBy: auth.user.id,
+      },
+    });
+
+    if (nextApprovalState === ClipApprovalState.DRAFT) {
+      await tx.clipApproval.updateMany({
+        where: { clipId: id, state: ClipApprovalState.APPROVED },
+        data: {
+          state: ClipApprovalState.DRAFT,
+          decidedAt: null,
+          comment: "Edited after approval; send this clip for review again before exporting.",
+        },
+      });
+    }
+
+    return edit;
   });
 
-  return apiData({ version: created.version, state: created.editorState });
+  return apiData({
+    version: created.version,
+    state: created.editorState,
+    approvalState: nextApprovalState,
+    approvalBlockReason: nextApprovalState ? approvalExportBlockMessage(nextApprovalState) : null,
+  });
 }

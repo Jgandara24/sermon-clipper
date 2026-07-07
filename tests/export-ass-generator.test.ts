@@ -60,4 +60,19 @@ describe("generateAssSubtitles", () => {
     expect(ass).not.toContain("{this}");
     expect(ass).toContain("(this)");
   });
+
+  it("emits a lower-third dialogue event when brand data is provided", () => {
+    const ass = generateAssSubtitles(LINES, getCaptionPreset("clean").style, 1080, 1920, {
+      headline: "First Baptist",
+      subhead: "Sunday message",
+      primaryColor: "#0f766e",
+      accentColor: "#facc15",
+      startMs: 0,
+      endMs: 4000,
+    });
+
+    expect(ass).toContain("Style: LowerThird");
+    expect(ass).toContain("Dialogue: 1,0:00:00.00,0:00:04.00,LowerThird");
+    expect(ass).toContain("First Baptist\\NSunday message");
+  });
 });

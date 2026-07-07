@@ -100,6 +100,15 @@ enum ExportPreset {
   @@map("export_preset")
 }
 
+enum ClipApprovalState {
+  DRAFT             @map("draft")
+  IN_REVIEW         @map("in_review")
+  APPROVED          @map("approved")
+  CHANGES_REQUESTED @map("changes_requested")
+
+  @@map("clip_approval_state")
+}
+
 model User {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String       @unique
@@ -112,6 +121,7 @@ model User {
   ownedWorkspaces Workspace[]       @relation("WorkspaceOwner")
   memberships     WorkspaceMember[]
   clipEdits       ClipEdit[]
+  clipApprovalRequests ClipApproval[]
 
   @@map("users")
 }
@@ -136,6 +146,9 @@ model Workspace {
   generatedClips GeneratedClip[]
   clipScores     ClipScore[]
   exportJobs     ExportJob[]
+  scriptureReferences ScriptureReference[]
+  brandTemplates BrandTemplate[]
+  clipApprovals  ClipApproval[]
 
   @@index([ownerId])
   @@map("workspaces")
@@ -242,6 +255,7 @@ model Project {
   processingJobs ProcessingJob[]
   usageLedger    UsageLedger[]
   generatedClips GeneratedClip[]
+  scriptureReferences ScriptureReference[]
 
   @@index([workspaceId])
   @@index([sourceVideoId])
@@ -313,6 +327,8 @@ model GeneratedClip {
   score      ClipScore?
   edits      ClipEdit[]
   exportJobs ExportJob[]
+  scriptureReferences ScriptureReference[]
+  approvals ClipApproval[]
 
   @@unique([projectId, rank])
   @@index([workspaceId])
@@ -404,4 +420,72 @@ model ExportedFile {
   exportJob ExportJob?
 
   @@map("exported_files")
+}
+
+model ScriptureReference {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  projectId   String   @map("project_id") @db.Uuid
+  clipId      String?  @map("clip_id") @db.Uuid
+  detectedText String  @map("detected_text")
+  normalized  String
+  book        String
+  chapterStart Int     @map("chapter_start")
+  verseStart   Int?    @map("verse_start")
+  chapterEnd   Int?    @map("chapter_end")
+  verseEnd     Int?    @map("verse_end")
+  confidence   Decimal @default(0.80) @db.Decimal(4, 2)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clip      GeneratedClip? @relation(fields: [clipId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([clipId])
+  @@map("scripture_references")
+}
+
+model BrandTemplate {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  name            String
+  churchName      String   @map("church_name")
+  speakerName     String?  @map("speaker_name")
+  primaryColor    String   @default("#0f766e") @map("primary_color")
+  accentColor     String   @default("#facc15") @map("accent_color")
+  captionPresetId String   @default("clean") @map("caption_preset_id")
+  lowerThird      Json     @default("{}") @map("lower_third")
+  isDefault       Boolean  @default(false) @map("is_default")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("brand_templates")
+}
+
+model ClipApproval {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String            @map("workspace_id") @db.Uuid
+  clipId      String            @map("clip_id") @db.Uuid
+  state       ClipApprovalState @default(DRAFT)
+  reviewToken String            @unique @map("review_token")
+  requesterId String?           @map("requester_id") @db.Uuid
+  approverName String?          @map("approver_name")
+  comment     String?
+  decidedAt   DateTime?         @map("decided_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clip      GeneratedClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  requester User?         @relation(fields: [requesterId], references: [id], onDelete: SetNull)
+
+  @@unique([clipId])
+  @@index([workspaceId])
+  @@map("clip_approvals")
 }

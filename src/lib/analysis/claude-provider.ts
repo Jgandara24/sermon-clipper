@@ -2,7 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { computePlatformFit, computeSpeakerEnergy } from "./computed-subscores";
-import { computeTotal, scoreToLetter } from "./scoring";
+import { buildChurchSubscores } from "./church-scoring";
+import { detectScriptureReferences } from "./scripture";
+import { computeTotal, scoreToLetter, SERMON_WEIGHTS } from "./scoring";
 import {
   AnalysisProviderUnavailableError,
   type AnalysisCandidate,
@@ -143,7 +145,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
         const durationS = (candidate.endMs - candidate.startMs) / 1000;
         const wordCount = candidate.text.split(/\s+/).filter(Boolean).length;
 
-        const subscores = {
+        const baseSubscores = {
           hook_strength: toSubscore(clip.subscores.hookStrength),
           clarity: toSubscore(clip.subscores.clarity),
           emotional_impact: toSubscore(clip.subscores.emotionalImpact),
@@ -153,6 +155,19 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
           speaker_energy: computeSpeakerEnergy(wordCount, durationS),
           platform_fit: computePlatformFit(durationS),
         };
+        const isSermon = context.genre.toLowerCase() === "sermon";
+        const scriptureReferences = isSermon ? detectScriptureReferences(candidate.text) : [];
+        const subscores = isSermon
+          ? {
+              clarity: baseSubscores.clarity,
+              emotional_impact: baseSubscores.emotional_impact,
+              completeness: baseSubscores.completeness,
+              shareability: baseSubscores.shareability,
+              speaker_energy: baseSubscores.speaker_energy,
+              platform_fit: baseSubscores.platform_fit,
+              ...buildChurchSubscores(candidate.text),
+            }
+          : baseSubscores;
 
         return {
           startMs: candidate.startMs,
@@ -162,9 +177,10 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
           hookText: clip.hookText,
           summary: clip.summary,
           excerpt: clip.excerpt,
-          total: computeTotal(subscores),
+          total: computeTotal(subscores, isSermon ? SERMON_WEIGHTS : undefined),
           subscores,
           modelVersion: SONNET_MODEL,
+          scriptureReferences,
         };
       });
   }

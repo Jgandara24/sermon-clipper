@@ -34,8 +34,9 @@ export default async function DashboardPage() {
               <p className="text-sm font-medium text-teal-800">Upload</p>
               <h1 className="mt-1 text-2xl font-semibold">Sermon projects</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
-                Upload a video to probe it for duration, resolution, and a thumbnail. Transcription
-                and AI clip scoring are still stubbed until later phases.
+                Upload a sermon video to probe it, transcribe it, and generate ranked,
+                church-aware clip suggestions. If local speech-to-text is not configured yet,
+                upload an SRT from the project page to run the same analysis path.
               </p>
             </div>
           </div>

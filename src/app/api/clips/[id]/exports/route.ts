@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
+import { approvalExportBlockMessage, isClipApprovedForExport } from "@/lib/approval";
 import { buildDefaultExportFilename } from "@/lib/export/filename";
 import { enqueueExportJob } from "@/lib/exports/queue";
 import { prisma } from "@/lib/prisma";
@@ -18,7 +19,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const clip = await prisma.generatedClip.findUnique({
     where: { id },
-    include: { project: true },
+    include: { project: true, approvals: { orderBy: { createdAt: "desc" }, take: 1 } },
   });
   if (!clip) {
     return apiError("PERMISSION_DENIED", "You don't have access to that workspace.", { status: 404 });
@@ -33,6 +34,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const parsed = postBodySchema.safeParse(json ?? {});
   if (!parsed.success) {
     return apiError("INVALID_REQUEST", "That export request couldn't be read.");
+  }
+
+  const approvalState = clip.approvals[0]?.state ?? null;
+  if (!isClipApprovedForExport(approvalState)) {
+    return apiError("APPROVAL_REQUIRED", approvalExportBlockMessage(approvalState), {
+      status: 409,
+    });
   }
 
   const latestEdit = await prisma.clipEdit.findFirst({

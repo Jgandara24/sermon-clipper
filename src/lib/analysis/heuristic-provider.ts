@@ -1,5 +1,7 @@
 import { computeCompleteness, computePlatformFit, computeSpeakerEnergy } from "./computed-subscores";
-import { computeTotal, scoreToLetter } from "./scoring";
+import { buildChurchSubscores } from "./church-scoring";
+import { detectScriptureReferences } from "./scripture";
+import { computeTotal, scoreToLetter, SERMON_WEIGHTS } from "./scoring";
 import type {
   AnalysisCandidate,
   AnalysisContext,
@@ -110,7 +112,7 @@ export class HeuristicAnalysisProvider implements AnalysisProvider {
         "Compared against the video's most common words.",
       );
 
-      const subscores = {
+      const baseSubscores = {
         hook_strength: hookStrength,
         clarity,
         emotional_impact: emotionalImpact,
@@ -120,6 +122,19 @@ export class HeuristicAnalysisProvider implements AnalysisProvider {
         topic_relevance: topicRelevance,
         platform_fit: platformFit,
       };
+      const isSermon = context.genre.toLowerCase() === "sermon";
+      const scriptureReferences = isSermon ? detectScriptureReferences(candidate.text) : [];
+      const subscores = isSermon
+        ? {
+            clarity,
+            emotional_impact: emotionalImpact,
+            completeness,
+            shareability,
+            speaker_energy: speakerEnergy,
+            platform_fit: platformFit,
+            ...buildChurchSubscores(candidate.text),
+          }
+        : baseSubscores;
 
       return {
         startMs: candidate.startMs,
@@ -131,9 +146,10 @@ export class HeuristicAnalysisProvider implements AnalysisProvider {
           "Heuristic scoring (no AI analysis configured): ranked by pacing, hook cues, and " +
           "emotional language density, not by an LLM reading the content.",
         excerpt: candidate.text.slice(0, 200),
-        total: computeTotal(subscores),
+        total: computeTotal(subscores, isSermon ? SERMON_WEIGHTS : undefined),
         subscores,
         modelVersion: "heuristic-v1",
+        scriptureReferences,
       };
     });
   }

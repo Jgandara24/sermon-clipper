@@ -1,5 +1,6 @@
 import {
   AuthProvider,
+  ClipApprovalState,
   GeneratedClipStatus,
   LedgerKind,
   Prisma,
@@ -178,6 +179,62 @@ async function main() {
           note: "A church member could send this to someone carrying anxiety.",
         },
       },
+    },
+  });
+
+  await prisma.scriptureReference.deleteMany({ where: { clipId: clip.id } });
+  await prisma.scriptureReference.create({
+    data: {
+      workspaceId: workspace.id,
+      projectId: project.id,
+      clipId: clip.id,
+      detectedText: "John 14",
+      normalized: "John 14",
+      book: "John",
+      chapterStart: 14,
+      confidence: new Prisma.Decimal("0.80"),
+    },
+  });
+
+  await prisma.brandTemplate.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000010" },
+    update: {
+      workspaceId: workspace.id,
+      name: "Sunday Sermon",
+      churchName: workspace.name,
+      speakerName: "Pastor",
+      primaryColor: "#0f766e",
+      accentColor: "#facc15",
+      captionPresetId: "clean",
+      lowerThird: { headline: workspace.name, subhead: "Sunday message", showSpeaker: true },
+      isDefault: true,
+    },
+    create: {
+      id: "00000000-0000-0000-0000-000000000010",
+      workspaceId: workspace.id,
+      name: "Sunday Sermon",
+      churchName: workspace.name,
+      speakerName: "Pastor",
+      primaryColor: "#0f766e",
+      accentColor: "#facc15",
+      captionPresetId: "clean",
+      lowerThird: { headline: workspace.name, subhead: "Sunday message", showSpeaker: true },
+      isDefault: true,
+    },
+  });
+
+  await prisma.clipApproval.upsert({
+    where: { clipId: clip.id },
+    update: {
+      state: ClipApprovalState.IN_REVIEW,
+      requesterId: user.id,
+    },
+    create: {
+      workspaceId: workspace.id,
+      clipId: clip.id,
+      requesterId: user.id,
+      state: ClipApprovalState.IN_REVIEW,
+      reviewToken: "demo-review-token-sermon-clipper-phase-7",
     },
   });
 
