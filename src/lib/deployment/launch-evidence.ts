@@ -192,6 +192,9 @@ function checkEvidenceItem(evidence: LaunchEvidence, key: string, label: string)
   if (!item.evidence?.trim()) {
     return { name: key, status: "fail", message: `${label} needs non-empty proof.` };
   }
+  if (/^\s*(todo|paste|placeholder|example)\b/i.test(item.evidence)) {
+    return { name: key, status: "fail", message: `${label} proof still looks like placeholder text.` };
+  }
   return { name: key, status: "ok", message: `${label} has passing evidence.` };
 }
 

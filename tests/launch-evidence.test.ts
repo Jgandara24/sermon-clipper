@@ -60,6 +60,18 @@ describe("launch evidence validation", () => {
     expect(result.checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "billing", status: "fail" })]));
   });
 
+  it("fails when passed evidence still contains placeholder text", () => {
+    const evidence = completeEvidence();
+    evidence.items.healthCheck = { status: "passed", evidence: "TODO: Paste health check output here." };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "healthCheck", status: "fail" })]),
+    );
+  });
+
   it("fails when expected commit does not match evidence commit", () => {
     const result = validateLaunchEvidence(completeEvidence(), { expectedCommitSha: "abc1234" });
 
