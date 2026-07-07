@@ -23,27 +23,104 @@ export type LaunchEvidenceResult = {
 };
 
 export const launchEvidenceItems = [
-  { key: "healthCheck", label: "Health check" },
-  { key: "productionSmoke", label: "Production smoke" },
-  { key: "webProcess", label: "Web process" },
-  { key: "workerProcess", label: "Worker process" },
-  { key: "databaseMigrations", label: "Database migrations" },
-  { key: "authEmail", label: "Auth email" },
-  { key: "workspaceCreate", label: "Workspace create" },
-  { key: "workspaceJoin", label: "Workspace join" },
-  { key: "upload", label: "Upload" },
-  { key: "processing", label: "Processing" },
-  { key: "clipRanking", label: "Clip ranking" },
-  { key: "branding", label: "Branding" },
-  { key: "approvalNotification", label: "Approval notification" },
-  { key: "reviewApproval", label: "Review approval" },
-  { key: "export", label: "Export" },
-  { key: "download", label: "Download" },
-  { key: "billing", label: "Billing" },
-  { key: "usageLimits", label: "Usage limits" },
-  { key: "observability", label: "Observability" },
-  { key: "ci", label: "CI" },
+  {
+    key: "healthCheck",
+    label: "Health check",
+    proof: "Paste curl -fsS <deploymentUrl>/api/health output showing no failed readiness checks.",
+  },
+  {
+    key: "productionSmoke",
+    label: "Production smoke",
+    proof: "Paste npm run smoke:production -- --base-url <deploymentUrl> output.",
+  },
+  {
+    key: "webProcess",
+    label: "Web process",
+    proof: "Deployment platform shows the web process running this commit.",
+  },
+  {
+    key: "workerProcess",
+    label: "Worker process",
+    proof: "Deployment platform shows at least one worker process running with stable WORKER_ID.",
+  },
+  {
+    key: "databaseMigrations",
+    label: "Database migrations",
+    proof: "npm run db:migrate:deploy completed successfully against production.",
+  },
+  { key: "authEmail", label: "Auth email", proof: "A real user received and verified an email OTP through SendGrid." },
+  { key: "workspaceCreate", label: "Workspace create", proof: "A real user created a workspace in production." },
+  {
+    key: "workspaceJoin",
+    label: "Workspace join",
+    proof: "A second real user accepted an invitation through /join/:token.",
+  },
+  { key: "upload", label: "Upload", proof: "A sermon video uploaded to the configured production S3/R2 bucket." },
+  {
+    key: "processing",
+    label: "Processing",
+    proof: "FINALIZE, PROBE, TRANSCRIBE, and ANALYZE completed or failed recoverably with visible events.",
+  },
+  {
+    key: "clipRanking",
+    label: "Clip ranking",
+    proof: "Ranked church-aware clips appeared with scripture/church scoring where applicable.",
+  },
+  { key: "branding", label: "Branding", proof: "A brand template was applied in the editor." },
+  {
+    key: "approvalNotification",
+    label: "Approval notification",
+    proof: "A real approval email and/or SMS was delivered.",
+  },
+  { key: "reviewApproval", label: "Review approval", proof: "The secure /review/:token link was viewed and approved." },
+  { key: "export", label: "Export", proof: "An approved clip exported through the worker." },
+  {
+    key: "download",
+    label: "Download",
+    proof: "The MP4 downloaded through a short-lived signed URL from production storage.",
+  },
+  {
+    key: "billing",
+    label: "Billing",
+    proof: "Stripe Checkout/Portal and webhook handling updated the workspace plan and granted minutes.",
+  },
+  {
+    key: "usageLimits",
+    label: "Usage limits",
+    proof: "Insufficient minutes or plan limit conditions were blocked without negative balances.",
+  },
+  {
+    key: "observability",
+    label: "Observability",
+    proof: "/app/settings/operations showed upload, processing, approval, export, billing, and worker events.",
+  },
+  { key: "ci", label: "CI", proof: "verify, integration, and e2e CI jobs passed for this commit." },
 ] as const;
+
+export type LaunchEvidenceTemplateOptions = {
+  deploymentUrl: string;
+  commitSha: string;
+  verifiedAt: string;
+  verifiedBy: string;
+};
+
+export function createLaunchEvidenceTemplate(options: LaunchEvidenceTemplateOptions): LaunchEvidence {
+  return {
+    deploymentUrl: options.deploymentUrl,
+    commitSha: options.commitSha,
+    verifiedAt: options.verifiedAt,
+    verifiedBy: options.verifiedBy,
+    items: Object.fromEntries(
+      launchEvidenceItems.map((item) => [
+        item.key,
+        {
+          status: "failed",
+          evidence: `TODO: ${item.proof.replaceAll("<deploymentUrl>", options.deploymentUrl)}`,
+        },
+      ]),
+    ),
+  };
+}
 
 function checkString(name: string, value: unknown): LaunchEvidenceCheck {
   return typeof value === "string" && value.trim()

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { launchEvidenceItems, validateLaunchEvidence } from "@/lib/deployment/launch-evidence";
+import {
+  createLaunchEvidenceTemplate,
+  launchEvidenceItems,
+  validateLaunchEvidence,
+} from "@/lib/deployment/launch-evidence";
 
 function completeEvidence() {
   return {
@@ -54,5 +58,19 @@ describe("launch evidence validation", () => {
 
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "billing", status: "fail" })]));
+  });
+
+  it("creates a fail-closed evidence template for every launch item", () => {
+    const template = createLaunchEvidenceTemplate({
+      deploymentUrl: "https://clips.example.org",
+      commitSha: "40aa4ff",
+      verifiedAt: "2026-07-07T20:00:00Z",
+      verifiedBy: "Launch operator",
+    });
+
+    expect(Object.keys(template.items).sort()).toEqual(launchEvidenceItems.map((item) => item.key).sort());
+    expect(Object.values(template.items).every((item) => item?.status === "failed")).toBe(true);
+    expect(template.items.productionSmoke?.evidence).toContain("https://clips.example.org");
+    expect(validateLaunchEvidence(template).status).toBe("fail");
   });
 });

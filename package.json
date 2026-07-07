@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "create:launch-evidence": "tsx scripts/create-launch-evidence.ts",
     "smoke:production": "tsx scripts/production-smoke.ts",
     "verify:launch-evidence": "tsx scripts/verify-launch-evidence.ts",
     "verify": "npm run prisma:validate && npm run lint && npm run typecheck && npm run test && npm run build",

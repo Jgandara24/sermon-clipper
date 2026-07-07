@@ -53,8 +53,14 @@ Record the following before declaring Phase 8 complete:
 | Observability | `/app/settings/operations` shows upload, processing, approval, export, billing, and worker events. |
 | CI | `verify`, `integration`, and `e2e` jobs pass for the deployed commit. |
 
-Use the JSON template at [phase8-launch-evidence.example.json](phase8-launch-evidence.example.json)
-to capture the evidence, then verify it with:
+Generate a launch-specific evidence file with the deployed URL and current commit:
+
+```sh
+npm run create:launch-evidence -- --base-url https://clips.example.org --verified-by "Launch operator"
+```
+
+Then fill every item in `docs/phase8-launch-evidence.json` with real production evidence, change
+each status to `passed`, and verify it:
 
 ```sh
 npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json
