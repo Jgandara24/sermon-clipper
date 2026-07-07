@@ -109,4 +109,14 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
     type: ProcessingJobType.ANALYZE,
     idempotencyKey: `analyze:${project.id}:${job.id}`,
   });
+
+  return {
+    metadata: {
+      provider: providerName,
+      language: result.language,
+      segmentCount: segments.length,
+      wordCount: segments.reduce((total, segment) => total + segment.words.length, 0),
+      source: sourceVideo.srtOverrideKey ? "srt_override" : "audio",
+    },
+  };
 };

@@ -10,6 +10,27 @@ function severityClass(severity: string) {
   return "bg-stone-100 text-stone-700";
 }
 
+function formatMetadata(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Object.keys(metadata).length === 0) {
+    return null;
+  }
+  return JSON.stringify(metadata, null, 2);
+}
+
+function MetadataDetails({ metadata }: { metadata: unknown }) {
+  const formatted = formatMetadata(metadata);
+  if (!formatted) return null;
+
+  return (
+    <details className="mt-2">
+      <summary className="cursor-pointer text-xs font-medium text-teal-800">Metadata</summary>
+      <pre className="mt-2 max-w-md overflow-auto rounded-md bg-stone-950 p-3 text-xs leading-relaxed text-stone-100">
+        {formatted}
+      </pre>
+    </details>
+  );
+}
+
 export default async function OperationsPage() {
   const user = await requireCurrentUser();
   const membership = await requirePrimaryWorkspacePermission(user.id, "MANAGE_OPERATIONS");
@@ -55,7 +76,10 @@ export default async function OperationsPage() {
                 </td>
                 <td className="px-4 py-3">{titleCaseStatus(event.category)}</td>
                 <td className="px-4 py-3 font-medium">{titleCaseStatus(event.eventType)}</td>
-                <td className="px-4 py-3 text-stone-700">{event.message}</td>
+                <td className="px-4 py-3 text-stone-700">
+                  <p>{event.message}</p>
+                  <MetadataDetails metadata={event.metadata} />
+                </td>
                 <td className="px-4 py-3 text-xs text-stone-500">
                   {event.projectId ? <p>project: {event.projectId}</p> : null}
                   {event.jobId ? <p>job: {event.jobId}</p> : null}

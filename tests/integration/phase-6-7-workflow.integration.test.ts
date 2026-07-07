@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
@@ -11,6 +11,7 @@ import {
   Prisma,
   PrismaClient,
   ProcessingJobState,
+  ProcessingJobType,
   ProjectStatus,
   SourceOrigin,
   WorkspaceRole,
@@ -332,6 +333,60 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
 
   it("invalidates approval after a subsequent editor save policy decision", () => {
     expect(approvalStateAfterEditorSave(ClipApprovalState.APPROVED)).toBe(ClipApprovalState.DRAFT);
+  });
+
+  it("records transcription provider metadata in operational events", async () => {
+    const storage = getStorageProvider();
+    const srtKey = `integration/${workspaceId}/${uniqueKey("transcript")}.srt`;
+    await writeFile(
+      storage.absolutePath(srtKey),
+      "1\n00:00:00,000 --> 00:00:04,000\nJohn 14 says peace stays with us.\n",
+    );
+
+    const sourceVideo = await prisma.sourceVideo.create({
+      data: {
+        workspaceId,
+        origin: SourceOrigin.UPLOAD,
+        filename: "srt-override.mp4",
+        durationS: new Prisma.Decimal("4.00"),
+        sizeBytes: BigInt(1024),
+        language: "en",
+        srtOverrideKey: srtKey,
+      },
+    });
+
+    const project = await prisma.project.create({
+      data: {
+        workspaceId,
+        sourceVideoId: sourceVideo.id,
+        name: "SRT Override Sermon",
+        status: ProjectStatus.PROCESSING,
+        processingConfig: { genre: "sermon" },
+      },
+    });
+
+    const job = await prisma.processingJob.create({
+      data: {
+        projectId: project.id,
+        type: ProcessingJobType.TRANSCRIBE,
+        idempotencyKey: uniqueKey("srt-transcribe"),
+      },
+    });
+
+    await expect(runOnePendingJob()).resolves.toBe(true);
+
+    const event = await prisma.operationalEvent.findFirstOrThrow({
+      where: { jobId: job.id, eventType: "processing_job_succeeded" },
+    });
+    expect(event.category).toBe("transcription");
+    expect(event.metadata).toMatchObject({
+      type: "TRANSCRIBE",
+      provider: "srt_upload",
+      language: "en",
+      source: "srt_override",
+      segmentCount: 1,
+      wordCount: 7,
+    });
   });
 
   it.skipIf(!existsSync(LOCAL_TINY_WHISPER_MODEL))(

@@ -152,4 +152,15 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
 
     await tx.project.update({ where: { id: project.id }, data: { status: ProjectStatus.READY } });
   });
+
+  return {
+    metadata: {
+      provider: provider.name,
+      modelVersions: [...new Set(kept.map((clip) => clip.modelVersion))],
+      candidateCount: candidates.length,
+      scoredCount: scored.length,
+      keptCount: kept.length,
+      genre,
+    },
+  };
 };

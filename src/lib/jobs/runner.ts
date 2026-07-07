@@ -40,7 +40,7 @@ export async function runOnePendingJob(): Promise<boolean> {
   }
 
   try {
-    await withHeartbeat(
+    const result = await withHeartbeat(
       () => heartbeatJob(prisma, job.id),
       () => handler({ job, prisma }),
     );
@@ -52,7 +52,7 @@ export async function runOnePendingJob(): Promise<boolean> {
       message: `${job.type} job succeeded.`,
       projectId: job.projectId,
       jobId: job.id,
-      metadata: { type: job.type, attempt: job.attempt },
+      metadata: { type: job.type, attempt: job.attempt, ...(result?.metadata ?? {}) },
     });
   } catch (error) {
     const failure =
