@@ -22,6 +22,14 @@ if (!baseUrl) {
 
 const resolvedBaseUrl = baseUrl;
 
+function normalizeDeploymentUrl(value: string) {
+  const url = new URL(value);
+  url.hash = "";
+  url.search = "";
+  url.pathname = url.pathname.replace(/\/+$/, "");
+  return url.toString().replace(/\/$/, "");
+}
+
 function readEvidenceFile(path: string) {
   if (!existsSync(path)) {
     console.error(`${path} does not exist.`);
@@ -34,7 +42,16 @@ function readEvidenceFile(path: string) {
 async function main() {
   const evidence = readEvidenceFile(filePath);
   const expectedCommitSha = expectedCommitShaOverride ?? evidence.commitSha;
-  const normalizedBaseUrl = resolvedBaseUrl.replace(/\/$/, "");
+  const normalizedBaseUrl = normalizeDeploymentUrl(resolvedBaseUrl);
+  const normalizedEvidenceUrl = normalizeDeploymentUrl(evidence.deploymentUrl);
+  if (normalizedEvidenceUrl !== normalizedBaseUrl) {
+    console.error(
+      `Evidence deployment URL ${evidence.deploymentUrl} does not match requested base URL ${resolvedBaseUrl}.`,
+    );
+    console.error("Create a separate launch evidence file for the deployment URL being verified.");
+    process.exit(2);
+  }
+
   const healthResponse = await fetch(`${normalizedBaseUrl}/api/health`, { cache: "no-store" });
   const healthPayload = await healthResponse.json().catch(() => null);
   const smoke = await runProductionSmoke({
