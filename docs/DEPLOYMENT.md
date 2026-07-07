@@ -13,7 +13,7 @@ bucket.
 - SendGrid credentials for email OTP sign-in.
 - Stripe account with Starter and Pro recurring Prices plus a webhook endpoint for
   `/api/stripe/webhook`.
-- SendGrid and/or Twilio credentials if approval notifications must be delivered in production.
+- SendGrid notification email or Twilio SMS credentials for production approval notifications.
 - `ffmpeg`/`ffprobe` available on worker hosts, with libass enabled for caption burn-in.
 - `whisper-cli` plus a local ggml model on worker hosts if self-hosted ASR is required.
 
@@ -109,11 +109,12 @@ npm run smoke:production -- --base-url https://clips.example.org --commit-sha <d
 
 The health endpoint returns HTTP 200 for `ok` or `degraded` and HTTP 503 for failed critical checks.
 Production readiness fails if `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, auth email
-delivery config, Stripe billing config, S3 storage configuration, database connectivity,
-migrations, or storage configuration are broken. Missing `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` or
-deployment commit metadata is reported as degraded because single-instance deployments can still
-run, but rolling or multi-instance deployments should set the encryption key and Phase 8 launch
-evidence should tie `/api/health` to the deployed commit. The health endpoint reads commit metadata
+delivery config, approval notification config, Stripe billing config, S3 storage configuration,
+database connectivity, migrations, or storage configuration are broken. Missing
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` or deployment commit metadata is reported as degraded because
+single-instance deployments can still run, but rolling or multi-instance deployments should set the
+encryption key and Phase 8 launch evidence should tie `/api/health` to the deployed commit. The
+health endpoint reads commit metadata
 from `SERMON_CLIPPER_COMMIT_SHA` first, then common provider variables such as
 `VERCEL_GIT_COMMIT_SHA` or `RAILWAY_GIT_COMMIT_SHA`.
 

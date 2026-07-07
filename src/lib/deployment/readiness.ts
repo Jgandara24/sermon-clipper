@@ -94,6 +94,28 @@ function checkAuthEmailEnv(env: EnvLike): ReadinessCheck[] {
   ];
 }
 
+function checkApprovalNotificationEnv(env: EnvLike): ReadinessCheck[] {
+  if (env.NODE_ENV !== "production") return [];
+
+  const emailConfigured = !!env.SENDGRID_API_KEY && !!env.NOTIFICATIONS_FROM_EMAIL;
+  const smsConfigured = !!env.TWILIO_ACCOUNT_SID && !!env.TWILIO_AUTH_TOKEN && !!env.TWILIO_MESSAGING_FROM;
+
+  return [
+    emailConfigured || smsConfigured
+      ? {
+          name: "approval_notifications",
+          status: "ok",
+          message: `Approval notifications configured via ${emailConfigured ? "email" : "SMS"}.`,
+        }
+      : {
+          name: "approval_notifications",
+          status: "fail",
+          message:
+            "Configure NOTIFICATIONS_FROM_EMAIL with SENDGRID_API_KEY or Twilio SMS credentials for production approval notifications.",
+        },
+  ];
+}
+
 function checkStripeEnv(env: EnvLike): ReadinessCheck[] {
   if (env.NODE_ENV !== "production") return [];
 
@@ -135,6 +157,7 @@ export function checkDeploymentEnvironment(env: EnvLike = process.env): Readines
     checkPublicAppUrl(env),
     checkRequiredEnv(env, "MEDIA_URL_SECRET"),
     ...checkAuthEmailEnv(env),
+    ...checkApprovalNotificationEnv(env),
     ...checkStripeEnv(env),
   ];
 
