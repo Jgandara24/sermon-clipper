@@ -16,6 +16,8 @@ Implemented:
   available outside production for local fixtures
 - Workspace role-permission enforcement for upload/import, clip editing, exports, approval
   requests, project cancellation, brand-template management, billing pages, and guarded navigation
+- Workspace member invitations: owners/admins can invite admins, editors, approvers, and viewers
+  by email; invited users can sign in and join through expiring tokenized links
 - Short-lived HMAC-signed upload, source-video, thumbnail, and export download URLs; S3/R2 mode
   redirects signed media links to presigned object URLs, while legacy session media routes redirect
   to signed URLs
@@ -23,7 +25,7 @@ Implemented:
   notification attempts recorded for sent/skipped/failed delivery
 - Review links expire, can be revoked when approved content changes, and write audit events for
   request, view, notification, revocation, and decision activity
-- Onboarding, dashboard, project detail, settings, and billing routes
+- Onboarding, dashboard, project detail, member/settings, and billing routes
 - Real video upload to the configured storage provider, FINALIZE + PROBE processing
   jobs (real ffprobe/ffmpeg metadata, thumbnail, and audio extraction), a DB-polling job queue
   and worker, live processing-status UI, and cancel (with usage-ledger release)
@@ -212,6 +214,9 @@ health checks, and smoke testing.
 - Email OTP uses SendGrid (`SENDGRID_API_KEY` plus `AUTH_EMAIL_FROM` or
   `NOTIFICATIONS_FROM_EMAIL`) in production. Local development logs the OTP and records skipped
   delivery when SendGrid is not configured.
+- Workspace invitations use SendGrid (`SENDGRID_API_KEY` plus `NOTIFICATIONS_FROM_EMAIL` or
+  `AUTH_EMAIL_FROM`) in production. Local development logs join links and records skipped delivery
+  instead of pretending email was sent.
 - Approval notifications use SendGrid (`SENDGRID_API_KEY`, `NOTIFICATIONS_FROM_EMAIL`) and Twilio
   Messaging (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_FROM`) when configured.
   Local development records skipped notification attempts instead of pretending delivery happened.

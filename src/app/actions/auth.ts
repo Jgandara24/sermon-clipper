@@ -19,11 +19,13 @@ import { prisma } from "@/lib/prisma";
 
 const loginSchema = z.object({
   email: z.string().email().toLowerCase(),
+  next: z.string().optional(),
 });
 
 const otpVerifySchema = z.object({
   email: z.string().email().toLowerCase(),
   code: z.string().trim().regex(/^\d{6}$/),
+  next: z.string().optional(),
 });
 
 const onboardingSchema = z.object({
@@ -32,6 +34,11 @@ const onboardingSchema = z.object({
   serviceDay: z.string().trim().min(2).max(24),
 });
 
+function safeNextPath(value: string | null | undefined) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}
+
 export async function devLoginAction(formData: FormData) {
   if (process.env.NODE_ENV === "production") {
     redirect("/login?error=dev-disabled");
@@ -39,6 +46,7 @@ export async function devLoginAction(formData: FormData) {
 
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
+    next: formData.get("next") || undefined,
   });
 
   if (!parsed.success) {
@@ -65,6 +73,10 @@ export async function devLoginAction(formData: FormData) {
   });
 
   const workspace = await getPrimaryWorkspaceForUser(user.id);
+  const nextPath = safeNextPath(parsed.data.next);
+  if (nextPath) {
+    redirect(nextPath);
+  }
   redirect(workspace ? "/app" : "/onboarding");
 }
 
@@ -83,11 +95,16 @@ function setAuthSessionCookie(token: string, expiresAt: Date) {
 export async function requestEmailOtpAction(formData: FormData) {
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
+    next: formData.get("next") || undefined,
   });
 
   if (!parsed.success) {
     redirect("/login?error=invalid-email");
   }
+
+  const nextParam = safeNextPath(parsed.data.next)
+    ? `&next=${encodeURIComponent(parsed.data.next ?? "")}`
+    : "";
 
   let challenge;
   try {
@@ -101,7 +118,7 @@ export async function requestEmailOtpAction(formData: FormData) {
         message: "Email OTP request was rate limited.",
         metadata: { email: parsed.data.email },
       });
-      redirect(`/login?error=otp_rate_limited&email=${encodeURIComponent(parsed.data.email)}`);
+      redirect(`/login?error=otp_rate_limited&email=${encodeURIComponent(parsed.data.email)}${nextParam}`);
     }
     throw error;
   }
@@ -136,16 +153,17 @@ export async function requestEmailOtpAction(formData: FormData) {
   });
 
   if (delivery.status === NotificationStatus.FAILED) {
-    redirect(`/login?error=otp_delivery_failed&email=${encodeURIComponent(challenge.email)}`);
+    redirect(`/login?error=otp_delivery_failed&email=${encodeURIComponent(challenge.email)}${nextParam}`);
   }
 
-  redirect(`/login?otp=sent&email=${encodeURIComponent(challenge.email)}`);
+  redirect(`/login?otp=sent&email=${encodeURIComponent(challenge.email)}${nextParam}`);
 }
 
 export async function verifyEmailOtpAction(formData: FormData) {
   const parsed = otpVerifySchema.safeParse({
     email: formData.get("email"),
     code: formData.get("code"),
+    next: formData.get("next") || undefined,
   });
 
   if (!parsed.success) {
@@ -161,7 +179,10 @@ export async function verifyEmailOtpAction(formData: FormData) {
       message: "Email OTP verification failed.",
       metadata: { email: parsed.data.email, reason: result.reason },
     });
-    redirect(`/login?error=${result.reason}&email=${encodeURIComponent(parsed.data.email)}`);
+    const nextParam = safeNextPath(parsed.data.next)
+      ? `&next=${encodeURIComponent(parsed.data.next ?? "")}`
+      : "";
+    redirect(`/login?error=${result.reason}&email=${encodeURIComponent(parsed.data.email)}${nextParam}`);
   }
 
   const cookieStore = await cookies();
@@ -175,6 +196,10 @@ export async function verifyEmailOtpAction(formData: FormData) {
   });
 
   const workspace = await getPrimaryWorkspaceForUser(result.userId);
+  const nextPath = safeNextPath(parsed.data.next);
+  if (nextPath) {
+    redirect(nextPath);
+  }
   redirect(workspace ? "/app" : "/onboarding");
 }
 

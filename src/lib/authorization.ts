@@ -8,6 +8,7 @@ export type WorkspacePermission =
   | "REQUEST_APPROVAL"
   | "REVIEW_CLIP"
   | "MANAGE_TEMPLATES"
+  | "MANAGE_MEMBERS"
   | "MANAGE_BILLING"
   | "MANAGE_OPERATIONS"
   | "CANCEL_PROJECT";
@@ -21,6 +22,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     "REQUEST_APPROVAL",
     "REVIEW_CLIP",
     "MANAGE_TEMPLATES",
+    "MANAGE_MEMBERS",
     "MANAGE_BILLING",
     "MANAGE_OPERATIONS",
     "CANCEL_PROJECT",
@@ -33,6 +35,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     "REQUEST_APPROVAL",
     "REVIEW_CLIP",
     "MANAGE_TEMPLATES",
+    "MANAGE_MEMBERS",
     "MANAGE_BILLING",
     "MANAGE_OPERATIONS",
     "CANCEL_PROJECT",

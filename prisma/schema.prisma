@@ -32,6 +32,15 @@ enum MemberStatus {
   @@map("member_status")
 }
 
+enum WorkspaceInvitationStatus {
+  PENDING  @map("pending")
+  ACCEPTED @map("accepted")
+  REVOKED  @map("revoked")
+  EXPIRED  @map("expired")
+
+  @@map("workspace_invitation_status")
+}
+
 enum SourceOrigin {
   UPLOAD @map("upload")
   URL    @map("url")
@@ -134,8 +143,9 @@ model User {
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
-  ownedWorkspaces      Workspace[]       @relation("WorkspaceOwner")
+  ownedWorkspaces      Workspace[]           @relation("WorkspaceOwner")
   memberships          WorkspaceMember[]
+  sentWorkspaceInvites WorkspaceInvitation[] @relation("WorkspaceInvitationInviter")
   clipEdits            ClipEdit[]
   clipApprovalRequests ClipApproval[]
   authSessions         AuthSession[]
@@ -198,6 +208,7 @@ model Workspace {
 
   owner                   User                     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   members                 WorkspaceMember[]
+  invitations             WorkspaceInvitation[]
   sourceVideos            SourceVideo[]
   projects                Project[]
   usageLedger             UsageLedger[]
@@ -259,6 +270,32 @@ model WorkspaceMember {
   @@unique([workspaceId, userId])
   @@index([userId])
   @@map("workspace_members")
+}
+
+model WorkspaceInvitation {
+  id                   String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId          String                    @map("workspace_id") @db.Uuid
+  email                String
+  role                 WorkspaceRole
+  status               WorkspaceInvitationStatus @default(PENDING)
+  tokenHash            String                    @unique @map("token_hash")
+  deliveryStatus       NotificationStatus        @default(PENDING) @map("delivery_status")
+  deliveryProvider     String?                   @map("delivery_provider")
+  deliveryErrorMessage String?                   @map("delivery_error_message")
+  invitedByUserId      String                    @map("invited_by_user_id") @db.Uuid
+  expiresAt            DateTime                  @map("expires_at")
+  acceptedAt           DateTime?                 @map("accepted_at")
+  revokedAt            DateTime?                 @map("revoked_at")
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime                  @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation("WorkspaceInvitationInviter", fields: [invitedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([email, status])
+  @@index([expiresAt])
+  @@map("workspace_invitations")
 }
 
 model SourceVideo {

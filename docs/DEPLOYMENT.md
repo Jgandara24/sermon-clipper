@@ -147,12 +147,14 @@ multi-instance deployments should set it.
 After deploy:
 
 1. Sign in with email OTP.
-2. Upload a short sermon video.
-3. Confirm `/app/settings/operations` shows upload and processing events.
-4. Generate clips, apply a brand template, and request approval with a real email or SMS recipient.
-5. Approve from the `/review/:token` link.
-6. Export and download the MP4.
-7. Start or update a paid plan through Stripe Checkout/Portal, then confirm the webhook updated the
+2. Create a workspace or invite a second user from `/app/settings` and accept the `/join/:token`
+   link after signing in as the invited email.
+3. Upload a short sermon video.
+4. Confirm `/app/settings/operations` shows upload and processing events.
+5. Generate clips, apply a brand template, and request approval with a real email or SMS recipient.
+6. Approve from the `/review/:token` link.
+7. Export and download the MP4.
+8. Start or update a paid plan through Stripe Checkout/Portal, then confirm the webhook updated the
    workspace plan, billing ledger entries, and operational events.
 
 ## Rollback

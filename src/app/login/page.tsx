@@ -27,10 +27,11 @@ function messageForError(error: string | undefined) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; error?: string; otp?: string }>;
+  searchParams: Promise<{ email?: string; error?: string; next?: string; otp?: string }>;
 }) {
   const params = await searchParams;
   const email = params.email ?? "demo@sermonclipper.local";
+  const next = params.next?.startsWith("/") && !params.next.startsWith("//") ? params.next : "";
   const errorMessage = messageForError(params.error);
   const otpSent = params.otp === "sent";
   const showDevLogin = process.env.NODE_ENV !== "production";
@@ -69,6 +70,7 @@ export default async function LoginPage({
                 className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
               />
             </div>
+            <input type="hidden" name="next" value={next} />
 
             <button
               type="submit"
@@ -81,6 +83,7 @@ export default async function LoginPage({
           {otpSent ? (
             <form action={verifyEmailOtpAction} className="mt-6 grid gap-4 rounded-md border border-teal-100 bg-teal-50 p-4">
               <input type="hidden" name="email" value={email} />
+              <input type="hidden" name="next" value={next} />
               <div>
                 <label htmlFor="code" className="text-sm font-medium">
                   Six-digit code
@@ -111,6 +114,7 @@ export default async function LoginPage({
           {showDevLogin ? (
             <form action={devLoginAction} className="mt-6 border-t border-stone-200 pt-5">
               <input type="hidden" name="email" value={email} />
+              <input type="hidden" name="next" value={next} />
               <button
                 type="submit"
                 className="w-full rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"

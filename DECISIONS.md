@@ -67,11 +67,31 @@ from drifting into per-route role logic and gives Phase 8 a production-safe auth
 that can be audited and tested.
 
 Tradeoff: Public review links remain token-authorized for now; the Phase 8 approval hardening
-slice adds expiration, revocation, audit events, and notification delivery. There is not yet a
-workspace member management UI for owners/admins to assign roles.
+slice adds expiration, revocation, audit events, and notification delivery. Workspace member
+invitation is now supported for new members, but role changes/removal for existing members remain a
+future administration slice.
 
-Status: Active — core role checks are enforced; review-link hardening and member administration
-remain open.
+Status: Active — core role checks and member invitation are enforced; existing-member role changes
+and removal remain open.
+
+## 2026-07-07 - Workspace Invitations Enable Joining Existing Churches
+
+Decision: Owners/admins can invite teammates by email from `/app/settings` into non-owner roles
+(`ADMIN`, `EDITOR`, `APPROVER`, `VIEWER`). Invitations store a hashed token, target email, role,
+expiry, delivery outcome, and status. `/join/:token` requires the invitee to sign in with the
+invited email, preserves the join URL through OTP login, and creates or activates the workspace
+membership on acceptance. Invitation delivery uses SendGrid when configured and logs skipped
+development delivery honestly.
+
+Why: Phase 8 completion requires a real church user to create or join a workspace. Existing
+workspace membership records handled authorization but did not provide a production-safe path for a
+new user to join an existing church workspace.
+
+Tradeoff: Invitations can be accepted and audited, but existing-member role changes and removals
+are still not exposed in the UI. Invite delivery is synchronous like the current OTP/approval
+notification paths; a durable notification queue remains a future scaling improvement.
+
+Status: Active.
 
 ## 2026-07-07 - Browser Media Access Uses Short-Lived Signed URLs
 
