@@ -5,7 +5,12 @@ import {
   computeReservationDelta,
   toDecimal,
 } from "@/lib/usage-ledger";
-import { estimateProcessingMinutes, planForCode } from "@/lib/billing/plans";
+import {
+  estimateProcessingMinutes,
+  planForCode,
+  planForStripePriceId,
+  stripePriceIdForPlan,
+} from "@/lib/billing/plans";
 
 describe("toDecimal", () => {
   it("passes Decimal values through unchanged", () => {
@@ -39,5 +44,19 @@ describe("billing plans", () => {
     expect(estimateProcessingMinutes(1).toString()).toBe("1");
     expect(estimateProcessingMinutes(60).toString()).toBe("1");
     expect(estimateProcessingMinutes(61).toString()).toBe("2");
+  });
+
+  it("maps paid app plans to configured Stripe prices", () => {
+    const env = {
+      NODE_ENV: "test",
+      STRIPE_PRICE_STARTER: "price_starter",
+      STRIPE_PRICE_PRO: "price_pro",
+    } as NodeJS.ProcessEnv;
+
+    expect(stripePriceIdForPlan("starter", env)).toBe("price_starter");
+    expect(stripePriceIdForPlan("pro", env)).toBe("price_pro");
+    expect(stripePriceIdForPlan("free", env)).toBeNull();
+    expect(planForStripePriceId("price_pro", env)?.code).toBe("pro");
+    expect(planForStripePriceId("price_unknown", env)).toBeNull();
   });
 });

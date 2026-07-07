@@ -180,16 +180,21 @@ model EmailOtpChallenge {
 }
 
 model Workspace {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name             String
-  ownerId          String   @map("owner_id") @db.Uuid
-  planCode         String   @default("free") @map("plan_code")
-  minuteBalance    Decimal  @default(60) @map("minute_balance") @db.Decimal(10, 2)
-  storageUsedBytes BigInt   @default(0) @map("storage_used_bytes")
-  settings         Json     @default("{}")
-  externalRefs     Json     @default("{}") @map("external_refs")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                     String
+  ownerId                  String    @map("owner_id") @db.Uuid
+  planCode                 String    @default("free") @map("plan_code")
+  minuteBalance            Decimal   @default(60) @map("minute_balance") @db.Decimal(10, 2)
+  stripeCustomerId         String?   @unique @map("stripe_customer_id")
+  stripeSubscriptionId     String?   @unique @map("stripe_subscription_id")
+  stripeSubscriptionStatus String?   @map("stripe_subscription_status")
+  stripePriceId            String?   @map("stripe_price_id")
+  stripeCurrentPeriodEnd   DateTime? @map("stripe_current_period_end")
+  storageUsedBytes         BigInt    @default(0) @map("storage_used_bytes")
+  settings                 Json      @default("{}")
+  externalRefs             Json      @default("{}") @map("external_refs")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
 
   owner                   User                     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   members                 WorkspaceMember[]
@@ -205,9 +210,38 @@ model Workspace {
   approvalNotifications   ApprovalNotification[]
   clipApprovalAuditEvents ClipApprovalAuditEvent[]
   operationalEvents       OperationalEvent[]
+  billingPeriodCredits    BillingPeriodCredit[]
 
   @@index([ownerId])
   @@map("workspaces")
+}
+
+model StripeWebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now()) @map("processed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("stripe_webhook_events")
+}
+
+model BillingPeriodCredit {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId          String   @map("workspace_id") @db.Uuid
+  stripeInvoiceId      String   @unique @map("stripe_invoice_id")
+  stripeSubscriptionId String   @map("stripe_subscription_id")
+  planCode             String   @map("plan_code")
+  minutesGranted       Decimal  @map("minutes_granted") @db.Decimal(10, 2)
+  ledgerId             String?  @map("ledger_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ledger    UsageLedger? @relation(fields: [ledgerId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([stripeSubscriptionId])
+  @@map("billing_period_credits")
 }
 
 model WorkspaceMember {
@@ -361,9 +395,10 @@ model UsageLedger {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project   Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  job       ProcessingJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project              Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  job                  ProcessingJob?        @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  billingPeriodCredits BillingPeriodCredit[]
 
   @@index([workspaceId, createdAt])
   @@index([projectId])

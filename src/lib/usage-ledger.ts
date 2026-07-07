@@ -186,3 +186,77 @@ export async function grantMinutes(
     note: params.note ?? "Minutes granted.",
   });
 }
+
+export async function grantMinutesForBillingPeriod(
+  client: PrismaClient,
+  params: {
+    workspaceId: string;
+    stripeInvoiceId: string;
+    stripeSubscriptionId: string;
+    planCode: string;
+    minutes: number | string | Prisma.Decimal;
+    note?: string;
+  },
+) {
+  const amount = toDecimal(params.minutes);
+  if (amount.lessThanOrEqualTo(0)) {
+    throw new InvalidLedgerAmountError("Grant amount must be greater than zero.");
+  }
+
+  return client.$transaction(async (tx) => {
+    const existing = await tx.billingPeriodCredit.findUnique({
+      where: { stripeInvoiceId: params.stripeInvoiceId },
+      include: { ledger: true },
+    });
+    if (existing?.ledger) return existing.ledger;
+
+    const rows = await tx.$queryRaw<{ minute_balance: Prisma.Decimal }[]>`
+      UPDATE workspaces
+      SET minute_balance = minute_balance + ${amount}, updated_at = now()
+      WHERE id = ${params.workspaceId}::uuid
+      RETURNING minute_balance
+    `;
+
+    if (rows.length === 0) {
+      throw new Error(`Workspace ${params.workspaceId} was not found for billing credit.`);
+    }
+
+    const ledger = await tx.usageLedger.create({
+      data: {
+        workspaceId: params.workspaceId,
+        kind: LedgerKind.GRANT,
+        minutesDelta: amount,
+        balanceAfter: rows[0].minute_balance,
+        note: params.note ?? `Stripe invoice ${params.stripeInvoiceId} included minutes.`,
+      },
+    });
+
+    await tx.billingPeriodCredit.create({
+      data: {
+        workspaceId: params.workspaceId,
+        stripeInvoiceId: params.stripeInvoiceId,
+        stripeSubscriptionId: params.stripeSubscriptionId,
+        planCode: params.planCode,
+        minutesGranted: amount,
+        ledgerId: ledger.id,
+      },
+    });
+
+    await recordOperationalEvent(tx, {
+      workspaceId: params.workspaceId,
+      category: "billing",
+      eventType: "stripe_minutes_granted",
+      message: "Stripe billing period minutes granted.",
+      metadata: {
+        ledgerId: ledger.id,
+        stripeInvoiceId: params.stripeInvoiceId,
+        stripeSubscriptionId: params.stripeSubscriptionId,
+        planCode: params.planCode,
+        minutesGranted: amount.toString(),
+        balanceAfter: ledger.balanceAfter.toString(),
+      },
+    });
+
+    return ledger;
+  });
+}

@@ -8,6 +8,7 @@ export type PlanLimits = {
   maxUploadBytes: number;
   maxVideoDurationS: number;
   overageAllowed: boolean;
+  stripePriceEnvVar?: string;
 };
 
 const PLAN_LIMITS: Record<string, PlanLimits> = {
@@ -26,6 +27,7 @@ const PLAN_LIMITS: Record<string, PlanLimits> = {
     maxUploadBytes: MAX_UPLOAD_BYTES,
     maxVideoDurationS: 3 * 60 * 60,
     overageAllowed: false,
+    stripePriceEnvVar: "STRIPE_PRICE_STARTER",
   },
   pro: {
     code: "pro",
@@ -34,6 +36,7 @@ const PLAN_LIMITS: Record<string, PlanLimits> = {
     maxUploadBytes: MAX_UPLOAD_BYTES,
     maxVideoDurationS: 3 * 60 * 60,
     overageAllowed: false,
+    stripePriceEnvVar: "STRIPE_PRICE_PRO",
   },
   dev: {
     code: "dev",
@@ -49,6 +52,23 @@ export function planForCode(planCode: string | null | undefined): PlanLimits {
   return PLAN_LIMITS[planCode ?? "free"] ?? PLAN_LIMITS.free;
 }
 
+export function paidPlans(): PlanLimits[] {
+  return Object.values(PLAN_LIMITS).filter((plan) => plan.stripePriceEnvVar);
+}
+
+export function stripePriceIdForPlan(planCode: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  const plan = planForCode(planCode);
+  return plan.stripePriceEnvVar ? (env[plan.stripePriceEnvVar] ?? null) : null;
+}
+
+export function planForStripePriceId(
+  priceId: string | null | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): PlanLimits | null {
+  if (!priceId) return null;
+  return paidPlans().find((plan) => plan.stripePriceEnvVar && env[plan.stripePriceEnvVar] === priceId) ?? null;
+}
+
 export function estimateProcessingMinutes(durationS: number | Prisma.Decimal): Prisma.Decimal {
   const seconds = durationS instanceof Prisma.Decimal ? durationS.toNumber() : durationS;
   if (!Number.isFinite(seconds) || seconds <= 0) {
@@ -61,4 +81,3 @@ export function formatBytes(bytes: number): string {
   const gib = bytes / (1024 * 1024 * 1024);
   return `${Number.isInteger(gib) ? gib.toFixed(0) : gib.toFixed(1)} GB`;
 }
-

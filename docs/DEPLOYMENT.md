@@ -11,6 +11,8 @@ bucket.
   account-specific `STORAGE_S3_ENDPOINT`.
 - A public HTTPS domain used by `NEXT_PUBLIC_APP_URL`.
 - SendGrid credentials for email OTP sign-in.
+- Stripe account with Starter and Pro recurring Prices plus a webhook endpoint for
+  `/api/stripe/webhook`.
 - SendGrid and/or Twilio credentials if approval notifications must be delivered in production.
 - `ffmpeg`/`ffprobe` available on worker hosts, with libass enabled for caption burn-in.
 - `whisper-cli` plus a local ggml model on worker hosts if self-hosted ASR is required.
@@ -29,6 +31,11 @@ NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=<stable-32-byte-base64-key>
 SENDGRID_API_KEY=SG...
 AUTH_EMAIL_FROM=auth@example.org
 AUTH_EMAIL_FROM_NAME=Sermon Clipper
+
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_STARTER=price_...
+STRIPE_PRICE_PRO=price_...
 
 STORAGE_PROVIDER=s3
 STORAGE_S3_BUCKET=sermon-clipper-production
@@ -100,10 +107,21 @@ curl -fsS https://clips.example.org/api/health
 
 The health endpoint returns HTTP 200 for `ok` or `degraded` and HTTP 503 for failed critical checks.
 Production readiness fails if `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, auth email
-delivery config, S3 storage configuration, database connectivity, migrations, or storage
-configuration are broken. A missing `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is reported as degraded
-because single-instance deployments can still run, but rolling or multi-instance deployments should
-set it.
+delivery config, Stripe billing config, S3 storage configuration, database connectivity,
+migrations, or storage configuration are broken. A missing `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is
+reported as degraded because single-instance deployments can still run, but rolling or
+multi-instance deployments should set it.
+
+## Stripe Billing
+
+- Create recurring monthly Stripe Prices for the Starter and Pro plans.
+- Set `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` to those Price IDs.
+- Configure a Stripe webhook endpoint at `https://clips.example.org/api/stripe/webhook`.
+- Subscribe the endpoint to `checkout.session.completed`, `customer.subscription.created`,
+  `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.paid`.
+- The app uses Checkout Sessions for subscription starts, the Stripe Customer Portal for
+  self-service changes/cancellation, and signed webhooks to update workspace plan state and grant
+  included minutes once an invoice is paid.
 
 ## Storage Bucket
 
@@ -134,7 +152,8 @@ After deploy:
 4. Generate clips, apply a brand template, and request approval with a real email or SMS recipient.
 5. Approve from the `/review/:token` link.
 6. Export and download the MP4.
-7. Confirm billing ledger entries and operational events are present.
+7. Start or update a paid plan through Stripe Checkout/Portal, then confirm the webhook updated the
+   workspace plan, billing ledger entries, and operational events.
 
 ## Rollback
 

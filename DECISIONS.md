@@ -169,12 +169,32 @@ checking only `minute_balance > 0` at upload time allowed a 90-minute sermon to 
 with one minute remaining. Reserving after ffprobe avoids charging invalid files while still gating
 the expensive transcription/analysis stages.
 
-Tradeoff: This is minute-balance enforcement, not Stripe billing. Plan codes are stored on
-`workspaces.plan_code` and managed out-of-band for now; adding Stripe Checkout/customer portal and
-webhook-driven minute grants remains a follow-up Phase 8 billing slice.
+Tradeoff: Stripe Checkout/customer portal and webhook-driven minute grants are now wired in a later
+Phase 8 billing slice. Plan codes are still simple application-level strings rather than a fully
+customized pricing catalog, and overages remain blocked rather than billed automatically.
 
-Status: Active — usage limits and reservations are enforced; Stripe payment collection remains
+Status: Active — usage limits and reservations are enforced; automatic overage billing remains
 open.
+
+## 2026-07-07 - Stripe Checkout Drives Paid Plan Billing
+
+Decision: Phase 8 adds Stripe subscription billing with Checkout Sessions for paid plan starts,
+Customer Portal sessions for self-service billing management, and signed webhook handling for
+`checkout.session.completed`, subscription lifecycle events, and `invoice.paid`. Workspaces store
+Stripe customer/subscription IDs, subscription status, price ID, and current period end. Paid
+invoice events grant the plan's included minutes through an idempotent billing-period credit tied
+to the Stripe invoice ID.
+
+Why: The product already enforced plan limits and minute balances, but paid plan collection was
+managed out-of-band. Phase 8 requires real churches to be billed or limited correctly according to
+their plan. Stripe Checkout and Portal avoid custom payment UI, while signed webhooks make Stripe
+the source of truth for subscription status and included-minute grants.
+
+Tradeoff: This is subscription billing, not usage-based overage billing. If a church exhausts its
+included minutes, the existing upload/processing gates still block overage instead of charging
+extra automatically. Future billing work can add metered usage, invoice previews, and dunning UI.
+
+Status: Active.
 
 ## 2026-07-07 - Operational Events Provide Production Observability
 

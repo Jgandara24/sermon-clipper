@@ -1,14 +1,19 @@
 import { formatDate, formatMinutes, titleCaseStatus } from "@/lib/format";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
-import { formatBytes, planForCode } from "@/lib/billing/plans";
+import { formatBytes, paidPlans, planForCode } from "@/lib/billing/plans";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ checkout?: string }>;
+}) {
   const user = await requireCurrentUser();
   const membership = await requirePrimaryWorkspacePermission(user.id, "MANAGE_BILLING");
   const workspace = membership.workspace;
+  const params = await searchParams;
   const ledger = await prisma.usageLedger.findMany({
     where: { workspaceId: workspace.id },
     orderBy: { createdAt: "desc" },
@@ -24,6 +29,16 @@ export default async function BillingPage() {
         <p className="mt-2 text-sm text-stone-500">
           Current plan limits and minute ledger for this workspace.
         </p>
+        {params.checkout === "success" ? (
+          <div className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
+            Checkout completed. Stripe will confirm the subscription by webhook before credits are applied.
+          </div>
+        ) : null}
+        {params.checkout === "cancelled" ? (
+          <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Checkout was cancelled. Your current plan is unchanged.
+          </div>
+        ) : null}
         <div className="mt-5 grid gap-3 rounded-md bg-stone-50 p-4 sm:grid-cols-3">
           <div>
             <p className="text-sm text-stone-500">Plan</p>
@@ -43,6 +58,43 @@ export default async function BillingPage() {
           <p className="mt-1 text-3xl font-semibold text-teal-800">
             {formatMinutes(workspace.minuteBalance)}
           </p>
+        </div>
+        <div className="mt-5 grid gap-3 rounded-md border border-stone-200 p-4">
+          <div>
+            <p className="text-sm font-semibold text-stone-800">Stripe subscription</p>
+            <p className="mt-1 text-sm text-stone-500">
+              Status: {workspace.stripeSubscriptionStatus ?? "not connected"}
+            </p>
+            {workspace.stripeCurrentPeriodEnd ? (
+              <p className="mt-1 text-sm text-stone-500">
+                Current period ends {formatDate(workspace.stripeCurrentPeriodEnd)}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {workspace.stripeCustomerId ? (
+              <form action="/api/billing/portal" method="post">
+                <button
+                  type="submit"
+                  className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+                >
+                  Open customer portal
+                </button>
+              </form>
+            ) : (
+              paidPlans().map((paidPlan) => (
+                <form key={paidPlan.code} action="/api/billing/checkout" method="post">
+                  <input type="hidden" name="planCode" value={paidPlan.code} />
+                  <button
+                    type="submit"
+                    className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+                  >
+                    Start {paidPlan.name}
+                  </button>
+                </form>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
