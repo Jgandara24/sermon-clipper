@@ -1,10 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createSignedMediaUrl,
   createSignedUploadUrl,
   verifySignedMediaUrl,
   verifySignedUploadUrl,
 } from "@/lib/media/signed-url";
+
+const originalEnv = { ...process.env };
+
+afterEach(() => {
+  process.env = { ...originalEnv };
+  vi.unstubAllEnvs();
+  vi.useRealTimers();
+});
 
 describe("signed media URLs", () => {
   it("verifies untampered short-lived media URLs", () => {
@@ -28,7 +36,6 @@ describe("signed media URLs", () => {
       filename: "clip.mp4",
       disposition: "attachment",
     });
-    vi.useRealTimers();
   });
 
   it("rejects tampered media URLs", () => {
@@ -59,7 +66,6 @@ describe("signed media URLs", () => {
       ok: false,
       reason: "expired",
     });
-    vi.useRealTimers();
   });
 
   it("binds upload signatures to the upload id", () => {
@@ -85,5 +91,27 @@ describe("signed media URLs", () => {
       ok: false,
       reason: "invalid",
     });
+  });
+
+  it("requires a dedicated strong media URL secret in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("MEDIA_URL_SECRET", "");
+    vi.stubEnv("AUTH_SECRET", "x".repeat(64));
+
+    expect(() =>
+      createSignedMediaUrl({
+        key: "exports/workspace-1/export.mp4",
+        workspaceId: "workspace-1",
+      }),
+    ).toThrow("MEDIA_URL_SECRET must be configured");
+
+    vi.stubEnv("MEDIA_URL_SECRET", "too-short");
+    expect(() =>
+      createSignedUploadUrl({
+        uploadId: "upload-1",
+        workspaceId: "workspace-1",
+        maxBytes: 1024,
+      }),
+    ).toThrow("MEDIA_URL_SECRET must be at least");
   });
 });

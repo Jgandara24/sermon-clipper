@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const DEFAULT_MEDIA_URL_TTL_SECONDS = 15 * 60;
 export const DEFAULT_UPLOAD_URL_TTL_SECONDS = 15 * 60;
+export const MIN_MEDIA_URL_SECRET_LENGTH = 32;
 
 type SignedMediaUrlInput = {
   key: string;
@@ -36,12 +37,19 @@ export type VerifiedSignedUploadUrl =
   | { ok: false; reason: "missing" | "expired" | "invalid" };
 
 function getSigningSecret(): string {
+  if (process.env.NODE_ENV === "production") {
+    const secret = process.env.MEDIA_URL_SECRET;
+    if (!secret) {
+      throw new Error("MEDIA_URL_SECRET must be configured in production.");
+    }
+    if (secret.length < MIN_MEDIA_URL_SECRET_LENGTH) {
+      throw new Error(`MEDIA_URL_SECRET must be at least ${MIN_MEDIA_URL_SECRET_LENGTH} characters in production.`);
+    }
+    return secret;
+  }
+
   const secret = process.env.MEDIA_URL_SECRET ?? process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
   if (secret) return secret;
-
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("MEDIA_URL_SECRET must be configured in production.");
-  }
 
   return "dev-only-sermon-clipper-media-url-secret";
 }

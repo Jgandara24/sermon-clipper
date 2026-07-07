@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { MIN_MEDIA_URL_SECRET_LENGTH } from "@/lib/media/signed-url";
 import { getStorageProvider } from "@/lib/storage";
 
 export type ReadinessStatus = "ok" | "warning" | "fail";
@@ -67,6 +68,21 @@ function checkPublicAppUrl(env: EnvLike): ReadinessCheck {
     }
   }
   return { name: "NEXT_PUBLIC_APP_URL", status: "ok", message: "NEXT_PUBLIC_APP_URL is configured." };
+}
+
+function checkMediaUrlSecret(env: EnvLike): ReadinessCheck {
+  const value = env.MEDIA_URL_SECRET;
+  if (!value) {
+    return { name: "MEDIA_URL_SECRET", status: "fail", message: "MEDIA_URL_SECRET is required." };
+  }
+  if (env.NODE_ENV === "production" && value.length < MIN_MEDIA_URL_SECRET_LENGTH) {
+    return {
+      name: "MEDIA_URL_SECRET",
+      status: "fail",
+      message: `MEDIA_URL_SECRET must be at least ${MIN_MEDIA_URL_SECRET_LENGTH} characters in production.`,
+    };
+  }
+  return { name: "MEDIA_URL_SECRET", status: "ok", message: "MEDIA_URL_SECRET is configured." };
 }
 
 function checkAuthEmailEnv(env: EnvLike): ReadinessCheck[] {
@@ -176,7 +192,7 @@ export function checkDeploymentEnvironment(env: EnvLike = process.env): Readines
   const checks: ReadinessCheck[] = [
     checkRequiredEnv(env, "DATABASE_URL"),
     checkPublicAppUrl(env),
-    checkRequiredEnv(env, "MEDIA_URL_SECRET"),
+    checkMediaUrlSecret(env),
     ...checkAuthEmailEnv(env),
     ...checkApprovalNotificationEnv(env),
     ...checkStripeEnv(env),

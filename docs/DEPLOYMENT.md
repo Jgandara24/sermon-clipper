@@ -25,7 +25,7 @@ Set these for both web and worker processes unless noted otherwise:
 NODE_ENV=production
 DATABASE_URL=postgresql://...
 NEXT_PUBLIC_APP_URL=https://clips.example.org
-MEDIA_URL_SECRET=<long-random-secret>
+MEDIA_URL_SECRET=<long-random-secret-at-least-32-characters>
 NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=<stable-32-byte-base64-key>
 SERMON_CLIPPER_COMMIT_SHA=<deployed-git-sha>
 
