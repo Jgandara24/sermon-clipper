@@ -125,6 +125,57 @@ export type LaunchEvidenceItemKey = (typeof launchEvidenceItems)[number]["key"];
 const launchEvidenceItemKeys = new Set<string>(launchEvidenceItems.map((item) => item.key));
 const minimumEvidenceLength = 20;
 const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: string) => string | null>> = {
+  healthCheck: (proof) => {
+    const required = [
+      { label: "/api/health", pattern: /\/api\/health/i },
+      { label: "status ok", pattern: /\bstatus\b.*\bok\b|\bok\b.*\bstatus\b/i },
+      { label: "all checks ok", pattern: /\ball\b.*\bchecks\b.*\bok\b|\bchecks\b.*\bok\b/i },
+      { label: "commit SHA", pattern: /\bcommit(?:Sha| SHA)?\b|[0-9a-f]{7,40}/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Health check proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  productionSmoke: (proof) => {
+    const required = [
+      { label: "smoke:production", pattern: /\bsmoke:production\b/i },
+      { label: "base URL", pattern: /\bbase-url\b|https:\/\//i },
+      { label: "status ok", pattern: /\bstatus\b.*\bok\b|\bok\b.*\bstatus\b|\bpassed\b/i },
+      { label: "commit SHA", pattern: /\bcommit(?:Sha| SHA|-sha)?\b|[0-9a-f]{7,40}/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Production smoke proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  webProcess: (proof) => {
+    const required = [
+      { label: "deployment platform", pattern: /\bdeployment\b.*\bplatform\b|\bvercel\b|\brailway\b|\bfly\b|\brender\b/i },
+      { label: "web process", pattern: /\bweb\b.*\bprocess\b|\bweb\b.*\bservice\b|\bservice\b.*\bweb\b/i },
+      { label: "running", pattern: /\brunning\b|\bhealthy\b|\bdeployed\b/i },
+      { label: "commit SHA", pattern: /\bcommit(?:Sha| SHA)?\b|[0-9a-f]{7,40}/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Web process proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  databaseMigrations: (proof) => {
+    const required = [
+      { label: "db:migrate:deploy", pattern: /\bdb:migrate:deploy\b|\bprisma migrate deploy\b/i },
+      { label: "production database", pattern: /\bproduction\b.*\bdatabase\b|\bdatabase\b.*\bproduction\b/i },
+      { label: "completed successfully", pattern: /\bcompleted\b.*\bsuccessfully\b|\bsucceeded\b|\bsuccess\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Database migrations proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
   authEmail: (proof) => {
     const required = [
       { label: "email OTP", pattern: /\bemail\b.*\bOTP\b|\bOTP\b.*\bemail\b/i },

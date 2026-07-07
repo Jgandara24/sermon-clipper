@@ -32,11 +32,11 @@ Record the following before declaring Phase 8 complete:
 | --- | --- |
 | Deployment URL | Production URL using HTTPS and the intended domain. |
 | Commit SHA | Git commit deployed to production. |
-| Health check | Output from `curl -fsS <url>/api/health` showing readiness status `ok`, all checks `ok`, and the deployed commit SHA. |
-| Production smoke | Output from `npm run smoke:production -- --base-url <url> --commit-sha <sha>` showing status `ok`. |
-| Web process | Deployment platform confirms the web process is running the deployed commit. |
+| Health check | Output from `curl -fsS <url>/api/health` showing readiness status `ok`, all checks `ok`, and the deployed commit SHA; the evidence text must name `/api/health`, status `ok`, checks `ok`, and commit SHA. |
+| Production smoke | Output from `npm run smoke:production -- --base-url <url> --commit-sha <sha>` showing status `ok`; the evidence text must name `smoke:production`, base URL, status `ok`/passed, and commit SHA. |
+| Web process | Deployment platform confirms the web process is running the deployed commit; the evidence text must name deployment platform, web process/service, running/healthy/deployed state, and commit SHA. |
 | Worker process | At least one separate worker process is running with stable `WORKER_ID`, available `ffmpeg`/`ffprobe`, available `whisper-cli`, and readable `WHISPER_MODEL_PATH`; the evidence text must name each prerequisite. |
-| Database | `npm run db:migrate:deploy` applied successfully against production. |
+| Database | `npm run db:migrate:deploy` applied successfully against production; the evidence text must name `db:migrate:deploy` or Prisma migrate deploy, production database, and successful completion. |
 | Auth email | A real user receives and verifies an email OTP through SendGrid; the evidence text must name email OTP, SendGrid, and verification/sign-in. |
 | Workspace create | The real user creates a workspace; the evidence text must name a real user, workspace, and creation. |
 | Workspace join | A second real user accepts an invitation through `/join/:token`; the evidence text must name the second user, invitation or `/join/` link, and accepted/joined state. |

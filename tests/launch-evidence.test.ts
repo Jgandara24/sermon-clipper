@@ -11,6 +11,13 @@ import {
 
 function completeEvidence(): LaunchEvidence {
   const evidenceByKey: Record<string, string> = {
+    healthCheck:
+      "curl -fsS https://clips.example.org/api/health returned status ok, all checks ok, and commitSha fe09434.",
+    productionSmoke:
+      "npm run smoke:production -- --base-url https://clips.example.org --commit-sha fe09434 returned status ok.",
+    webProcess: "Vercel deployment platform shows the web process running deployed commit SHA fe09434.",
+    databaseMigrations:
+      "npm run db:migrate:deploy completed successfully against the production database for commit fe09434.",
     authEmail: "Real user owner@example.org received an email OTP through SendGrid and verified the code to sign in.",
     workspaceCreate: "Real user owner@example.org created production workspace ws_prod_123.",
     workspaceJoin:
@@ -140,6 +147,66 @@ describe("launch evidence validation", () => {
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "healthCheck", status: "fail" })]),
+    );
+  });
+
+  it("fails when health check proof does not mention readiness and commit output", () => {
+    const evidence = completeEvidence();
+    evidence.items.healthCheck = {
+      status: "passed",
+      evidence: "The health endpoint worked.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "healthCheck", status: "fail" })]),
+    );
+  });
+
+  it("fails when production smoke proof does not mention smoke command, URL, status, and commit", () => {
+    const evidence = completeEvidence();
+    evidence.items.productionSmoke = {
+      status: "passed",
+      evidence: "Production smoke passed.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "productionSmoke", status: "fail" })]),
+    );
+  });
+
+  it("fails when web process proof does not mention platform, running web process, and commit", () => {
+    const evidence = completeEvidence();
+    evidence.items.webProcess = {
+      status: "passed",
+      evidence: "The app is deployed.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "webProcess", status: "fail" })]),
+    );
+  });
+
+  it("fails when database migration proof does not mention production migrate deploy success", () => {
+    const evidence = completeEvidence();
+    evidence.items.databaseMigrations = {
+      status: "passed",
+      evidence: "Migrations are current.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "databaseMigrations", status: "fail" })]),
     );
   });
 
