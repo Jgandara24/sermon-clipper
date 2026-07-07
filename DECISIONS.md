@@ -257,6 +257,24 @@ against storage or paid providers.
 
 Status: Active.
 
+## 2026-07-07 - Production Smoke Checks Are Executable
+
+Decision: Phase 8 adds `npm run smoke:production`, an unauthenticated live-environment smoke
+runner for deployed Sermon Clipper instances. It checks `/api/health`, the OTP login page, protected
+app redirect behavior, invalid invite-token handling, signed-media rejection, and Stripe webhook
+signature enforcement.
+
+Why: The runbook previously described manual checks, but launch readiness should be repeatable by
+operators and deployment platforms. These checks prove key production surfaces are reachable and
+fail closed without requiring test user credentials or uploading church media.
+
+Tradeoff: This is not a full authenticated workflow test. The manual smoke flow still verifies real
+OTP delivery, workspace invite acceptance, upload/processing/export, approval notifications, and
+Stripe Checkout/Portal behavior with live provider credentials. A future synthetic-user smoke test
+can automate more once safe disposable accounts and media fixtures are available in production.
+
+Status: Active.
+
 ## 2026-07-06 - No External Provider Calls In Foundation
 
 Decision: Upload, URL import, transcription, AI analysis, rendering, storage, billing, and publishing are visible as stubs only.

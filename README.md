@@ -175,6 +175,15 @@ an MP4. Install the browser once with `npx playwright install chromium`, then ru
 npm run test:e2e
 ```
 
+After deploying, run the production smoke checks against the live URL:
+
+```sh
+npm run smoke:production -- --base-url https://clips.example.org
+```
+
+This checks the health endpoint, login surface, protected-route redirect, invalid join-token
+handling, signed-media rejection, and Stripe webhook signature enforcement.
+
 ## Production Deployment
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the Phase 8 production runbook covering required

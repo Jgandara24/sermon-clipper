@@ -103,6 +103,7 @@ npm run worker:prod
 
 ```sh
 curl -fsS https://clips.example.org/api/health
+npm run smoke:production -- --base-url https://clips.example.org
 ```
 
 The health endpoint returns HTTP 200 for `ok` or `degraded` and HTTP 503 for failed critical checks.
@@ -111,6 +112,11 @@ delivery config, Stripe billing config, S3 storage configuration, database conne
 migrations, or storage configuration are broken. A missing `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is
 reported as degraded because single-instance deployments can still run, but rolling or
 multi-instance deployments should set it.
+
+`npm run smoke:production` checks the deployed app's health payload, login/OTP surface,
+unauthenticated app redirect, invalid join-token handling, signed-media rejection, and Stripe
+webhook signature enforcement. It exits non-zero on hard failures and reports degraded readiness as
+a warning.
 
 ## Stripe Billing
 
@@ -146,15 +152,16 @@ multi-instance deployments should set it.
 
 After deploy:
 
-1. Sign in with email OTP.
-2. Create a workspace or invite a second user from `/app/settings` and accept the `/join/:token`
+1. Run `npm run smoke:production -- --base-url https://clips.example.org`.
+2. Sign in with email OTP.
+3. Create a workspace or invite a second user from `/app/settings` and accept the `/join/:token`
    link after signing in as the invited email.
-3. Upload a short sermon video.
-4. Confirm `/app/settings/operations` shows upload and processing events.
-5. Generate clips, apply a brand template, and request approval with a real email or SMS recipient.
-6. Approve from the `/review/:token` link.
-7. Export and download the MP4.
-8. Start or update a paid plan through Stripe Checkout/Portal, then confirm the webhook updated the
+4. Upload a short sermon video.
+5. Confirm `/app/settings/operations` shows upload and processing events.
+6. Generate clips, apply a brand template, and request approval with a real email or SMS recipient.
+7. Approve from the `/review/:token` link.
+8. Export and download the MP4.
+9. Start or update a paid plan through Stripe Checkout/Portal, then confirm the webhook updated the
    workspace plan, billing ledger entries, and operational events.
 
 ## Rollback
