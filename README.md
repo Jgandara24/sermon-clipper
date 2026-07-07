@@ -181,17 +181,31 @@ npm run test:e2e
 After deploying, run the production smoke checks against the live URL:
 
 ```sh
-npm run smoke:production -- --base-url https://clips.example.org
+npm run smoke:production -- --base-url https://clips.example.org --commit-sha <deployed-git-sha>
 ```
 
 This checks the health endpoint, login surface, protected-route redirect, invalid join-token
-handling, signed-media rejection, and Stripe webhook signature enforcement.
+handling, signed-media rejection, Stripe webhook signature enforcement, and, when `--commit-sha` is
+provided, the deployed commit reported by `/api/health`.
 
 ## Production Deployment
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the Phase 8 production runbook covering required
 environment variables, database migrations, web and worker processes, S3/R2 storage, domain/secrets,
 health checks, and smoke testing.
+
+For final Phase 8 launch evidence:
+
+```sh
+npm run create:launch-evidence -- --base-url https://clips.example.org --verified-by "Launch operator"
+npm run collect:launch-evidence -- --base-url https://clips.example.org
+npm run record:launch-evidence -- --list
+npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json
+```
+
+`docs/phase8-launch-evidence.json` is intentionally ignored by Git because it can contain real
+production details. See [docs/PHASE8_COMPLETION_AUDIT.md](docs/PHASE8_COMPLETION_AUDIT.md) for the
+full requirement-by-requirement completion gate.
 
 ## Notes
 
