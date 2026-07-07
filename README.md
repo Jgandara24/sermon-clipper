@@ -200,7 +200,7 @@ For final Phase 8 launch evidence:
 npm run create:launch-evidence -- --base-url https://clips.example.org --verified-by "Launch operator"
 npm run collect:launch-evidence -- --base-url https://clips.example.org
 npm run record:launch-evidence -- --list
-npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json
+npm run launch:phase8 -- --base-url https://clips.example.org
 ```
 
 `docs/phase8-launch-evidence.json` is intentionally ignored by Git because it can contain real

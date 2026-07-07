@@ -68,6 +68,12 @@ local evidence file with real production evidence, change each status to `passed
 npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json
 ```
 
+For the final gate, run:
+
+```sh
+npm run launch:phase8 -- --base-url https://clips.example.org
+```
+
 The health and production smoke items can be collected automatically:
 
 ```sh
