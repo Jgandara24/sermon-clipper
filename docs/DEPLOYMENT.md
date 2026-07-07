@@ -15,7 +15,8 @@ bucket.
   `/api/stripe/webhook`.
 - SendGrid notification email or Twilio SMS credentials for production approval notifications.
 - `ffmpeg`/`ffprobe` available on worker hosts, with libass enabled for caption burn-in.
-- `whisper-cli` plus a local ggml model on worker hosts if self-hosted ASR is required.
+- `whisper-cli` plus a local ggml model on every worker host for sermon transcription.
+- Anthropic API access for Claude-backed sermon clip classification and scoring.
 
 ## Required Environment
 
@@ -51,6 +52,10 @@ WORKER_POLL_INTERVAL_MS=2000
 WORKER_HEARTBEAT_INTERVAL_MS=30000
 WORKER_STALE_JOB_TIMEOUT_MS=900000
 WORKER_RECOVERY_INTERVAL_MS=60000
+
+ANTHROPIC_API_KEY=sk-ant-...
+WHISPER_MODEL_PATH=/models/ggml-base.en.bin
+WHISPER_CPP_BINARY=whisper-cli
 ```
 
 Optional provider credentials:
@@ -61,9 +66,6 @@ NOTIFICATIONS_FROM_NAME=Sermon Clipper
 TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=...
 TWILIO_MESSAGING_FROM=+15555550100
-ANTHROPIC_API_KEY=sk-ant-...
-WHISPER_MODEL_PATH=/models/ggml-base.en.bin
-WHISPER_CPP_BINARY=whisper-cli
 FFMPEG_PATH=ffmpeg
 FFPROBE_PATH=ffprobe
 ```
@@ -110,7 +112,8 @@ npm run smoke:production -- --base-url https://clips.example.org --commit-sha <d
 The health endpoint returns HTTP 200 for `ok` or `degraded` and HTTP 503 for failed critical checks.
 Production readiness fails if `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, auth email
 delivery config, approval notification config, Stripe billing config, S3 storage configuration,
-database connectivity, migrations, or storage configuration are broken. Missing
+provider-backed transcription/analysis config, database connectivity, migrations, or storage
+configuration are broken. Missing
 `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` or deployment commit metadata is reported as degraded because
 single-instance deployments can still run, but rolling or multi-instance deployments should set the
 encryption key and Phase 8 launch evidence should tie `/api/health` to the deployed commit. The
@@ -155,6 +158,11 @@ degraded or warning.
 - Run workers in the same region as object storage when possible.
 - Give each process a stable `WORKER_ID`; production workers fail startup when it is missing so
   job heartbeats and stale recovery are auditable.
+- Install `whisper-cli` and mount the same model file path referenced by `WHISPER_MODEL_PATH` on
+  every worker. The readiness gate proves the path is configured; the launch workflow must still
+  prove a real sermon was transcribed by the deployed worker.
+- Configure `ANTHROPIC_API_KEY` for production clip scoring. The heuristic scorer remains useful
+  for local development, but Phase 8 launch readiness requires Claude-backed analysis evidence.
 - Monitor `/app/settings/operations` for `worker`, `processing`, `transcription`, `analysis`, and
   `export` events.
 - If a worker dies mid-job, another worker will recover stale `RUNNING` jobs after

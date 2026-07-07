@@ -20,6 +20,8 @@ describe("deployment readiness", () => {
         expect.objectContaining({ name: "STRIPE_WEBHOOK_SECRET", status: "fail" }),
         expect.objectContaining({ name: "STRIPE_PRICE_STARTER", status: "fail" }),
         expect.objectContaining({ name: "STRIPE_PRICE_PRO", status: "fail" }),
+        expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "fail" }),
+        expect.objectContaining({ name: "ANTHROPIC_API_KEY", status: "fail" }),
         expect.objectContaining({ name: "STORAGE_PROVIDER", status: "fail" }),
       ]),
     );
@@ -38,6 +40,8 @@ describe("deployment readiness", () => {
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_STARTER: "price_starter_123",
       STRIPE_PRICE_PRO: "price_pro_123",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+      ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ENDPOINT: "https://account-id.r2.cloudflarestorage.com",
@@ -70,6 +74,8 @@ describe("deployment readiness", () => {
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_STARTER: "price_starter_123",
       STRIPE_PRICE_PRO: "price_pro_123",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+      ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ACCESS_KEY_ID: "key",
@@ -97,6 +103,8 @@ describe("deployment readiness", () => {
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_STARTER: "price_starter_123",
       STRIPE_PRICE_PRO: "price_pro_123",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+      ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ACCESS_KEY_ID: "key",
@@ -121,6 +129,8 @@ describe("deployment readiness", () => {
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_STARTER: "price_starter_123",
       STRIPE_PRICE_PRO: "price_pro_123",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+      ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ENDPOINT: "http://account-id.r2.cloudflarestorage.com",
@@ -147,6 +157,8 @@ describe("deployment readiness", () => {
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_STARTER: "price_starter_123",
       STRIPE_PRICE_PRO: "price_pro_123",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+      ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ACCESS_KEY_ID: "key",
@@ -172,6 +184,8 @@ describe("deployment readiness", () => {
       STRIPE_WEBHOOK_SECRET: "webhook",
       STRIPE_PRICE_STARTER: "starter",
       STRIPE_PRICE_PRO: "pro",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+      ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ACCESS_KEY_ID: "key",
@@ -185,6 +199,34 @@ describe("deployment readiness", () => {
         expect.objectContaining({ name: "STRIPE_WEBHOOK_SECRET", status: "fail" }),
         expect.objectContaining({ name: "STRIPE_PRICE_STARTER", status: "fail" }),
         expect.objectContaining({ name: "STRIPE_PRICE_PRO", status: "fail" }),
+      ]),
+    );
+  });
+
+  it("fails production readiness without provider-backed transcription and AI analysis", () => {
+    const checks = checkDeploymentEnvironment({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://example",
+      NEXT_PUBLIC_APP_URL: "https://clips.example.com",
+      MEDIA_URL_SECRET: "x".repeat(32),
+      SENDGRID_API_KEY: "sendgrid-key",
+      AUTH_EMAIL_FROM: "auth@example.com",
+      NOTIFICATIONS_FROM_EMAIL: "clips@example.com",
+      STRIPE_SECRET_KEY: "sk_test_123",
+      STRIPE_WEBHOOK_SECRET: "whsec_123",
+      STRIPE_PRICE_STARTER: "price_starter_123",
+      STRIPE_PRICE_PRO: "price_pro_123",
+      STORAGE_PROVIDER: "s3",
+      STORAGE_S3_BUCKET: "sermon-clipper-production",
+      STORAGE_S3_ACCESS_KEY_ID: "key",
+      STORAGE_S3_SECRET_ACCESS_KEY: "secret",
+    });
+
+    expect(summarizeReadiness(checks)).toBe("fail");
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "fail" }),
+        expect.objectContaining({ name: "ANTHROPIC_API_KEY", status: "fail" }),
       ]),
     );
   });

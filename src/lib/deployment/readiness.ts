@@ -167,6 +167,27 @@ function checkStripeEnv(env: EnvLike): ReadinessCheck[] {
   ];
 }
 
+function checkGenerationProviderEnv(env: EnvLike): ReadinessCheck[] {
+  if (env.NODE_ENV !== "production") return [];
+
+  return [
+    env.WHISPER_MODEL_PATH
+      ? { name: "WHISPER_MODEL_PATH", status: "ok", message: "Whisper transcription model path is configured." }
+      : {
+          name: "WHISPER_MODEL_PATH",
+          status: "fail",
+          message: "WHISPER_MODEL_PATH is required in production so workers can transcribe uploaded sermons.",
+        },
+    env.ANTHROPIC_API_KEY?.startsWith("sk-ant")
+      ? { name: "ANTHROPIC_API_KEY", status: "ok", message: "Claude analysis provider is configured." }
+      : {
+          name: "ANTHROPIC_API_KEY",
+          status: "fail",
+          message: "ANTHROPIC_API_KEY must be configured for production AI clip scoring.",
+        },
+  ];
+}
+
 function checkS3Endpoint(env: EnvLike): ReadinessCheck {
   const endpoint = env.STORAGE_S3_ENDPOINT;
   if (!endpoint) {
@@ -196,6 +217,7 @@ export function checkDeploymentEnvironment(env: EnvLike = process.env): Readines
     ...checkAuthEmailEnv(env),
     ...checkApprovalNotificationEnv(env),
     ...checkStripeEnv(env),
+    ...checkGenerationProviderEnv(env),
   ];
 
   const storageProvider = env.STORAGE_PROVIDER ?? "local";
