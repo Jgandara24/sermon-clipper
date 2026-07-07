@@ -11,6 +11,10 @@ function messageForError(error: string | undefined) {
       return "That code expired. Request a new one.";
     case "too_many_attempts":
       return "Too many attempts. Request a new code.";
+    case "otp_rate_limited":
+      return "Too many sign-in code requests. Wait a few minutes and try again.";
+    case "otp_delivery_failed":
+      return "We could not send that sign-in code. Try again or contact support.";
     case "not_found":
       return "Request a new code before signing in.";
     case "dev-disabled":
@@ -98,8 +102,8 @@ export default async function LoginPage({
                 Verify code
               </button>
               <p className="text-xs text-teal-900">
-                Local development prints the code in the Next.js server log until an email provider
-                is configured.
+                Check your email for the code. Local development logs the code when SendGrid is not
+                configured.
               </p>
             </form>
           ) : null}

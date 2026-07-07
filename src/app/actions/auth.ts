@@ -1,6 +1,6 @@
 "use server";
 
-import { AuthProvider, WorkspaceRole } from "@prisma/client";
+import { AuthProvider, NotificationStatus, WorkspaceRole } from "@prisma/client";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -9,8 +9,12 @@ import {
   AUTH_SESSION_COOKIE,
   consumeEmailOtpChallenge,
   createEmailOtpChallenge,
+  EmailOtpRateLimitError,
+  markEmailOtpDelivery,
   revokeSessionToken,
 } from "@/lib/auth/email-otp";
+import { sendEmailOtp } from "@/lib/auth/email-otp-delivery";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
 
 const loginSchema = z.object({
@@ -85,11 +89,55 @@ export async function requestEmailOtpAction(formData: FormData) {
     redirect("/login?error=invalid-email");
   }
 
-  const challenge = await createEmailOtpChallenge(prisma, { email: parsed.data.email });
+  let challenge;
+  try {
+    challenge = await createEmailOtpChallenge(prisma, { email: parsed.data.email });
+  } catch (error) {
+    if (error instanceof EmailOtpRateLimitError) {
+      await recordOperationalEventSafely(prisma, {
+        category: "auth",
+        eventType: "email_otp_rate_limited",
+        severity: "warning",
+        message: "Email OTP request was rate limited.",
+        metadata: { email: parsed.data.email },
+      });
+      redirect(`/login?error=otp_rate_limited&email=${encodeURIComponent(parsed.data.email)}`);
+    }
+    throw error;
+  }
 
-  // Phase 8 foundation: this is a real OTP challenge/session flow. Until a production email
-  // provider is configured, local/dev delivery is explicit and auditable in server logs.
-  console.info(`[auth] OTP for ${challenge.email}: ${challenge.code} (expires ${challenge.expiresAt.toISOString()})`);
+  const delivery = await sendEmailOtp(challenge);
+  await markEmailOtpDelivery(prisma, {
+    challengeId: challenge.id,
+    status: delivery.status,
+    provider: delivery.provider,
+    errorMessage: delivery.errorMessage,
+  });
+  await recordOperationalEventSafely(prisma, {
+    category: "auth",
+    eventType:
+      delivery.status === NotificationStatus.SENT
+        ? "email_otp_sent"
+        : delivery.status === NotificationStatus.FAILED
+          ? "email_otp_delivery_failed"
+          : "email_otp_delivery_skipped",
+    severity:
+      delivery.status === NotificationStatus.FAILED
+        ? "error"
+        : delivery.status === NotificationStatus.SKIPPED
+          ? "warning"
+          : "info",
+    message: `Email OTP delivery ${delivery.status.toLowerCase()}.`,
+    metadata: {
+      email: challenge.email,
+      provider: delivery.provider,
+      errorMessage: delivery.errorMessage ?? null,
+    },
+  });
+
+  if (delivery.status === NotificationStatus.FAILED) {
+    redirect(`/login?error=otp_delivery_failed&email=${encodeURIComponent(challenge.email)}`);
+  }
 
   redirect(`/login?otp=sent&email=${encodeURIComponent(challenge.email)}`);
 }
@@ -106,12 +154,25 @@ export async function verifyEmailOtpAction(formData: FormData) {
 
   const result = await consumeEmailOtpChallenge(prisma, parsed.data);
   if (!result.ok) {
+    await recordOperationalEventSafely(prisma, {
+      category: "auth",
+      eventType: "email_otp_verify_failed",
+      severity: "warning",
+      message: "Email OTP verification failed.",
+      metadata: { email: parsed.data.email, reason: result.reason },
+    });
     redirect(`/login?error=${result.reason}&email=${encodeURIComponent(parsed.data.email)}`);
   }
 
   const cookieStore = await cookies();
   cookieStore.set(setAuthSessionCookie(result.token, result.expiresAt));
   cookieStore.delete(DEV_SESSION_COOKIE);
+  await recordOperationalEventSafely(prisma, {
+    category: "auth",
+    eventType: "email_otp_verify_succeeded",
+    message: "Email OTP verification succeeded.",
+    metadata: { email: parsed.data.email, userId: result.userId },
+  });
 
   const workspace = await getPrimaryWorkspaceForUser(result.userId);
   redirect(workspace ? "/app" : "/onboarding");

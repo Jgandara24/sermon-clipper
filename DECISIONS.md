@@ -25,12 +25,33 @@ keeping the existing local demo/test path intact. Storing only hashes for OTP co
 tokens avoids putting bearer secrets in the database. Server Actions handle validation and cookie
 setting, matching the Next.js App Router auth guidance.
 
-Tradeoff: OTP delivery is not wired to a production email provider yet; codes are printed to server
-logs so the auth flow can be verified locally and in tests without pretending email delivery exists.
-The next hardening slice should add a delivery provider, rate limiting, and audit events around
-OTP sends/verifications.
+Tradeoff: Google OAuth is still absent. Email OTP now uses SendGrid when configured, rate-limits
+repeated requests, records delivery status on the challenge, and emits auth operational events.
+Local development still logs codes and records skipped delivery when SendGrid is not configured so
+tests and fixtures do not pretend external email was sent.
 
-Status: Active — authentication/session foundation is real; notification delivery remains open.
+Status: Active — email OTP authentication/session foundation and SendGrid delivery are real; Google
+OAuth remains open.
+
+## 2026-07-07 - Email OTP Delivery Is Provider-Backed And Rate-Limited
+
+Decision: Email OTP requests are capped per email address inside a short rolling window, delivery
+is attempted through SendGrid using `SENDGRID_API_KEY` plus `AUTH_EMAIL_FROM` or
+`NOTIFICATIONS_FROM_EMAIL`, and each challenge records delivery status, provider, error, and sent
+timestamp. Production readiness now fails when auth email delivery is not configured. Development
+environments log the OTP code and mark delivery skipped instead of silently claiming an email was
+sent.
+
+Why: Phase 8 requires a real church user to sign in outside local development. A production OTP
+flow that only prints codes to logs is not launch-ready, and an unbounded request endpoint invites
+abuse. Recording delivery outcomes and auth operational events gives operators evidence when a
+church cannot receive a sign-in code.
+
+Tradeoff: OTP delivery is synchronous during the login Server Action and currently relies on
+SendGrid only. A future hardening slice can move auth email into a durable notification queue, add
+provider webhooks, or add Google OAuth as a second sign-in path.
+
+Status: Active.
 
 ## 2026-07-07 - Workspace Roles Gate Phase 8 Mutation Boundaries
 

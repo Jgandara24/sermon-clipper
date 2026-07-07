@@ -4,6 +4,7 @@ type OperationalEventClient = PrismaClient | Prisma.TransactionClient;
 
 export type OperationalEventSeverity = "info" | "warning" | "error";
 export type OperationalEventCategory =
+  | "auth"
   | "upload"
   | "processing"
   | "transcription"

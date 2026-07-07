@@ -160,17 +160,22 @@ model AuthSession {
 }
 
 model EmailOtpChallenge {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email      String
-  codeHash   String    @map("code_hash")
-  expiresAt  DateTime  @map("expires_at")
-  consumedAt DateTime? @map("consumed_at")
-  attempts   Int       @default(0)
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                String
+  codeHash             String             @map("code_hash")
+  expiresAt            DateTime           @map("expires_at")
+  consumedAt           DateTime?          @map("consumed_at")
+  attempts             Int                @default(0)
+  deliveryStatus       NotificationStatus @default(PENDING) @map("delivery_status")
+  deliveryProvider     String?            @map("delivery_provider")
+  deliveryErrorMessage String?            @map("delivery_error_message")
+  sentAt               DateTime?          @map("sent_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
 
   @@index([email, createdAt])
   @@index([expiresAt])
+  @@index([deliveryStatus])
   @@map("email_otp_challenges")
 }
 

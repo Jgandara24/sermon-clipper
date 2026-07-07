@@ -1,10 +1,13 @@
-import { AuthProvider, PrismaClient } from "@prisma/client";
+import { AuthProvider, NotificationStatus, PrismaClient } from "@prisma/client";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   consumeEmailOtpChallenge,
   createEmailOtpChallenge,
+  EmailOtpRateLimitError,
   hashSecret,
+  markEmailOtpDelivery,
   MAX_EMAIL_OTP_ATTEMPTS,
+  MAX_EMAIL_OTP_REQUESTS_PER_WINDOW,
 } from "@/lib/auth/email-otp";
 
 const prisma = new PrismaClient();
@@ -57,5 +60,33 @@ describe("email OTP integration", () => {
 
     const blocked = await consumeEmailOtpChallenge(prisma, { email, code: "000000" });
     expect(blocked).toEqual({ ok: false, reason: "too_many_attempts" });
+  });
+
+  it("rate limits repeated OTP requests inside the request window", async () => {
+    const email = uniqueEmail();
+
+    for (let i = 0; i < MAX_EMAIL_OTP_REQUESTS_PER_WINDOW; i += 1) {
+      await createEmailOtpChallenge(prisma, { email });
+    }
+
+    await expect(createEmailOtpChallenge(prisma, { email })).rejects.toBeInstanceOf(EmailOtpRateLimitError);
+  });
+
+  it("records OTP delivery status and provider audit fields", async () => {
+    const email = uniqueEmail();
+    const challenge = await createEmailOtpChallenge(prisma, { email });
+    const sentAt = new Date("2026-07-07T12:00:00.000Z");
+
+    const updated = await markEmailOtpDelivery(prisma, {
+      challengeId: challenge.id,
+      status: NotificationStatus.SENT,
+      provider: "sendgrid",
+      now: sentAt,
+    });
+
+    expect(updated.deliveryStatus).toBe(NotificationStatus.SENT);
+    expect(updated.deliveryProvider).toBe("sendgrid");
+    expect(updated.deliveryErrorMessage).toBeNull();
+    expect(updated.sentAt?.toISOString()).toBe(sentAt.toISOString());
   });
 });

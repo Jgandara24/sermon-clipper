@@ -22,11 +22,37 @@ function checkRequiredEnv(env: EnvLike, name: string): ReadinessCheck {
     : { name, status: "fail", message: `${name} is required.` };
 }
 
+function checkAuthEmailEnv(env: EnvLike): ReadinessCheck[] {
+  if (env.NODE_ENV !== "production") return [];
+
+  return [
+    env.SENDGRID_API_KEY
+      ? { name: "SENDGRID_API_KEY", status: "ok", message: "SendGrid is configured for auth email." }
+      : {
+          name: "SENDGRID_API_KEY",
+          status: "fail",
+          message: "SENDGRID_API_KEY is required in production for email OTP sign-in.",
+        },
+    env.AUTH_EMAIL_FROM || env.NOTIFICATIONS_FROM_EMAIL
+      ? {
+          name: "AUTH_EMAIL_FROM",
+          status: "ok",
+          message: "Auth email sender is configured.",
+        }
+      : {
+          name: "AUTH_EMAIL_FROM",
+          status: "fail",
+          message: "AUTH_EMAIL_FROM or NOTIFICATIONS_FROM_EMAIL is required in production.",
+        },
+  ];
+}
+
 export function checkDeploymentEnvironment(env: EnvLike = process.env): ReadinessCheck[] {
   const checks: ReadinessCheck[] = [
     checkRequiredEnv(env, "DATABASE_URL"),
     checkRequiredEnv(env, "NEXT_PUBLIC_APP_URL"),
     checkRequiredEnv(env, "MEDIA_URL_SECRET"),
+    ...checkAuthEmailEnv(env),
   ];
 
   const storageProvider = env.STORAGE_PROVIDER ?? "local";
@@ -141,4 +167,3 @@ export async function checkDeploymentReadiness(
   ];
   return { status: summarizeReadiness(checks), checks };
 }
-
