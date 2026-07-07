@@ -36,8 +36,8 @@ describe("deployment readiness", () => {
       NOTIFICATIONS_FROM_EMAIL: "clips@example.com",
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
-      STRIPE_PRICE_STARTER: "price_starter",
-      STRIPE_PRICE_PRO: "price_pro",
+      STRIPE_PRICE_STARTER: "price_starter_123",
+      STRIPE_PRICE_PRO: "price_pro_123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ENDPOINT: "https://account-id.r2.cloudflarestorage.com",
@@ -68,8 +68,8 @@ describe("deployment readiness", () => {
       NOTIFICATIONS_FROM_EMAIL: "clips@example.com",
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
-      STRIPE_PRICE_STARTER: "price_starter",
-      STRIPE_PRICE_PRO: "price_pro",
+      STRIPE_PRICE_STARTER: "price_starter_123",
+      STRIPE_PRICE_PRO: "price_pro_123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ACCESS_KEY_ID: "key",
@@ -95,8 +95,8 @@ describe("deployment readiness", () => {
       TWILIO_MESSAGING_FROM: "+15555550100",
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
-      STRIPE_PRICE_STARTER: "price_starter",
-      STRIPE_PRICE_PRO: "price_pro",
+      STRIPE_PRICE_STARTER: "price_starter_123",
+      STRIPE_PRICE_PRO: "price_pro_123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ACCESS_KEY_ID: "key",
@@ -119,8 +119,8 @@ describe("deployment readiness", () => {
       NOTIFICATIONS_FROM_EMAIL: "clips@example.com",
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
-      STRIPE_PRICE_STARTER: "price_starter",
-      STRIPE_PRICE_PRO: "price_pro",
+      STRIPE_PRICE_STARTER: "price_starter_123",
+      STRIPE_PRICE_PRO: "price_pro_123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ENDPOINT: "http://account-id.r2.cloudflarestorage.com",
@@ -145,8 +145,8 @@ describe("deployment readiness", () => {
       NOTIFICATIONS_FROM_EMAIL: "clips@example.com",
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
-      STRIPE_PRICE_STARTER: "price_starter",
-      STRIPE_PRICE_PRO: "price_pro",
+      STRIPE_PRICE_STARTER: "price_starter_123",
+      STRIPE_PRICE_PRO: "price_pro_123",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
       STORAGE_S3_ACCESS_KEY_ID: "key",
@@ -156,6 +156,36 @@ describe("deployment readiness", () => {
     expect(summarizeReadiness(checks)).toBe("fail");
     expect(checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "MEDIA_URL_SECRET", status: "fail" })]),
+    );
+  });
+
+  it("fails production readiness when Stripe billing identifiers are placeholders", () => {
+    const checks = checkDeploymentEnvironment({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://example",
+      NEXT_PUBLIC_APP_URL: "https://clips.example.com",
+      MEDIA_URL_SECRET: "x".repeat(32),
+      SENDGRID_API_KEY: "sendgrid-key",
+      AUTH_EMAIL_FROM: "auth@example.com",
+      NOTIFICATIONS_FROM_EMAIL: "clips@example.com",
+      STRIPE_SECRET_KEY: "secret",
+      STRIPE_WEBHOOK_SECRET: "webhook",
+      STRIPE_PRICE_STARTER: "starter",
+      STRIPE_PRICE_PRO: "pro",
+      STORAGE_PROVIDER: "s3",
+      STORAGE_S3_BUCKET: "sermon-clipper-production",
+      STORAGE_S3_ACCESS_KEY_ID: "key",
+      STORAGE_S3_SECRET_ACCESS_KEY: "secret",
+    });
+
+    expect(summarizeReadiness(checks)).toBe("fail");
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "STRIPE_SECRET_KEY", status: "fail" }),
+        expect.objectContaining({ name: "STRIPE_WEBHOOK_SECRET", status: "fail" }),
+        expect.objectContaining({ name: "STRIPE_PRICE_STARTER", status: "fail" }),
+        expect.objectContaining({ name: "STRIPE_PRICE_PRO", status: "fail" }),
+      ]),
     );
   });
 

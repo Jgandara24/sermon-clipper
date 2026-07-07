@@ -129,6 +129,8 @@ health and smoke evidence must both be `ok`, not degraded or warning.
 
 - Create recurring monthly Stripe Prices for the Starter and Pro plans.
 - Set `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` to those Price IDs.
+- Production readiness requires `STRIPE_SECRET_KEY` to start with `sk_`, `STRIPE_WEBHOOK_SECRET`
+  to start with `whsec_`, and both plan IDs to start with `price_`.
 - Configure a Stripe webhook endpoint at `https://clips.example.org/api/stripe/webhook`.
 - Subscribe the endpoint to `checkout.session.completed`, `customer.subscription.created`,
   `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.paid`.

@@ -136,33 +136,33 @@ function checkStripeEnv(env: EnvLike): ReadinessCheck[] {
   if (env.NODE_ENV !== "production") return [];
 
   return [
-    env.STRIPE_SECRET_KEY
+    env.STRIPE_SECRET_KEY?.startsWith("sk_")
       ? { name: "STRIPE_SECRET_KEY", status: "ok", message: "Stripe API key is configured." }
       : {
           name: "STRIPE_SECRET_KEY",
           status: "fail",
-          message: "STRIPE_SECRET_KEY is required in production for subscription billing.",
+          message: "STRIPE_SECRET_KEY must be a Stripe secret key starting with sk_.",
         },
-    env.STRIPE_WEBHOOK_SECRET
+    env.STRIPE_WEBHOOK_SECRET?.startsWith("whsec_")
       ? { name: "STRIPE_WEBHOOK_SECRET", status: "ok", message: "Stripe webhook secret is configured." }
       : {
           name: "STRIPE_WEBHOOK_SECRET",
           status: "fail",
-          message: "STRIPE_WEBHOOK_SECRET is required in production for billing reconciliation.",
+          message: "STRIPE_WEBHOOK_SECRET must be a Stripe webhook secret starting with whsec_.",
         },
-    env.STRIPE_PRICE_STARTER
+    env.STRIPE_PRICE_STARTER?.startsWith("price_")
       ? { name: "STRIPE_PRICE_STARTER", status: "ok", message: "Starter Stripe price is configured." }
       : {
           name: "STRIPE_PRICE_STARTER",
           status: "fail",
-          message: "STRIPE_PRICE_STARTER is required in production.",
+          message: "STRIPE_PRICE_STARTER must be a Stripe Price ID starting with price_.",
         },
-    env.STRIPE_PRICE_PRO
+    env.STRIPE_PRICE_PRO?.startsWith("price_")
       ? { name: "STRIPE_PRICE_PRO", status: "ok", message: "Pro Stripe price is configured." }
       : {
           name: "STRIPE_PRICE_PRO",
           status: "fail",
-          message: "STRIPE_PRICE_PRO is required in production.",
+          message: "STRIPE_PRICE_PRO must be a Stripe Price ID starting with price_.",
         },
   ];
 }
