@@ -50,8 +50,8 @@ Record the following before declaring Phase 8 complete:
 | Review approval | The secure `/review/:token` link is viewed and approved. |
 | Export | An approved clip exports through the worker. |
 | Download | The MP4 downloads through a short-lived signed URL from production storage. |
-| Billing | Stripe Checkout/Portal and webhook handling update the workspace plan and grant minutes. |
-| Usage limits | Insufficient minutes or plan limit conditions are blocked without negative balances. |
+| Billing | Stripe Checkout/Portal and webhook handling update the workspace plan and grant minutes; the evidence text must name Stripe, Checkout, Portal, webhook, workspace plan, and granted minutes. |
+| Usage limits | Insufficient minutes or plan limit conditions are blocked without negative balances; the evidence text must name insufficient minutes, blocked/rejected behavior, and no negative balance. |
 | Observability | `/app/settings/operations` shows upload, processing, approval, export, billing, and worker events. |
 | CI | `verify`, `integration`, and `e2e` jobs pass for the deployed commit; the evidence text must name each gate. |
 

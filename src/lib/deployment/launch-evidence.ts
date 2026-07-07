@@ -172,6 +172,33 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
     }
     return null;
   },
+  billing: (proof) => {
+    const required = [
+      { label: "Stripe", pattern: /\bstripe\b/i },
+      { label: "Checkout", pattern: /\bcheckout\b/i },
+      { label: "Portal", pattern: /\bportal\b/i },
+      { label: "webhook", pattern: /\bwebhook\b/i },
+      { label: "workspace plan", pattern: /\bworkspace\b.*\bplan\b|\bplan\b.*\bworkspace\b/i },
+      { label: "granted minutes", pattern: /\bgrant(?:ed)?\b.*\bminutes\b|\bminutes\b.*\bgrant(?:ed)?\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Billing proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  usageLimits: (proof) => {
+    const required = [
+      { label: "insufficient minutes", pattern: /\binsufficient\b.*\bminutes\b|\bno\b.*\bminutes\b/i },
+      { label: "blocked", pattern: /\bblocked\b|\brejected\b|\bprevented\b/i },
+      { label: "no negative balance", pattern: /\bno\b.*\bnegative\b.*\bbalance\b|\bwithout\b.*\bnegative\b.*\bbalance\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Usage limit proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
 };
 
 export function isLaunchEvidenceItemKey(key: string): key is LaunchEvidenceItemKey {

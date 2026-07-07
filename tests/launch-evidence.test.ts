@@ -17,6 +17,10 @@ function completeEvidence(): LaunchEvidence {
       "Operations metadata shows provider whisper_cpp, source audio, and configured WHISPER_MODEL_PATH /models/ggml-base.en.bin in production.",
     analysisProvider:
       "Operations metadata shows provider claude-sonnet-5 with ANTHROPIC_API_KEY-backed scoring, not the heuristic fallback.",
+    billing:
+      "Stripe Checkout and Portal were opened, Stripe webhook updated the workspace plan, and granted minutes appeared in the ledger.",
+    usageLimits:
+      "Insufficient minutes upload was blocked without negative balance; operations showed rejected billing-limit event.",
     ci: "CI passed verify, integration, and e2e jobs for commit fe09434.",
   };
 
@@ -177,6 +181,36 @@ describe("launch evidence validation", () => {
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "ci", status: "fail" })]),
+    );
+  });
+
+  it("fails when billing proof does not mention Stripe workflow and minute grants", () => {
+    const evidence = completeEvidence();
+    evidence.items.billing = {
+      status: "passed",
+      evidence: "Billing worked for the test workspace.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "billing", status: "fail" })]),
+    );
+  });
+
+  it("fails when usage limit proof does not mention blocked insufficient minutes without negative balance", () => {
+    const evidence = completeEvidence();
+    evidence.items.usageLimits = {
+      status: "passed",
+      evidence: "Limits behaved correctly.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "usageLimits", status: "fail" })]),
     );
   });
 
