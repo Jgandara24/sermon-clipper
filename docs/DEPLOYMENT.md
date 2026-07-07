@@ -164,6 +164,11 @@ After deploy:
 9. Start or update a paid plan through Stripe Checkout/Portal, then confirm the webhook updated the
    workspace plan, billing ledger entries, and operational events.
 
+Use [PHASE8_COMPLETION_AUDIT.md](PHASE8_COMPLETION_AUDIT.md) as the launch evidence checklist
+before declaring Phase 8 complete. The automated smoke test is necessary but not sufficient because
+the final Phase 8 criterion requires an authenticated, provider-backed church workflow on the live
+deployment.
+
 ## Rollback
 
 - Stop new workers first so they do not claim jobs during rollback.
