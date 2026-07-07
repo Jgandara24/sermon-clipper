@@ -10,6 +10,13 @@ import {
 } from "@/lib/deployment/launch-evidence";
 
 function completeEvidence(): LaunchEvidence {
+  const evidenceByKey: Record<string, string> = {
+    transcriptionProvider:
+      "Operations metadata shows provider whisper_cpp, source audio, and configured WHISPER_MODEL_PATH /models/ggml-base.en.bin in production.",
+    analysisProvider:
+      "Operations metadata shows provider claude-sonnet-5 with ANTHROPIC_API_KEY-backed scoring, not the heuristic fallback.",
+  };
+
   return {
     deploymentUrl: "https://clips.example.org",
     commitSha: "fe09434",
@@ -18,7 +25,7 @@ function completeEvidence(): LaunchEvidence {
     items: Object.fromEntries(
       launchEvidenceItems.map((item) => [
         item.key,
-        { status: "passed", evidence: `${item.label} proof captured in production.` },
+        { status: "passed", evidence: evidenceByKey[item.key] ?? `${item.label} proof captured in production.` },
       ]),
     ),
   };
@@ -107,6 +114,36 @@ describe("launch evidence validation", () => {
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "healthCheck", status: "fail" })]),
+    );
+  });
+
+  it("fails when transcription provider proof does not mention Whisper model configuration", () => {
+    const evidence = completeEvidence();
+    evidence.items.transcriptionProvider = {
+      status: "passed",
+      evidence: "The transcript completed in production with provider metadata visible.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "transcriptionProvider", status: "fail" })]),
+    );
+  });
+
+  it("fails when analysis provider proof relies on heuristic scoring", () => {
+    const evidence = completeEvidence();
+    evidence.items.analysisProvider = {
+      status: "passed",
+      evidence: "Operations metadata shows heuristic-v1 scoring and no Claude provider call.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "analysisProvider", status: "fail" })]),
     );
   });
 

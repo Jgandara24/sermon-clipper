@@ -123,6 +123,29 @@ export type LaunchEvidenceItemKey = (typeof launchEvidenceItems)[number]["key"];
 
 const launchEvidenceItemKeys = new Set<string>(launchEvidenceItems.map((item) => item.key));
 const minimumEvidenceLength = 20;
+const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: string) => string | null>> = {
+  transcriptionProvider: (proof) => {
+    if (!/\bwhisper(?:\.cpp|_cpp|-cpp)?\b/i.test(proof)) {
+      return "Transcription provider proof must mention whisper.cpp or whisper_cpp.";
+    }
+    if (!/\bWHISPER_MODEL_PATH\b/.test(proof)) {
+      return "Transcription provider proof must mention the configured WHISPER_MODEL_PATH.";
+    }
+    return null;
+  },
+  analysisProvider: (proof) => {
+    if (!/\bclaude\b/i.test(proof)) {
+      return "AI analysis provider proof must mention Claude.";
+    }
+    if (!/\bANTHROPIC_API_KEY\b/.test(proof)) {
+      return "AI analysis provider proof must mention ANTHROPIC_API_KEY-backed scoring.";
+    }
+    if (/\bheuristic(?:-v1)?\b/i.test(proof) && !/\bnot\s+the\s+heuristic\b/i.test(proof)) {
+      return "AI analysis provider proof must not rely on the heuristic fallback.";
+    }
+    return null;
+  },
+};
 
 export function isLaunchEvidenceItemKey(key: string): key is LaunchEvidenceItemKey {
   return launchEvidenceItemKeys.has(key);
@@ -306,6 +329,10 @@ function checkEvidenceItem(evidence: LaunchEvidence, key: string, label: string)
   }
   if (/^\s*(todo|paste|placeholder|example)\b/i.test(item.evidence)) {
     return { name: key, status: "fail", message: `${label} proof still looks like placeholder text.` };
+  }
+  const semanticError = isLaunchEvidenceItemKey(key) ? providerEvidenceChecks[key]?.(item.evidence) : null;
+  if (semanticError) {
+    return { name: key, status: "fail", message: semanticError };
   }
   return { name: key, status: "ok", message: `${label} has passing evidence.` };
 }
