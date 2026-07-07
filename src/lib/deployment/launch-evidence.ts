@@ -108,6 +108,22 @@ export type LaunchEvidenceTemplateOptions = {
   verifiedBy: string;
 };
 
+export type LaunchEvidenceItemKey = (typeof launchEvidenceItems)[number]["key"];
+
+const launchEvidenceItemKeys = new Set<string>(launchEvidenceItems.map((item) => item.key));
+
+export function isLaunchEvidenceItemKey(key: string): key is LaunchEvidenceItemKey {
+  return launchEvidenceItemKeys.has(key);
+}
+
+export type RecordLaunchEvidenceItemOptions = {
+  evidence: LaunchEvidence;
+  itemKey: string;
+  proof: string;
+  status?: LaunchEvidenceItem["status"];
+  verifiedAt: string;
+};
+
 export function createLaunchEvidenceTemplate(options: LaunchEvidenceTemplateOptions): LaunchEvidence {
   return {
     deploymentUrl: options.deploymentUrl,
@@ -123,6 +139,23 @@ export function createLaunchEvidenceTemplate(options: LaunchEvidenceTemplateOpti
         },
       ]),
     ),
+  };
+}
+
+export function recordLaunchEvidenceItem(options: RecordLaunchEvidenceItemOptions): LaunchEvidence {
+  if (!isLaunchEvidenceItemKey(options.itemKey)) {
+    throw new Error(`Unknown launch evidence item: ${options.itemKey}`);
+  }
+  return {
+    ...options.evidence,
+    verifiedAt: options.verifiedAt,
+    items: {
+      ...options.evidence.items,
+      [options.itemKey]: {
+        status: options.status ?? "passed",
+        evidence: options.proof,
+      },
+    },
   };
 }
 

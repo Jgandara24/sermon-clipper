@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   createLaunchEvidenceTemplate,
   launchEvidenceItems,
+  recordLaunchEvidenceItem,
   validateLaunchEvidence,
+  type LaunchEvidence,
 } from "@/lib/deployment/launch-evidence";
 
-function completeEvidence() {
+function completeEvidence(): LaunchEvidence {
   return {
     deploymentUrl: "https://clips.example.org",
     commitSha: "fe09434",
@@ -126,5 +128,39 @@ describe("launch evidence validation", () => {
     expect(Object.values(template.items).every((item) => item?.status === "failed")).toBe(true);
     expect(template.items.productionSmoke?.evidence).toContain("https://clips.example.org");
     expect(validateLaunchEvidence(template).status).toBe("fail");
+  });
+
+  it("records a single launch evidence item without changing other items", () => {
+    const template = createLaunchEvidenceTemplate({
+      deploymentUrl: "https://clips.example.org",
+      commitSha: "40aa4ff",
+      verifiedAt: "2026-07-07T20:00:00Z",
+      verifiedBy: "Launch operator",
+    });
+
+    const updated = recordLaunchEvidenceItem({
+      evidence: template,
+      itemKey: "workspaceCreate",
+      proof: "Created workspace sc_prod_123 as owner@example.org.",
+      verifiedAt: "2026-07-07T21:00:00Z",
+    });
+
+    expect(updated.verifiedAt).toBe("2026-07-07T21:00:00Z");
+    expect(updated.items.workspaceCreate).toEqual({
+      status: "passed",
+      evidence: "Created workspace sc_prod_123 as owner@example.org.",
+    });
+    expect(updated.items.workspaceJoin?.status).toBe("failed");
+  });
+
+  it("rejects unknown launch evidence item keys when recording evidence", () => {
+    expect(() =>
+      recordLaunchEvidenceItem({
+        evidence: completeEvidence(),
+        itemKey: "workspaceCreat",
+        proof: "Typo should fail.",
+        verifiedAt: "2026-07-07T21:00:00Z",
+      }),
+    ).toThrow("Unknown launch evidence item");
   });
 });

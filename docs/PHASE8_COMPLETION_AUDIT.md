@@ -77,6 +77,12 @@ smoke check. The collector prints the full launch-evidence validation result aft
 health and smoke evidence. Add `--require-complete` during final launch verification if the command
 should exit non-zero while any evidence item is still missing or failed.
 
+Record each manual evidence item with the checked item key instead of editing JSON by hand:
+
+```sh
+npm run record:launch-evidence -- --item workspaceCreate --evidence "Created production workspace as owner@example.org."
+```
+
 By default, verification also checks that the evidence file's `commitSha` matches the current Git
 `HEAD`. Use `--commit-sha <sha>` when verifying evidence for a specific deployed revision from a
 different local checkout.
