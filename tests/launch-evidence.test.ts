@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createLaunchEvidenceTemplate,
@@ -161,6 +163,14 @@ describe("launch evidence validation", () => {
     expect(Object.values(template.items).every((item) => item?.status === "failed")).toBe(true);
     expect(template.items.productionSmoke?.evidence).toContain("https://clips.example.org");
     expect(validateLaunchEvidence(template).status).toBe("fail");
+  });
+
+  it("keeps the tracked example evidence file aligned with required launch items", () => {
+    const examplePath = path.join(process.cwd(), "docs", "phase8-launch-evidence.example.json");
+    const example = JSON.parse(readFileSync(examplePath, "utf-8")) as LaunchEvidence;
+
+    expect(Object.keys(example.items).sort()).toEqual(launchEvidenceItems.map((item) => item.key).sort());
+    expect(validateLaunchEvidence(example).status).toBe("fail");
   });
 
   it("records a single launch evidence item without changing other items", () => {

@@ -42,6 +42,8 @@ Record the following before declaring Phase 8 complete:
 | Workspace join | A second real user accepts an invitation through `/join/:token`. |
 | Upload | A sermon video uploads to the configured S3/R2 bucket. |
 | Processing | FINALIZE, PROBE, TRANSCRIBE, and ANALYZE complete or fail recoverably with visible events. |
+| Transcription provider | Production worker transcribes the sermon with whisper.cpp using the configured `WHISPER_MODEL_PATH`. |
+| AI analysis provider | Production worker scores clips with Claude using `ANTHROPIC_API_KEY`, not the heuristic fallback. |
 | Clip ranking | Ranked church-aware clips appear with scripture/church scoring where applicable. |
 | Branding | A brand template is applied in the editor. |
 | Approval notification | A real approval email and/or SMS is delivered. |

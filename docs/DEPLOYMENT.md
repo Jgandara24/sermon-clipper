@@ -189,7 +189,8 @@ After deploy:
    link after signing in as the invited email.
 4. Upload a short sermon video.
 5. Confirm `/app/settings/operations` shows upload and processing events.
-6. Generate clips, apply a brand template, and request approval with a real email or SMS recipient.
+6. Confirm the worker completed transcription with whisper.cpp and clip scoring with Claude, then
+   generate clips, apply a brand template, and request approval with a real email or SMS recipient.
 7. Approve from the `/review/:token` link.
 8. Export and download the MP4.
 9. Start or update a paid plan through Stripe Checkout/Portal, then confirm the webhook updated the

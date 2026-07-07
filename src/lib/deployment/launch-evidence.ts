@@ -67,6 +67,16 @@ export const launchEvidenceItems = [
     proof: "FINALIZE, PROBE, TRANSCRIBE, and ANALYZE completed or failed recoverably with visible events.",
   },
   {
+    key: "transcriptionProvider",
+    label: "Transcription provider",
+    proof: "Production worker transcribed the sermon with whisper.cpp using the configured WHISPER_MODEL_PATH.",
+  },
+  {
+    key: "analysisProvider",
+    label: "AI analysis provider",
+    proof: "Production worker scored clips with Claude using ANTHROPIC_API_KEY, not the heuristic fallback.",
+  },
+  {
     key: "clipRanking",
     label: "Clip ranking",
     proof: "Ranked church-aware clips appeared with scripture/church scoring where applicable.",
