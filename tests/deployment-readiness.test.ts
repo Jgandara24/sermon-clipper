@@ -40,6 +40,7 @@ describe("deployment readiness", () => {
       STRIPE_PRICE_PRO: "price_pro",
       STORAGE_PROVIDER: "s3",
       STORAGE_S3_BUCKET: "sermon-clipper-production",
+      STORAGE_S3_ENDPOINT: "https://account-id.r2.cloudflarestorage.com",
       STORAGE_S3_ACCESS_KEY_ID: "key",
       STORAGE_S3_SECRET_ACCESS_KEY: "secret",
     });
@@ -48,6 +49,7 @@ describe("deployment readiness", () => {
     expect(checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "STORAGE_PROVIDER", status: "ok" }),
+        expect.objectContaining({ name: "STORAGE_S3_ENDPOINT", status: "ok" }),
         expect.objectContaining({ name: "approval_notifications", status: "ok" }),
         expect.objectContaining({ name: "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY", status: "warning" }),
         expect.objectContaining({ name: "deployment_commit", status: "warning" }),
@@ -103,6 +105,32 @@ describe("deployment readiness", () => {
 
     expect(checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "approval_notifications", status: "ok" })]),
+    );
+  });
+
+  it("fails production readiness when S3 endpoint is not HTTPS", () => {
+    const checks = checkDeploymentEnvironment({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://example",
+      NEXT_PUBLIC_APP_URL: "https://clips.example.com",
+      MEDIA_URL_SECRET: "secret",
+      SENDGRID_API_KEY: "sendgrid-key",
+      AUTH_EMAIL_FROM: "auth@example.com",
+      NOTIFICATIONS_FROM_EMAIL: "clips@example.com",
+      STRIPE_SECRET_KEY: "sk_test_123",
+      STRIPE_WEBHOOK_SECRET: "whsec_123",
+      STRIPE_PRICE_STARTER: "price_starter",
+      STRIPE_PRICE_PRO: "price_pro",
+      STORAGE_PROVIDER: "s3",
+      STORAGE_S3_BUCKET: "sermon-clipper-production",
+      STORAGE_S3_ENDPOINT: "http://account-id.r2.cloudflarestorage.com",
+      STORAGE_S3_ACCESS_KEY_ID: "key",
+      STORAGE_S3_SECRET_ACCESS_KEY: "secret",
+    });
+
+    expect(summarizeReadiness(checks)).toBe("fail");
+    expect(checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "STORAGE_S3_ENDPOINT", status: "fail" })]),
     );
   });
 

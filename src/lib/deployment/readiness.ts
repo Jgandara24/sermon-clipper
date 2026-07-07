@@ -151,6 +151,27 @@ function checkStripeEnv(env: EnvLike): ReadinessCheck[] {
   ];
 }
 
+function checkS3Endpoint(env: EnvLike): ReadinessCheck {
+  const endpoint = env.STORAGE_S3_ENDPOINT;
+  if (!endpoint) {
+    return { name: "STORAGE_S3_ENDPOINT", status: "ok", message: "Using provider default S3 endpoint." };
+  }
+
+  try {
+    const url = new URL(endpoint);
+    if (env.NODE_ENV === "production" && url.protocol !== "https:") {
+      return {
+        name: "STORAGE_S3_ENDPOINT",
+        status: "fail",
+        message: "STORAGE_S3_ENDPOINT must use HTTPS in production.",
+      };
+    }
+    return { name: "STORAGE_S3_ENDPOINT", status: "ok", message: "S3-compatible endpoint is valid." };
+  } catch {
+    return { name: "STORAGE_S3_ENDPOINT", status: "fail", message: "STORAGE_S3_ENDPOINT must be a valid URL." };
+  }
+}
+
 export function checkDeploymentEnvironment(env: EnvLike = process.env): ReadinessCheck[] {
   const checks: ReadinessCheck[] = [
     checkRequiredEnv(env, "DATABASE_URL"),
@@ -185,6 +206,7 @@ export function checkDeploymentEnvironment(env: EnvLike = process.env): Readines
       status: "ok",
       message: `S3 region is ${env.STORAGE_S3_REGION ?? "auto"}.`,
     });
+    checks.push(checkS3Endpoint(env));
   }
 
   checks.push(

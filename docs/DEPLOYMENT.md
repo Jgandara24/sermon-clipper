@@ -140,6 +140,8 @@ health and smoke evidence must both be `ok`, not degraded or warning.
 
 - Create a private bucket. Do not make objects public.
 - Grant the runtime access key permission to read, write, list, and delete objects in that bucket.
+- Leave `STORAGE_S3_ENDPOINT` unset for AWS S3, or set it to an HTTPS S3-compatible endpoint for
+  R2/MinIO-compatible production storage.
 - Use lifecycle rules for temporary objects under `tmp/` if the provider supports prefix-based
   expiry.
 - Keep browser access routed through Sermon Clipper signed URLs. The app redirects signed media
