@@ -161,6 +161,32 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
     }
     return null;
   },
+  upload: (proof) => {
+    const required = [
+      { label: "sermon video", pattern: /\bsermon\b.*\bvideo\b|\bvideo\b.*\bsermon\b/i },
+      { label: "S3/R2", pattern: /\b(?:S3|R2)\b/i },
+      { label: "bucket", pattern: /\bbucket\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Upload proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  processing: (proof) => {
+    const required = ["FINALIZE", "PROBE", "TRANSCRIBE", "ANALYZE"].map((stage) => ({
+      label: stage,
+      pattern: new RegExp(`\\b${stage}\\b`, "i"),
+    }));
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Processing proof must mention completed/recoverable stage(s): ${missing.join(", ")}.`;
+    }
+    if (!/\bcompleted\b|\bsucceeded\b|\brecoverable\b/i.test(proof)) {
+      return "Processing proof must mention completed, succeeded, or recoverable processing events.";
+    }
+    return null;
+  },
   workerProcess: (proof) => {
     const required = [
       { label: "WORKER_ID", pattern: /\bWORKER_ID\b/ },
@@ -193,6 +219,18 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
     }
     if (/\bheuristic(?:-v1)?\b/i.test(proof) && !/\bnot\s+the\s+heuristic\b/i.test(proof)) {
       return "AI analysis provider proof must not rely on the heuristic fallback.";
+    }
+    return null;
+  },
+  clipRanking: (proof) => {
+    const required = [
+      { label: "ranked clips", pattern: /\branked\b.*\bclips\b|\bclips\b.*\branked\b/i },
+      { label: "church-aware scoring", pattern: /\bchurch[- ]aware\b|\bchurch\b.*\bscor/i },
+      { label: "scripture/church subscores", pattern: /\bscripture\b|\bbiblical_usefulness\b|\btheological_clarity\b|\bpastoral_tone\b/ },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Clip ranking proof must mention: ${missing.join(", ")}.`;
     }
     return null;
   },

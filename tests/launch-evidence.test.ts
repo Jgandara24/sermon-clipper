@@ -15,12 +15,17 @@ function completeEvidence(): LaunchEvidence {
     workspaceCreate: "Real user owner@example.org created production workspace ws_prod_123.",
     workspaceJoin:
       "Second user editor@example.org accepted the workspace invitation through /join/prod-token and joined the workspace.",
+    upload: "Sermon video uploaded to Cloudflare R2 S3 bucket sermon-clipper-production under src/ws_prod_123/source.mp4.",
+    processing:
+      "Operations events show FINALIZE, PROBE, TRANSCRIBE, and ANALYZE completed successfully for project prod_project_123.",
     workerProcess:
       "Deployment platform shows worker-1 running with WORKER_ID=worker-1, ffmpeg, ffprobe, whisper-cli, and readable WHISPER_MODEL_PATH /models/ggml-base.en.bin.",
     transcriptionProvider:
       "Operations metadata shows provider whisper_cpp, source audio, and configured WHISPER_MODEL_PATH /models/ggml-base.en.bin in production.",
     analysisProvider:
       "Operations metadata shows provider claude-sonnet-5 with ANTHROPIC_API_KEY-backed scoring, not the heuristic fallback.",
+    clipRanking:
+      "Ranked clips appeared with church-aware scoring, scripture relevance, biblical_usefulness, theological_clarity, and pastoral_tone subscores.",
     billing:
       "Stripe Checkout and Portal were opened, Stripe webhook updated the workspace plan, and granted minutes appeared in the ledger.",
     usageLimits:
@@ -173,6 +178,36 @@ describe("launch evidence validation", () => {
     );
   });
 
+  it("fails when upload proof does not mention sermon video and S3/R2 bucket", () => {
+    const evidence = completeEvidence();
+    evidence.items.upload = {
+      status: "passed",
+      evidence: "Upload worked in production.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "upload", status: "fail" })]),
+    );
+  });
+
+  it("fails when processing proof does not mention every required stage", () => {
+    const evidence = completeEvidence();
+    evidence.items.processing = {
+      status: "passed",
+      evidence: "Processing completed in production.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "processing", status: "fail" })]),
+    );
+  });
+
   it("fails when worker process proof does not mention runtime prerequisites", () => {
     const evidence = completeEvidence();
     evidence.items.workerProcess = {
@@ -215,6 +250,21 @@ describe("launch evidence validation", () => {
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "analysisProvider", status: "fail" })]),
+    );
+  });
+
+  it("fails when clip ranking proof does not mention church-aware scripture scoring", () => {
+    const evidence = completeEvidence();
+    evidence.items.clipRanking = {
+      status: "passed",
+      evidence: "Clips appeared in production.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "clipRanking", status: "fail" })]),
     );
   });
 

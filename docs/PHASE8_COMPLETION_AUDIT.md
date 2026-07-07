@@ -40,11 +40,11 @@ Record the following before declaring Phase 8 complete:
 | Auth email | A real user receives and verifies an email OTP through SendGrid; the evidence text must name email OTP, SendGrid, and verification/sign-in. |
 | Workspace create | The real user creates a workspace; the evidence text must name a real user, workspace, and creation. |
 | Workspace join | A second real user accepts an invitation through `/join/:token`; the evidence text must name the second user, invitation or `/join/` link, and accepted/joined state. |
-| Upload | A sermon video uploads to the configured S3/R2 bucket. |
-| Processing | FINALIZE, PROBE, TRANSCRIBE, and ANALYZE complete or fail recoverably with visible events. |
+| Upload | A sermon video uploads to the configured S3/R2 bucket; the evidence text must name sermon video, S3/R2, and bucket. |
+| Processing | FINALIZE, PROBE, TRANSCRIBE, and ANALYZE complete or fail recoverably with visible events; the evidence text must name every stage and completed/succeeded/recoverable status. |
 | Transcription provider | Operations metadata proves production transcription used `whisper_cpp`/whisper.cpp and the configured `WHISPER_MODEL_PATH`. |
 | AI analysis provider | Operations metadata proves production scoring used Claude with `ANTHROPIC_API_KEY`, not the heuristic fallback. |
-| Clip ranking | Ranked church-aware clips appear with scripture/church scoring where applicable. |
+| Clip ranking | Ranked church-aware clips appear with scripture/church scoring where applicable; the evidence text must name ranked clips, church-aware scoring, and scripture or church subscores. |
 | Branding | A brand template is applied in the editor. |
 | Approval notification | A real approval email and/or SMS is delivered. |
 | Review approval | The secure `/review/:token` link is viewed and approved. |
