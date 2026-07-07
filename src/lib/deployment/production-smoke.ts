@@ -31,6 +31,18 @@ function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/$/, "");
 }
 
+function checkBaseUrl(baseUrl: string, expectProduction: boolean): SmokeCheck {
+  try {
+    const url = new URL(baseUrl);
+    if (expectProduction && url.protocol !== "https:") {
+      return { name: "base-url", status: "fail", message: "Production smoke base URL must use HTTPS." };
+    }
+    return { name: "base-url", status: "ok", message: "Smoke base URL is valid." };
+  } catch {
+    return { name: "base-url", status: "fail", message: "Smoke base URL must be a valid URL." };
+  }
+}
+
 function commitsMatch(actual: string, expected: string) {
   const normalizedActual = actual.trim().toLowerCase();
   const normalizedExpected = expected.trim().toLowerCase();
@@ -79,8 +91,13 @@ export async function runProductionSmoke(options: ProductionSmokeOptions): Promi
   const fetchImpl = options.fetchImpl ?? fetch;
   const expectProduction = options.expectProduction ?? true;
   const expectedCommitSha = options.expectedCommitSha?.trim();
+  const baseUrlCheck = checkBaseUrl(baseUrl, expectProduction);
+  if (baseUrlCheck.status === "fail") {
+    return { status: "fail", checks: [baseUrlCheck] };
+  }
 
   const checks = await Promise.all([
+    Promise.resolve(baseUrlCheck),
     runCheck("health", async () => {
       const response = await fetchWithTimeout(fetchImpl, `${baseUrl}/api/health`, { cache: "no-store" }, timeoutMs);
       const payload = (await response.json().catch(() => null)) as {

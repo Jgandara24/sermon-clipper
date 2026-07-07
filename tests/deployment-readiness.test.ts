@@ -52,6 +52,30 @@ describe("deployment readiness", () => {
     );
   });
 
+  it("fails production readiness when public app URL is not HTTPS", () => {
+    const checks = checkDeploymentEnvironment({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://example",
+      NEXT_PUBLIC_APP_URL: "http://clips.example.com",
+      MEDIA_URL_SECRET: "secret",
+      SENDGRID_API_KEY: "sendgrid-key",
+      AUTH_EMAIL_FROM: "auth@example.com",
+      STRIPE_SECRET_KEY: "sk_test_123",
+      STRIPE_WEBHOOK_SECRET: "whsec_123",
+      STRIPE_PRICE_STARTER: "price_starter",
+      STRIPE_PRICE_PRO: "price_pro",
+      STORAGE_PROVIDER: "s3",
+      STORAGE_S3_BUCKET: "sermon-clipper-production",
+      STORAGE_S3_ACCESS_KEY_ID: "key",
+      STORAGE_S3_SECRET_ACCESS_KEY: "secret",
+    });
+
+    expect(summarizeReadiness(checks)).toBe("fail");
+    expect(checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "NEXT_PUBLIC_APP_URL", status: "fail" })]),
+    );
+  });
+
   it("reports deployment commit metadata when configured", () => {
     const metadata = getDeploymentMetadata({
       VERCEL_GIT_COMMIT_SHA: "abcdef1234567890",

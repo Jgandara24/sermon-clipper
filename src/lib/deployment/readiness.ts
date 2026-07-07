@@ -47,6 +47,28 @@ function checkRequiredEnv(env: EnvLike, name: string): ReadinessCheck {
     : { name, status: "fail", message: `${name} is required.` };
 }
 
+function checkPublicAppUrl(env: EnvLike): ReadinessCheck {
+  const value = env.NEXT_PUBLIC_APP_URL;
+  if (!value) {
+    return { name: "NEXT_PUBLIC_APP_URL", status: "fail", message: "NEXT_PUBLIC_APP_URL is required." };
+  }
+  if (env.NODE_ENV === "production") {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== "https:") {
+        return {
+          name: "NEXT_PUBLIC_APP_URL",
+          status: "fail",
+          message: "NEXT_PUBLIC_APP_URL must use HTTPS in production.",
+        };
+      }
+    } catch {
+      return { name: "NEXT_PUBLIC_APP_URL", status: "fail", message: "NEXT_PUBLIC_APP_URL must be a valid URL." };
+    }
+  }
+  return { name: "NEXT_PUBLIC_APP_URL", status: "ok", message: "NEXT_PUBLIC_APP_URL is configured." };
+}
+
 function checkAuthEmailEnv(env: EnvLike): ReadinessCheck[] {
   if (env.NODE_ENV !== "production") return [];
 
@@ -110,7 +132,7 @@ function checkStripeEnv(env: EnvLike): ReadinessCheck[] {
 export function checkDeploymentEnvironment(env: EnvLike = process.env): ReadinessCheck[] {
   const checks: ReadinessCheck[] = [
     checkRequiredEnv(env, "DATABASE_URL"),
-    checkRequiredEnv(env, "NEXT_PUBLIC_APP_URL"),
+    checkPublicAppUrl(env),
     checkRequiredEnv(env, "MEDIA_URL_SECRET"),
     ...checkAuthEmailEnv(env),
     ...checkStripeEnv(env),

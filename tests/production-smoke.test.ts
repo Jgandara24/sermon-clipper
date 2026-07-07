@@ -16,6 +16,18 @@ function fetchFor(routes: Record<string, Response>): typeof fetch {
 }
 
 describe("production smoke checks", () => {
+  it("fails production smoke when base URL is not HTTPS", async () => {
+    const result = await runProductionSmoke({
+      baseUrl: "http://clips.example.com",
+      fetchImpl: fetchFor({}),
+    });
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "base-url", status: "fail" })]),
+    );
+  });
+
   it("passes when deployed critical unauthenticated surfaces behave correctly", async () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
