@@ -5,6 +5,7 @@ import {
   computeReservationDelta,
   toDecimal,
 } from "@/lib/usage-ledger";
+import { estimateProcessingMinutes, planForCode } from "@/lib/billing/plans";
 
 describe("toDecimal", () => {
   it("passes Decimal values through unchanged", () => {
@@ -26,5 +27,17 @@ describe("computeReservationDelta", () => {
   it("rejects zero or negative amounts", () => {
     expect(() => computeReservationDelta(0)).toThrow(InvalidLedgerAmountError);
     expect(() => computeReservationDelta(-1)).toThrow(InvalidLedgerAmountError);
+  });
+});
+
+describe("billing plans", () => {
+  it("falls back to the free plan for unknown plan codes", () => {
+    expect(planForCode("unknown").code).toBe("free");
+  });
+
+  it("ceil-estimates processing minutes from video duration", () => {
+    expect(estimateProcessingMinutes(1).toString()).toBe("1");
+    expect(estimateProcessingMinutes(60).toString()).toBe("1");
+    expect(estimateProcessingMinutes(61).toString()).toBe("2");
   });
 });

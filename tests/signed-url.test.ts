@@ -48,6 +48,7 @@ describe("signed media URLs", () => {
     const url = createSignedUploadUrl({
       uploadId: "upload-1",
       workspaceId: "workspace-1",
+      maxBytes: 1024,
       expiresInSeconds: 60,
     });
 
@@ -62,10 +63,25 @@ describe("signed media URLs", () => {
   });
 
   it("binds upload signatures to the upload id", () => {
-    const url = createSignedUploadUrl({ uploadId: "upload-1", workspaceId: "workspace-1" });
+    const url = createSignedUploadUrl({ uploadId: "upload-1", workspaceId: "workspace-1", maxBytes: 1024 });
     const parsed = new URL(`http://localhost${url}`);
 
     expect(verifySignedUploadUrl("upload-2", parsed.searchParams)).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+  });
+
+  it("binds upload signatures to the plan byte limit", () => {
+    const url = createSignedUploadUrl({ uploadId: "upload-1", workspaceId: "workspace-1", maxBytes: 1024 });
+    const parsed = new URL(`http://localhost${url}`);
+    expect(verifySignedUploadUrl("upload-1", parsed.searchParams)).toMatchObject({
+      ok: true,
+      maxBytes: 1024,
+    });
+
+    parsed.searchParams.set("maxBytes", "2048");
+    expect(verifySignedUploadUrl("upload-1", parsed.searchParams)).toEqual({
       ok: false,
       reason: "invalid",
     });

@@ -11,11 +11,13 @@ export type JobHandler = (context: JobContext) => Promise<void>;
 export class JobFailureError extends Error {
   code: string;
   userMessage: string;
+  retryable: boolean;
 
-  constructor(code: string, userMessage: string, options?: { cause?: unknown }) {
+  constructor(code: string, userMessage: string, options?: { cause?: unknown; retryable?: boolean }) {
     super(userMessage);
     this.code = code;
     this.userMessage = userMessage;
+    this.retryable = options?.retryable ?? true;
     if (options?.cause) {
       this.cause = options.cause;
     }

@@ -15,6 +15,7 @@ type SignedMediaUrlInput = {
 type SignedUploadUrlInput = {
   uploadId: string;
   workspaceId: string;
+  maxBytes: number;
   expiresInSeconds?: number;
 };
 
@@ -31,7 +32,7 @@ export type VerifiedSignedMediaUrl =
   | { ok: false; reason: "missing" | "expired" | "invalid" };
 
 export type VerifiedSignedUploadUrl =
-  | { ok: true; uploadId: string; workspaceId: string; expiresAt: number }
+  | { ok: true; uploadId: string; workspaceId: string; maxBytes: number; expiresAt: number }
   | { ok: false; reason: "missing" | "expired" | "invalid" };
 
 function getSigningSecret(): string {
@@ -78,8 +79,8 @@ function mediaPayload(params: {
   ].join("\n");
 }
 
-function uploadPayload(params: { uploadId: string; workspaceId: string; expiresAt: string }) {
-  return ["upload", params.uploadId, params.workspaceId, params.expiresAt].join("\n");
+function uploadPayload(params: { uploadId: string; workspaceId: string; maxBytes: string; expiresAt: string }) {
+  return ["upload", params.uploadId, params.workspaceId, params.maxBytes, params.expiresAt].join("\n");
 }
 
 export function createSignedMediaUrl({
@@ -160,11 +161,13 @@ export function verifySignedMediaUrl(searchParams: URLSearchParams): VerifiedSig
 export function createSignedUploadUrl({
   uploadId,
   workspaceId,
+  maxBytes,
   expiresInSeconds = DEFAULT_UPLOAD_URL_TTL_SECONDS,
 }: SignedUploadUrlInput): string {
   const expiresAt = String(expiresAtFromNow(expiresInSeconds));
-  const params = new URLSearchParams({ workspaceId, expiresAt });
-  params.set("signature", signPayload(uploadPayload({ uploadId, workspaceId, expiresAt })));
+  const maxBytesValue = String(maxBytes);
+  const params = new URLSearchParams({ workspaceId, maxBytes: maxBytesValue, expiresAt });
+  params.set("signature", signPayload(uploadPayload({ uploadId, workspaceId, maxBytes: maxBytesValue, expiresAt })));
   return `/api/uploads/${uploadId}?${params.toString()}`;
 }
 
@@ -173,11 +176,17 @@ export function verifySignedUploadUrl(
   searchParams: URLSearchParams,
 ): VerifiedSignedUploadUrl {
   const workspaceId = searchParams.get("workspaceId");
+  const maxBytes = searchParams.get("maxBytes");
   const expiresAt = searchParams.get("expiresAt");
   const signature = searchParams.get("signature");
 
-  if (!workspaceId || !expiresAt || !signature) {
+  if (!workspaceId || !maxBytes || !expiresAt || !signature) {
     return { ok: false, reason: "missing" };
+  }
+
+  const maxBytesNumber = Number(maxBytes);
+  if (!Number.isInteger(maxBytesNumber) || maxBytesNumber <= 0) {
+    return { ok: false, reason: "invalid" };
   }
 
   const expiresAtNumber = Number(expiresAt);
@@ -189,10 +198,10 @@ export function verifySignedUploadUrl(
     return { ok: false, reason: "expired" };
   }
 
-  const expected = signPayload(uploadPayload({ uploadId, workspaceId, expiresAt }));
+  const expected = signPayload(uploadPayload({ uploadId, workspaceId, maxBytes, expiresAt }));
   if (!safeEqual(signature, expected)) {
     return { ok: false, reason: "invalid" };
   }
 
-  return { ok: true, uploadId, workspaceId, expiresAt: expiresAtNumber };
+  return { ok: true, uploadId, workspaceId, maxBytes: maxBytesNumber, expiresAt: expiresAtNumber };
 }

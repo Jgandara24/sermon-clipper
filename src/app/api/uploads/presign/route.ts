@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
-import { MAX_UPLOAD_BYTES } from "@/lib/limits";
+import { formatBytes, planForCode } from "@/lib/billing/plans";
 import { createSignedUploadUrl, DEFAULT_UPLOAD_URL_TTL_SECONDS } from "@/lib/media/signed-url";
 
 const bodySchema = z.object({
@@ -22,8 +22,13 @@ export async function POST(request: Request) {
     return apiError("INVALID_FILE_TYPE", "That file isn't a video we can read.");
   }
 
-  if (parsed.data.size > MAX_UPLOAD_BYTES) {
-    return apiError("FILE_TOO_LARGE", "Videos up to 5 GB for now.", { status: 413 });
+  const plan = planForCode(workspace.planCode);
+  if (parsed.data.size > plan.maxUploadBytes) {
+    return apiError(
+      "PLAN_LIMIT_EXCEEDED",
+      `${plan.name} plan uploads are limited to ${formatBytes(plan.maxUploadBytes)}.`,
+      { status: 413 },
+    );
   }
 
   if (workspace.minuteBalance.lessThanOrEqualTo(0)) {
@@ -38,9 +43,9 @@ export async function POST(request: Request) {
 
   return apiData({
     uploadId,
-    uploadUrl: createSignedUploadUrl({ uploadId, workspaceId: workspace.id }),
+    uploadUrl: createSignedUploadUrl({ uploadId, workspaceId: workspace.id, maxBytes: plan.maxUploadBytes }),
     method: "PUT",
-    maxBytes: MAX_UPLOAD_BYTES,
+    maxBytes: plan.maxUploadBytes,
     expiresInSeconds: DEFAULT_UPLOAD_URL_TTL_SECONDS,
   });
 }

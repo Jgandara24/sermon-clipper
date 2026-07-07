@@ -36,6 +36,10 @@ Implemented:
   hook cues, emotional-language density, topic overlap — clearly labeled non-AI) by default;
   ranked clip list UI with score breakdowns and like/dislike
 - Usage ledger reserve/settle/release primitives with an atomic, idempotent balance mutation
+- Plan-aware usage enforcement: upload links carry signed plan byte limits, FINALIZE reserves
+  estimated processing minutes from real ffprobe duration before transcription/analysis can run,
+  insufficient balances stop the pipeline with a billing error, and project failures/cancels
+  refund reserved processing minutes
 - Editor MVP (`/app/clips/:id/editor`): transcript-based script editor (click-to-delete words,
   filler-word chips, extend before/after), 4 original caption presets with live style overrides,
   center/face/manual layout with a manual crop box, a DOM/CSS preview (real video playback,
@@ -77,7 +81,7 @@ Stubbed by design:
 - Face-tracking layout mode (falls back to the same center crop as "center" mode — no per-frame
   face detection yet, per guide §14's own Phase 8 deferral)
 - Per-word karaoke caption animation (all presets burn in at the line level — see DECISIONS.md)
-- Billing and publishing providers
+- Stripe checkout/customer portal and publishing providers
 - Production OTP email delivery provider (OTP codes are printed to server logs until a provider is
   configured)
 - Google OAuth
@@ -166,9 +170,11 @@ npm run test:e2e
 ## Notes
 
 - `.env.example` contains only local development placeholders.
-- Billing and publishing providers are intentionally absent — see DECISIONS.md for what's stubbed
-  and why. Video upload/probing (Phase 2), transcription (Phase 3), AI clip generation (Phase 4),
-  the clip editor (Phase 5), and export rendering (Phase 6) are all real.
+- Stripe checkout/customer portal and publishing providers are intentionally absent — see
+  DECISIONS.md for what's stubbed and why. Minute-balance enforcement is real: uploads are capped
+  by workspace plan, and processing reserves estimated minutes after video duration is known. Video
+  upload/probing (Phase 2), transcription (Phase 3), AI clip generation (Phase 4), the clip editor
+  (Phase 5), and export rendering (Phase 6) are all real.
 - The editor's video preview streams the original source file directly (with HTTP Range support)
   rather than a separate low-res proxy — no extra render step needed for a real, scrubbable
   preview. Crop/caption rendering in the browser is a DOM/CSS approximation; the FFmpeg export

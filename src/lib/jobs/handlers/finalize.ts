@@ -2,17 +2,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Prisma, ProcessingJobType, ProjectStatus } from "@prisma/client";
+import { estimateProcessingMinutes, planForCode } from "@/lib/billing/plans";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import { MAX_VIDEO_DURATION_S } from "@/lib/limits";
 import { probeVideoFile } from "@/lib/media/probe";
 import { getStorageProvider } from "@/lib/storage";
+import { InsufficientBalanceError, reserveMinutesForJob } from "@/lib/usage-ledger";
 
 /** Confirms the uploaded file is a readable video within limits, then hands off to PROBE. */
 export const runFinalizeJob: JobHandler = async ({ job, prisma }) => {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: job.projectId },
-    include: { sourceVideo: true },
+    include: { sourceVideo: true, workspace: { select: { planCode: true } } },
   });
 
   if (!project.sourceVideo?.storageKey) {
@@ -36,8 +38,41 @@ export const runFinalizeJob: JobHandler = async ({ job, prisma }) => {
   }
 
   if (probeResult.durationS > MAX_VIDEO_DURATION_S) {
-    throw new JobFailureError("VIDEO_TOO_LONG", "Videos up to 3 hours for now.");
+    throw new JobFailureError("VIDEO_TOO_LONG", "Videos up to 3 hours for now.", { retryable: false });
   }
+
+  const plan = planForCode(project.workspace.planCode);
+  if (probeResult.durationS > plan.maxVideoDurationS) {
+    throw new JobFailureError(
+      "PLAN_LIMIT_EXCEEDED",
+      `${plan.name} plan videos are limited to ${Math.floor(plan.maxVideoDurationS / 60)} minutes.`,
+      { retryable: false },
+    );
+  }
+
+  const estimatedMinutes = estimateProcessingMinutes(probeResult.durationS);
+  try {
+    await reserveMinutesForJob(prisma, {
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      jobId: job.id,
+      minutes: estimatedMinutes,
+      note: `Reserved ${estimatedMinutes.toString()} processing minutes for ${Math.ceil(probeResult.durationS)} seconds of video.`,
+    });
+  } catch (error) {
+    if (error instanceof InsufficientBalanceError) {
+      throw new JobFailureError(
+        "INSUFFICIENT_MINUTES",
+        `This sermon needs ${estimatedMinutes.toString()} minutes to process. Add minutes or upgrade your plan.`,
+        { cause: error, retryable: false },
+      );
+    }
+    throw error;
+  }
+  await prisma.processingJob.update({
+    where: { id: job.id },
+    data: { minutesReserved: estimatedMinutes },
+  });
 
   await prisma.sourceVideo.update({
     where: { id: project.sourceVideo.id },
@@ -58,5 +93,6 @@ export const runFinalizeJob: JobHandler = async ({ job, prisma }) => {
     projectId: project.id,
     type: ProcessingJobType.PROBE,
     idempotencyKey: `probe:${project.id}`,
+    minutesReserved: new Prisma.Decimal(0),
   });
 };

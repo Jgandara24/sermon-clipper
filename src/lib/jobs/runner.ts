@@ -1,6 +1,6 @@
 import { type ProcessingJobType, ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { releaseReservationForJob } from "@/lib/usage-ledger";
+import { releaseReservationsForProject } from "@/lib/usage-ledger";
 import { withHeartbeat } from "@/lib/worker/reliability";
 import { jobHandlers } from "./handlers";
 import { claimNextJob, heartbeatJob, markJobFailed, markJobFailedOrRetry, markJobSucceeded } from "./queue";
@@ -33,17 +33,20 @@ export async function runOnePendingJob(): Promise<boolean> {
   } catch (error) {
     const failure =
       error instanceof JobFailureError
-        ? { code: error.code, message: error.userMessage }
+        ? { code: error.code, message: error.userMessage, retryable: error.retryable }
         : { code: "INTERNAL_ERROR", message: "Something went wrong processing this stage." };
 
     if (!(error instanceof JobFailureError)) {
       console.error(`[worker] job ${job.id} (${job.type}) failed unexpectedly`, error);
     }
 
-    const updatedJob = await markJobFailedOrRetry(prisma, job, failure);
+    const updatedJob =
+      failure.retryable === false
+        ? await markJobFailed(prisma, job.id, failure)
+        : await markJobFailedOrRetry(prisma, job, failure);
     if (updatedJob.state === "FAILED") {
-      await releaseReservationForJob(prisma, {
-        jobId: job.id,
+      await releaseReservationsForProject(prisma, {
+        projectId: job.projectId,
         note: `Released after failure: ${failure.code}`,
       });
       await prisma.project

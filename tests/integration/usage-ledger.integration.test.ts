@@ -4,6 +4,7 @@ import {
   InsufficientBalanceError,
   grantMinutes,
   releaseReservationForJob,
+  releaseReservationsForProject,
   reserveMinutesForJob,
   settleReservationForJob,
 } from "@/lib/usage-ledger";
@@ -118,6 +119,36 @@ describe("usage ledger against a real database", () => {
     const job = await createJob();
     const result = await releaseReservationForJob(prisma, { jobId: job.id });
     expect(result).toBeNull();
+  });
+
+  it("releases all processing reservations for a failed project", async () => {
+    const isolatedProject = await prisma.project.create({
+      data: { workspaceId, name: "Ledger Project Release Test" },
+    });
+    const job = await prisma.processingJob.create({
+      data: {
+        projectId: isolatedProject.id,
+        type: ProcessingJobType.FINALIZE,
+        idempotencyKey: uniqueKey("project-release-job"),
+      },
+    });
+    const before = await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
+
+    await reserveMinutesForJob(prisma, {
+      workspaceId,
+      projectId: isolatedProject.id,
+      jobId: job.id,
+      minutes: 3,
+    });
+
+    const refunds = await releaseReservationsForProject(prisma, {
+      projectId: isolatedProject.id,
+      note: "Released after project failure.",
+    });
+    const after = await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
+
+    expect(refunds).toHaveLength(1);
+    expect(after.minuteBalance.toString()).toBe(before.minuteBalance.toString());
   });
 
   it("grants add to the balance", async () => {

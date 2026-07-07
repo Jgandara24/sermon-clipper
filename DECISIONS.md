@@ -132,6 +132,29 @@ BullMQ/Redis as the future queue transport if volume demands it.
 
 Status: Active.
 
+## 2026-07-07 - Plan Limits Reserve Processing Minutes Before Analysis
+
+Decision: Phase 8 adds an application-level plan catalog (`free`, `starter`, `pro`, `dev`) that
+drives upload byte limits, video-duration limits, and included-minute display. Presigned upload URLs
+now include the plan byte limit in the HMAC payload, so the upload endpoint enforces the same limit
+the presign route approved. `FINALIZE` probes the real video duration, estimates processing minutes
+with `ceil(duration_seconds / 60)`, reserves those minutes atomically against the workspace balance,
+and stops with `INSUFFICIENT_MINUTES` or `PLAN_LIMIT_EXCEEDED` before downstream processing starts.
+Project-level failure/cancel paths release processing reservations idempotently.
+
+Why: Phase 8 requires churches to be billed or limited correctly according to their plan, with
+overage prevention. The existing ledger primitives were correct but not connected to the pipeline:
+checking only `minute_balance > 0` at upload time allowed a 90-minute sermon to enter processing
+with one minute remaining. Reserving after ffprobe avoids charging invalid files while still gating
+the expensive transcription/analysis stages.
+
+Tradeoff: This is minute-balance enforcement, not Stripe billing. Plan codes are stored on
+`workspaces.plan_code` and managed out-of-band for now; adding Stripe Checkout/customer portal and
+webhook-driven minute grants remains a follow-up Phase 8 billing slice.
+
+Status: Active — usage limits and reservations are enforced; Stripe payment collection remains
+open.
+
 ## 2026-07-06 - No External Provider Calls In Foundation
 
 Decision: Upload, URL import, transcription, AI analysis, rendering, storage, billing, and publishing are visible as stubs only.
@@ -192,7 +215,8 @@ Why: The guide's own pipeline (§8 step 6) reserves minutes when the user confir
 
 Tradeoff: `cancel` still calls `releaseReservationForJob` for every job on the project, which is a correct no-op today (nothing to release) and becomes load-bearing the moment Phase 3 reserves real transcription minutes.
 
-Status: Active — expected to start mattering in Phase 3.
+Status: Superseded by the 2026-07-07 plan-limit reservation decision. FINALIZE now reserves
+estimated processing minutes after ffprobe confirms the uploaded video duration.
 
 ## 2026-07-06 - Real-Database Tests Live Outside `verify`/CI
 

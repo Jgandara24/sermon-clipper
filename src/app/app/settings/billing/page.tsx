@@ -1,5 +1,6 @@
 import { formatDate, formatMinutes, titleCaseStatus } from "@/lib/format";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
+import { formatBytes, planForCode } from "@/lib/billing/plans";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export default async function BillingPage() {
     orderBy: { createdAt: "desc" },
     take: 20,
   });
+  const plan = planForCode(workspace.planCode);
 
   return (
     <section className="grid gap-6">
@@ -20,9 +22,23 @@ export default async function BillingPage() {
         <p className="text-sm font-medium text-teal-800">Billing</p>
         <h1 className="mt-1 text-2xl font-semibold">Usage ledger</h1>
         <p className="mt-2 text-sm text-stone-500">
-          Stripe and real usage charging are intentionally not wired in Phase 1.
+          Current plan limits and minute ledger for this workspace.
         </p>
-        <div className="mt-5 rounded-md bg-stone-50 p-4">
+        <div className="mt-5 grid gap-3 rounded-md bg-stone-50 p-4 sm:grid-cols-3">
+          <div>
+            <p className="text-sm text-stone-500">Plan</p>
+            <p className="mt-1 text-2xl font-semibold text-stone-800">{plan.name}</p>
+          </div>
+          <div>
+            <p className="text-sm text-stone-500">Included minutes</p>
+            <p className="mt-1 text-2xl font-semibold text-stone-800">{plan.includedMinutes}</p>
+          </div>
+          <div>
+            <p className="text-sm text-stone-500">Upload limit</p>
+            <p className="mt-1 text-2xl font-semibold text-stone-800">{formatBytes(plan.maxUploadBytes)}</p>
+          </div>
+        </div>
+        <div className="mt-3 rounded-md bg-stone-50 p-4">
           <p className="text-sm text-stone-500">Current minute balance</p>
           <p className="mt-1 text-3xl font-semibold text-teal-800">
             {formatMinutes(workspace.minuteBalance)}

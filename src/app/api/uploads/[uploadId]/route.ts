@@ -1,5 +1,4 @@
 import { apiData, apiError } from "@/lib/api/response";
-import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 import { verifySignedUploadUrl } from "@/lib/media/signed-url";
 import { getStorageProvider, StorageLimitExceededError } from "@/lib/storage";
 
@@ -23,11 +22,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ uplo
   const tempKey = `tmp/${verified.workspaceId}/${uploadId}`;
 
   try {
-    const bytesWritten = await storage.writeFromWebStream(tempKey, request.body, MAX_UPLOAD_BYTES);
+    const bytesWritten = await storage.writeFromWebStream(tempKey, request.body, verified.maxBytes);
     return apiData({ uploadId, bytesWritten });
   } catch (error) {
     if (error instanceof StorageLimitExceededError) {
-      return apiError("FILE_TOO_LARGE", "Videos up to 5 GB for now.", { status: 413 });
+      return apiError("PLAN_LIMIT_EXCEEDED", "That upload is larger than this workspace plan allows.", {
+        status: 413,
+      });
     }
     console.error("[uploads] failed to write upload", error);
     return apiError("STORAGE_UNAVAILABLE", "Storage hiccup — try again in a minute.", {

@@ -4,7 +4,7 @@ import { apiData, apiError } from "@/lib/api/response";
 import { cancelJobIfActive } from "@/lib/jobs/queue";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
-import { releaseReservationForJob } from "@/lib/usage-ledger";
+import { releaseReservationsForProject } from "@/lib/usage-ledger";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiWorkspace("CANCEL_PROJECT");
@@ -32,11 +32,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   for (const job of project.processingJobs) {
-    const result = await cancelJobIfActive(prisma, job.id);
-    if (result.count > 0) {
-      await releaseReservationForJob(prisma, { jobId: job.id, note: "Released: project canceled." });
-    }
+    await cancelJobIfActive(prisma, job.id);
   }
+  await releaseReservationsForProject(prisma, {
+    projectId: project.id,
+    note: "Released: project canceled.",
+  });
 
   const updated = await prisma.project.update({
     where: { id: project.id },

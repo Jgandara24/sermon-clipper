@@ -123,6 +123,27 @@ export async function releaseReservationForJob(
   });
 }
 
+export async function releaseReservationsForProject(
+  client: PrismaClient,
+  params: { projectId: string; note?: string },
+) {
+  const reservations = await client.usageLedger.findMany({
+    where: { projectId: params.projectId, kind: LedgerKind.PROCESSING },
+  });
+
+  const released = [];
+  for (const reservation of reservations) {
+    if (!reservation.jobId) continue;
+    const refund = await releaseReservationForJob(client, {
+      jobId: reservation.jobId,
+      note: params.note ?? "Reserved minutes released.",
+    });
+    if (refund) released.push(refund);
+  }
+
+  return released;
+}
+
 /**
  * Settles a job's reservation on success. MVP: the reservation debit already stands as the
  * final charge, so settling is a lookup, not a new ledger row. A future phase that reserves an
