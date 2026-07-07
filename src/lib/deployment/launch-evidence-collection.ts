@@ -36,9 +36,13 @@ function formatHealthEvidence(health: HealthEvidencePayload) {
   ].join(" ");
 }
 
-function formatSmokeEvidence(smoke: SmokeResult) {
+function formatSmokeEvidence(smoke: SmokeResult, evidence: LaunchEvidence) {
   const checkSummary = smoke.checks.map((check) => `${check.status.toUpperCase()} ${check.name}: ${check.message}`);
-  return [`Production smoke status: ${smoke.status}.`, ...checkSummary].join("\n");
+  return [
+    `Ran npm run smoke:production -- --base-url ${evidence.deploymentUrl} --commit-sha ${evidence.commitSha}.`,
+    `Production smoke status: ${smoke.status}.`,
+    ...checkSummary,
+  ].join("\n");
 }
 
 function automatedItem(status: LaunchEvidenceItem["status"], evidence: string): LaunchEvidenceItem {
@@ -77,7 +81,7 @@ export function applyAutomatedLaunchEvidence(input: AutomatedLaunchEvidenceInput
       ),
       productionSmoke: automatedItem(
         input.smoke.status === "ok" ? "passed" : "failed",
-        formatSmokeEvidence(input.smoke),
+        formatSmokeEvidence(input.smoke, input.evidence),
       ),
     },
   };

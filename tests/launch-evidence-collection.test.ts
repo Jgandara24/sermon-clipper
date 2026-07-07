@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyAutomatedLaunchEvidence } from "@/lib/deployment/launch-evidence-collection";
-import { createLaunchEvidenceTemplate } from "@/lib/deployment/launch-evidence";
+import { createLaunchEvidenceTemplate, validateLaunchEvidenceItemProof } from "@/lib/deployment/launch-evidence";
 
 function template() {
   return createLaunchEvidenceTemplate({
@@ -35,8 +35,17 @@ describe("launch evidence collection", () => {
     expect(evidence.verifiedAt).toBe("2026-07-07T21:00:00Z");
     expect(evidence.items.healthCheck?.status).toBe("passed");
     expect(evidence.items.healthCheck?.evidence).toContain("Deployment commit: abc1234");
+    expect(validateLaunchEvidenceItemProof("healthCheck", evidence.items.healthCheck?.evidence ?? "")).toEqual(
+      expect.objectContaining({ status: "ok" }),
+    );
     expect(evidence.items.productionSmoke?.status).toBe("passed");
+    expect(evidence.items.productionSmoke?.evidence).toContain(
+      "npm run smoke:production -- --base-url https://clips.example.org --commit-sha abc1234",
+    );
     expect(evidence.items.productionSmoke?.evidence).toContain("Production smoke status: ok");
+    expect(validateLaunchEvidenceItemProof("productionSmoke", evidence.items.productionSmoke?.evidence ?? "")).toEqual(
+      expect.objectContaining({ status: "ok" }),
+    );
   });
 
   it("marks health failed when readiness reports failed checks", () => {
