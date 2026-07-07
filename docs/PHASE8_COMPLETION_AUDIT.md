@@ -37,9 +37,9 @@ Record the following before declaring Phase 8 complete:
 | Web process | Deployment platform confirms the web process is running the deployed commit. |
 | Worker process | At least one separate worker process is running with stable `WORKER_ID`, available `ffmpeg`/`ffprobe`, available `whisper-cli`, and readable `WHISPER_MODEL_PATH`; the evidence text must name each prerequisite. |
 | Database | `npm run db:migrate:deploy` applied successfully against production. |
-| Auth email | A real user receives and verifies an email OTP through SendGrid. |
-| Workspace create | The real user creates a workspace. |
-| Workspace join | A second real user accepts an invitation through `/join/:token`. |
+| Auth email | A real user receives and verifies an email OTP through SendGrid; the evidence text must name email OTP, SendGrid, and verification/sign-in. |
+| Workspace create | The real user creates a workspace; the evidence text must name a real user, workspace, and creation. |
+| Workspace join | A second real user accepts an invitation through `/join/:token`; the evidence text must name the second user, invitation or `/join/` link, and accepted/joined state. |
 | Upload | A sermon video uploads to the configured S3/R2 bucket. |
 | Processing | FINALIZE, PROBE, TRANSCRIBE, and ANALYZE complete or fail recoverably with visible events. |
 | Transcription provider | Operations metadata proves production transcription used `whisper_cpp`/whisper.cpp and the configured `WHISPER_MODEL_PATH`. |

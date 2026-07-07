@@ -11,6 +11,10 @@ import {
 
 function completeEvidence(): LaunchEvidence {
   const evidenceByKey: Record<string, string> = {
+    authEmail: "Real user owner@example.org received an email OTP through SendGrid and verified the code to sign in.",
+    workspaceCreate: "Real user owner@example.org created production workspace ws_prod_123.",
+    workspaceJoin:
+      "Second user editor@example.org accepted the workspace invitation through /join/prod-token and joined the workspace.",
     workerProcess:
       "Deployment platform shows worker-1 running with WORKER_ID=worker-1, ffmpeg, ffprobe, whisper-cli, and readable WHISPER_MODEL_PATH /models/ggml-base.en.bin.",
     transcriptionProvider:
@@ -121,6 +125,51 @@ describe("launch evidence validation", () => {
     expect(result.status).toBe("fail");
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "healthCheck", status: "fail" })]),
+    );
+  });
+
+  it("fails when auth email proof does not mention OTP, SendGrid, and verification", () => {
+    const evidence = completeEvidence();
+    evidence.items.authEmail = {
+      status: "passed",
+      evidence: "A user signed in successfully.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "authEmail", status: "fail" })]),
+    );
+  });
+
+  it("fails when workspace create proof does not mention a real user creating a workspace", () => {
+    const evidence = completeEvidence();
+    evidence.items.workspaceCreate = {
+      status: "passed",
+      evidence: "Workspace exists in production.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "workspaceCreate", status: "fail" })]),
+    );
+  });
+
+  it("fails when workspace join proof does not mention second-user invitation acceptance", () => {
+    const evidence = completeEvidence();
+    evidence.items.workspaceJoin = {
+      status: "passed",
+      evidence: "Team access works.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "workspaceJoin", status: "fail" })]),
     );
   });
 

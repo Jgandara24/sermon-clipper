@@ -125,6 +125,42 @@ export type LaunchEvidenceItemKey = (typeof launchEvidenceItems)[number]["key"];
 const launchEvidenceItemKeys = new Set<string>(launchEvidenceItems.map((item) => item.key));
 const minimumEvidenceLength = 20;
 const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: string) => string | null>> = {
+  authEmail: (proof) => {
+    const required = [
+      { label: "email OTP", pattern: /\bemail\b.*\bOTP\b|\bOTP\b.*\bemail\b/i },
+      { label: "SendGrid", pattern: /\bsendgrid\b/i },
+      { label: "verified", pattern: /\bverified\b|\bverification\b|\bsign(?:ed)?\s+in\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Auth email proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  workspaceCreate: (proof) => {
+    const required = [
+      { label: "real user", pattern: /\breal\b.*\buser\b|\buser\b.*\breal\b/i },
+      { label: "workspace", pattern: /\bworkspace\b/i },
+      { label: "created", pattern: /\bcreated\b|\bcreate\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Workspace create proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
+  workspaceJoin: (proof) => {
+    const required = [
+      { label: "second user", pattern: /\bsecond\b.*\buser\b|\binvite[de]?\b.*\buser\b/i },
+      { label: "/join/:token or invitation", pattern: /\/join\/:token|\/join\/|invitation/i },
+      { label: "accepted", pattern: /\baccepted\b|\bjoined\b/i },
+    ];
+    const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
+    if (missing.length > 0) {
+      return `Workspace join proof must mention: ${missing.join(", ")}.`;
+    }
+    return null;
+  },
   workerProcess: (proof) => {
     const required = [
       { label: "WORKER_ID", pattern: /\bWORKER_ID\b/ },
