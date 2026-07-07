@@ -78,8 +78,9 @@ Implemented:
   whisper.cpp output parser, SRT parsing, filler detection, transcript chunking/dedup, the
   heuristic clip scorer, editor state/word helpers, caption-line derivation, export crop
   resolution, kept-range/timeline mapping, ASS subtitle generation, and the export filename
-  builder; a separate real-database integration suite for the ledger (`npm run test:integration`)
-- CI workflow for lint, typecheck, tests, Prisma validation, and build
+  builder; a separate real-database integration suite for production-critical workflows
+- CI workflow for lint, typecheck, tests, Prisma validation, build, real-Postgres integration
+  tests, and the Playwright Phase 6/7 browser workflow
 
 Stubbed by design:
 
@@ -155,12 +156,13 @@ This runs Prisma validation, ESLint, TypeScript, Vitest, and the production Next
 
 A separate integration suite exercises the usage ledger against a real, migrated Postgres
 database (reserve/settle/release, idempotency, the balance-never-negative invariant), worker
-reliability (delayed retries, heartbeats, stale-job recovery), operational event persistence, and
-the Phase 6/7 reviewed-brand-export workflow (approved clip + brand lower-third + word delete →
-real 1080×1920 MP4 rendered by FFmpeg/libass). If `.data/models/ggml-tiny.en.bin` exists, it also proves
-upload-video-only ASR by running a spoken sermon MP4 through whisper.cpp and generating ranked
-scripture-aware clips without an SRT override. It's intentionally not part of `verify`/CI — run it
-manually once Postgres is up:
+reliability (delayed retries, heartbeats, stale-job recovery), operational event persistence,
+Stripe billing reconciliation, workspace invitations, and the Phase 6/7 reviewed-brand-export
+workflow (approved clip + brand lower-third + word delete → real 1080×1920 MP4 rendered by
+FFmpeg/libass). If `.data/models/ggml-tiny.en.bin` exists, it also proves upload-video-only ASR by
+running a spoken sermon MP4 through whisper.cpp and generating ranked scripture-aware clips without
+an SRT override. CI runs this suite against a Postgres service; run it manually once local Postgres
+is up:
 
 ```sh
 npm run test:integration
@@ -169,7 +171,8 @@ npm run test:integration
 A Playwright browser test covers the Phase 6/7 reviewed export path through the UI: a ranked
 sermon clip with scripture is opened in the editor, a brand template is applied, export is blocked
 until approval, the phone review link approves the clip, and the approved clip exports/downloads as
-an MP4. Install the browser once with `npx playwright install chromium`, then run:
+an MP4. CI runs this with Chromium and ffmpeg installed; locally install the browser once with
+`npx playwright install chromium`, then run:
 
 ```sh
 npm run test:e2e

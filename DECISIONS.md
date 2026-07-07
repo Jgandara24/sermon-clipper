@@ -340,11 +340,30 @@ estimated processing minutes after ffprobe confirms the uploaded video duration.
 
 ## 2026-07-06 - Real-Database Tests Live Outside `verify`/CI
 
-Decision: `vitest.config.ts` excludes `tests/integration/**`; those tests run separately via `npm run test:integration` against a real, migrated Postgres. `npm run verify` (and CI) stay exactly as DB-free as they were before Phase 2.
+Decision: `vitest.config.ts` excludes `tests/integration/**`; those tests run separately via `npm run test:integration` against a real, migrated Postgres. `npm run verify` stays exactly as DB-free as it was before Phase 2.
 
-Why: `verify`'s existing contract ("does not require external provider credentials") implicitly meant no live services at all, including Postgres — `prisma validate` only checks schema syntax. Introducing DB-backed tests into that path would silently break local verify for anyone without Postgres already running, and CI has no Postgres service today.
+Why: `verify`'s existing contract ("does not require external provider credentials") implicitly meant no live services at all, including Postgres — `prisma validate` only checks schema syntax. Introducing DB-backed tests into that path would silently break local verify for anyone without Postgres already running.
 
-Tradeoff: The ledger's balance-never-negative and idempotency invariants (required by guide §21) are proven, but only when a developer remembers to run `npm run test:integration` locally — CI doesn't catch a regression there yet. Revisit by adding a Postgres service to `.github/workflows/ci.yml` when Phase 8 ("test suite green") tackles CI hardening in earnest.
+Tradeoff: Superseded for CI by the 2026-07-07 CI hardening decision. Local `verify` remains
+database-free, while CI now provisions Postgres for integration and e2e jobs.
+
+Status: Superseded for CI; active for local command separation.
+
+## 2026-07-07 - CI Runs Production-Critical Integration And Browser Workflows
+
+Decision: CI now keeps `npm run verify` as a DB-free job, but adds separate Postgres-backed
+`integration` and `e2e` jobs. The integration job applies Prisma migrations and runs
+`npm run test:integration`; the e2e job applies migrations, installs Chromium and ffmpeg, and runs
+the Playwright Phase 6/7 browser workflow.
+
+Why: Phase 8 requires end-to-end coverage for production-critical happy and failure paths.
+Database invariants, worker reliability, Stripe billing reconciliation, workspace invitations,
+approval hardening, real FFmpeg export rendering, and browser-level reviewed export behavior should
+not depend on a developer remembering to run local-only commands.
+
+Tradeoff: CI is slower and requires service containers plus media/browser dependencies. Keeping
+these as separate jobs preserves the fast, DB-free `verify` contract while still blocking merges on
+the launch-critical suites.
 
 Status: Active.
 

@@ -16,3 +16,64 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run verify
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: sermon_clipper
+          POSTGRES_PASSWORD: sermon_clipper
+          POSTGRES_DB: sermon_clipper
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sermon_clipper -d sermon_clipper"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sermon_clipper:sermon_clipper@localhost:5432/sermon_clipper?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm run db:migrate:deploy
+      - run: npm run test:integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: sermon_clipper
+          POSTGRES_PASSWORD: sermon_clipper
+          POSTGRES_DB: sermon_clipper
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sermon_clipper -d sermon_clipper"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sermon_clipper:sermon_clipper@localhost:5432/sermon_clipper?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm run db:migrate:deploy
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
