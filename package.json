@@ -12,6 +12,7 @@
     "test:e2e": "playwright test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "smoke:production": "tsx scripts/production-smoke.ts",
+    "verify:launch-evidence": "tsx scripts/verify-launch-evidence.ts",
     "verify": "npm run prisma:validate && npm run lint && npm run typecheck && npm run test && npm run build",
     "prisma:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://sermon_clipper:sermon_clipper@localhost:5432/sermon_clipper?schema=public} prisma generate",
     "prisma:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://sermon_clipper:sermon_clipper@localhost:5432/sermon_clipper?schema=public} prisma validate",

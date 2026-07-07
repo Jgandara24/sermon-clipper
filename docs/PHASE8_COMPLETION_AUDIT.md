@@ -53,6 +53,13 @@ Record the following before declaring Phase 8 complete:
 | Observability | `/app/settings/operations` shows upload, processing, approval, export, billing, and worker events. |
 | CI | `verify`, `integration`, and `e2e` jobs pass for the deployed commit. |
 
+Use the JSON template at [phase8-launch-evidence.example.json](phase8-launch-evidence.example.json)
+to capture the evidence, then verify it with:
+
+```sh
+npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json
+```
+
 ## Completion Rule
 
 Do not mark Phase 8 complete from local tests alone. Local verification proves the code path; Phase

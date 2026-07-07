@@ -1,0 +1,88 @@
+{
+  "deploymentUrl": "https://clips.example.org",
+  "commitSha": "fe09434",
+  "verifiedAt": "2026-07-07T20:00:00Z",
+  "verifiedBy": "Launch operator",
+  "items": {
+    "healthCheck": {
+      "status": "failed",
+      "evidence": "Paste curl -fsS https://clips.example.org/api/health output showing no failed readiness checks."
+    },
+    "productionSmoke": {
+      "status": "failed",
+      "evidence": "Paste npm run smoke:production -- --base-url https://clips.example.org output."
+    },
+    "webProcess": {
+      "status": "failed",
+      "evidence": "Deployment platform shows the web process running this commit."
+    },
+    "workerProcess": {
+      "status": "failed",
+      "evidence": "Deployment platform shows at least one worker process running with stable WORKER_ID."
+    },
+    "databaseMigrations": {
+      "status": "failed",
+      "evidence": "npm run db:migrate:deploy completed successfully against production."
+    },
+    "authEmail": {
+      "status": "failed",
+      "evidence": "A real user received and verified an email OTP through SendGrid."
+    },
+    "workspaceCreate": {
+      "status": "failed",
+      "evidence": "A real user created a workspace in production."
+    },
+    "workspaceJoin": {
+      "status": "failed",
+      "evidence": "A second real user accepted an invitation through /join/:token."
+    },
+    "upload": {
+      "status": "failed",
+      "evidence": "A sermon video uploaded to the configured production S3/R2 bucket."
+    },
+    "processing": {
+      "status": "failed",
+      "evidence": "FINALIZE, PROBE, TRANSCRIBE, and ANALYZE completed or failed recoverably with visible events."
+    },
+    "clipRanking": {
+      "status": "failed",
+      "evidence": "Ranked church-aware clips appeared with scripture/church scoring where applicable."
+    },
+    "branding": {
+      "status": "failed",
+      "evidence": "A brand template was applied in the editor."
+    },
+    "approvalNotification": {
+      "status": "failed",
+      "evidence": "A real approval email and/or SMS was delivered."
+    },
+    "reviewApproval": {
+      "status": "failed",
+      "evidence": "The secure /review/:token link was viewed and approved."
+    },
+    "export": {
+      "status": "failed",
+      "evidence": "An approved clip exported through the worker."
+    },
+    "download": {
+      "status": "failed",
+      "evidence": "The MP4 downloaded through a short-lived signed URL from production storage."
+    },
+    "billing": {
+      "status": "failed",
+      "evidence": "Stripe Checkout/Portal and webhook handling updated the workspace plan and granted minutes."
+    },
+    "usageLimits": {
+      "status": "failed",
+      "evidence": "Insufficient minutes or plan limit conditions were blocked without negative balances."
+    },
+    "observability": {
+      "status": "failed",
+      "evidence": "/app/settings/operations showed upload, processing, approval, export, billing, and worker events."
+    },
+    "ci": {
+      "status": "failed",
+      "evidence": "verify, integration, and e2e CI jobs passed for this commit."
+    }
+  }
+}
