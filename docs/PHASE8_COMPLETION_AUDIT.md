@@ -80,6 +80,7 @@ should exit non-zero while any evidence item is still missing or failed.
 Record each manual evidence item with the checked item key instead of editing JSON by hand:
 
 ```sh
+npm run record:launch-evidence -- --list
 npm run record:launch-evidence -- --item workspaceCreate --evidence "Created production workspace as owner@example.org."
 ```
 

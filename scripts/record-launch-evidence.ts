@@ -18,6 +18,13 @@ const itemKey = argValue("--item");
 const proof = argValue("--evidence");
 const status = (argValue("--status") ?? "passed") as LaunchEvidenceItem["status"];
 
+if (process.argv.includes("--list")) {
+  for (const item of launchEvidenceItems) {
+    console.log(`${item.key}: ${item.label} - ${item.proof}`);
+  }
+  process.exit(0);
+}
+
 if (!itemKey) {
   console.error(`Missing item. Use --item <key>. Valid keys: ${launchEvidenceItems.map((item) => item.key).join(", ")}`);
   process.exit(2);

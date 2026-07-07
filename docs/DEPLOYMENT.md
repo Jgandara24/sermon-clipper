@@ -162,8 +162,9 @@ After deploy:
    `npm run collect:launch-evidence -- --base-url https://clips.example.org`. The collector uses
    the evidence file's `commitSha` unless `--commit-sha` is supplied. For the final launch gate,
    add `--require-complete` after every manual evidence item has been filled.
-   Use `npm run record:launch-evidence -- --item <key> --evidence "<proof>"` to fill manual
-   evidence items without editing JSON by hand.
+   Use `npm run record:launch-evidence -- --list` to see valid item keys, then
+   `npm run record:launch-evidence -- --item <key> --evidence "<proof>"` to fill manual evidence
+   items without editing JSON by hand.
 2. Sign in with email OTP.
 3. Create a workspace or invite a second user from `/app/settings` and accept the `/join/:token`
    link after signing in as the invited email.
