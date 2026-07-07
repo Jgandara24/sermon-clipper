@@ -22,6 +22,10 @@ export type LaunchEvidenceResult = {
   checks: LaunchEvidenceCheck[];
 };
 
+export type LaunchEvidenceValidationOptions = {
+  expectedCommitSha?: string;
+};
+
 export const launchEvidenceItems = [
   {
     key: "healthCheck",
@@ -155,6 +159,24 @@ function checkCommitSha(value: unknown): LaunchEvidenceCheck {
   return { name: "commitSha", status: "ok", message: "commitSha looks valid." };
 }
 
+function checkExpectedCommitSha(value: unknown, expectedCommitSha: string): LaunchEvidenceCheck {
+  if (typeof value !== "string") {
+    return { name: "commitShaMatches", status: "fail", message: "commitSha is required before it can be matched." };
+  }
+
+  const actual = value.trim().toLowerCase();
+  const expected = expectedCommitSha.trim().toLowerCase();
+  if (!actual || !expected || !(actual.startsWith(expected) || expected.startsWith(actual))) {
+    return {
+      name: "commitShaMatches",
+      status: "fail",
+      message: `Evidence commit ${value} does not match expected commit ${expectedCommitSha}.`,
+    };
+  }
+
+  return { name: "commitShaMatches", status: "ok", message: "Evidence commit matches expected commit." };
+}
+
 function checkEvidenceItem(evidence: LaunchEvidence, key: string, label: string): LaunchEvidenceCheck {
   const item = evidence.items?.[key];
   if (!item) {
@@ -173,7 +195,10 @@ function checkEvidenceItem(evidence: LaunchEvidence, key: string, label: string)
   return { name: key, status: "ok", message: `${label} has passing evidence.` };
 }
 
-export function validateLaunchEvidence(input: unknown): LaunchEvidenceResult {
+export function validateLaunchEvidence(
+  input: unknown,
+  options: LaunchEvidenceValidationOptions = {},
+): LaunchEvidenceResult {
   if (!input || typeof input !== "object") {
     return {
       status: "fail",
@@ -185,6 +210,7 @@ export function validateLaunchEvidence(input: unknown): LaunchEvidenceResult {
   const checks: LaunchEvidenceCheck[] = [
     checkDeploymentUrl(evidence.deploymentUrl),
     checkCommitSha(evidence.commitSha),
+    ...(options.expectedCommitSha ? [checkExpectedCommitSha(evidence.commitSha, options.expectedCommitSha)] : []),
     checkString("verifiedAt", evidence.verifiedAt),
     checkString("verifiedBy", evidence.verifiedBy),
     ...launchEvidenceItems.map((item) => checkEvidenceItem(evidence, item.key, item.label)),

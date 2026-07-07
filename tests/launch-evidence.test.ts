@@ -60,6 +60,26 @@ describe("launch evidence validation", () => {
     expect(result.checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "billing", status: "fail" })]));
   });
 
+  it("fails when expected commit does not match evidence commit", () => {
+    const result = validateLaunchEvidence(completeEvidence(), { expectedCommitSha: "abc1234" });
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "commitShaMatches", status: "fail" })]),
+    );
+  });
+
+  it("passes commit matching when either SHA is a prefix of the other", () => {
+    const evidence = completeEvidence();
+    evidence.commitSha = "fe09434abcdef";
+
+    const result = validateLaunchEvidence(evidence, { expectedCommitSha: "fe09434" });
+
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "commitShaMatches", status: "ok" })]),
+    );
+  });
+
   it("creates a fail-closed evidence template for every launch item", () => {
     const template = createLaunchEvidenceTemplate({
       deploymentUrl: "https://clips.example.org",

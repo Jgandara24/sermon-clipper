@@ -66,6 +66,10 @@ each status to `passed`, and verify it:
 npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json
 ```
 
+By default, verification also checks that the evidence file's `commitSha` matches the current Git
+`HEAD`. Use `--commit-sha <sha>` when verifying evidence for a specific deployed revision from a
+different local checkout.
+
 ## Completion Rule
 
 Do not mark Phase 8 complete from local tests alone. Local verification proves the code path; Phase
