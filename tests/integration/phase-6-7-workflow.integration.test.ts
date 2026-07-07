@@ -270,6 +270,7 @@ beforeAll(async () => {
       requesterId: userId,
       state: ClipApprovalState.APPROVED,
       reviewToken: uniqueKey("review-token"),
+      reviewTokenExpiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       approverName: "Pastor Test",
       decidedAt: new Date(),
     },

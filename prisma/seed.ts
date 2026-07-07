@@ -14,6 +14,7 @@ import {
 
 const prisma = new PrismaClient();
 const demoEmail = "demo@sermonclipper.local";
+const reviewTokenExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
 async function main() {
   const user = await prisma.user.upsert({
@@ -228,6 +229,8 @@ async function main() {
     update: {
       state: ClipApprovalState.IN_REVIEW,
       requesterId: user.id,
+      reviewTokenExpiresAt,
+      reviewTokenRevokedAt: null,
     },
     create: {
       workspaceId: workspace.id,
@@ -235,6 +238,7 @@ async function main() {
       requesterId: user.id,
       state: ClipApprovalState.IN_REVIEW,
       reviewToken: "demo-review-token-sermon-clipper-phase-7",
+      reviewTokenExpiresAt,
     },
   });
 

@@ -45,9 +45,9 @@ user should mutate billing, templates, exports, or approval state. A central mat
 from drifting into per-route role logic and gives Phase 8 a production-safe authorization boundary
 that can be audited and tested.
 
-Tradeoff: Public review links remain token-authorized for now; production-safe review-link
-expiration, revocation, audit events, and notification delivery are still separate Phase 8 slices.
-There is not yet a workspace member management UI for owners/admins to assign roles.
+Tradeoff: Public review links remain token-authorized for now; the Phase 8 approval hardening
+slice adds expiration, revocation, audit events, and notification delivery. There is not yet a
+workspace member management UI for owners/admins to assign roles.
 
 Status: Active — core role checks are enforced; review-link hardening and member administration
 remain open.
@@ -91,6 +91,27 @@ traffic but not the final high-scale upload path. A future upload slice should a
 presigning/resume support.
 
 Status: Active — object storage is supported; direct browser multipart uploads remain open.
+
+## 2026-07-07 - Approval Notifications And Review Link Auditability
+
+Decision: Clip approval requests now issue a fresh 14-day review token, clear any prior revocation,
+and optionally notify a reviewer by SendGrid email and/or Twilio SMS. Notification attempts are
+persisted as `approval_notifications` rows with `sent`, `failed`, or `skipped` status. Review links
+store expiry, revocation, and last-viewed timestamps, and `clip_approval_audit_events` records
+review requests, link views, notification outcomes, revocations, and final decisions. Editing an
+approved clip revokes the prior review link and returns the approval state to draft.
+
+Why: Phase 8 requires production-safe approval notifications plus review link expiration,
+revocation, and auditability. Keeping delivery behind provider functions lets local development
+record honest skipped attempts while production can send through real providers using environment
+credentials.
+
+Tradeoff: Notification sending is synchronous during the approval request API call. That is simple
+and auditable, but high-volume production should move delivery to a durable background notification
+queue with retry/backoff and provider webhooks.
+
+Status: Active — provider-backed approval notifications and link auditability are in place;
+background notification retry/webhook handling remains open.
 
 ## 2026-07-06 - No External Provider Calls In Foundation
 
@@ -339,16 +360,15 @@ approval record and expose `/review/:token`; that public token page lets an appr
 request changes from a phone without loading the editor.
 
 Why: The Phase 7 acceptance path requires reviewed, branded clips. This implementation makes that
-workflow real without jumping ahead to full teams, comments, notification delivery, or direct
-publishing. The review token is opaque and tied to one clip approval, giving a simple URL that is
-good enough for local/demo workflow and easy to replace with authenticated invitations later.
+workflow real without jumping ahead to full teams, threaded comments, or direct publishing. The
+review token is opaque and tied to one clip approval, giving a simple URL that Phase 8 later
+hardened with expiry, revocation, audit events, and optional notifications.
 
-Tradeoff: This is not a full collaboration system. There are no threaded comments, role-specific
-approval permissions beyond possession of the token, or email/SMS notifications. Exports are now
-approval-gated, and any successful editor save after approval returns the approval to `DRAFT` so
-the clip must be reviewed again before export. Lower-thirds are text-only ASS overlays, not
-logo/image assets or animated brand packages. The model and editor state shape leave room for those
-upgrades.
+Tradeoff: This is not a full collaboration system. There are no threaded comments or role-specific
+approval permissions beyond possession of an active token. Exports are approval-gated, and any
+successful editor save after approval returns the approval to `DRAFT` so the clip must be reviewed
+again before export. Lower-thirds are text-only ASS overlays, not logo/image assets or animated
+brand packages. The model and editor state shape leave room for those upgrades.
 
 Status: Active — adequate for the MVP review-and-branding path; production collaboration and asset
 management remain Phase 8+/V1 hardening.

@@ -30,6 +30,8 @@ export type Clip = {
   approval: {
     state: string;
     reviewUrl: string | null;
+    reviewTokenExpiresAt?: string | null;
+    notificationStatus?: string | null;
   } | null;
 };
 
@@ -57,6 +59,8 @@ function ClipCard({
   const [expanded, setExpanded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [approval, setApproval] = useState(clip.approval);
+  const [reviewerEmail, setReviewerEmail] = useState("");
+  const [reviewerPhone, setReviewerPhone] = useState("");
 
   async function handleLike(nextLiked: boolean | null) {
     setIsSaving(true);
@@ -75,10 +79,25 @@ function ClipCard({
   async function handleRequestReview() {
     setIsSaving(true);
     try {
-      const res = await fetch(`/api/clips/${clip.id}/approval`, { method: "POST" });
+      const res = await fetch(`/api/clips/${clip.id}/approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewerEmail, reviewerPhone }),
+      });
       const json = await res.json();
       if (res.ok) {
-        setApproval({ state: json.data.state, reviewUrl: json.data.reviewUrl });
+        const notificationSummary =
+          json.data.notifications?.length > 0
+            ? json.data.notifications
+                .map((item: { channel: string; status: string }) => `${item.channel.toLowerCase()} ${item.status.toLowerCase()}`)
+                .join(", ")
+            : null;
+        setApproval({
+          state: json.data.state,
+          reviewUrl: json.data.reviewUrl,
+          reviewTokenExpiresAt: json.data.reviewTokenExpiresAt,
+          notificationStatus: notificationSummary,
+        });
       }
     } finally {
       setIsSaving(false);
@@ -119,6 +138,12 @@ function ClipCard({
                 <Link href={approval.reviewUrl} className="mt-1 inline-block text-teal-800 hover:underline">
                   Open phone review link
                 </Link>
+              ) : null}
+              {approval.reviewTokenExpiresAt ? (
+                <p className="mt-1">Expires: {new Date(approval.reviewTokenExpiresAt).toLocaleDateString()}</p>
+              ) : null}
+              {approval.notificationStatus ? (
+                <p className="mt-1">Notification: {approval.notificationStatus}</p>
               ) : null}
             </div>
           ) : null}
@@ -198,6 +223,24 @@ function ClipCard({
             >
               <ThumbsDown size={14} />
             </button>
+          </div>
+          <div className="grid max-w-[220px] gap-1 text-xs">
+            <input
+              type="email"
+              value={reviewerEmail}
+              onChange={(event) => setReviewerEmail(event.target.value)}
+              placeholder="Reviewer email"
+              className="rounded-md border border-stone-300 px-2 py-1"
+              aria-label="Reviewer email"
+            />
+            <input
+              type="tel"
+              value={reviewerPhone}
+              onChange={(event) => setReviewerPhone(event.target.value)}
+              placeholder="Reviewer phone"
+              className="rounded-md border border-stone-300 px-2 py-1"
+              aria-label="Reviewer phone"
+            />
           </div>
         </div>
       </div>

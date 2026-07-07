@@ -1,6 +1,7 @@
 import { CheckCircle2, MessageSquareWarning } from "lucide-react";
 import { notFound } from "next/navigation";
 import { decideClipReviewAction } from "@/app/actions/review";
+import { isReviewLinkActive, recordReviewLinkViewed, reviewLinkUnavailableReason } from "@/lib/approval";
 import { formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -11,10 +12,10 @@ export default async function ClipReviewPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ saved?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
   const { token } = await params;
-  const { saved } = await searchParams;
+  const { saved, error } = await searchParams;
   const approval = await prisma.clipApproval.findUnique({
     where: { reviewToken: token },
     include: {
@@ -31,6 +32,16 @@ export default async function ClipReviewPage({
 
   if (!approval) {
     notFound();
+  }
+  const inactiveReason = reviewLinkUnavailableReason(approval);
+  const isActive = isReviewLinkActive(approval);
+
+  if (isActive) {
+    await recordReviewLinkViewed({
+      prisma,
+      approvalId: approval.id,
+      workspaceId: approval.workspaceId,
+    });
   }
 
   return (
@@ -66,6 +77,16 @@ export default async function ClipReviewPage({
         </section>
 
         <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+          {inactiveReason ? (
+            <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              This review link is {inactiveReason}. Ask the media team to send a fresh review link.
+            </p>
+          ) : null}
+          {error ? (
+            <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              That decision could not be saved because the review link is {error}.
+            </p>
+          ) : null}
           {saved ? (
             <p className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
               Review saved.
@@ -78,9 +99,14 @@ export default async function ClipReviewPage({
                 {approval.state.replace(/_/g, " ")}
                 {approval.decidedAt ? ` · ${formatDate(approval.decidedAt)}` : ""}
               </p>
+              <p className="mt-1 text-xs text-stone-400">
+                Link expires {formatDate(approval.reviewTokenExpiresAt)}
+                {approval.reviewTokenRevokedAt ? ` · revoked ${formatDate(approval.reviewTokenRevokedAt)}` : ""}
+              </p>
             </div>
           </div>
 
+          {isActive ? (
           <form action={decideClipReviewAction} className="mt-5 grid gap-3">
             <input type="hidden" name="token" value={approval.reviewToken} />
             <label className="grid gap-1 text-sm">
@@ -122,6 +148,7 @@ export default async function ClipReviewPage({
               </button>
             </div>
           </form>
+          ) : null}
         </section>
       </div>
     </main>

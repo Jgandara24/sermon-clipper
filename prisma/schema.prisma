@@ -109,6 +109,22 @@ enum ClipApprovalState {
   @@map("clip_approval_state")
 }
 
+enum NotificationChannel {
+  EMAIL @map("email")
+  SMS   @map("sms")
+
+  @@map("notification_channel")
+}
+
+enum NotificationStatus {
+  PENDING @map("pending")
+  SENT    @map("sent")
+  FAILED  @map("failed")
+  SKIPPED @map("skipped")
+
+  @@map("notification_status")
+}
+
 model User {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String       @unique
@@ -118,11 +134,11 @@ model User {
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
-  ownedWorkspaces Workspace[]       @relation("WorkspaceOwner")
-  memberships     WorkspaceMember[]
-  clipEdits       ClipEdit[]
+  ownedWorkspaces      Workspace[]       @relation("WorkspaceOwner")
+  memberships          WorkspaceMember[]
+  clipEdits            ClipEdit[]
   clipApprovalRequests ClipApproval[]
-  authSessions   AuthSession[]
+  authSessions         AuthSession[]
 
   @@map("users")
 }
@@ -170,30 +186,32 @@ model Workspace {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
-  owner          User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  members        WorkspaceMember[]
-  sourceVideos   SourceVideo[]
-  projects       Project[]
-  usageLedger    UsageLedger[]
-  generatedClips GeneratedClip[]
-  clipScores     ClipScore[]
-  exportJobs     ExportJob[]
-  scriptureReferences ScriptureReference[]
-  brandTemplates BrandTemplate[]
-  clipApprovals  ClipApproval[]
+  owner                   User                     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members                 WorkspaceMember[]
+  sourceVideos            SourceVideo[]
+  projects                Project[]
+  usageLedger             UsageLedger[]
+  generatedClips          GeneratedClip[]
+  clipScores              ClipScore[]
+  exportJobs              ExportJob[]
+  scriptureReferences     ScriptureReference[]
+  brandTemplates          BrandTemplate[]
+  clipApprovals           ClipApproval[]
+  approvalNotifications   ApprovalNotification[]
+  clipApprovalAuditEvents ClipApprovalAuditEvent[]
 
   @@index([ownerId])
   @@map("workspaces")
 }
 
 model WorkspaceMember {
-  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId String       @map("workspace_id") @db.Uuid
-  userId      String       @map("user_id") @db.Uuid
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
   role        WorkspaceRole
-  status      MemberStatus @default(ACTIVE)
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  status      MemberStatus  @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -232,15 +250,15 @@ model SourceVideo {
 }
 
 model Transcript {
-  id            String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sourceVideoId String                 @unique @map("source_video_id") @db.Uuid
+  id            String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceVideoId String                   @unique @map("source_video_id") @db.Uuid
   language      String
   provider      String
-  fullText      String                 @map("full_text")
+  fullText      String                   @map("full_text")
   // Generated column (to_tsvector over full_text) + GIN index, added via raw SQL in the migration.
   searchVector  Unsupported("tsvector")? @map("search_vector")
-  createdAt     DateTime               @default(now()) @map("created_at")
-  updatedAt     DateTime               @updatedAt @map("updated_at")
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  updatedAt     DateTime                 @updatedAt @map("updated_at")
 
   sourceVideo SourceVideo         @relation(fields: [sourceVideoId], references: [id], onDelete: Cascade)
   segments    TranscriptSegment[]
@@ -282,11 +300,11 @@ model Project {
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
-  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  sourceVideo    SourceVideo?    @relation(fields: [sourceVideoId], references: [id], onDelete: SetNull)
-  processingJobs ProcessingJob[]
-  usageLedger    UsageLedger[]
-  generatedClips GeneratedClip[]
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceVideo         SourceVideo?         @relation(fields: [sourceVideoId], references: [id], onDelete: SetNull)
+  processingJobs      ProcessingJob[]
+  usageLedger         UsageLedger[]
+  generatedClips      GeneratedClip[]
   scriptureReferences ScriptureReference[]
 
   @@index([workspaceId])
@@ -296,19 +314,19 @@ model Project {
 
 model ProcessingJob {
   id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  projectId         String             @map("project_id") @db.Uuid
-  type              ProcessingJobType
-  state             ProcessingJobState @default(QUEUED)
-  progress          Int                @default(0)
-  attempt           Int                @default(0)
-  idempotencyKey    String             @unique @map("idempotency_key")
-  errorCode         String?            @map("error_code")
-  errorMessageUser  String?            @map("error_message_user")
-  minutesReserved   Decimal?           @map("minutes_reserved") @db.Decimal(10, 2)
-  startedAt         DateTime?          @map("started_at")
-  finishedAt        DateTime?          @map("finished_at")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  projectId        String             @map("project_id") @db.Uuid
+  type             ProcessingJobType
+  state            ProcessingJobState @default(QUEUED)
+  progress         Int                @default(0)
+  attempt          Int                @default(0)
+  idempotencyKey   String             @unique @map("idempotency_key")
+  errorCode        String?            @map("error_code")
+  errorMessageUser String?            @map("error_message_user")
+  minutesReserved  Decimal?           @map("minutes_reserved") @db.Decimal(10, 2)
+  startedAt        DateTime?          @map("started_at")
+  finishedAt       DateTime?          @map("finished_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
 
   project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   usageLedger UsageLedger[]
@@ -319,16 +337,16 @@ model ProcessingJob {
 }
 
 model UsageLedger {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId   String      @map("workspace_id") @db.Uuid
-  kind          LedgerKind
-  projectId     String?     @map("project_id") @db.Uuid
-  minutesDelta  Decimal     @map("minutes_delta") @db.Decimal(10, 2)
-  balanceAfter  Decimal     @map("balance_after") @db.Decimal(10, 2)
-  jobId         String?     @map("job_id") @db.Uuid
-  note          String?
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId  String     @map("workspace_id") @db.Uuid
+  kind         LedgerKind
+  projectId    String?    @map("project_id") @db.Uuid
+  minutesDelta Decimal    @map("minutes_delta") @db.Decimal(10, 2)
+  balanceAfter Decimal    @map("balance_after") @db.Decimal(10, 2)
+  jobId        String?    @map("job_id") @db.Uuid
+  note         String?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
   workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -354,13 +372,13 @@ model GeneratedClip {
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
-  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  score      ClipScore?
-  edits      ClipEdit[]
-  exportJobs ExportJob[]
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project             Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  score               ClipScore?
+  edits               ClipEdit[]
+  exportJobs          ExportJob[]
   scriptureReferences ScriptureReference[]
-  approvals ClipApproval[]
+  approvals           ClipApproval[]
 
   @@unique([projectId, rank])
   @@index([workspaceId])
@@ -455,18 +473,18 @@ model ExportedFile {
 }
 
 model ScriptureReference {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId String   @map("workspace_id") @db.Uuid
-  projectId   String   @map("project_id") @db.Uuid
-  clipId      String?  @map("clip_id") @db.Uuid
-  detectedText String  @map("detected_text")
-  normalized  String
-  book        String
-  chapterStart Int     @map("chapter_start")
-  verseStart   Int?    @map("verse_start")
-  chapterEnd   Int?    @map("chapter_end")
-  verseEnd     Int?    @map("verse_end")
-  confidence   Decimal @default(0.80) @db.Decimal(4, 2)
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  projectId    String   @map("project_id") @db.Uuid
+  clipId       String?  @map("clip_id") @db.Uuid
+  detectedText String   @map("detected_text")
+  normalized   String
+  book         String
+  chapterStart Int      @map("chapter_start")
+  verseStart   Int?     @map("verse_start")
+  chapterEnd   Int?     @map("chapter_end")
+  verseEnd     Int?     @map("verse_end")
+  confidence   Decimal  @default(0.80) @db.Decimal(4, 2)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -501,23 +519,70 @@ model BrandTemplate {
 }
 
 model ClipApproval {
-  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId String            @map("workspace_id") @db.Uuid
-  clipId      String            @map("clip_id") @db.Uuid
-  state       ClipApprovalState @default(DRAFT)
-  reviewToken String            @unique @map("review_token")
-  requesterId String?           @map("requester_id") @db.Uuid
-  approverName String?          @map("approver_name")
-  comment     String?
-  decidedAt   DateTime?         @map("decided_at")
-  createdAt   DateTime          @default(now()) @map("created_at")
-  updatedAt   DateTime          @updatedAt @map("updated_at")
+  id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId             String            @map("workspace_id") @db.Uuid
+  clipId                  String            @map("clip_id") @db.Uuid
+  state                   ClipApprovalState @default(DRAFT)
+  reviewToken             String            @unique @map("review_token")
+  reviewTokenExpiresAt    DateTime          @map("review_token_expires_at")
+  reviewTokenRevokedAt    DateTime?         @map("review_token_revoked_at")
+  reviewTokenLastViewedAt DateTime?         @map("review_token_last_viewed_at")
+  requesterId             String?           @map("requester_id") @db.Uuid
+  approverName            String?           @map("approver_name")
+  comment                 String?
+  decidedAt               DateTime?         @map("decided_at")
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
 
-  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  clip      GeneratedClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
-  requester User?         @relation(fields: [requesterId], references: [id], onDelete: SetNull)
+  workspace     Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clip          GeneratedClip            @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  requester     User?                    @relation(fields: [requesterId], references: [id], onDelete: SetNull)
+  notifications ApprovalNotification[]
+  auditEvents   ClipApprovalAuditEvent[]
 
   @@unique([clipId])
   @@index([workspaceId])
+  @@index([reviewTokenExpiresAt])
   @@map("clip_approvals")
+}
+
+model ApprovalNotification {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  approvalId        String              @map("approval_id") @db.Uuid
+  workspaceId       String              @map("workspace_id") @db.Uuid
+  channel           NotificationChannel
+  recipient         String
+  provider          String
+  status            NotificationStatus  @default(PENDING)
+  errorMessage      String?             @map("error_message")
+  providerMessageId String?             @map("provider_message_id")
+  metadata          Json                @default("{}")
+  sentAt            DateTime?           @map("sent_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  approval  ClipApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([approvalId])
+  @@index([workspaceId])
+  @@index([status])
+  @@map("approval_notifications")
+}
+
+model ClipApprovalAuditEvent {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  approvalId  String   @map("approval_id") @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  eventType   String   @map("event_type")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  approval  ClipApproval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([approvalId])
+  @@index([workspaceId])
+  @@index([eventType])
+  @@map("clip_approval_audit_events")
 }

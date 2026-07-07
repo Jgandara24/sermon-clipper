@@ -18,6 +18,10 @@ Implemented:
 - Short-lived HMAC-signed upload, source-video, thumbnail, and export download URLs; S3/R2 mode
   redirects signed media links to presigned object URLs, while legacy session media routes redirect
   to signed URLs
+- Approval notifications can send reviewer links by SendGrid email and/or Twilio SMS, with
+  notification attempts recorded for sent/skipped/failed delivery
+- Review links expire, can be revoked when approved content changes, and write audit events for
+  request, view, notification, revocation, and decision activity
 - Onboarding, dashboard, project detail, settings, and billing routes
 - Real video upload to the configured storage provider, FINALIZE + PROBE processing
   jobs (real ffprobe/ffmpeg metadata, thumbnail, and audio extraction), a DB-polling job queue
@@ -74,8 +78,8 @@ Stubbed by design:
   face detection yet, per guide §14's own Phase 8 deferral)
 - Per-word karaoke caption animation (all presets burn in at the line level — see DECISIONS.md)
 - Billing and publishing providers
-- Production email/SMS delivery provider for OTP and approval notifications (OTP codes are printed
-  to server logs until a provider is configured)
+- Production OTP email delivery provider (OTP codes are printed to server logs until a provider is
+  configured)
 - Google OAuth
 - Pulpit Engine bridge
 
@@ -182,4 +186,7 @@ npm run test:e2e
   through expiring signed URLs using `MEDIA_URL_SECRET`; when S3/R2 is active, signed media links
   redirect to presigned object URLs. Workers download objects to temp files for ffmpeg/whisper and
   upload derived thumbnails/audio/exports back to object storage.
+- Approval notifications use SendGrid (`SENDGRID_API_KEY`, `NOTIFICATIONS_FROM_EMAIL`) and Twilio
+  Messaging (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_FROM`) when configured.
+  Local development records skipped notification attempts instead of pretending delivery happened.
 - The reserved `POST /api/integrations/pulpit-engine/webhook` endpoint returns HTTP 501.

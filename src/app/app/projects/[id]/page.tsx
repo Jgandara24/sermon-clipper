@@ -173,10 +173,11 @@ export default async function ProjectPage({
                 normalized: ref.normalized,
                 detectedText: ref.detectedText,
               })),
-              approval: clip.approvals[0]
+                  approval: clip.approvals[0]
                 ? {
                     state: clip.approvals[0].state,
                     reviewUrl: `/review/${clip.approvals[0].reviewToken}`,
+                    reviewTokenExpiresAt: clip.approvals[0].reviewTokenExpiresAt.toISOString(),
                   }
                 : null,
             }))}

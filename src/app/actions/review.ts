@@ -4,7 +4,7 @@ import { ClipApprovalState } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { decideClipApproval } from "@/lib/approval";
+import { decideClipApproval, ReviewLinkUnavailableError } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
 
 const reviewDecisionSchema = z.object({
@@ -31,13 +31,20 @@ export async function decideClipReviewAction(formData: FormData) {
       ? ClipApprovalState.APPROVED
       : ClipApprovalState.CHANGES_REQUESTED;
 
-  await decideClipApproval({
-    prisma,
-    reviewToken: parsed.data.token,
-    state,
-    approverName: parsed.data.approverName || null,
-    comment: parsed.data.comment || null,
-  });
+  try {
+    await decideClipApproval({
+      prisma,
+      reviewToken: parsed.data.token,
+      state,
+      approverName: parsed.data.approverName || null,
+      comment: parsed.data.comment || null,
+    });
+  } catch (error) {
+    if (error instanceof ReviewLinkUnavailableError) {
+      redirect(`/review/${parsed.data.token}?error=${error.reason}`);
+    }
+    throw error;
+  }
 
   revalidatePath(`/review/${parsed.data.token}`);
   redirect(`/review/${parsed.data.token}?saved=1`);

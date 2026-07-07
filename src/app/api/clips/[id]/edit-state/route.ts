@@ -102,7 +102,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const currentApproval = await prisma.clipApproval.findUnique({
     where: { clipId: id },
-    select: { state: true },
+    select: { id: true, workspaceId: true, state: true },
   });
   const nextApprovalState = approvalStateAfterEditorSave(currentApproval?.state);
 
@@ -124,9 +124,20 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         data: {
           state: ClipApprovalState.DRAFT,
           decidedAt: null,
+          reviewTokenRevokedAt: new Date(),
           comment: "Edited after approval; send this clip for review again before exporting.",
         },
       });
+      if (currentApproval) {
+        await tx.clipApprovalAuditEvent.create({
+          data: {
+            approvalId: currentApproval.id,
+            workspaceId: currentApproval.workspaceId,
+            eventType: "review_link_revoked",
+            metadata: { reason: "clip_edited_after_approval" },
+          },
+        });
+      }
     }
 
     return edit;
