@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/app-shell";
-import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
+import { requireCurrentUser, requirePrimaryWorkspaceMembership } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,11 @@ export default async function AuthenticatedLayout({
   children: React.ReactNode;
 }>) {
   const user = await requireCurrentUser();
-  const workspace = await requirePrimaryWorkspace(user.id);
+  const membership = await requirePrimaryWorkspaceMembership(user.id);
 
-  return <AppShell user={user} workspace={workspace}>{children}</AppShell>;
+  return (
+    <AppShell user={user} workspace={membership.workspace} role={membership.role}>
+      {children}
+    </AppShell>
+  );
 }

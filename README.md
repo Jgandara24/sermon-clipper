@@ -13,6 +13,8 @@ Implemented:
 - Local Postgres dev path via Docker Compose
 - Email OTP auth foundation with hashed one-time codes and DB-backed opaque session tokens; a
   development-only login button remains available outside production for local fixtures
+- Workspace role-permission enforcement for upload/import, clip editing, exports, approval
+  requests, project cancellation, brand-template management, billing pages, and guarded navigation
 - Onboarding, dashboard, project detail, settings, and billing routes
 - Real video upload (presigned-style direct upload to local disk), FINALIZE + PROBE processing
   jobs (real ffprobe/ffmpeg metadata, thumbnail, and audio extraction), a DB-polling job queue

@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { WorkspacePermission } from "@/lib/authorization";
+import { assertWorkspacePermission } from "@/lib/authorization";
 import { AUTH_SESSION_COOKIE, hashSecret } from "@/lib/auth/email-otp";
 import { prisma } from "@/lib/prisma";
 
@@ -43,15 +45,17 @@ export async function requireCurrentUser() {
 }
 
 export async function getPrimaryWorkspaceForUser(userId: string) {
-  return prisma.workspace.findFirst({
+  const membership = await getPrimaryWorkspaceMembershipForUser(userId);
+  return membership?.workspace ?? null;
+}
+
+export async function getPrimaryWorkspaceMembershipForUser(userId: string) {
+  return prisma.workspaceMember.findFirst({
     where: {
-      members: {
-        some: {
-          userId,
-          status: "ACTIVE",
-        },
-      },
+      userId,
+      status: "ACTIVE",
     },
+    include: { workspace: true },
     orderBy: { createdAt: "asc" },
   });
 }
@@ -64,4 +68,29 @@ export async function requirePrimaryWorkspace(userId: string) {
   }
 
   return workspace;
+}
+
+export async function requirePrimaryWorkspaceMembership(userId: string) {
+  const membership = await getPrimaryWorkspaceMembershipForUser(userId);
+
+  if (!membership) {
+    redirect("/onboarding");
+  }
+
+  return membership;
+}
+
+export async function requirePrimaryWorkspacePermission(
+  userId: string,
+  permission: WorkspacePermission,
+) {
+  const membership = await requirePrimaryWorkspaceMembership(userId);
+
+  try {
+    assertWorkspacePermission(membership.role, permission);
+  } catch {
+    redirect("/app?error=permission-denied");
+  }
+
+  return membership;
 }

@@ -1,12 +1,13 @@
 import { formatDate, formatMinutes, titleCaseStatus } from "@/lib/format";
-import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
+import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 export default async function BillingPage() {
   const user = await requireCurrentUser();
-  const workspace = await requirePrimaryWorkspace(user.id);
+  const membership = await requirePrimaryWorkspacePermission(user.id, "MANAGE_BILLING");
+  const workspace = membership.workspace;
   const ledger = await prisma.usageLedger.findMany({
     where: { workspaceId: workspace.id },
     orderBy: { createdAt: "desc" },

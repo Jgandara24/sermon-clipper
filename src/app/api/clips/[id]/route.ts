@@ -12,7 +12,7 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiWorkspace();
+  const auth = await requireApiWorkspace("EDIT_CLIP");
   if ("error" in auth) return auth.error;
   const { workspace } = auth;
 

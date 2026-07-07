@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
-import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
+import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import {
   createDraftProjectForWorkspace,
@@ -21,7 +21,8 @@ const projectSchema = z.object({
 
 export async function createDraftProjectAction(formData: FormData) {
   const user = await requireCurrentUser();
-  const workspace = await requirePrimaryWorkspace(user.id);
+  const membership = await requirePrimaryWorkspacePermission(user.id, "IMPORT_MEDIA");
+  const workspace = membership.workspace;
 
   const parsed = projectSchema.safeParse({
     name: formData.get("name"),
@@ -49,7 +50,8 @@ const uploadedProjectSchema = z.object({
 
 export async function createProjectFromUploadAction(formData: FormData) {
   const user = await requireCurrentUser();
-  const workspace = await requirePrimaryWorkspace(user.id);
+  const membership = await requirePrimaryWorkspacePermission(user.id, "IMPORT_MEDIA");
+  const workspace = membership.workspace;
 
   const parsed = uploadedProjectSchema.safeParse({
     sourceVideoId: formData.get("sourceVideoId"),

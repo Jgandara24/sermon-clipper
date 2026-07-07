@@ -31,6 +31,26 @@ OTP sends/verifications.
 
 Status: Active — authentication/session foundation is real; notification delivery remains open.
 
+## 2026-07-07 - Workspace Roles Gate Phase 8 Mutation Boundaries
+
+Decision: Phase 8 adds a central workspace permission matrix (`OWNER`, `ADMIN`, `EDITOR`,
+`APPROVER`, `VIEWER`) and enforces it from the shared page/action/API auth helpers. Upload/import,
+clip edits, SRT overrides, export enqueue/retry/re-sign, approval requests, project cancellation,
+template management, billing, and guarded navigation now check explicit permissions instead of
+treating every active workspace member as equivalent.
+
+Why: Workspace scoping alone proves a user belongs to a church workspace, but it does not prove the
+user should mutate billing, templates, exports, or approval state. A central matrix keeps the app
+from drifting into per-route role logic and gives Phase 8 a production-safe authorization boundary
+that can be audited and tested.
+
+Tradeoff: Public review links remain token-authorized for now; production-safe review-link
+expiration, revocation, audit events, and notification delivery are still separate Phase 8 slices.
+There is not yet a workspace member management UI for owners/admins to assign roles.
+
+Status: Active — core role checks are enforced; review-link hardening and member administration
+remain open.
+
 ## 2026-07-06 - No External Provider Calls In Foundation
 
 Decision: Upload, URL import, transcription, AI analysis, rendering, storage, billing, and publishing are visible as stubs only.

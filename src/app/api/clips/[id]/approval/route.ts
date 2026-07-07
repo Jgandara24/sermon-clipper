@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiWorkspace();
+  const auth = await requireApiWorkspace("REQUEST_APPROVAL");
   if ("error" in auth) return auth.error;
 
   const { id } = await params;

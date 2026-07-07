@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { ClipEditor } from "@/components/clip-editor";
 import { approvalExportBlockMessage, isClipApprovedForExport } from "@/lib/approval";
-import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
+import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { parseLowerThird } from "@/lib/brand-template";
 import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
 import { prisma } from "@/lib/prisma";
@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
 
 export default async function ClipEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireCurrentUser();
-  const workspace = await requirePrimaryWorkspace(user.id);
+  const membership = await requirePrimaryWorkspacePermission(user.id, "EDIT_CLIP");
+  const workspace = membership.workspace;
   const { id } = await params;
 
   const clip = await prisma.generatedClip.findUnique({

@@ -1,8 +1,10 @@
 import type { Prisma } from "@prisma/client";
+import type { WorkspaceRole } from "@prisma/client";
 import { CreditCard, Download, FolderOpen, Home, LogOut, Palette, Settings } from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/app/actions/auth";
 import { formatMinutes } from "@/lib/format";
+import { hasWorkspacePermission, type WorkspacePermission } from "@/lib/authorization";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -15,17 +17,27 @@ type AppShellProps = {
     email: string;
     name: string | null;
   };
+  role: WorkspaceRole;
 };
 
 const navItems = [
   { href: "/app", label: "Home", icon: Home },
-  { href: "/app/templates", label: "Templates", icon: Palette },
+  { href: "/app/templates", label: "Templates", icon: Palette, permission: "MANAGE_TEMPLATES" },
   { href: "/app/exports", label: "Exports", icon: Download },
   { href: "/app/settings", label: "Settings", icon: Settings },
-  { href: "/app/settings/billing", label: "Billing", icon: CreditCard },
-];
+  { href: "/app/settings/billing", label: "Billing", icon: CreditCard, permission: "MANAGE_BILLING" },
+] satisfies Array<{
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>;
+  permission?: WorkspacePermission;
+}>;
 
-export function AppShell({ children, workspace, user }: AppShellProps) {
+export function AppShell({ children, workspace, user, role }: AppShellProps) {
+  const visibleNavItems = navItems.filter(
+    (item) => !item.permission || hasWorkspacePermission(role, item.permission),
+  );
+
   return (
     <div className="min-h-screen bg-[#f6f5f0] text-stone-950">
       <div className="grid min-h-screen lg:grid-cols-[264px_1fr]">
@@ -41,7 +53,7 @@ export function AppShell({ children, workspace, user }: AppShellProps) {
           </div>
 
           <nav className="mt-8 grid gap-1" aria-label="Main navigation">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

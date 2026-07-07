@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { buildLowerThird, brandTemplateInputSchema } from "@/lib/brand-template";
-import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function saveBrandTemplateAction(formData: FormData) {
   const user = await requireCurrentUser();
-  const workspace = await requirePrimaryWorkspace(user.id);
+  const membership = await requirePrimaryWorkspacePermission(user.id, "MANAGE_TEMPLATES");
+  const workspace = membership.workspace;
 
   const parsed = brandTemplateInputSchema.safeParse({
     name: formData.get("name"),

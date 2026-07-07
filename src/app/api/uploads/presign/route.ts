@@ -11,7 +11,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const auth = await requireApiWorkspace();
+  const auth = await requireApiWorkspace("IMPORT_MEDIA");
   if ("error" in auth) return auth.error;
   const { workspace } = auth;
 

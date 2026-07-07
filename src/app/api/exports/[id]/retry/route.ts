@@ -6,7 +6,7 @@ import { assertWorkspaceScope } from "@/lib/project-service";
 
 /** "Try again" on a failed export — reuses the same job row rather than creating a new one (guide §15 step 6). */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiWorkspace();
+  const auth = await requireApiWorkspace("EXPORT_CLIP");
   if ("error" in auth) return auth.error;
 
   const { id } = await params;

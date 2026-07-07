@@ -13,7 +13,7 @@ const postBodySchema = z.object({
 
 /** Enqueues an export job for a clip (guide §15/§19). Idempotent per (clip, edit version, filename). */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiWorkspace();
+  const auth = await requireApiWorkspace("EXPORT_CLIP");
   if ("error" in auth) return auth.error;
 
   const { id } = await params;

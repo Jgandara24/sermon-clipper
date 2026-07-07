@@ -7,7 +7,7 @@ const DOWNLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** DOWNLOAD_LINK_EXPIRED recovery (guide §20): re-signs (extends) an expired export's download link. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiWorkspace();
+  const auth = await requireApiWorkspace("EXPORT_CLIP");
   if ("error" in auth) return auth.error;
 
   const { id } = await params;

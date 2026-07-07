@@ -73,7 +73,7 @@ const putBodySchema = z.object({
 
 /** Optimistic concurrency (guide §12): rejects a save whose baseVersion isn't the current tip. */
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiWorkspace();
+  const auth = await requireApiWorkspace("EDIT_CLIP");
   if ("error" in auth) return auth.error;
 
   const { id } = await params;

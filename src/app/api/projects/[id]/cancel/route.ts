@@ -7,7 +7,7 @@ import { assertWorkspaceScope } from "@/lib/project-service";
 import { releaseReservationForJob } from "@/lib/usage-ledger";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiWorkspace();
+  const auth = await requireApiWorkspace("CANCEL_PROJECT");
   if ("error" in auth) return auth.error;
   const { workspace } = auth;
 

@@ -14,7 +14,7 @@ const MAX_SRT_BYTES = 2 * 1024 * 1024;
 
 /** Uploading an SRT skips ASR entirely for this video (guide §9 step 5) and re-runs TRANSCRIBE. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireApiWorkspace();
+  const auth = await requireApiWorkspace("EDIT_CLIP");
   if ("error" in auth) return auth.error;
   const { workspace } = auth;
 

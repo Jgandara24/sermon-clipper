@@ -1,15 +1,16 @@
 import { saveBrandTemplateAction } from "@/app/actions/templates";
+import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
+import { parseLowerThird } from "@/lib/brand-template";
 import { CAPTION_PRESETS } from "@/lib/editor/caption-presets";
 import { formatDate } from "@/lib/format";
-import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
-import { parseLowerThird } from "@/lib/brand-template";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 export default async function TemplatesPage() {
   const user = await requireCurrentUser();
-  const workspace = await requirePrimaryWorkspace(user.id);
+  const membership = await requirePrimaryWorkspacePermission(user.id, "MANAGE_TEMPLATES");
+  const workspace = membership.workspace;
   const templates = await prisma.brandTemplate.findMany({
     where: { workspaceId: workspace.id },
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
