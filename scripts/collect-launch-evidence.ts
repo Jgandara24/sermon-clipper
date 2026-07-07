@@ -65,7 +65,10 @@ async function main() {
   console.log(`\nUpdated ${filePath}`);
   console.log(`Production smoke status: ${smoke.status}`);
 
-  const validation = validateLaunchEvidence(updated, { expectedCommitSha });
+  const validation = validateLaunchEvidence(updated, {
+    expectedCommitSha,
+    expectedDeploymentUrl: normalizedBaseUrl,
+  });
   for (const check of validation.checks) {
     const label = check.status.toUpperCase().padEnd(5);
     console.log(`${label} launch-evidence ${check.name}: ${check.message}`);

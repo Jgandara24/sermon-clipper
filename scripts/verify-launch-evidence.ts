@@ -8,6 +8,7 @@ function argValue(name: string) {
 }
 
 const filePath = argValue("--file") ?? process.env.LAUNCH_EVIDENCE_FILE;
+const expectedDeploymentUrl = argValue("--base-url") ?? process.env.LAUNCH_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
 const expectedCommitSha =
   argValue("--commit-sha") ??
   process.env.LAUNCH_COMMIT_SHA ??
@@ -34,7 +35,7 @@ try {
   process.exit(1);
 }
 
-const result = validateLaunchEvidence(payload, { expectedCommitSha });
+const result = validateLaunchEvidence(payload, { expectedCommitSha, expectedDeploymentUrl });
 
 for (const check of result.checks) {
   const label = check.status.toUpperCase().padEnd(5);

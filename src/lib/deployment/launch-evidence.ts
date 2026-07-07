@@ -24,6 +24,7 @@ export type LaunchEvidenceResult = {
 
 export type LaunchEvidenceValidationOptions = {
   expectedCommitSha?: string;
+  expectedDeploymentUrl?: string;
 };
 
 export const launchEvidenceItems = [
@@ -205,6 +206,43 @@ function checkDeploymentUrl(value: unknown): LaunchEvidenceCheck {
   }
 }
 
+function normalizedDeploymentUrl(value: string) {
+  const url = new URL(value);
+  url.hash = "";
+  url.search = "";
+  url.pathname = url.pathname.replace(/\/+$/, "");
+  return url.toString().replace(/\/$/, "");
+}
+
+function checkExpectedDeploymentUrl(value: unknown, expectedDeploymentUrl: string): LaunchEvidenceCheck {
+  if (typeof value !== "string") {
+    return {
+      name: "deploymentUrlMatches",
+      status: "fail",
+      message: "deploymentUrl is required before it can be matched.",
+    };
+  }
+
+  try {
+    const actual = normalizedDeploymentUrl(value);
+    const expected = normalizedDeploymentUrl(expectedDeploymentUrl);
+    if (actual !== expected) {
+      return {
+        name: "deploymentUrlMatches",
+        status: "fail",
+        message: `Evidence deployment URL ${value} does not match expected deployment URL ${expectedDeploymentUrl}.`,
+      };
+    }
+    return { name: "deploymentUrlMatches", status: "ok", message: "Evidence deployment URL matches expected URL." };
+  } catch {
+    return {
+      name: "deploymentUrlMatches",
+      status: "fail",
+      message: "deploymentUrl and expected deployment URL must be valid URLs before they can be matched.",
+    };
+  }
+}
+
 function checkCommitSha(value: unknown): LaunchEvidenceCheck {
   if (typeof value !== "string" || !/^[0-9a-f]{7,40}$/i.test(value.trim())) {
     return {
@@ -276,6 +314,9 @@ export function validateLaunchEvidence(
   const evidence = input as LaunchEvidence;
   const checks: LaunchEvidenceCheck[] = [
     checkDeploymentUrl(evidence.deploymentUrl),
+    ...(options.expectedDeploymentUrl
+      ? [checkExpectedDeploymentUrl(evidence.deploymentUrl, options.expectedDeploymentUrl)]
+      : []),
     checkCommitSha(evidence.commitSha),
     ...(options.expectedCommitSha ? [checkExpectedCommitSha(evidence.commitSha, options.expectedCommitSha)] : []),
     checkIsoTimestamp("verifiedAt", evidence.verifiedAt),

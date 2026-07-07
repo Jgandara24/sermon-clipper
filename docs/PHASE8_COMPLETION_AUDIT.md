@@ -65,7 +65,7 @@ provider output, production URLs, or operational details. Keep the tracked
 local evidence file with real production evidence, change each status to `passed`, and verify it:
 
 ```sh
-npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json
+npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json --base-url https://clips.example.org
 ```
 
 For the final gate, run:
@@ -92,9 +92,10 @@ npm run record:launch-evidence -- --list
 npm run record:launch-evidence -- --item workspaceCreate --evidence "Created production workspace as owner@example.org."
 ```
 
-By default, verification also checks that the evidence file's `commitSha` matches the current Git
-`HEAD`. Use `--commit-sha <sha>` when verifying evidence for a specific deployed revision from a
-different local checkout.
+When `--base-url` is supplied, verification checks that the evidence file's `deploymentUrl` matches
+the deployment being verified. By default, verification also checks that the evidence file's
+`commitSha` matches the current Git `HEAD`. Use `--commit-sha <sha>` when verifying evidence for a
+specific deployed revision from a different local checkout.
 
 ## Completion Rule
 

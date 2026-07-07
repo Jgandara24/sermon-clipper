@@ -166,6 +166,8 @@ After deploy:
    Use `npm run record:launch-evidence -- --list` to see valid item keys, then
    `npm run record:launch-evidence -- --item <key> --evidence "<proof>"` to fill manual evidence
    items without editing JSON by hand.
+   To verify the evidence file before the final gate, run
+   `npm run verify:launch-evidence -- --file docs/phase8-launch-evidence.json --base-url https://clips.example.org`.
 2. Sign in with email OTP.
 3. Create a workspace or invite a second user from `/app/settings` and accept the `/join/:token`
    link after signing in as the invited email.

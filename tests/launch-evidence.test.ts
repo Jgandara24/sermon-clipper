@@ -117,6 +117,27 @@ describe("launch evidence validation", () => {
     );
   });
 
+  it("fails when expected deployment URL does not match evidence deployment URL", () => {
+    const result = validateLaunchEvidence(completeEvidence(), {
+      expectedDeploymentUrl: "https://staging-clips.example.org",
+    });
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "deploymentUrlMatches", status: "fail" })]),
+    );
+  });
+
+  it("passes deployment URL matching with trailing slash differences", () => {
+    const result = validateLaunchEvidence(completeEvidence(), {
+      expectedDeploymentUrl: "https://clips.example.org/",
+    });
+
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "deploymentUrlMatches", status: "ok" })]),
+    );
+  });
+
   it("passes commit matching when either SHA is a prefix of the other", () => {
     const evidence = completeEvidence();
     evidence.commitSha = "fe09434abcdef";
