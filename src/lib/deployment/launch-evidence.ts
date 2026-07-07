@@ -132,6 +132,29 @@ function checkString(name: string, value: unknown): LaunchEvidenceCheck {
     : { name, status: "fail", message: `${name} is required.` };
 }
 
+function checkIsoTimestamp(name: string, value: unknown): LaunchEvidenceCheck {
+  if (typeof value !== "string" || !value.trim()) {
+    return { name, status: "fail", message: `${name} is required.` };
+  }
+  if (Number.isNaN(Date.parse(value))) {
+    return { name, status: "fail", message: `${name} must be a parseable timestamp.` };
+  }
+  return { name, status: "ok", message: `${name} is a valid timestamp.` };
+}
+
+function checkUnknownEvidenceItems(items: LaunchEvidence["items"]): LaunchEvidenceCheck {
+  const knownKeys = new Set<string>(launchEvidenceItems.map((item) => item.key));
+  const unknownKeys = Object.keys(items ?? {}).filter((key) => !knownKeys.has(key));
+  if (unknownKeys.length > 0) {
+    return {
+      name: "items",
+      status: "fail",
+      message: `Unknown launch evidence item(s): ${unknownKeys.join(", ")}.`,
+    };
+  }
+  return { name: "items", status: "ok", message: "Launch evidence item keys are recognized." };
+}
+
 function checkDeploymentUrl(value: unknown): LaunchEvidenceCheck {
   if (typeof value !== "string" || !value.trim()) {
     return { name: "deploymentUrl", status: "fail", message: "deploymentUrl is required." };
@@ -214,8 +237,9 @@ export function validateLaunchEvidence(
     checkDeploymentUrl(evidence.deploymentUrl),
     checkCommitSha(evidence.commitSha),
     ...(options.expectedCommitSha ? [checkExpectedCommitSha(evidence.commitSha, options.expectedCommitSha)] : []),
-    checkString("verifiedAt", evidence.verifiedAt),
+    checkIsoTimestamp("verifiedAt", evidence.verifiedAt),
     checkString("verifiedBy", evidence.verifiedBy),
+    checkUnknownEvidenceItems(evidence.items),
     ...launchEvidenceItems.map((item) => checkEvidenceItem(evidence, item.key, item.label)),
   ];
 

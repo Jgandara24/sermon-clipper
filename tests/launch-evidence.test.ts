@@ -40,6 +40,28 @@ describe("launch evidence validation", () => {
     );
   });
 
+  it("fails when verifiedAt is not a parseable timestamp", () => {
+    const evidence = completeEvidence();
+    evidence.verifiedAt = "launch day";
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "verifiedAt", status: "fail" })]),
+    );
+  });
+
+  it("fails when unknown evidence item keys are present", () => {
+    const evidence = completeEvidence();
+    evidence.items.billingg = { status: "passed", evidence: "Misspelled billing proof." };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "items", status: "fail" })]));
+  });
+
   it("fails when an evidence item is missing proof", () => {
     const evidence = completeEvidence();
     evidence.items.export = { status: "passed", evidence: "" };
