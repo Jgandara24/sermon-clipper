@@ -59,7 +59,7 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   workspace scoping, never delete non-expired data, and have unit + integration tests. Schedule it
   from the worker on an interval (follow the stale-recovery pattern in
   `src/lib/worker/reliability.ts`). Record the retention policy choice in `DECISIONS.md`.
-- [ ] **R1.4 Incident-response page.** Add an "Incident Response" section to `docs/DEPLOYMENT.md`:
+- [x] **R1.4 Incident-response page.** Add an "Incident Response" section to `docs/DEPLOYMENT.md`:
   severity levels, first-response steps for the top failure modes (DB down, worker stalled/stale
   jobs, Stripe webhooks failing, storage unreachable, provider outage → heuristic fallback), and
   where to look (`/api/health`, `/app/settings/operations`, worker logs).

@@ -332,6 +332,87 @@ before declaring Phase 8 complete. The automated smoke test is necessary but not
 the final Phase 8 criterion requires an authenticated, provider-backed church workflow on the live
 deployment.
 
+## Incident Response
+
+Where to look, in order: `curl -fsS <url>/api/health` (readiness + per-check status + commit),
+`/app/settings/operations` as owner/admin (upload/processing/transcription/analysis/export/
+approval/billing/worker event feed with severities), then platform logs for the web and worker
+services.
+
+### Severity levels
+
+- **SEV1 — service down or money wrong.** Web unreachable, database down, Stripe webhooks
+  failing (plans/minutes not updating after payment), or data loss suspected. Act immediately;
+  all hands.
+- **SEV2 — degraded core workflow.** Workers not claiming jobs, storage unreachable, provider
+  outage (transcription/analysis failing), exports failing. Act within hours.
+- **SEV3 — annoyance.** Single stuck job, one failed notification, slow processing. Next
+  business day.
+
+Single-operator deployment: "who gets paged" is the operator; an external uptime monitor pointed
+at `/api/health` is the pager (see Smoke Test / monitoring notes). Record every SEV1/SEV2 in a
+short postmortem note (what broke, impact window, fix, prevention) alongside the launch evidence
+notes.
+
+### First response by failure mode
+
+**Database down / unreachable** (`/api/health` returns 503, `database` check failed)
+
+1. Check the database service status in the platform dashboard and its logs.
+2. Do not restart workers into a down database — they will fail their readiness gates anyway.
+3. If the instance is lost, follow "Backups & Restore → Production restore procedure". Web and
+   workers recover on their own once `DATABASE_URL` responds; verify with `/api/health` and one
+   authenticated dashboard load.
+
+**Worker stalled / jobs stuck** (`worker_heartbeat` check failed, or QUEUED jobs not progressing)
+
+1. Check worker process status and logs on the platform (crash loops usually mean a failed
+   startup readiness gate: missing ffmpeg/whisper binary, unreadable `WHISPER_MODEL_PATH`, or
+   missing `WORKER_ID`).
+2. A worker that died mid-job self-heals: another worker (or the restarted one) recovers stale
+   `RUNNING` jobs after `WORKER_STALE_JOB_TIMEOUT_MS` (default 15 min) — watch for
+   `stale_jobs_recovered` worker events in `/app/settings/operations`.
+3. Terminal job failures release reserved minutes and mark the project failed; the affected
+   church re-runs the upload once the cause is fixed. Exports have a retry endpoint from the UI.
+
+**Stripe webhooks failing** (payments succeed but plans/minutes don't update)
+
+1. Stripe Dashboard → Developers → Webhooks → check the endpoint's recent delivery attempts and
+   error responses.
+2. Common causes: rotated `STRIPE_WEBHOOK_SECRET` not updated in the environment, or the web
+   process rejecting with 4xx (check web logs for signature errors).
+3. After fixing config, resend the failed events from the Stripe dashboard — handlers are
+   idempotent (`stripe_webhook_events` dedupe; `invoice.paid` grants dedupe by invoice), so
+   resending is always safe.
+4. Verify: workspace plan and minute balance in `/app/settings/billing`, `billing` events in
+   operations.
+
+**Storage unreachable** (uploads fail, media 5xx, `storage` health check failed)
+
+1. Check the provider status page (R2/S3) and verify `STORAGE_S3_*` credentials haven't expired
+   or been rotated without a deploy.
+2. Processing/export jobs that hit storage errors retry automatically (3 attempts with backoff)
+   and then fail terminally with minutes released — after restoring storage, affected projects
+   re-run and failed exports retry from the UI.
+3. Signed URL errors with healthy storage usually mean `MEDIA_URL_SECRET` changed — old links
+   die on rotation by design; new links work immediately.
+
+**Provider outage — Anthropic or transcription** (`analysis`/`transcription` events failing)
+
+1. Check the provider status page and the exact error in operations event metadata.
+2. Jobs retry with backoff, then fail terminally. Production does not silently fall back to the
+   heuristic scorer — failures stay visible instead of shipping degraded clip ranking.
+3. Nothing is lost: once the provider recovers, re-run processing for affected projects. Reserved
+   minutes were released on terminal failure.
+
+**Email/SMS not delivering** (OTP or approval notifications missing)
+
+1. Check SendGrid activity feed / Twilio logs for bounces, suppressions, or auth failures.
+2. Approval notification attempts are persisted — check `approval` events in operations for the
+   recorded error.
+3. OTP requests are rate-limited (3 per 15 minutes per email) — "no email" may just be the limit;
+   the login surface says so explicitly.
+
 ## Rollback
 
 - Stop new workers first so they do not claim jobs during rollback.
