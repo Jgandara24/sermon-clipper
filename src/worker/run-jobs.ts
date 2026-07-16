@@ -5,6 +5,7 @@ import { runOnePendingJob } from "@/lib/jobs/runner";
 import { jobHandlers } from "@/lib/jobs/handlers";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
+import { enqueueDueCleanupJobs, sweepOrphanedExportedFiles } from "@/lib/retention";
 import { releaseReservationForJob } from "@/lib/usage-ledger";
 import {
   assertWorkerRuntimeReady,
@@ -15,9 +16,11 @@ import { ProjectStatus, type ProcessingJobType } from "@prisma/client";
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
 const RECOVERY_INTERVAL_MS = Number(process.env.WORKER_RECOVERY_INTERVAL_MS ?? 60_000);
+const CLEANUP_SCAN_INTERVAL_MS = Number(process.env.WORKER_CLEANUP_INTERVAL_MS ?? 3_600_000);
 const WORKER_PROCESS_HEARTBEAT_INTERVAL_MS = workerProcessHeartbeatIntervalMs();
 let shuttingDown = false;
 let lastRecoveryAt = 0;
+let lastCleanupScanAt = 0;
 let lastWorkerHeartbeatAt = 0;
 const SUPPORTED_TYPES = Object.keys(jobHandlers) as ProcessingJobType[];
 
@@ -66,6 +69,22 @@ async function loop() {
           });
         }
         lastRecoveryAt = now;
+      }
+      if (now - lastCleanupScanAt >= CLEANUP_SCAN_INTERVAL_MS) {
+        // Retention reaper: enqueue CLEANUP jobs for projects with expired media or stale
+        // exports, and sweep orphaned exported-file rows that no longer map to a project.
+        const cleanupScan = await enqueueDueCleanupJobs(prisma);
+        const orphanSweep = await sweepOrphanedExportedFiles(prisma);
+        if (cleanupScan.enqueued || orphanSweep.rowsDeleted) {
+          console.log("[worker] retention cleanup scan", { cleanupScan, orphanSweep });
+          await recordOperationalEventSafely(prisma, {
+            category: "worker",
+            eventType: "retention_scan",
+            message: "Retention scan enqueued cleanup work.",
+            metadata: { cleanupScan, orphanSweep },
+          });
+        }
+        lastCleanupScanAt = now;
       }
 
       processed = await runOnePendingJob();

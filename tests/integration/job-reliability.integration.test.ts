@@ -83,20 +83,23 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+// These tests use PREVIEW_RENDER as a deliberately handlerless job type so a concurrently running
+// worker or test file can never execute real work against these rows (CLEANUP gained a real
+// retention handler and is no longer safe for this).
 describe("processing job reliability", () => {
   it("does not claim retrying jobs before runAfter", async () => {
     const future = new Date(Date.now() + 60_000);
     await prisma.processingJob.create({
       data: {
         projectId,
-        type: ProcessingJobType.CLEANUP,
+        type: ProcessingJobType.PREVIEW_RENDER,
         state: ProcessingJobState.RETRYING,
         idempotencyKey: uniqueKey("future-processing"),
         runAfter: future,
       },
     });
 
-    const claimed = await claimNextJob(prisma, [ProcessingJobType.CLEANUP]);
+    const claimed = await claimNextJob(prisma, [ProcessingJobType.PREVIEW_RENDER]);
 
     expect(claimed).toBeNull();
   });
@@ -105,14 +108,14 @@ describe("processing job reliability", () => {
     const job = await prisma.processingJob.create({
       data: {
         projectId,
-        type: ProcessingJobType.CLEANUP,
+        type: ProcessingJobType.PREVIEW_RENDER,
         state: ProcessingJobState.RETRYING,
         idempotencyKey: uniqueKey("eligible-processing"),
         runAfter: new Date(Date.now() - 1_000),
       },
     });
 
-    const claimed = await claimNextJob(prisma, [ProcessingJobType.CLEANUP]);
+    const claimed = await claimNextJob(prisma, [ProcessingJobType.PREVIEW_RENDER]);
 
     expect(claimed?.id).toBe(job.id);
     expect(claimed?.state).toBe(ProcessingJobState.RUNNING);
@@ -125,7 +128,7 @@ describe("processing job reliability", () => {
     const retryingJob = await prisma.processingJob.create({
       data: {
         projectId,
-        type: ProcessingJobType.CLEANUP,
+        type: ProcessingJobType.PREVIEW_RENDER,
         state: ProcessingJobState.RUNNING,
         idempotencyKey: uniqueKey("retry-processing"),
         attempt: 1,
@@ -144,7 +147,7 @@ describe("processing job reliability", () => {
     const exhaustedJob = await prisma.processingJob.create({
       data: {
         projectId,
-        type: ProcessingJobType.CLEANUP,
+        type: ProcessingJobType.PREVIEW_RENDER,
         state: ProcessingJobState.RUNNING,
         idempotencyKey: uniqueKey("failed-processing"),
         attempt: 3,
@@ -167,7 +170,7 @@ describe("processing job reliability", () => {
     const retryJob = await prisma.processingJob.create({
       data: {
         projectId,
-        type: ProcessingJobType.CLEANUP,
+        type: ProcessingJobType.PREVIEW_RENDER,
         state: ProcessingJobState.RUNNING,
         idempotencyKey: uniqueKey("stale-retry-processing"),
         attempt: 1,
@@ -179,7 +182,7 @@ describe("processing job reliability", () => {
     const failJob = await prisma.processingJob.create({
       data: {
         projectId,
-        type: ProcessingJobType.CLEANUP,
+        type: ProcessingJobType.PREVIEW_RENDER,
         state: ProcessingJobState.RUNNING,
         idempotencyKey: uniqueKey("stale-fail-processing"),
         attempt: 3,
@@ -189,7 +192,7 @@ describe("processing job reliability", () => {
       },
     });
 
-    const recovery = await recoverStaleProcessingJobs(prisma, [ProcessingJobType.CLEANUP], now);
+    const recovery = await recoverStaleProcessingJobs(prisma, [ProcessingJobType.PREVIEW_RENDER], now);
 
     expect(recovery.recovered).toBeGreaterThanOrEqual(1);
     expect(recovery.failed).toBeGreaterThanOrEqual(1);

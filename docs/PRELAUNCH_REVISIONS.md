@@ -51,7 +51,7 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 - [x] **R1.2 Object-storage durability.** Document S3/R2 bucket versioning (or replication) for
   `src/` and `exports/` prefixes in `docs/DEPLOYMENT.md`, plus lifecycle rules beyond the existing
   `tmp/` note. Include R2-specific and S3-specific instructions since both are supported.
-- [ ] **R1.3 Retention reaper (CLEANUP job).** Implement a real handler for
+- [x] **R1.3 Retention reaper (CLEANUP job).** Implement a real handler for
   `ProcessingJobType.CLEANUP` wired into `src/lib/jobs/handlers/index.ts` and the worker loop:
   delete expired `ExportedFile` objects past `downloadExpiresAt` grace, purge expired projects per
   `Project.expiresAt`, and remove the corresponding storage objects via the `StorageProvider`

@@ -1,4 +1,4 @@
-import { type ProcessingJobType, ProjectStatus } from "@prisma/client";
+import { ProcessingJobType, ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { releaseReservationsForProject } from "@/lib/usage-ledger";
@@ -68,7 +68,9 @@ export async function runOnePendingJob(): Promise<boolean> {
       failure.retryable === false
         ? await markJobFailed(prisma, job.id, failure)
         : await markJobFailedOrRetry(prisma, job, failure);
-    if (updatedJob.state === "FAILED") {
+    // CLEANUP is background maintenance on a possibly-healthy project: its failure must not
+    // fail the project or touch minute reservations the way a pipeline-stage failure does.
+    if (updatedJob.state === "FAILED" && job.type !== ProcessingJobType.CLEANUP) {
       await releaseReservationsForProject(prisma, {
         projectId: job.projectId,
         note: `Released after failure: ${failure.code}`,

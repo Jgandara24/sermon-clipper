@@ -604,3 +604,33 @@ Why: Guide §15 step 2 requires "re-submitting the same job id must not double-c
 Tradeoff: Two exports of the same clip state with two different filenames create two separate render jobs rather than reusing one — an accepted minor inefficiency in exchange for keeping the idempotency key derivation simple and not requiring a client-supplied key.
 
 Status: Active.
+
+## 2026-07-16 - Retention Reaper Purges Media, Keeps The Record
+
+Decision: `ProcessingJobType.CLEANUP` now has a real handler. The worker scans on
+`WORKER_CLEANUP_INTERVAL_MS` (default hourly) and enqueues one CLEANUP job per project that has
+retention work, with a daily-bucketed idempotency key (`cleanup:{projectId}:{yyyy-mm-dd}`). The
+handler deletes exported MP4 objects `EXPORT_FILE_RETENTION_GRACE_MS` (default 30 days) after
+`downloadExpiresAt` — any age once the project itself has expired — and purges an expired
+project's source media (video, extracted audio, thumbnail, SRT override) from storage, but only
+when every project referencing that source video has expired. Deleted `ExportedFile` rows rely on
+`ExportJob.outputFileId`'s `SetNull` so export history survives. Orphaned exported-file rows (left
+behind by clip/export-job cascade deletes) are swept directly in the scan since they no longer map
+to a project. Database records — projects, clips, scores, transcripts, ledger, audit events — are
+never deleted by the reaper; media objects are. A failed CLEANUP job is exempt from the runner's
+"terminal failure marks the project FAILED and releases reservations" behavior, because cleanup is
+maintenance on a possibly-healthy project.
+
+Why: Phase 8 review flagged that `Project.expiresAt` and `ExportedFile.downloadExpiresAt` were set
+but nothing ever deleted expired objects — unbounded storage cost growth and no automated deletion
+path for retention policy. The "no marker column" design (re-scan predicates go false once keys
+are nulled and rows deleted) avoids a schema migration entirely, and the daily idempotency bucket
+lets a project be re-swept as new exports age out while same-day re-scans dedupe.
+
+Tradeoff: This is media retention, not GDPR-complete erasure — transcripts and clip text remain
+until a future data-subject-deletion feature removes rows. An expired project sharing its source
+video with an active project re-matches the scan daily (one no-op job per day) until the last
+referrer expires; bounded and harmless. Reliability integration tests switched their inert job
+type from CLEANUP to PREVIEW_RENDER since CLEANUP now executes real work.
+
+Status: Active.

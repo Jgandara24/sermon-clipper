@@ -293,6 +293,11 @@ collecting launch evidence.
   `export` events.
 - If a worker dies mid-job, another worker will recover stale `RUNNING` jobs after
   `WORKER_STALE_JOB_TIMEOUT_MS`.
+- Workers run the retention reaper: every `WORKER_CLEANUP_INTERVAL_MS` (default hourly) they
+  enqueue `CLEANUP` jobs that delete exported MP4s `EXPORT_FILE_RETENTION_GRACE_MS` (default 30
+  days) after the download link expired and purge expired projects' source media from storage.
+  Database records (projects, clips, transcripts, ledger, audit events) are kept. Watch for
+  `retention_cleanup` events in `/app/settings/operations`.
 - Workers need local disk space for temporary ffmpeg/whisper files.
 
 ## Smoke Test
