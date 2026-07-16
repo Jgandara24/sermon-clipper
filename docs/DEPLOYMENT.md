@@ -158,6 +158,82 @@ degraded or warning.
 - Keep browser access routed through Sermon Clipper signed URLs. The app redirects signed media
   requests to presigned object URLs when S3/R2 is active.
 
+## Backups & Restore
+
+The Postgres database holds workspaces, minute balances, the usage ledger, Stripe billing state,
+and approval audit trails. Losing it loses money-relevant data, so backups are a launch
+requirement, not an optimization.
+
+### Recovery targets
+
+- **RPO (max acceptable data loss): 24 hours** via daily platform snapshots, plus a pre-release
+  logical backup so a bad release never risks more than the current day.
+- **RTO (max acceptable downtime to restore): 1 hour** from deciding to restore to a verified
+  database serving traffic.
+- Revisit both targets before onboarding paying churches; daily snapshots are the launch floor,
+  not the end state.
+
+### Configure platform backups (human action — Railway dashboard)
+
+1. Open the Postgres service in the Railway project and attach/confirm its volume.
+2. Enable scheduled volume backups: daily cadence, minimum 7 daily snapshots retained (plus
+   monthly retention if available on the plan).
+3. Trigger one manual backup immediately and confirm it appears in the backup list before
+   collecting launch evidence.
+
+### Logical backups (defense in depth)
+
+Platform snapshots alone tie recovery to one vendor. Take a logical backup before every release,
+and keep at least the last 4 in private object storage (separate bucket or `backups/` prefix,
+never the public-facing media bucket):
+
+```sh
+pg_dump "$DATABASE_URL" --format=custom --no-owner --file "sermon-clipper-$(date +%Y%m%d-%H%M%S).dump"
+```
+
+Restore a logical backup into an empty database with:
+
+```sh
+pg_restore --no-owner --dbname "$RESTORE_DATABASE_URL" sermon-clipper-<timestamp>.dump
+```
+
+### Restore drill (run once before launch, then quarterly)
+
+Do not trust an unexercised backup. The drill restores into a scratch database, never production:
+
+1. Create a fresh empty Postgres database (locally via `docker compose up -d` or a temporary
+   Railway instance).
+2. Restore the most recent backup into it (`pg_restore` above, or the platform's
+   restore-to-new-service flow for volume snapshots).
+3. Verify the restore against money-relevant invariants:
+
+```sh
+psql "$RESTORE_DATABASE_URL" -c "SELECT count(*) FROM workspaces;"
+psql "$RESTORE_DATABASE_URL" -c "SELECT count(*) FROM usage_ledger;"
+psql "$RESTORE_DATABASE_URL" -c "SELECT id, minute_balance FROM workspaces ORDER BY created_at LIMIT 5;"
+psql "$RESTORE_DATABASE_URL" -c "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL;"
+```
+
+   Row counts must be plausible for the backup time, no query may error, and the applied-migration
+   count must match the deployed release.
+4. Point a local app at the restored database (`DATABASE_URL=$RESTORE_DATABASE_URL npm run dev`)
+   and confirm sign-in plus one workspace dashboard load.
+5. Record the drill date, backup timestamp, and verification output alongside the launch evidence
+   notes.
+
+### Production restore procedure
+
+1. Stop all workers first (same ordering as Rollback) so no jobs mutate state mid-restore.
+2. Put the web process into maintenance (scale to zero or block at the platform level).
+3. Restore the chosen snapshot/dump into a **new** database instance; never restore over the only
+   copy of the damaged one.
+4. Run the drill verification queries above against the restored instance.
+5. Point `DATABASE_URL` for web and workers at the restored instance, redeploy, and confirm
+   `/api/health` reports `ok` including `worker_heartbeat`.
+6. Reconcile Stripe: replay any webhook events delivered after the backup timestamp from the
+   Stripe dashboard (Developers → Webhooks → resend). `stripe_webhook_events` idempotency makes
+   replays safe; `invoice.paid` re-grants are deduplicated by invoice ID.
+
 ## Worker Operations
 
 - Run workers in the same region as object storage when possible.
