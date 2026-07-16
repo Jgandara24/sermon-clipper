@@ -72,6 +72,41 @@ FFMPEG_PATH=ffmpeg
 FFPROBE_PATH=ffprobe
 ```
 
+## Railway Service Configuration
+
+The repo carries per-service config-as-code (Railway's schema has no multi-service file):
+
+- **Web** — `railway.json`: Nixpacks build, `npm run start`, migrations applied once per release
+  via `preDeployCommand: npm run db:migrate:deploy`, deploy-time healthcheck on `/api/health`
+  (new deploys receive no traffic until it passes), restart on failure.
+- **Worker** — `railway.worker.json`: builds `Dockerfile.worker` (ffmpeg + whisper.cpp),
+  restart on failure. `requiredMountPath: /models` makes Railway refuse to deploy the worker
+  until a persistent volume is mounted at `/models` — without it the whisper model would
+  re-download on every deploy and the readiness gate would race the download.
+
+Human actions in the Railway dashboard (once per environment):
+
+1. Create two services from this repo. In each service's settings set **Config-as-code file
+   path**: web → `railway.json`, worker → `railway.worker.json`.
+2. Attach a persistent volume to the worker service mounted at `/models`; set
+   `WHISPER_MODEL_PATH=/models/ggml-base.en.bin`. The image entrypoint downloads the model to the
+   volume on first boot.
+3. Set the environment variables below (Railway shared variables + per-service references keep
+   them in one place). `SERMON_CLIPPER_COMMIT_SHA` can be omitted on Railway — `/api/health`
+   falls back to the platform-provided `RAILWAY_GIT_COMMIT_SHA`.
+
+Which service consumes which variables:
+
+| Variables | Web | Worker |
+| --- | --- | --- |
+| `NODE_ENV`, `DATABASE_URL`, `STORAGE_PROVIDER` + `STORAGE_S3_*` | ✅ | ✅ |
+| `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (readiness reporting) | ✅ (does the work) |
+| `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | ✅ | — |
+| `SENDGRID_API_KEY`, `AUTH_EMAIL_*`, `NOTIFICATIONS_*`, `TWILIO_*` | ✅ | — |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` | ✅ | — |
+| `WORKER_ID`, `WORKER_*` tuning, `WORKER_CLEANUP_INTERVAL_MS`, `EXPORT_FILE_RETENTION_GRACE_MS` | — | ✅ |
+| `WHISPER_CPP_BINARY`, `FFMPEG_PATH`, `FFPROBE_PATH` | — | defaulted in the image |
+
 ## Release Steps
 
 1. Install dependencies.

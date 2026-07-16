@@ -69,7 +69,11 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 - [ ] **R2.1 Version the deploy files.** `railway.json`, `Dockerfile.worker`,
   `scripts/worker-entrypoint.sh`, `.dockerignore` are currently untracked. Commit them — but only
   after R2.2–R2.6 are applied so the first tracked version is the corrected one.
-- [ ] **R2.2 Complete `railway.json`.** Worker service currently declares only builder +
+- [x] **R2.2 Complete `railway.json`.** (Split into per-service `railway.json` +
+  `railway.worker.json` — Railway's schema has no multi-service format, so the old single file
+  would have been ignored entirely. Worker deploys now hard-require the `/models` volume via
+  `requiredMountPath`; web runs migrations via `preDeployCommand` and gates traffic on
+  `/api/health`.) Worker service currently declares only builder +
   dockerfile. Add restart policy and healthcheck config supported by the Railway schema; document
   (in `docs/DEPLOYMENT.md`) the required persistent volume mounted at the `WHISPER_MODEL_PATH`
   directory (without it the ~142MB model re-downloads every deploy) and the full per-service env
@@ -150,6 +154,9 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 - **R1.2** Configure bucket durability: S3 → enable versioning + lifecycle rules; R2 → set up the
   daily `src/` replication job with a separate credential + lifecycle rules — see
   "Backups & Restore → Object storage durability" in `docs/DEPLOYMENT.md`.
+- **R2.2** Railway dashboard: set each service's Config-as-code file path (web → `railway.json`,
+  worker → `railway.worker.json`), attach a persistent volume to the worker mounted at `/models`,
+  and set the per-service env vars — see "Railway Service Configuration" in `docs/DEPLOYMENT.md`.
 
 ## Loop result
 
