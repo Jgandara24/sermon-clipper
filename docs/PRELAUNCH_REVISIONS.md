@@ -93,7 +93,7 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   `WHISPER_MODEL_SHA256` for custom `WHISPER_MODEL_URL`) and a bounded retry (e.g. 3 attempts,
   backoff) on download failure. Keep the atomic `.tmp` + `mv` pattern. Fail loudly on checksum
   mismatch.
-- [ ] **R2.6 Fix `.env.example` secret hygiene.** `MEDIA_URL_SECRET` is left uncommented with a
+- [x] **R2.6 Fix `.env.example` secret hygiene.** `MEDIA_URL_SECRET` is left uncommented with a
   known placeholder value — a copy-paste deploy ships a guessable secret. Comment it out like the
   other secrets and note the ≥32-char production requirement.
 - [ ] **R2.7 Worker resource sizing.** Document memory/CPU/scratch-disk requirements for the
