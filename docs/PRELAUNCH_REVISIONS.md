@@ -48,7 +48,7 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   retention, explicit RPO/RTO targets, and a step-by-step restore drill (including how to verify a
   restore succeeded against the usage ledger). Add a matching launch-evidence expectation note if
   appropriate. The dashboard clicks themselves are human actions — document them exactly.
-- [ ] **R1.2 Object-storage durability.** Document S3/R2 bucket versioning (or replication) for
+- [x] **R1.2 Object-storage durability.** Document S3/R2 bucket versioning (or replication) for
   `src/` and `exports/` prefixes in `docs/DEPLOYMENT.md`, plus lifecycle rules beyond the existing
   `tmp/` note. Include R2-specific and S3-specific instructions since both are supported.
 - [ ] **R1.3 Retention reaper (CLEANUP job).** Implement a real handler for
@@ -147,6 +147,9 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   "Backups & Restore → Configure platform backups" in `docs/DEPLOYMENT.md`.
 - **R1.1** Run the restore drill once before launch (restore latest backup into a scratch DB,
   run the verification queries, record the result) — see "Backups & Restore → Restore drill".
+- **R1.2** Configure bucket durability: S3 → enable versioning + lifecycle rules; R2 → set up the
+  daily `src/` replication job with a separate credential + lifecycle rules — see
+  "Backups & Restore → Object storage durability" in `docs/DEPLOYMENT.md`.
 
 ## Loop result
 

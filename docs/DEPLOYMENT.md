@@ -153,8 +153,8 @@ degraded or warning.
 - Grant the runtime access key permission to read, write, list, and delete objects in that bucket.
 - Leave `STORAGE_S3_ENDPOINT` unset for AWS S3, or set it to an HTTPS S3-compatible endpoint for
   R2/MinIO-compatible production storage.
-- Use lifecycle rules for temporary objects under `tmp/` if the provider supports prefix-based
-  expiry.
+- Configure versioning/replication and lifecycle rules per "Backups & Restore → Object storage
+  durability" — at minimum, prefix-based expiry for temporary objects under `tmp/`.
 - Keep browser access routed through Sermon Clipper signed URLs. The app redirects signed media
   requests to presigned object URLs when S3/R2 is active.
 
@@ -233,6 +233,44 @@ psql "$RESTORE_DATABASE_URL" -c "SELECT count(*) FROM _prisma_migrations WHERE f
 6. Reconcile Stripe: replay any webhook events delivered after the backup timestamp from the
    Stripe dashboard (Developers → Webhooks → resend). `stripe_webhook_events` idempotency makes
    replays safe; `invoice.paid` re-grants are deduplicated by invoice ID.
+
+### Object storage durability
+
+The bucket's prefixes have very different recovery value. Protect them accordingly:
+
+| Prefix | Contents | Recoverability |
+| --- | --- | --- |
+| `src/{workspaceId}/` | Original uploaded sermon videos | **Irreplaceable** — churches may keep no other copy; every clip, transcript, and export derives from these |
+| `exports/{workspaceId}/` | Rendered MP4s | Re-derivable from `src/` + database edit state, but each re-render costs worker CPU |
+| `audio/{workspaceId}/`, `thumbs/{workspaceId}/` | Extracted audio, thumbnails | Cheaply re-derivable from `src/` |
+| `tmp/{workspaceId}/` | In-flight uploads | Disposable |
+
+**AWS S3 (human action — AWS console/CLI):**
+
+- Enable bucket versioning so accidental deletes/overwrites of `src/` objects are recoverable.
+- Lifecycle rules: expire noncurrent versions after 30 days; abort incomplete multipart uploads
+  after 7 days; expire `tmp/` objects after 7 days.
+
+**Cloudflare R2 (human action — Cloudflare dashboard + a scheduled job):**
+
+- R2 has no S3-style bucket versioning. Replicate the `src/` prefix instead: run a daily sync to
+  a second bucket with any S3-compatible tool, for example:
+
+  ```sh
+  rclone sync r2-prod:sermon-clipper-production/src r2-backup:sermon-clipper-backup/src
+  ```
+
+- Use a **separate credential** for the replication job and do not give the replication bucket's
+  credentials to the app runtime — the runtime key can delete objects (needed for cleanup), and
+  the whole point of the replica is surviving a compromised or misbehaving runtime credential.
+- R2 lifecycle rules: delete `tmp/` objects after 7 days; abort incomplete multipart uploads
+  after 7 days.
+
+Storage recovery targets: with daily `src/` replication (R2) or versioning (S3), storage RPO for
+originals is ≤24 hours on R2 and effectively zero for delete/overwrite mistakes on S3. Losing
+`exports/`, `audio/`, or `thumbs/` alone is a degraded-service event, not a data-loss event —
+they can be regenerated. Confirm one restored/replicated `src/` object plays back before
+collecting launch evidence.
 
 ## Worker Operations
 
