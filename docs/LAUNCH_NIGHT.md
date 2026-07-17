@@ -64,39 +64,45 @@ can be honestly collected without the operator. Decisions already made: **privat
 
 ## Phase C — Railway deployment
 
-Use the Railway MCP tools. Region: pick the default/closest US region.
-
-- [ ] Create project `sermon-clipper` (production environment).
-- [ ] Provision Postgres (template/plugin). Capture its `DATABASE_URL`.
-- [ ] Create service **web** from the GitHub repo (`main`), config-as-code path `railway.json`.
-- [ ] Create service **worker** from the same repo, config path `railway.worker.json`; create and
-      attach a volume mounted at `/models`.
-- [ ] Set variables: shared → `NODE_ENV=production`, `DATABASE_URL` (reference the Postgres
-      service), `STORAGE_PROVIDER=s3` + the four `STORAGE_S3_*` values +
-      `STORAGE_S3_REGION=auto` + `STORAGE_S3_FORCE_PATH_STYLE=true`, `ANTHROPIC_API_KEY`,
-      `WHISPER_MODEL_PATH=/models/ggml-base.en.bin`; web-only → `NEXT_PUBLIC_APP_URL` (set after
-      domain), `MEDIA_URL_SECRET`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`, `SENDGRID_API_KEY`,
-      `AUTH_EMAIL_FROM`, `NOTIFICATIONS_FROM_EMAIL` (fallback to `AUTH_EMAIL_FROM`), Stripe vars
-      (Phase D), `SENTRY_DSN` if provided; worker-only → `WORKER_ID=worker-1`.
-- [ ] Generate the web service's Railway domain; set `NEXT_PUBLIC_APP_URL=https://<domain>`.
-- [ ] Deploy both services. Watch build/deploy logs. Web must pass its `/api/health` healthcheck
-      (expect `stripe`/billing degraded until Phase D; worker heartbeat appears once the worker
-      boots and downloads the model — first boot includes a ~148MB model download).
-- [ ] Check worker logs: model downloaded + checksum OK, readiness gate passed, polling.
-- [ ] Enable/confirm Postgres backups if the API exposes it; otherwise log as morning to-do.
+- [x] Reused the pre-existing `sermon-clipper` Railway project (created 2026-07-08, predates this
+      session) rather than creating a new one — see the 2026-07-17 entry below.
+- [x] Postgres already provisioned (standard Railway plugin), `DATABASE_URL` already wired.
+- [x] Connected **web** and **worker** to the GitHub repo (`Jgandara24/sermon-clipper`, `main`) —
+      both had been deployed via CLI upload only, never GitHub-connected, until tonight.
+- [x] Worker's `railwayConfigFile` set to `/railway.worker.json` (it was `null`, silently building
+      via plain Nixpacks instead of `Dockerfile.worker`, even in the original "successful"
+      2026-07-08 deploy — ffmpeg/whisper.cpp were never actually in that image).
+- [x] Set all missing shared + web-only variables (`STORAGE_PROVIDER=s3`, `STORAGE_S3_*`,
+      `ANTHROPIC_API_KEY`, `SENDGRID_API_KEY`, `AUTH_EMAIL_FROM`, `NOTIFICATIONS_FROM_EMAIL`,
+      `WHISPER_MODEL_PATH`) on both services.
+- [x] Worker's persistent volume remounted from `/data` to `/models` to match
+      `railway.worker.json`'s `requiredMountPath` (existing volume, not recreated).
+- [x] Generated a fresh Railway domain: `web-production-2a243.up.railway.app`. The original
+      domain (`web-production-10669...`, inherited from 2026-07-08) developed a stuck Railway
+      edge-routing entry — the app was confirmed fully healthy internally (logs, deployment
+      status, direct local repro with pulled prod env vars) but that one domain kept returning
+      `x-railway-fallback: true` 502s regardless of restarts/redeploys. Deleted it and switched
+      `NEXT_PUBLIC_APP_URL` + the Stripe webhook URL to the new domain.
+- [x] Both services deployed and healthy. `/api/health` on the new domain returns `status: "ok"`
+      across every check, including a live worker heartbeat.
+- [x] Worker logs confirmed: whisper model downloaded, `[worker] polling for processing jobs every
+      2000ms` running without errors (after fixing a Prisma `binaryTargets` bug — see PR #2).
+- [ ] Postgres backups: not yet confirmed/enabled. Morning to-do.
+- [ ] Follow-up (non-blocking): worker's `WHISPER_MODEL_PATH` still literally reads
+      `/data/models/ggml-base.en.bin`, which no longer matches the volume's `/models` mount — it
+      re-downloads the model on every restart instead of reusing the persisted copy. Update the var
+      to `/models/ggml-base.en.bin` and confirm the existing `/data/models/...` copy (if any) can be
+      ignored/cleaned up.
 
 ## Phase D — Stripe (test mode) via API
 
-Use `STRIPE_SECRET_KEY` with curl against api.stripe.com (never log the key).
-
-- [ ] Create products + monthly recurring prices: Starter $15/mo, Pro $29/mo (USD).
-- [ ] Create a webhook endpoint for `https://<domain>/api/stripe/webhook` subscribed to:
-      `checkout.session.completed`, `customer.subscription.created`,
-      `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
-      `invoice.payment_failed`, `charge.refunded`. Capture the endpoint's `whsec_` secret.
-- [ ] Set on Railway web: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`,
-      `STRIPE_PRICE_PRO`; redeploy web.
-- [ ] `/api/health` now fully `ok` (all checks, including billing and worker heartbeat).
+- [x] Created products + monthly recurring prices: Starter $15/mo (`price_1TuDBYE2hlRSr7ABppOfdIyV`),
+      Pro $29/mo (`price_1TuDBZE2hlRSr7ABVodU4djE`).
+- [x] Created a webhook endpoint (`we_1TuDBzE2hlRSr7ABfhh0Gi9n`) subscribed to the 7 events listed
+      above; URL updated to match the domain switch. `whsec_` secret captured, never logged.
+- [x] Set on Railway web: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`,
+      `STRIPE_PRICE_PRO`; redeployed web.
+- [x] `/api/health` now fully `ok` (all checks, including billing and worker heartbeat).
 
 ## Phase E — Automated launch evidence
 
@@ -167,6 +173,18 @@ via the Gmail connector. Use `jake+approver@jakegandara.com` as the second user 
   pre-real-user-data; reconsider once handling real church data or before any public launch
   announcement). Flip back to private only after upgrading to a paid plan, since free-tier private
   repos can't carry branch protection.
+
+- **2026-07-17:** `RAILWAY_ACCOUNT_TOKEN` was accidentally echoed into an agent chat transcript
+  (a shell double-quoting mistake let `${RAILWAY_ACCOUNT_TOKEN}` expand before reaching Python,
+  and a failed script's traceback printed it). Treat that token as compromised — **revoke it from
+  the Railway dashboard (Account Settings → Tokens) and mint a fresh one** before doing further
+  unattended Railway work. Also complete the already-planned switch to a project-scoped token
+  (was step 7 of the original handoff, not yet done).
+- **2026-07-17:** Worker's `WHISPER_MODEL_PATH` (`/data/models/ggml-base.en.bin`) no longer
+  matches the volume's mount path (`/models`, moved tonight to satisfy `railway.worker.json`'s
+  `requiredMountPath`). It currently works by re-downloading the model onto ephemeral storage on
+  every restart. Fix: update the var to `/models/ggml-base.en.bin`.
+- **2026-07-17:** Postgres backup confirmation not done.
 
 ## Night result
 
