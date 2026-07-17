@@ -16,15 +16,17 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DBUILD_SHARED_L
 
 # Full install (including devDependencies) so Prisma Client can be generated and the worker can
 # be typechecked + bundled; nothing from this stage's node_modules ships except the generated
-# client. `worker:build` runs `tsc --noEmit` first, so a type error anywhere in the worker's
-# import graph fails the image build instead of surfacing at runtime.
+# client. `worker:build` typechecks against tsconfig.worker.json (scoped to src/worker + src/lib,
+# no dependency on Next's gitignored generated files like next-env.d.ts/.next/types — the worker
+# has nothing to do with app routing or JSX) then bundles, so a type error anywhere in the
+# worker's import graph fails the image build instead of surfacing at runtime.
 FROM node:24-bookworm-slim AS app-builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY prisma ./prisma
 RUN npm run prisma:generate
-COPY tsconfig.json next-env.d.ts ./
+COPY tsconfig.json tsconfig.worker.json ./
 COPY src ./src
 RUN npm run worker:build
 
