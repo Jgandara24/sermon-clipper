@@ -282,6 +282,17 @@ export async function revokeMinutesForRefundedInvoice(
       return { ledger: null, revokedMinutes: new Prisma.Decimal(0), workspaceId: null };
     }
 
+    // Row-lock the workspace FIRST: concurrent clawbacks (and reservations) for this workspace
+    // serialize here, and the idempotency check below runs only after any earlier transaction
+    // has committed its REFUND row. Checking before the lock is a double-claw race — two
+    // concurrent events for the same invoice would both pass the marker check.
+    const rows = await tx.$queryRaw<{ minute_balance: Prisma.Decimal }[]>`
+      SELECT minute_balance FROM workspaces WHERE id = ${credit.workspaceId}::uuid FOR UPDATE
+    `;
+    if (rows.length === 0) {
+      throw new Error(`Workspace ${credit.workspaceId} was not found for refund clawback.`);
+    }
+
     const existing = await tx.usageLedger.findFirst({
       where: { workspaceId: credit.workspaceId, kind: LedgerKind.REFUND, note: { contains: marker } },
     });
@@ -291,14 +302,6 @@ export async function revokeMinutesForRefundedInvoice(
         revokedMinutes: existing.minutesDelta.negated(),
         workspaceId: credit.workspaceId,
       };
-    }
-
-    // Row-lock the workspace so the floor computation can't race a concurrent reservation.
-    const rows = await tx.$queryRaw<{ minute_balance: Prisma.Decimal }[]>`
-      SELECT minute_balance FROM workspaces WHERE id = ${credit.workspaceId}::uuid FOR UPDATE
-    `;
-    if (rows.length === 0) {
-      throw new Error(`Workspace ${credit.workspaceId} was not found for refund clawback.`);
     }
 
     const balance = toDecimal(rows[0].minute_balance);

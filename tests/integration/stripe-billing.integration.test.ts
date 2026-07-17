@@ -2,6 +2,7 @@ import { Prisma, PrismaClient, WorkspaceRole } from "@prisma/client";
 import type Stripe from "stripe";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { handleStripeWebhookEvent } from "@/lib/billing/stripe";
+import { revokeMinutesForRefundedInvoice } from "@/lib/usage-ledger";
 
 const prisma = new PrismaClient();
 const workspaceIdsToDelete: string[] = [];
@@ -256,6 +257,45 @@ describe("Stripe billing integration", () => {
     await expect(
       prisma.usageLedger.count({ where: { workspaceId: workspace.id, kind: "REFUND" } }),
     ).resolves.toBe(1);
+  });
+
+  it("claws back exactly once when two refund events race for the same invoice", async () => {
+    const workspace = await createWorkspace();
+    const subId = `sub_race_${runId}`;
+    const invoiceId = `in_race_${runId}`;
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { stripeSubscriptionId: subId, planCode: "pro" },
+    });
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_race_grant_${runId}`, "invoice.paid", {
+        id: invoiceId,
+        object: "invoice",
+        subscription: subId,
+      }),
+    );
+    // Extra headroom so a double-claw would be visible in the balance, not masked by the floor.
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { minuteBalance: new Prisma.Decimal("3000") },
+    });
+
+    // Two concurrent clawbacks on separate pooled connections (distinct Stripe events for the
+    // same invoice — webhook event dedupe does not protect this path). The workspace row lock
+    // must serialize them and the post-lock idempotency check must make the loser a no-op.
+    const results = await Promise.all([
+      revokeMinutesForRefundedInvoice(prisma, { stripeInvoiceId: invoiceId }),
+      revokeMinutesForRefundedInvoice(prisma, { stripeInvoiceId: invoiceId }),
+    ]);
+
+    const after = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(after.minuteBalance.toString()).toBe("1800"); // 3000 - 1200, exactly once
+    await expect(
+      prisma.usageLedger.count({ where: { workspaceId: workspace.id, kind: "REFUND" } }),
+    ).resolves.toBe(1);
+    // Both callers resolve to the same ledger row.
+    expect(results[0].ledger?.id).toBe(results[1].ledger?.id);
   });
 
   it("records but does not claw back on a partial refund", async () => {
