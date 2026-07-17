@@ -1,3 +1,5 @@
+import type { AnalysisUsage } from "./usage";
+
 export type Subscore = {
   score: number;
   letter: string;
@@ -45,6 +47,11 @@ export interface AnalysisProvider {
     candidates: AnalysisCandidate[],
     context: AnalysisContext,
   ): Promise<ScoredCandidate[]>;
+  /**
+   * Provider token usage for the most recent scoreCandidates call, for spend telemetry.
+   * Undefined/null for providers that spend nothing (heuristic).
+   */
+  lastUsage?: AnalysisUsage | null;
 }
 
 export class AnalysisProviderUnavailableError extends Error {}

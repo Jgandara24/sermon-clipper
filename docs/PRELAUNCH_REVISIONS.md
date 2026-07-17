@@ -126,7 +126,11 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   concurrent/daily export jobs per workspace. Follow the existing OTP rate-limit pattern
   (DB-backed counting, no new infra). Enforce in `src/lib/*`, return the repo's standard apiError
   shape, emit operational events on rejection, and test both allow and reject paths.
-- [ ] **R3.2 Provider spend telemetry.** Track Anthropic usage per ANALYZE job (tokens/estimated
+- [x] **R3.2 Provider spend telemetry.** (Per-call token capture in ClaudeAnalysisProvider →
+  list-price USD estimate → ANALYZE job metadata → per-workspace 30-day rollup card on
+  /app/settings/operations. Deployment-wide SQL + COGS model + Anthropic spend-alert human
+  action documented in DEPLOYMENT.md. Note: rollup is per-workspace in the UI by design —
+  a global figure on a tenant-scoped page would leak cross-tenant info; operators use the SQL.) Track Anthropic usage per ANALYZE job (tokens/estimated
   cost in job or operational-event metadata) and surface a per-workspace and global rollup in
   `/app/settings/operations`. Document the COGS model vs the ~3–4¢/min target and where to set
   Anthropic console spend alerts in `docs/DEPLOYMENT.md` (console config itself = human action).
@@ -174,6 +178,9 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 - **R2.2** Railway dashboard: set each service's Config-as-code file path (web → `railway.json`,
   worker → `railway.worker.json`), attach a persistent volume to the worker mounted at `/models`,
   and set the per-service env vars — see "Railway Service Configuration" in `docs/DEPLOYMENT.md`.
+- **R3.2** Anthropic Console: set a monthly spend limit + email alerts on the workspace/key used
+  by `ANTHROPIC_API_KEY`; set budget alerts in Railway and the storage provider — see
+  "Provider Spend & COGS" in `docs/DEPLOYMENT.md`.
 
 ## Loop result
 

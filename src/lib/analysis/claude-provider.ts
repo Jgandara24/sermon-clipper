@@ -5,6 +5,7 @@ import { computePlatformFit, computeSpeakerEnergy } from "./computed-subscores";
 import { buildChurchSubscores } from "./church-scoring";
 import { detectScriptureReferences } from "./scripture";
 import { computeTotal, scoreToLetter, SERMON_WEIGHTS } from "./scoring";
+import { buildAnalysisUsage, type AnalysisModelCall, type AnalysisUsage } from "./usage";
 import {
   AnalysisProviderUnavailableError,
   type AnalysisCandidate,
@@ -69,9 +70,22 @@ function toSubscore(llm: { score: number; note: string }): Subscore {
   return { score: llm.score, letter: scoreToLetter(llm.score), note: llm.note };
 }
 
+function toModelCall(model: string, usage: Anthropic.Usage): AnalysisModelCall {
+  return {
+    model,
+    inputTokens: usage.input_tokens ?? 0,
+    outputTokens: usage.output_tokens ?? 0,
+    cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+    cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+  };
+}
+
 /** Real Claude API analysis — Stage A (Haiku) classifies/rejects, Stage B (Sonnet) scores. */
 export class ClaudeAnalysisProvider implements AnalysisProvider {
   readonly name = SONNET_MODEL;
+
+  /** Token usage for the most recent scoreCandidates call — spend telemetry, see usage.ts. */
+  lastUsage: AnalysisUsage | null = null;
 
   async isAvailable(): Promise<boolean> {
     return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -85,6 +99,8 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
       throw new AnalysisProviderUnavailableError("ANTHROPIC_API_KEY is not configured.");
     }
 
+    this.lastUsage = null;
+    const modelCalls: AnalysisModelCall[] = [];
     const client = new Anthropic();
 
     const stageA = await client.messages.parse({
@@ -101,6 +117,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
       ],
       output_config: { format: zodOutputFormat(StageAResultSchema) },
     });
+    modelCalls.push(toModelCall(HAIKU_MODEL, stageA.usage));
 
     const kept = (stageA.parsed_output?.classifications ?? [])
       .filter((c) => c.momentType !== "reject")
@@ -109,6 +126,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
       .slice(0, MAX_STAGE_B_CANDIDATES);
 
     if (kept.length === 0) {
+      this.lastUsage = buildAnalysisUsage(modelCalls);
       return [];
     }
 
@@ -135,6 +153,9 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
         },
       ],
     });
+
+    modelCalls.push(toModelCall(SONNET_MODEL, stageB.usage));
+    this.lastUsage = buildAnalysisUsage(modelCalls);
 
     const scoredClips = stageB.parsed_output?.scoredClips ?? [];
 

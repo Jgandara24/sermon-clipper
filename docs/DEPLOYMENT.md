@@ -394,6 +394,34 @@ before declaring Phase 8 complete. The automated smoke test is necessary but not
 the final Phase 8 criterion requires an authenticated, provider-backed church workflow on the live
 deployment.
 
+## Provider Spend & COGS
+
+- Every Claude-scored ANALYZE job records its token usage and a list-price USD estimate in the
+  job's `analysis` success event metadata. `/app/settings/operations` shows the per-workspace
+  30-day rollup ("AI analysis spend"). The Anthropic invoice is the source of truth; the in-app
+  figure exists to make cost drift visible early.
+- Deployment-wide (all workspaces) estimate, from psql:
+
+  ```sql
+  SELECT count(*) AS jobs,
+         sum((metadata->'usage'->>'estimatedCostUsd')::numeric) AS est_usd,
+         sum((metadata->'usage'->>'totalInputTokens')::bigint) AS input_tokens
+  FROM operational_events
+  WHERE category = 'analysis' AND event_type = 'processing_job_succeeded'
+    AND metadata->'usage' IS NOT NULL
+    AND created_at > now() - interval '30 days';
+  ```
+
+- **COGS model:** per source-minute of sermon, the paid components are Claude analysis (Haiku
+  classification + Sonnet scoring over transcript excerpts — the dominant API cost), worker CPU
+  (whisper.cpp transcription ≈ real-time on 2 vCPU, plus per-export renders), storage
+  (~1GB/hour of source video), and egress. The competitive target is well under ~3–4¢ per
+  source-minute all-in; compare the operations rollup (analysis $) plus Railway/R2 line items
+  against minutes processed (`usage_ledger`) monthly.
+- **Human action — spend alerts:** in the Anthropic Console, set a monthly spend limit and
+  email alerts on the workspace/key used by `ANTHROPIC_API_KEY`, sized from the rollup above
+  with headroom. Set the equivalent budget alerts in Railway and the storage provider.
+
 ## Incident Response
 
 Where to look, in order: `curl -fsS <url>/api/health` (readiness + per-check status + commit),

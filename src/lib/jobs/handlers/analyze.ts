@@ -153,6 +153,10 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
     await tx.project.update({ where: { id: project.id }, data: { status: ProjectStatus.READY } });
   });
 
+  // Provider token usage (Claude only; heuristic spends nothing) flows into the analysis
+  // success event's metadata, where /app/settings/operations rolls it up as estimated spend.
+  const usage = provider.lastUsage ?? null;
+
   return {
     metadata: {
       provider: provider.name,
@@ -161,6 +165,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
       scoredCount: scored.length,
       keptCount: kept.length,
       genre,
+      ...(usage ? { usage } : {}),
     },
   };
 };

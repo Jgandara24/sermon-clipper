@@ -1,3 +1,4 @@
+import { summarizeAnalysisSpend } from "@/lib/analysis/usage";
 import { formatDate, titleCaseStatus } from "@/lib/format";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -35,11 +36,14 @@ export default async function OperationsPage() {
   const user = await requireCurrentUser();
   const membership = await requirePrimaryWorkspacePermission(user.id, "MANAGE_OPERATIONS");
   const workspace = membership.workspace;
-  const events = await prisma.operationalEvent.findMany({
-    where: { workspaceId: workspace.id },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+  const [events, spend] = await Promise.all([
+    prisma.operationalEvent.findMany({
+      where: { workspaceId: workspace.id },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    summarizeAnalysisSpend(prisma, workspace.id),
+  ]);
 
   return (
     <section className="grid gap-6">
@@ -50,6 +54,38 @@ export default async function OperationsPage() {
           Recent upload, processing, export, approval, billing, and worker events for this
           workspace. Use this feed to diagnose failed jobs, skipped notifications, rejected
           uploads, and billing-limit stops.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
+        <p className="text-sm font-medium text-teal-800">AI analysis spend</p>
+        <div className="mt-3 grid gap-4 sm:grid-cols-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-stone-500">Last {spend.windowDays} days</p>
+            <p className="mt-1 text-2xl font-semibold">
+              ${spend.estimatedCostUsd.toFixed(2)}
+              {spend.incomplete ? <span className="text-sm text-amber-700">+</span> : null}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-stone-500">Analyzed jobs</p>
+            <p className="mt-1 text-2xl font-semibold">{spend.jobCount}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-stone-500">Input tokens</p>
+            <p className="mt-1 text-2xl font-semibold">{spend.totalInputTokens.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-stone-500">Output tokens</p>
+            <p className="mt-1 text-2xl font-semibold">{spend.totalOutputTokens.toLocaleString()}</p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-stone-500">
+          List-price estimate from per-job Claude token usage; the Anthropic invoice is the source
+          of truth. Heuristic-scored jobs cost nothing and are not counted.
+          {spend.incomplete
+            ? " Some usage could not be fully priced or counted — treat this as a lower bound."
+            : ""}
         </p>
       </div>
 
