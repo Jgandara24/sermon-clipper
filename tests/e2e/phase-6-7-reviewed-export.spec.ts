@@ -361,7 +361,12 @@ John 14 says peace stays with us because Jesus tells the church not to let their
       buffer: Buffer.from(srt),
     });
 
-    await expect(page.getByText(/srt_upload/i)).toBeVisible({ timeout: 10_000 });
+    // This is the first hit to /api/videos/[id]/srt in the whole suite. On a warm local `next
+    // dev` server (the common case when iterating locally) it's near-instant; on a cold CI
+    // runner, on-demand route compilation plus the DB write, background job run, and client
+    // poll can exceed a tight 10s budget even though nothing is actually broken — confirmed via
+    // two consecutive CI failures at this exact line before any other route in the suite fails.
+    await expect(page.getByText(/srt_upload/i)).toBeVisible({ timeout: 30_000 });
     await runPendingProcessingJobs();
     await page.reload();
 
