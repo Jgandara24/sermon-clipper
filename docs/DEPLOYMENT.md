@@ -110,6 +110,7 @@ Which service consumes which variables:
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` | ✅ | — |
 | `WORKER_ID`, `WORKER_*` tuning, `WORKER_CLEANUP_INTERVAL_MS`, `EXPORT_FILE_RETENTION_GRACE_MS` | — | ✅ |
 | `WHISPER_CPP_BINARY`, `FFMPEG_PATH`, `FFPROBE_PATH` | — | defaulted in the image |
+| `SENTRY_DSN` (optional but recommended) | ✅ | ✅ |
 
 ### Worker sizing
 
@@ -422,12 +423,27 @@ deployment.
   email alerts on the workspace/key used by `ANTHROPIC_API_KEY`, sized from the rollup above
   with headroom. Set the equivalent budget alerts in Railway and the storage provider.
 
+## Monitoring & Alerting
+
+- **Error monitoring (Sentry, errors only):** set `SENTRY_DSN` on both web and worker. The web
+  process reports server request errors through `src/instrumentation.ts`; the worker reports
+  unexpected job/loop errors (expected failures stay in operational events). With `SENTRY_DSN`
+  unset, monitoring is fully disabled — safe for local dev and CI. Human action: create a Sentry
+  project, copy its DSN into both services, and configure alert rules (notify on any new issue).
+  Optional: wire source-map upload later via `withSentryConfig` + `SENTRY_AUTH_TOKEN`; not
+  required for readable server-side stack traces.
+- **Uptime monitoring:** point an external pinger (UptimeRobot, Better Stack, or similar — human
+  action) at `https://<domain>/api/health` with a 60s interval, alerting on non-200 or on the
+  word `"fail"` in the body. `/api/health` already covers DB, storage, providers, migrations, and
+  worker heartbeat, so one probe watches the whole system — including the worker, which has no
+  HTTP surface of its own.
+
 ## Incident Response
 
 Where to look, in order: `curl -fsS <url>/api/health` (readiness + per-check status + commit),
 `/app/settings/operations` as owner/admin (upload/processing/transcription/analysis/export/
-approval/billing/worker event feed with severities), then platform logs for the web and worker
-services.
+approval/billing/worker event feed with severities), Sentry (if configured), then platform logs
+for the web and worker services.
 
 ### Severity levels
 

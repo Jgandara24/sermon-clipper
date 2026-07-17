@@ -3,6 +3,11 @@ import { recoverStaleExportJobs } from "@/lib/exports/queue";
 import { recoverStaleProcessingJobs } from "@/lib/jobs/queue";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { jobHandlers } from "@/lib/jobs/handlers";
+import {
+  captureErrorSafely,
+  flushErrorReporting,
+  initErrorReporting,
+} from "@/lib/observability/error-reporting";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
 import { enqueueDueCleanupJobs, sweepOrphanedExportedFiles } from "@/lib/retention";
@@ -93,6 +98,7 @@ async function loop() {
       processed = (await runOnePendingExportJob()) || processed;
     } catch (error) {
       console.error("[worker] unexpected error while polling for jobs", error);
+      await captureErrorSafely(error, { source: "worker_poll_loop" });
       await recordOperationalEventSafely(prisma, {
         category: "worker",
         eventType: "worker_poll_error",
@@ -123,6 +129,10 @@ try {
 }
 
 console.log(`[worker] polling for processing jobs every ${POLL_INTERVAL_MS}ms`);
+// Sentry (errors only) when SENTRY_DSN is set; also captures unhandled rejections by default.
+initErrorReporting({ process: "worker", workerId: process.env.WORKER_ID ?? "unknown" }).catch(
+  () => {},
+);
 recordWorkerProcessHeartbeat(prisma, {
   supportedProcessingTypes: SUPPORTED_TYPES,
   pollIntervalMs: POLL_INTERVAL_MS,
@@ -130,7 +140,8 @@ recordWorkerProcessHeartbeat(prisma, {
 }).catch((error) => {
   console.error("[worker] failed to record startup heartbeat", error instanceof Error ? error.message : error);
 });
-loop().then(() => {
+loop().then(async () => {
   console.log("[worker] shutting down");
+  await flushErrorReporting();
   process.exit(0);
 });

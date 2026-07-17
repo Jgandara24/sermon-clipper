@@ -1,5 +1,6 @@
 import { ProcessingJobType, ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { captureErrorSafely } from "@/lib/observability/error-reporting";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { releaseReservationsForProject } from "@/lib/usage-ledger";
 import { withHeartbeat } from "@/lib/worker/reliability";
@@ -62,6 +63,9 @@ export async function runOnePendingJob(): Promise<boolean> {
 
     if (!(error instanceof JobFailureError)) {
       console.error(`[worker] job ${job.id} (${job.type}) failed unexpectedly`, error);
+      // Expected failures (JobFailureError) live in operational events; only genuinely
+      // unexpected errors go to external error monitoring.
+      await captureErrorSafely(error, { jobId: job.id, jobType: job.type });
     }
 
     const updatedJob =

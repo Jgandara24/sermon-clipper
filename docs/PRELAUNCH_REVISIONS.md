@@ -134,7 +134,11 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   cost in job or operational-event metadata) and surface a per-workspace and global rollup in
   `/app/settings/operations`. Document the COGS model vs the ~3–4¢/min target and where to set
   Anthropic console spend alerts in `docs/DEPLOYMENT.md` (console config itself = human action).
-- [ ] **R3.3 External error monitoring hooks.** Add Sentry (`@sentry/nextjs`) for web + worker,
+- [x] **R3.3 External error monitoring hooks.** (Web: `src/instrumentation.ts` register +
+  onRequestError via @sentry/nextjs. Worker: DSN-gated lazy shim in
+  `src/lib/observability/error-reporting.ts` wired into the poll loop, unexpected job failures,
+  and shutdown flush — expected JobFailureErrors stay in operational events. Fully no-op without
+  SENTRY_DSN, verified by smoke-running the compiled worker. Uptime-monitor guidance added.) Add Sentry (`@sentry/nextjs`) for web + worker,
   gated on `SENTRY_DSN` env (no-op when absent so local dev and CI are unaffected), wired into the
   worker's error paths and Next.js error handling. Update `.env.example` and `docs/DEPLOYMENT.md`
   (including an uptime-monitor recommendation pointed at `/api/health`). Account creation/DSN =
@@ -181,6 +185,9 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 - **R3.2** Anthropic Console: set a monthly spend limit + email alerts on the workspace/key used
   by `ANTHROPIC_API_KEY`; set budget alerts in Railway and the storage provider — see
   "Provider Spend & COGS" in `docs/DEPLOYMENT.md`.
+- **R3.3** Create a Sentry project, set `SENTRY_DSN` on web + worker, configure alert rules; point
+  an external uptime monitor at `/api/health` — see "Monitoring & Alerting" in
+  `docs/DEPLOYMENT.md`.
 
 ## Loop result
 
