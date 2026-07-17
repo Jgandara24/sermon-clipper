@@ -157,18 +157,16 @@ via the Gmail connector. Use `jake+approver@jakegandara.com` as the second user 
   `railway login`, drop credentials in `.env.production.local` (gitignored — never commit it),
   then re-run this file as a loop starting at Phase A.
 
-- **Phase B, branch protection step:** blocked on a GitHub plan limit, not a bug. Both classic
-  branch protection (`PUT /branches/main/protection`) and the newer rulesets API
-  (`POST /rulesets`) return 403 `"Upgrade to GitHub Pro or make this repository public"` for a
-  **private** repo on a free personal account — this is a genuine platform gate, verified by
-  trying both APIs. Two real options, both requiring the operator's decision (money or
-  visibility, neither appropriate to decide unilaterally):
-  1. Upgrade the GitHub account to Pro (~$4/mo) — enables protection on the private repo as-is.
-  2. Make `Jgandara24/sermon-clipper` public — enables protection for free, but exposes
-     proprietary source.
-  Once either is done, re-run: `gh api repos/Jgandara24/sermon-clipper/branches/main/protection
-  --method PUT --input -` with the JSON body in `docs/DEPLOYMENT.md` → "CI Gates" (contexts:
-  `verify`, `integration`, `e2e`, `worker-image`; `strict: true`; `enforce_admins: true`).
+- **Phase B, branch protection step:** was blocked on a GitHub plan limit (private repos on a
+  free personal account can't use classic protection or rulesets — verified by trying both).
+  **Resolved 2026-07-16 night:** operator chose to make the repo public rather than pay for
+  GitHub Pro right now. `Jgandara24/sermon-clipper` visibility changed to public, then branch
+  protection applied successfully requiring `verify`, `integration`, `e2e`, `worker-image` (all
+  four confirmed via `GET .../branches/main/protection`). **Consequence to remember:** all source
+  is now publicly visible on GitHub — revisit before this matters for real (fine pre-revenue/
+  pre-real-user-data; reconsider once handling real church data or before any public launch
+  announcement). Flip back to private only after upgrading to a paid plan, since free-tier private
+  repos can't carry branch protection.
 
 ## Night result
 
