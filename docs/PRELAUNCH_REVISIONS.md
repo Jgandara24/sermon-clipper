@@ -108,7 +108,7 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 - [x] **R2.6 Fix `.env.example` secret hygiene.** `MEDIA_URL_SECRET` is left uncommented with a
   known placeholder value — a copy-paste deploy ships a guessable secret. Comment it out like the
   other secrets and note the ≥32-char production requirement.
-- [ ] **R2.7 Worker resource sizing.** Document memory/CPU/scratch-disk requirements for the
+- [x] **R2.7 Worker resource sizing.** Document memory/CPU/scratch-disk requirements for the
   worker (whisper.cpp base.en + 3-pass ffmpeg renders, temp files in `os.tmpdir()`) in
   `docs/DEPLOYMENT.md`, with a recommended Railway instance size.
 

@@ -111,6 +111,25 @@ Which service consumes which variables:
 | `WORKER_ID`, `WORKER_*` tuning, `WORKER_CLEANUP_INTERVAL_MS`, `EXPORT_FILE_RETENTION_GRACE_MS` | — | ✅ |
 | `WHISPER_CPP_BINARY`, `FFMPEG_PATH`, `FFPROBE_PATH` | — | defaulted in the image |
 
+### Worker sizing
+
+A worker processes **one job at a time** (throughput scales by adding worker services/replicas,
+each with its own stable `WORKER_ID`). Size each worker instance for the heaviest single job:
+
+- **CPU: 2 vCPU minimum, 4 recommended.** whisper.cpp transcription and the 3-pass ffmpeg export
+  render are both CPU-bound and scale with cores; on shared/undersized CPU a 45-minute sermon's
+  transcription can exceed the 15-minute stale-job timeout and get requeued mid-run.
+- **Memory: 4 GB minimum.** The base.en model is ~148 MB on disk plus whisper compute buffers;
+  ffmpeg 1080×1920 x264 encoding runs alongside Node. 2 GB instances will OOM on long sources.
+- **Scratch disk: 15–20 GB.** Jobs download the full source video to `os.tmpdir()` (uploads are
+  capped at 5 GB), plus the extracted 16 kHz WAV (~115 MB per source hour) and per-pass render
+  intermediates. Temp files are cleaned per job, but budget for the largest source plus
+  intermediates concurrently.
+- **Volume: 1 GB** mounted at `/models` is ample for the default model.
+- **Sunday load:** churches upload in a burst after services. Queue depth, not job speed, is the
+  lever — add worker replicas ahead of Sunday/Monday if `processing` events show jobs waiting in
+  QUEUED for more than a few minutes.
+
 ## Release Steps
 
 1. Install dependencies.
