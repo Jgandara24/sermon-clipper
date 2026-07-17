@@ -170,7 +170,11 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   `reserveMinutesForJob` calls race one balance; assert exactly one wins when funds cover only one
   and the balance never goes negative (the in-UPDATE guard in `src/lib/usage-ledger.ts` is the
   mechanism under test).
-- [ ] **R4.4 Claude provider unit tests + model config.** Move the hardcoded model IDs in
+- [x] **R4.4 Claude provider unit tests + model config.** (`ANALYSIS_MODEL_CLASSIFY` /
+  `ANALYSIS_MODEL_SCORING` env overrides, defaults unchanged; 11 mocked-SDK unit tests covering
+  both-stage happy path with usage capture, stage-A rejection filtering, the 25-candidate cap,
+  malformed output on either stage, out-of-range indices, API-error propagation, missing-key
+  behavior, env override plumbing, and sermon church-subscore/scripture wiring.) Move the hardcoded model IDs in
   `src/lib/analysis/claude-provider.ts` to env-overridable config
   (`ANALYSIS_MODEL_SCORING`, `ANALYSIS_MODEL_CLASSIFY`, defaults unchanged; update
   `.env.example`). Add unit tests with a mocked Anthropic SDK covering: both stages happy path,

@@ -17,8 +17,19 @@ import {
 
 // claude-haiku-4-5 for the cheap Stage A pass, claude-sonnet-5 for Stage B scoring/rationale —
 // per guide §3. Sonnet 5 rejects a non-default temperature, so neither call sets one.
-const HAIKU_MODEL = "claude-haiku-4-5";
-const SONNET_MODEL = "claude-sonnet-5";
+// Env-overridable so a model deprecation is a config change, not a code deploy. New model IDs
+// should also be added to the pricing table in usage.ts or spend telemetry undercounts.
+const DEFAULT_CLASSIFY_MODEL = "claude-haiku-4-5";
+const DEFAULT_SCORING_MODEL = "claude-sonnet-5";
+
+export function classifyModel(): string {
+  return process.env.ANALYSIS_MODEL_CLASSIFY || DEFAULT_CLASSIFY_MODEL;
+}
+
+export function scoringModel(): string {
+  return process.env.ANALYSIS_MODEL_SCORING || DEFAULT_SCORING_MODEL;
+}
+
 const MAX_STAGE_B_CANDIDATES = 25;
 
 const MomentTypeSchema = z.enum([
@@ -82,7 +93,9 @@ function toModelCall(model: string, usage: Anthropic.Usage): AnalysisModelCall {
 
 /** Real Claude API analysis — Stage A (Haiku) classifies/rejects, Stage B (Sonnet) scores. */
 export class ClaudeAnalysisProvider implements AnalysisProvider {
-  readonly name = SONNET_MODEL;
+  get name(): string {
+    return scoringModel();
+  }
 
   /** Token usage for the most recent scoreCandidates call — spend telemetry, see usage.ts. */
   lastUsage: AnalysisUsage | null = null;
@@ -100,11 +113,13 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
     }
 
     this.lastUsage = null;
+    const stageAModel = classifyModel();
+    const stageBModel = scoringModel();
     const modelCalls: AnalysisModelCall[] = [];
     const client = new Anthropic();
 
     const stageA = await client.messages.parse({
-      model: HAIKU_MODEL,
+      model: stageAModel,
       max_tokens: 4096,
       messages: [
         {
@@ -117,7 +132,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
       ],
       output_config: { format: zodOutputFormat(StageAResultSchema) },
     });
-    modelCalls.push(toModelCall(HAIKU_MODEL, stageA.usage));
+    modelCalls.push(toModelCall(stageAModel, stageA.usage));
 
     const kept = (stageA.parsed_output?.classifications ?? [])
       .filter((c) => c.momentType !== "reject")
@@ -131,7 +146,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
     }
 
     const stageB = await client.messages.parse({
-      model: SONNET_MODEL,
+      model: stageBModel,
       max_tokens: 8192,
       thinking: { type: "disabled" },
       output_config: {
@@ -154,7 +169,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
       ],
     });
 
-    modelCalls.push(toModelCall(SONNET_MODEL, stageB.usage));
+    modelCalls.push(toModelCall(stageBModel, stageB.usage));
     this.lastUsage = buildAnalysisUsage(modelCalls);
 
     const scoredClips = stageB.parsed_output?.scoredClips ?? [];
@@ -200,7 +215,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
           excerpt: clip.excerpt,
           total: computeTotal(subscores, isSermon ? SERMON_WEIGHTS : undefined),
           subscores,
-          modelVersion: SONNET_MODEL,
+          modelVersion: stageBModel,
           scriptureReferences,
         };
       });
