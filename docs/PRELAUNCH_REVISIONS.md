@@ -97,7 +97,10 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   `tsx` from production dependencies in `package.json` (it can stay a devDependency for local
   `npm run worker`). Ensure Prisma client generation still works and `npm run verify` still passes.
   Record the approach in `DECISIONS.md`.
-- [ ] **R2.5 Harden `scripts/worker-entrypoint.sh`.** Add SHA-256 checksum verification of the
+- [x] **R2.5 Harden `scripts/worker-entrypoint.sh`.** (SHA-256 pinned to upstream's declared LFS
+  hash and cross-checked against a real download; 3-attempt retry with backoff; on-boot
+  re-verification of the volume copy with self-repair. All three paths — happy, corrupt download
+  → exit 1, corrupted existing file → re-download — tested live in the container.) Add SHA-256 checksum verification of the
   downloaded whisper model (known checksum for the default `ggml-base.en.bin`, overridable via
   `WHISPER_MODEL_SHA256` for custom `WHISPER_MODEL_URL`) and a bounded retry (e.g. 3 attempts,
   backoff) on download failure. Keep the atomic `.tmp` + `mv` pattern. Fail loudly on checksum

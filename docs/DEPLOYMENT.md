@@ -90,7 +90,11 @@ Human actions in the Railway dashboard (once per environment):
    path**: web → `railway.json`, worker → `railway.worker.json`.
 2. Attach a persistent volume to the worker service mounted at `/models`; set
    `WHISPER_MODEL_PATH=/models/ggml-base.en.bin`. The image entrypoint downloads the model to the
-   volume on first boot.
+   volume on first boot (3 attempts with backoff), verifies its SHA-256 against the pinned
+   upstream checksum, and re-verifies the on-disk copy on every boot — a corrupted volume copy is
+   deleted and re-downloaded. When overriding `WHISPER_MODEL_URL`, also set
+   `WHISPER_MODEL_SHA256` so the custom model can be integrity-checked; without it the entrypoint
+   warns and skips verification.
 3. Set the environment variables below (Railway shared variables + per-service references keep
    them in one place). `SERMON_CLIPPER_COMMIT_SHA` can be omitted on Railway — `/api/health`
    falls back to the platform-provided `RAILWAY_GIT_COMMIT_SHA`.
