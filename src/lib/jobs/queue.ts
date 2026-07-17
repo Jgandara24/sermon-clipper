@@ -4,6 +4,7 @@ import {
   type ProcessingJob,
   ProcessingJobState,
   ProcessingJobType,
+  ProjectStatus,
 } from "@prisma/client";
 import {
   PROCESSING_MAX_ATTEMPTS,
@@ -169,6 +170,7 @@ export async function recoverStaleProcessingJobs(
   let recovered = 0;
   let failed = 0;
   const failedJobIds: string[] = [];
+  const failedJobs: Array<{ id: string; type: ProcessingJobType }> = [];
   for (const job of staleJobs) {
     const exhausted = job.attempt >= (job.maxAttempts || PROCESSING_MAX_ATTEMPTS);
     const result = await client.processingJob.updateMany({
@@ -199,13 +201,41 @@ export async function recoverStaleProcessingJobs(
       if (exhausted) {
         failed += 1;
         failedJobIds.push(job.id);
+        failedJobs.push({ id: job.id, type: job.type });
       } else {
         recovered += 1;
       }
     }
   }
 
-  return { recovered, failed, failedJobIds };
+  return { recovered, failed, failedJobIds, failedJobs };
+}
+
+/**
+ * Applies the pipeline side effects of terminally failed stale jobs: release the job's minute
+ * reservation and mark its project FAILED. CLEANUP jobs are exempt — retention maintenance runs
+ * against healthy projects, and a stale cleanup must not fail the project or touch reservations
+ * (mirrors the same exemption in the runner's failure path).
+ */
+export async function applyStaleFailureSideEffects(
+  client: PrismaClient,
+  failedJobs: Array<{ id: string; type: ProcessingJobType }>,
+  options?: { releaseReservation: (client: PrismaClient, jobId: string) => Promise<unknown> },
+) {
+  for (const job of failedJobs) {
+    if (job.type === ProcessingJobType.CLEANUP) {
+      continue;
+    }
+    if (options?.releaseReservation) {
+      await options.releaseReservation(client, job.id);
+    }
+    await client.project
+      .updateMany({
+        where: { processingJobs: { some: { id: job.id } } },
+        data: { status: ProjectStatus.FAILED },
+      })
+      .catch(() => {});
+  }
 }
 
 /** Cancels a job only if it hasn't already reached a terminal state. */

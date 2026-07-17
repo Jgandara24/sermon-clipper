@@ -14,6 +14,7 @@ import {
   requeueFailedExportJob,
 } from "@/lib/exports/queue";
 import {
+  applyStaleFailureSideEffects,
   claimNextJob,
   markJobFailedOrRetry,
   recoverStaleProcessingJobs,
@@ -285,5 +286,74 @@ describe("export job reliability", () => {
     expect(retried.finishedAt).toBeNull();
     expect(retried.heartbeatAt).toBeNull();
     expect(retried.workerId).toBeNull();
+  });
+});
+
+describe("stale failure side effects", () => {
+  it("fails the project for exhausted pipeline jobs but never for CLEANUP jobs", async () => {
+    const now = new Date();
+    const staleTime = new Date(now.getTime() - 60 * 60 * 1000);
+
+    const pipelineProject = await prisma.project.create({
+      data: { workspaceId, name: "Stale Pipeline Project", status: ProjectStatus.PROCESSING },
+    });
+    const cleanupProject = await prisma.project.create({
+      data: { workspaceId, name: "Healthy Cleanup Project", status: ProjectStatus.READY },
+    });
+
+    const pipelineJob = await prisma.processingJob.create({
+      data: {
+        projectId: pipelineProject.id,
+        type: ProcessingJobType.FINALIZE,
+        state: ProcessingJobState.RUNNING,
+        idempotencyKey: uniqueKey("stale-side-pipeline"),
+        attempt: 3,
+        maxAttempts: 3,
+        startedAt: staleTime,
+        heartbeatAt: staleTime,
+      },
+    });
+    const cleanupJob = await prisma.processingJob.create({
+      data: {
+        projectId: cleanupProject.id,
+        type: ProcessingJobType.CLEANUP,
+        state: ProcessingJobState.RUNNING,
+        idempotencyKey: uniqueKey("stale-side-cleanup"),
+        attempt: 3,
+        maxAttempts: 3,
+        startedAt: staleTime,
+        heartbeatAt: staleTime,
+      },
+    });
+
+    const recovery = await recoverStaleProcessingJobs(
+      prisma,
+      [ProcessingJobType.FINALIZE, ProcessingJobType.CLEANUP],
+      now,
+    );
+    expect(recovery.failedJobs.map((j) => j.id)).toEqual(
+      expect.arrayContaining([pipelineJob.id, cleanupJob.id]),
+    );
+
+    const released: string[] = [];
+    await applyStaleFailureSideEffects(prisma, recovery.failedJobs, {
+      releaseReservation: async (_client, jobId) => {
+        released.push(jobId);
+      },
+    });
+
+    // Pipeline job: reservation released, project failed.
+    expect(released).toContain(pipelineJob.id);
+    const failedProject = await prisma.project.findUniqueOrThrow({
+      where: { id: pipelineProject.id },
+    });
+    expect(failedProject.status).toBe(ProjectStatus.FAILED);
+
+    // CLEANUP job: no reservation release, healthy project untouched.
+    expect(released).not.toContain(cleanupJob.id);
+    const healthyProject = await prisma.project.findUniqueOrThrow({
+      where: { id: cleanupProject.id },
+    });
+    expect(healthyProject.status).toBe(ProjectStatus.READY);
   });
 });

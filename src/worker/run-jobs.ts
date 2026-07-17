@@ -1,6 +1,6 @@
 import { runOnePendingExportJob } from "@/lib/exports/runner";
 import { recoverStaleExportJobs } from "@/lib/exports/queue";
-import { recoverStaleProcessingJobs } from "@/lib/jobs/queue";
+import { applyStaleFailureSideEffects, recoverStaleProcessingJobs } from "@/lib/jobs/queue";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { jobHandlers } from "@/lib/jobs/handlers";
 import {
@@ -17,7 +17,7 @@ import {
   recordWorkerProcessHeartbeat,
   workerProcessHeartbeatIntervalMs,
 } from "@/lib/worker/reliability";
-import { ProjectStatus, type ProcessingJobType } from "@prisma/client";
+import type { ProcessingJobType } from "@prisma/client";
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
 const RECOVERY_INTERVAL_MS = Number(process.env.WORKER_RECOVERY_INTERVAL_MS ?? 60_000);
@@ -51,18 +51,15 @@ async function loop() {
           recoverStaleProcessingJobs(prisma, SUPPORTED_TYPES),
           recoverStaleExportJobs(prisma),
         ]);
-        for (const jobId of processingRecovery.failedJobIds) {
-          await releaseReservationForJob(prisma, {
-            jobId,
-            note: "Released after stale worker timeout.",
-          });
-          await prisma.project
-            .updateMany({
-              where: { processingJobs: { some: { id: jobId } } },
-              data: { status: ProjectStatus.FAILED },
-            })
-            .catch(() => {});
-        }
+        // CLEANUP jobs are exempted inside the helper — a stale retention job must never mark a
+        // healthy project FAILED or release its reservations.
+        await applyStaleFailureSideEffects(prisma, processingRecovery.failedJobs, {
+          releaseReservation: (client, jobId) =>
+            releaseReservationForJob(client, {
+              jobId,
+              note: "Released after stale worker timeout.",
+            }),
+        });
         if (processingRecovery.recovered || processingRecovery.failed || exportRecovery.recovered || exportRecovery.failed) {
           console.warn("[worker] recovered stale jobs", { processingRecovery, exportRecovery });
           await recordOperationalEventSafely(prisma, {
