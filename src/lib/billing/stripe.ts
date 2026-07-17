@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient, type Workspace } from "@prisma/client";
 import Stripe from "stripe";
 import { planForCode, planForStripePriceId, stripePriceIdForPlan } from "@/lib/billing/plans";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
-import { grantMinutesForBillingPeriod } from "@/lib/usage-ledger";
+import { grantMinutesForBillingPeriod, revokeMinutesForRefundedInvoice } from "@/lib/usage-ledger";
 
 export const STRIPE_API_VERSION = "2026-02-25.clover";
 
@@ -251,6 +251,66 @@ async function handleInvoicePaid(client: PrismaClient, invoice: Stripe.Invoice) 
   });
 }
 
+/**
+ * Dunning visibility: payment failures surface as warning billing events so operators see them
+ * in /app/settings/operations. Plan state itself is not touched here — Stripe sends the
+ * authoritative `customer.subscription.updated` (status `past_due`, then `canceled` when dunning
+ * exhausts) and handleSubscriptionUpdated applies it.
+ */
+async function handleInvoicePaymentFailed(client: PrismaClient, invoice: Stripe.Invoice) {
+  const subscriptionId = invoiceSubscriptionId(invoice);
+  if (!subscriptionId) return;
+
+  const workspace = await client.workspace.findUnique({
+    where: { stripeSubscriptionId: subscriptionId },
+  });
+  if (!workspace) return;
+
+  await recordOperationalEventSafely(client, {
+    workspaceId: workspace.id,
+    category: "billing",
+    eventType: "stripe_invoice_payment_failed",
+    severity: "warning",
+    message: "A Stripe invoice payment failed — the subscription is in dunning.",
+    metadata: {
+      invoiceId: invoice.id,
+      subscriptionId,
+      planCode: workspace.planCode,
+      attemptCount: (invoice as { attempt_count?: number }).attempt_count ?? null,
+    },
+  });
+}
+
+/**
+ * Refund policy: a fully refunded charge claws back that invoice's granted minutes, floored at
+ * the current balance (never negative — spent minutes are not re-collected). Partial refunds
+ * only record an event for the operator; minute adjustments for partials are a manual decision.
+ */
+async function handleChargeRefunded(client: PrismaClient, charge: Stripe.Charge) {
+  const invoiceId = stringId((charge as { invoice?: unknown }).invoice);
+  if (!invoiceId) return;
+
+  if (!charge.refunded) {
+    const workspaceId = (
+      await client.billingPeriodCredit.findUnique({ where: { stripeInvoiceId: invoiceId } })
+    )?.workspaceId;
+    await recordOperationalEventSafely(client, {
+      workspaceId: workspaceId ?? null,
+      category: "billing",
+      eventType: "stripe_charge_partially_refunded",
+      severity: "warning",
+      message: "A Stripe charge was partially refunded — no minutes were revoked automatically.",
+      metadata: { chargeId: charge.id, invoiceId, amountRefunded: charge.amount_refunded },
+    });
+    return;
+  }
+
+  await revokeMinutesForRefundedInvoice(client, {
+    stripeInvoiceId: invoiceId,
+    note: `Stripe charge ${charge.id} fully refunded.`,
+  });
+}
+
 export async function handleStripeWebhookEvent(client: PrismaClient, event: Stripe.Event) {
   const shouldProcess = await markEventReceived(client, event);
   if (!shouldProcess) return { processed: false, duplicate: true };
@@ -266,6 +326,12 @@ export async function handleStripeWebhookEvent(client: PrismaClient, event: Stri
       break;
     case "invoice.paid":
       await handleInvoicePaid(client, event.data.object as Stripe.Invoice);
+      break;
+    case "invoice.payment_failed":
+      await handleInvoicePaymentFailed(client, event.data.object as Stripe.Invoice);
+      break;
+    case "charge.refunded":
+      await handleChargeRefunded(client, event.data.object as Stripe.Charge);
       break;
     default:
       break;

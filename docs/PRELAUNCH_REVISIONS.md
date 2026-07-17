@@ -152,7 +152,13 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   add a short "CI gates" note to `docs/DEPLOYMENT.md` listing the three required checks (`verify`,
   `integration`, `e2e`) and mark the GitHub settings click as a human action. If `gh api` can
   *read* current protection, check and report actual status.
-- [ ] **R4.2 Stripe failure-path tests.** Add integration tests for `invoice.payment_failed`
+- [x] **R4.2 Stripe failure-path tests.** (subscription.deleted was routed but untested — now
+  proven: downgrade to free, granted balance + ledger history intact. Implemented the two missing
+  handlers rather than testing around them: `invoice.payment_failed` → warning dunning event,
+  plan state left to the authoritative subscription.updated; `charge.refunded` → full refunds
+  claw back the invoice's granted minutes via a new floored, idempotent REFUND ledger mutation
+  (never negative, spent minutes not re-collected), partial refunds record-only. 4 new
+  integration tests including the floor and double-event cases.) Add integration tests for `invoice.payment_failed`
   (dunning → plan state), `customer.subscription.deleted` (downgrade to free without destroying
   granted balance history), and refund handling. If a handler for any of these doesn't exist in
   `src/lib/billing/stripe.ts`, implement it (webhook events are already idempotent via

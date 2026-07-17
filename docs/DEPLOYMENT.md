@@ -205,7 +205,10 @@ degraded or warning.
   to start with `whsec_`, and both plan IDs to start with `price_`.
 - Configure a Stripe webhook endpoint at `https://clips.example.org/api/stripe/webhook`.
 - Subscribe the endpoint to `checkout.session.completed`, `customer.subscription.created`,
-  `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.paid`.
+  `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
+  `invoice.payment_failed` (dunning visibility as warning billing events), and `charge.refunded`
+  (a fully refunded charge claws back that invoice's granted minutes, floored at the current
+  balance so it never goes negative; partial refunds only record an event).
 - The app uses Checkout Sessions for subscription starts, the Stripe Customer Portal for
   self-service changes/cancellation, and signed webhooks to update workspace plan state and grant
   included minutes once an invoice is paid.

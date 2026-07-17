@@ -694,3 +694,27 @@ is fine for abuse control. Limits are static env values, not plan-differentiated
 `billing/plans.ts` when paid tiers should buy higher throughput.
 
 Status: Active.
+
+## 2026-07-16 - Stripe Dunning Is Observed, Refunds Claw Back Floored Minutes
+
+Decision: `invoice.payment_failed` now records a warning-severity billing event for dunning
+visibility and deliberately does not touch plan state — Stripe's `customer.subscription.updated`
+(`past_due`, then `canceled` when dunning exhausts) remains the single authority on plan
+transitions. `charge.refunded` on a fully refunded charge claws back that invoice's granted
+minutes through `revokeMinutesForRefundedInvoice`: the clawback is floored at the workspace's
+current balance (a row-locked read-then-update, so it can't race a concurrent reservation), the
+REFUND ledger row doubles as a per-invoice idempotency marker on top of the webhook event dedupe,
+and partial refunds only record an event — adjusting minutes for a partial refund is a manual
+operator decision.
+
+Why: Phase 8 review flagged that only the happy billing paths (checkout, subscription update,
+idempotent invoice grant) were handled and tested. Failed payments were invisible to operators,
+and a refunded church kept its granted minutes with no record. The floor preserves the system's
+"no negative balances" invariant: minutes already spent on real processing are not re-collected.
+
+Tradeoff: A church that spends all granted minutes and then gets a full refund keeps the value of
+the spent minutes (clawback of 0) — acceptable generosity, consistent with the spec's refund
+posture, and visible in the ledger either way. Proration and partial-refund minute math are
+deliberately out of scope.
+
+Status: Active.

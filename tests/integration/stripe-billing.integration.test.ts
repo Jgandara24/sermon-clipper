@@ -134,4 +134,168 @@ describe("Stripe billing integration", () => {
     expect(credits).toHaveLength(1);
     expect(credits[0].stripeInvoiceId).toBe("in_456");
   });
+
+  it("downgrades to free on subscription.deleted without destroying balance or ledger history", async () => {
+    const workspace = await createWorkspace();
+    const subId = `sub_del_${runId}`;
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { stripeCustomerId: `cus_del_${runId}`, stripeSubscriptionId: subId, planCode: "pro" },
+    });
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_del_grant_${runId}`, "invoice.paid", {
+        id: `in_del_${runId}`,
+        object: "invoice",
+        subscription: subId,
+      }),
+    );
+
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_del_${runId}`, "customer.subscription.deleted", {
+        id: subId,
+        object: "subscription",
+        customer: `cus_del_${runId}`,
+        status: "canceled",
+        items: { data: [{ price: { id: "price_pro" }, current_period_end: 1786046400 }] },
+      }),
+    );
+
+    const updated = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(updated.planCode).toBe("free");
+    expect(updated.stripeSubscriptionStatus).toBe("canceled");
+    // Cancellation does not confiscate already-granted minutes or erase billing history.
+    expect(updated.minuteBalance.toString()).toBe("1200");
+    const ledger = await prisma.usageLedger.findMany({ where: { workspaceId: workspace.id } });
+    expect(ledger.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("records a dunning warning on invoice.payment_failed without touching plan state", async () => {
+    const workspace = await createWorkspace();
+    const subId = `sub_dun_${runId}`;
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { stripeSubscriptionId: subId, planCode: "starter" },
+    });
+
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_dun_${runId}`, "invoice.payment_failed", {
+        id: `in_dun_${runId}`,
+        object: "invoice",
+        subscription: subId,
+        attempt_count: 2,
+      }),
+    );
+
+    const updated = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(updated.planCode).toBe("starter");
+    const events = await prisma.operationalEvent.findMany({
+      where: { workspaceId: workspace.id, eventType: "stripe_invoice_payment_failed" },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].severity).toBe("warning");
+  });
+
+  it("claws back granted minutes on a full refund, floored so the balance never goes negative", async () => {
+    const workspace = await createWorkspace();
+    const subId = `sub_ref_${runId}`;
+    const invoiceId = `in_ref_${runId}`;
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { stripeSubscriptionId: subId, planCode: "pro" },
+    });
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_ref_grant_${runId}`, "invoice.paid", {
+        id: invoiceId,
+        object: "invoice",
+        subscription: subId,
+      }),
+    );
+    // Simulate the church having spent most of the granted minutes before refunding.
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { minuteBalance: new Prisma.Decimal("100") },
+    });
+
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_ref_${runId}`, "charge.refunded", {
+        id: `ch_ref_${runId}`,
+        object: "charge",
+        invoice: invoiceId,
+        refunded: true,
+        amount_refunded: 2900,
+      }),
+    );
+
+    const updated = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    // Granted 1200 but only 100 remained — clawback floors at the balance, never negative.
+    expect(updated.minuteBalance.toString()).toBe("0");
+    const refundRows = await prisma.usageLedger.findMany({
+      where: { workspaceId: workspace.id, kind: "REFUND" },
+    });
+    expect(refundRows).toHaveLength(1);
+    expect(refundRows[0].minutesDelta.toString()).toBe("-100");
+
+    // A second refund event for the same invoice must not double-claw.
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_ref_dup_${runId}`, "charge.refunded", {
+        id: `ch_ref_dup_${runId}`,
+        object: "charge",
+        invoice: invoiceId,
+        refunded: true,
+        amount_refunded: 2900,
+      }),
+    );
+    const after = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(after.minuteBalance.toString()).toBe("0");
+    await expect(
+      prisma.usageLedger.count({ where: { workspaceId: workspace.id, kind: "REFUND" } }),
+    ).resolves.toBe(1);
+  });
+
+  it("records but does not claw back on a partial refund", async () => {
+    const workspace = await createWorkspace();
+    const subId = `sub_part_${runId}`;
+    const invoiceId = `in_part_${runId}`;
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { stripeSubscriptionId: subId, planCode: "starter" },
+    });
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_part_grant_${runId}`, "invoice.paid", {
+        id: invoiceId,
+        object: "invoice",
+        subscription: subId,
+      }),
+    );
+    const granted = (await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } }))
+      .minuteBalance;
+
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_part_${runId}`, "charge.refunded", {
+        id: `ch_part_${runId}`,
+        object: "charge",
+        invoice: invoiceId,
+        refunded: false,
+        amount_refunded: 500,
+      }),
+    );
+
+    const updated = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(updated.minuteBalance.toString()).toBe(granted.toString());
+    await expect(
+      prisma.usageLedger.count({ where: { workspaceId: workspace.id, kind: "REFUND" } }),
+    ).resolves.toBe(0);
+    const events = await prisma.operationalEvent.findMany({
+      where: { workspaceId: workspace.id, eventType: "stripe_charge_partially_refunded" },
+    });
+    expect(events).toHaveLength(1);
+  });
 });

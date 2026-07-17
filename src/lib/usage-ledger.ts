@@ -260,3 +260,82 @@ export async function grantMinutesForBillingPeriod(
     return ledger;
   });
 }
+
+/**
+ * Claws back the minutes granted for a refunded Stripe invoice. The clawback is floored at the
+ * workspace's current balance — already-spent minutes are not re-collected and the balance never
+ * goes negative. Idempotent per invoice: the REFUND ledger row carries a marker note that
+ * short-circuits repeat calls (webhook event dedupe is the primary guard; this also protects
+ * against distinct Stripe events referencing the same invoice).
+ */
+export async function revokeMinutesForRefundedInvoice(
+  client: PrismaClient,
+  params: { stripeInvoiceId: string; note?: string },
+) {
+  const marker = `[refund:invoice:${params.stripeInvoiceId}]`;
+
+  return client.$transaction(async (tx) => {
+    const credit = await tx.billingPeriodCredit.findUnique({
+      where: { stripeInvoiceId: params.stripeInvoiceId },
+    });
+    if (!credit) {
+      return { ledger: null, revokedMinutes: new Prisma.Decimal(0), workspaceId: null };
+    }
+
+    const existing = await tx.usageLedger.findFirst({
+      where: { workspaceId: credit.workspaceId, kind: LedgerKind.REFUND, note: { contains: marker } },
+    });
+    if (existing) {
+      return {
+        ledger: existing,
+        revokedMinutes: existing.minutesDelta.negated(),
+        workspaceId: credit.workspaceId,
+      };
+    }
+
+    // Row-lock the workspace so the floor computation can't race a concurrent reservation.
+    const rows = await tx.$queryRaw<{ minute_balance: Prisma.Decimal }[]>`
+      SELECT minute_balance FROM workspaces WHERE id = ${credit.workspaceId}::uuid FOR UPDATE
+    `;
+    if (rows.length === 0) {
+      throw new Error(`Workspace ${credit.workspaceId} was not found for refund clawback.`);
+    }
+
+    const balance = toDecimal(rows[0].minute_balance);
+    const clawback = Prisma.Decimal.min(balance, toDecimal(credit.minutesGranted));
+    const updated = await tx.$queryRaw<{ minute_balance: Prisma.Decimal }[]>`
+      UPDATE workspaces
+      SET minute_balance = minute_balance - ${clawback}, updated_at = now()
+      WHERE id = ${credit.workspaceId}::uuid
+      RETURNING minute_balance
+    `;
+
+    // A zero-delta row still gets written: it is the audit record and the idempotency marker.
+    const ledger = await tx.usageLedger.create({
+      data: {
+        workspaceId: credit.workspaceId,
+        kind: LedgerKind.REFUND,
+        minutesDelta: clawback.negated(),
+        balanceAfter: updated[0].minute_balance,
+        note: `${params.note ?? "Stripe refund clawback."} ${marker}`,
+      },
+    });
+
+    await recordOperationalEvent(tx, {
+      workspaceId: credit.workspaceId,
+      category: "billing",
+      eventType: "stripe_refund_minutes_revoked",
+      severity: "warning",
+      message: "Minutes revoked after a Stripe refund.",
+      metadata: {
+        ledgerId: ledger.id,
+        stripeInvoiceId: params.stripeInvoiceId,
+        minutesGranted: credit.minutesGranted.toString(),
+        minutesRevoked: clawback.toString(),
+        balanceAfter: ledger.balanceAfter.toString(),
+      },
+    });
+
+    return { ledger, revokedMinutes: clawback, workspaceId: credit.workspaceId };
+  });
+}
