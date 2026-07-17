@@ -240,3 +240,27 @@ restore drill.
 **Suggested next steps:** review the branch (`git log main..prelaunch-revisions`), merge to
 `main`, push to GitHub (which starts the R4.1 chain), then work the human-actions list and
 resume the Phase 8 launch-evidence flow (`npm run create:launch-evidence`).
+
+## Independent review (Codex) — findings and fixes
+
+An adversarial second review (per `docs/CODEX_REVIEW_REQUEST.md`) returned 4 findings
+(2 blocker, 2 major), all confirmed real and fixed (see DECISIONS.md 2026-07-16 "Independent
+Review (Codex) Fixes"):
+
+1. **[blocker → fixed]** Refund clawback idempotency checked before the workspace row lock —
+   two concurrent refund events for one invoice could double-claw. Lock now acquired first;
+   concurrent-race regression test added.
+2. **[blocker → fixed]** Lockfile missing `@emnapi/*` entries again (macOS npm rewrite during
+   R3.3) — Docker build failed on Linux. Regenerated from the node:24 container; image rebuilt
+   green; new `worker-image` CI job (4th required check) prevents recurrence.
+3. **[major → fixed]** Worker stale-recovery applied release-reservations/fail-project side
+   effects to CLEANUP jobs, bypassing the runner's exemption. Extracted
+   `applyStaleFailureSideEffects` with the CLEANUP exemption; recovery-path regression test
+   added.
+4. **[major → fixed]** Presign rate limit failed open when the counter event write failed
+   silently. The counter is now a strict write and the route fails closed (500) if it cannot be
+   persisted.
+
+Codex verified as true: all gates pass, Railway config matches the live schema, Sentry DSN
+gating and Next 16 `onRequestError` usage, and per-job analysis provider instances (no
+`lastUsage` cross-contamination).

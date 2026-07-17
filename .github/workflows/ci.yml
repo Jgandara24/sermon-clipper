@@ -77,3 +77,19 @@ jobs:
       - run: npm run db:migrate:deploy
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+
+  # Guards against lockfile drift that only breaks under Linux npm (macOS installs can drop
+  # platform-specific optional deps) and against Dockerfile regressions — the worker image is
+  # the production runtime for transcription and rendering.
+  worker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.worker
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -718,3 +718,35 @@ posture, and visible in the ledger either way. Proration and partial-refund minu
 deliberately out of scope.
 
 Status: Active.
+
+## 2026-07-16 - Independent Review (Codex) Fixes: Refund Lock Ordering, Stale-Cleanup Side Effects, Fail-Closed Presign Counter, Linux Lockfile Gate
+
+Decision: Four fixes from an adversarial second review of the pre-launch branch. (1) In
+`revokeMinutesForRefundedInvoice`, the per-invoice idempotency check now runs *after* the
+workspace `FOR UPDATE` row lock — checking before the lock let two concurrent refund events for
+the same invoice (distinct Stripe event ids, so webhook dedupe does not apply) both pass the
+check and double-claw; serializing on the lock first means the loser sees the winner's committed
+REFUND row. (2) Stale-job recovery side effects (release reservations, mark project FAILED) moved
+into `applyStaleFailureSideEffects`, which exempts CLEANUP jobs — the worker loop previously
+applied them to every exhausted stale job, so a stale retention job could fail a healthy project.
+(3) The `upload_presigned` operational event doubles as the presign rate-limit counter, so it is
+now written with the strict (non-swallowing) recorder and the route fails closed with a 500 if
+the counter cannot be persisted — previously a failing events table silently disabled the cap.
+(4) The lockfile is regenerated from the node:24 Linux container (a macOS `npm install` had
+dropped the `@emnapi/*` optional entries again, breaking `npm ci` only inside the Docker build),
+and a fourth CI job (`worker-image`, buildx with GHA cache) now builds `Dockerfile.worker` on
+every push/PR so lockfile drift and Dockerfile regressions cannot land silently.
+
+Why: Each was a genuine hole the original implementation's tests missed: the refund race needed
+two events past the marker check before either locked; the cleanup exemption existed in the
+runner path but not the recovery path; fail-open rate limiting is invisible until the events
+table degrades; and macOS-vs-Linux lockfile drift had already recurred once within this branch.
+
+Tradeoff: Refund idempotency still keys on the marker-note convention rather than a dedicated
+unique column (no migration); the lock-then-check ordering makes it race-proof, and a
+`billing_period_credits.refund_ledger_id` unique column is the cleaner future shape if refund
+handling grows. Regression tests added for the race and the recovery exemption; the fail-closed
+presign write is enforced by code path (strict recorder + early return) — fault-injection
+testing of a failing events table is left out as impractical in the integration harness.
+
+Status: Active.

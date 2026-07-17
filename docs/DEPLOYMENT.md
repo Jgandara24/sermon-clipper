@@ -436,17 +436,19 @@ pull request:
 | `verify` | Prisma validate/generate, lint, typecheck, unit tests, production build (DB-free) |
 | `integration` | Billing, usage-ledger, rate-limit, retention, and workflow tests against real Postgres 17 + ffmpeg |
 | `e2e` | The Playwright Phase 6/7 church workflow in Chromium |
+| `worker-image` | `Dockerfile.worker` builds on Linux — catches lockfile drift (macOS installs can drop platform-specific optional deps and break `npm ci` only in the image) and Dockerfile regressions |
 
-All three must be **required status checks** — the `integration` job is the only place billing
+All four must be **required status checks** — the `integration` job is the only place billing
 and ledger correctness are exercised in CI, so without branch protection a broken money path can
 merge green. Human actions (GitHub settings, once):
 
 1. Push this repository to GitHub (no remote is configured at the time of writing) and confirm
-   all three jobs pass.
+   all four jobs pass.
 2. Settings → Branches → add a branch protection rule for `main`: require status checks to pass
-   before merging, and select `verify`, `integration`, and `e2e` as required checks.
+   before merging, and select `verify`, `integration`, `e2e`, and `worker-image` as required
+   checks.
 3. Verify from a terminal: `gh api repos/<owner>/<repo>/branches/main/protection --jq
-   '.required_status_checks.contexts'` should list all three.
+   '.required_status_checks.contexts'` should list all four.
 
 ## Monitoring & Alerting
 
