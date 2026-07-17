@@ -447,12 +447,13 @@ merge green. Human actions (GitHub settings, once):
    passed first try, `e2e` needed one fix (a hardcoded 10s assertion timeout too tight for a cold
    CI `next dev` compile on the first-ever hit to an API route — see git history on `main` the
    same night) — all four green as of run `29557146876`.
-2. Enable branch protection requiring `verify`, `integration`, `e2e`, `worker-image`. **Blocked**
-   on a GitHub plan limit for private repos on a free personal account (classic protection *and*
-   the rulesets API both 403 with "Upgrade to GitHub Pro or make this repository public" —
-   verified by trying both). Pick one, then run the command below:
-   - Upgrade the account to GitHub Pro (~$4/mo), keeping the repo private, **or**
-   - Settings → General → Danger Zone → change repository visibility to Public.
+2. Enable branch protection requiring `verify`, `integration`, `e2e`, `worker-image`. **Done** —
+   private-repo free-tier accounts can't use branch protection (classic *and* rulesets both
+   403'd), so the repo was made **public** 2026-07-16 night rather than pay for GitHub Pro right
+   now; protection then applied successfully with all four required checks. Revisit if/when
+   proprietary-source exposure becomes a real concern — flipping back to private requires a paid
+   plan to keep protection. Command used (kept here for re-applying after any future repo
+   recreation):
 
    ```sh
    gh api repos/<owner>/<repo>/branches/main/protection --method PUT --input - <<'EOF'
