@@ -4,7 +4,10 @@ import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
 import { formatBytes, planForCode } from "@/lib/billing/plans";
 import { createSignedUploadUrl, DEFAULT_UPLOAD_URL_TTL_SECONDS } from "@/lib/media/signed-url";
-import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
+import {
+  recordOperationalEvent,
+  recordOperationalEventSafely,
+} from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
 import { checkUploadPresignLimit } from "@/lib/rate-limit";
 
@@ -85,19 +88,30 @@ export async function POST(request: Request) {
   }
 
   const uploadId = randomUUID();
-  await recordOperationalEventSafely(prisma, {
-    workspaceId: workspace.id,
-    category: "upload",
-    eventType: "upload_presigned",
-    message: "Signed upload URL issued.",
-    metadata: {
-      uploadId,
-      filename: parsed.data.filename,
-      requestedBytes: parsed.data.size,
-      maxBytes: plan.maxUploadBytes,
-      planCode: plan.code,
-    },
-  });
+  // This event is also the rate-limit counter (checkUploadPresignLimit counts it), so it must
+  // fail closed: if the counter can't be written, no URL is issued — otherwise a failing events
+  // table would silently disable the hourly cap while presigns keep flowing.
+  try {
+    await recordOperationalEvent(prisma, {
+      workspaceId: workspace.id,
+      category: "upload",
+      eventType: "upload_presigned",
+      message: "Signed upload URL issued.",
+      metadata: {
+        uploadId,
+        filename: parsed.data.filename,
+        requestedBytes: parsed.data.size,
+        maxBytes: plan.maxUploadBytes,
+        planCode: plan.code,
+      },
+    });
+  } catch (error) {
+    console.error("[uploads] failed to record presign counter event", error);
+    return apiError("INTERNAL_ERROR", "Uploads are briefly unavailable — try again in a minute.", {
+      status: 500,
+      retryable: true,
+    });
+  }
 
   return apiData({
     uploadId,
