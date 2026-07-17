@@ -209,4 +209,34 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 
 ## Loop result
 
-> Written by the loop when it stops.
+**Complete: 18/18 items done** (commits `22bfe48..6590b4e` on `prelaunch-revisions`, 2026-07-16).
+Every commit passed `npm run verify`; DB-touching items also passed `npm run test:integration`
+(48 tests) — final counts: 10 integration files, ~300 unit assertions including 24 new tests.
+
+**Shipped:**
+- **R1** — Backups/restore runbook (RPO 24h/RTO 1h, restore drill), object-storage durability
+  (S3 versioning / R2 `src/` replication), a real retention reaper (CLEANUP handler + hourly
+  scan + orphan sweep, media purged, records kept), and an incident-response playbook.
+- **R2** — Deploy config corrected and versioned: the old `railway.json` used a nonexistent
+  multi-service schema and would have been silently ignored — replaced with per-service
+  `railway.json`/`railway.worker.json` (volume hard-required via `requiredMountPath`, migrations
+  via `preDeployCommand`, traffic gated on `/api/health`). Worker image: 4-stage build,
+  `--omit=dev` runtime, typechecked + esbuild-compiled worker (tsx out of prod), **statically
+  linked whisper-cli — the old dynamically-linked binary could never have executed in
+  production** (exit 127), checksum-verified model download with self-repair, sizing guidance.
+- **R3** — Per-workspace rate limits (export concurrency/daily caps closing the filename-variation
+  loophole; presign hourly cap bounding paid-pipeline entry), Claude spend telemetry per ANALYZE
+  job with an operations-page rollup + COGS model, and DSN-gated Sentry for web + worker.
+- **R4** — CI gates documented (**the repo has no git remote — CI has never run**); Stripe
+  dunning + refund handlers implemented and tested (floored idempotent minute clawback);
+  ledger balance guard proven under 2-way and 8-way real-connection races; analysis models
+  env-configurable with 11 mocked-SDK provider tests.
+
+**Blocked on humans:** everything in "Human actions required" above — Railway backups + volume +
+config-file paths + env vars, bucket versioning/replication, GitHub push + branch protection,
+Sentry project + uptime monitor, Anthropic/Railway/storage spend alerts, and the one-time
+restore drill.
+
+**Suggested next steps:** review the branch (`git log main..prelaunch-revisions`), merge to
+`main`, push to GitHub (which starts the R4.1 chain), then work the human-actions list and
+resume the Phase 8 launch-evidence flow (`npm run create:launch-evidence`).
