@@ -1,0 +1,63 @@
+# Worker image: runs the job/export queue (npm run worker:prod).
+# Needs system binaries the web service doesn't: ffmpeg with libass (caption burn-in)
+# and whisper.cpp's whisper-cli (transcription). See docs/DEPLOYMENT.md.
+
+FROM debian:bookworm-slim AS whisper-builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+RUN git clone --depth 1 --branch v1.9.1 https://github.com/ggerganov/whisper.cpp.git .
+# BUILD_SHARED_LIBS=OFF statically links libwhisper/libggml into whisper-cli so the single
+# binary can be copied into the runtime stage without hunting shared libraries.
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=OFF \
+    && cmake --build build --config Release -j"$(nproc)" \
+    && ./build/bin/whisper-cli --help >/dev/null
+
+# Full install (including devDependencies) so Prisma Client can be generated and the worker can
+# be typechecked + bundled; nothing from this stage's node_modules ships except the generated
+# client. `worker:build` runs `tsc --noEmit` first, so a type error anywhere in the worker's
+# import graph fails the image build instead of surfacing at runtime.
+FROM node:24-bookworm-slim AS app-builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY prisma ./prisma
+RUN npm run prisma:generate
+COPY tsconfig.json next-env.d.ts ./
+COPY src ./src
+RUN npm run worker:build
+
+# Production dependencies only — no playwright/eslint/vitest/typescript in the shipped image.
+FROM node:24-bookworm-slim AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+FROM node:24-bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ffmpeg ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && ffmpeg -filters | grep -q subtitles
+
+COPY --from=whisper-builder /build/build/bin/whisper-cli /usr/local/bin/whisper-cli
+RUN chmod +x /usr/local/bin/whisper-cli
+
+WORKDIR /app
+COPY --from=prod-deps /app/node_modules ./node_modules
+# Generated Prisma Client (schema-specific) from the build stage.
+COPY --from=app-builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=app-builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+# Compiled worker bundle — no TypeScript source or tsx runtime ships to production.
+COPY --from=app-builder /app/dist ./dist
+COPY package.json ./
+COPY scripts/worker-entrypoint.sh scripts/worker-entrypoint.sh
+RUN chmod +x scripts/worker-entrypoint.sh
+
+ENV NODE_ENV=production
+ENV WHISPER_CPP_BINARY=whisper-cli
+ENV FFMPEG_PATH=ffmpeg
+ENV FFPROBE_PATH=ffprobe
+
+ENTRYPOINT ["scripts/worker-entrypoint.sh"]
+CMD ["node", "--enable-source-maps", "dist/worker/run-jobs.cjs"]

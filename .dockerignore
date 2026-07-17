@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+build
+coverage
+playwright-report
+test-results
+.git
+.data
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+docs/phase8-launch-evidence.json

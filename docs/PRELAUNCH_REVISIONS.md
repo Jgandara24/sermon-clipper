@@ -66,7 +66,8 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 
 ## R2 — Deploy configuration completeness (launch blocker)
 
-- [ ] **R2.1 Version the deploy files.** `railway.json`, `Dockerfile.worker`,
+- [x] **R2.1 Version the deploy files.** (Committed after all R2.2–R2.6 fixes: `railway.json`,
+  `railway.worker.json`, `Dockerfile.worker`, `scripts/worker-entrypoint.sh`, `.dockerignore`.) `railway.json`, `Dockerfile.worker`,
   `scripts/worker-entrypoint.sh`, `.dockerignore` are currently untracked. Commit them — but only
   after R2.2–R2.6 are applied so the first tracked version is the corrected one.
 - [x] **R2.2 Complete `railway.json`.** (Split into per-service `railway.json` +
