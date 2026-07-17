@@ -157,6 +157,19 @@ via the Gmail connector. Use `jake+approver@jakegandara.com` as the second user 
   `railway login`, drop credentials in `.env.production.local` (gitignored — never commit it),
   then re-run this file as a loop starting at Phase A.
 
+- **Phase B, branch protection step:** blocked on a GitHub plan limit, not a bug. Both classic
+  branch protection (`PUT /branches/main/protection`) and the newer rulesets API
+  (`POST /rulesets`) return 403 `"Upgrade to GitHub Pro or make this repository public"` for a
+  **private** repo on a free personal account — this is a genuine platform gate, verified by
+  trying both APIs. Two real options, both requiring the operator's decision (money or
+  visibility, neither appropriate to decide unilaterally):
+  1. Upgrade the GitHub account to Pro (~$4/mo) — enables protection on the private repo as-is.
+  2. Make `Jgandara24/sermon-clipper` public — enables protection for free, but exposes
+     proprietary source.
+  Once either is done, re-run: `gh api repos/Jgandara24/sermon-clipper/branches/main/protection
+  --method PUT --input -` with the JSON body in `docs/DEPLOYMENT.md` → "CI Gates" (contexts:
+  `verify`, `integration`, `e2e`, `worker-image`; `strict: true`; `enforce_admins: true`).
+
 ## Night result
 
 > Written by the loop before stopping.

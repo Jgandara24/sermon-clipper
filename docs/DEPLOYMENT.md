@@ -442,12 +442,33 @@ All four must be **required status checks** — the `integration` job is the onl
 and ledger correctness are exercised in CI, so without branch protection a broken money path can
 merge green. Human actions (GitHub settings, once):
 
-1. Push this repository to GitHub (no remote is configured at the time of writing) and confirm
-   all four jobs pass.
-2. Settings → Branches → add a branch protection rule for `main`: require status checks to pass
-   before merging, and select `verify`, `integration`, `e2e`, and `worker-image` as required
-   checks.
-3. Verify from a terminal: `gh api repos/<owner>/<repo>/branches/main/protection --jq
+1. Push this repository to GitHub and confirm all four jobs pass. **Done** — pushed to
+   `Jgandara24/sermon-clipper` (private) 2026-07-16 night; `verify`/`integration`/`worker-image`
+   passed first try, `e2e` needed one fix (a hardcoded 10s assertion timeout too tight for a cold
+   CI `next dev` compile on the first-ever hit to an API route — see git history on `main` the
+   same night) — all four green as of run `29557146876`.
+2. Enable branch protection requiring `verify`, `integration`, `e2e`, `worker-image`. **Blocked**
+   on a GitHub plan limit for private repos on a free personal account (classic protection *and*
+   the rulesets API both 403 with "Upgrade to GitHub Pro or make this repository public" —
+   verified by trying both). Pick one, then run the command below:
+   - Upgrade the account to GitHub Pro (~$4/mo), keeping the repo private, **or**
+   - Settings → General → Danger Zone → change repository visibility to Public.
+
+   ```sh
+   gh api repos/<owner>/<repo>/branches/main/protection --method PUT --input - <<'EOF'
+   {
+     "required_status_checks": {
+       "strict": true,
+       "contexts": ["verify", "integration", "e2e", "worker-image"]
+     },
+     "enforce_admins": true,
+     "required_pull_request_reviews": null,
+     "restrictions": null
+   }
+   EOF
+   ```
+
+   Verify: `gh api repos/<owner>/<repo>/branches/main/protection --jq
    '.required_status_checks.contexts'` should list all four.
 
 ## Monitoring & Alerting
