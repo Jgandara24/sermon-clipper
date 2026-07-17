@@ -146,7 +146,9 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 
 ## R4 — CI gaps on money paths (pre-launch)
 
-- [ ] **R4.1 Branch protection documentation.** In-repo you cannot set GitHub branch protection —
+- [x] **R4.1 Branch protection documentation.** (Checked actual state: the repo has **no git
+  remote** — it has never been pushed, so CI has never run and protection cannot exist yet.
+  Documented the three required checks and the push → verify → protect chain in DEPLOYMENT.md.) In-repo you cannot set GitHub branch protection —
   add a short "CI gates" note to `docs/DEPLOYMENT.md` listing the three required checks (`verify`,
   `integration`, `e2e`) and mark the GitHub settings click as a human action. If `gh api` can
   *read* current protection, check and report actual status.
@@ -188,6 +190,9 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 - **R3.3** Create a Sentry project, set `SENTRY_DSN` on web + worker, configure alert rules; point
   an external uptime monitor at `/api/health` — see "Monitoring & Alerting" in
   `docs/DEPLOYMENT.md`.
+- **R4.1** Push the repo to GitHub (no remote configured today), confirm the three CI jobs pass,
+  then enable branch protection on `main` requiring `verify` + `integration` + `e2e` — see
+  "CI Gates" in `docs/DEPLOYMENT.md`.
 
 ## Loop result
 

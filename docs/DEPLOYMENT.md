@@ -423,6 +423,28 @@ deployment.
   email alerts on the workspace/key used by `ANTHROPIC_API_KEY`, sized from the rollup above
   with headroom. Set the equivalent budget alerts in Railway and the storage provider.
 
+## CI Gates
+
+GitHub Actions (`.github/workflows/ci.yml`) runs three jobs on every push to `main` and every
+pull request:
+
+| Check | What it gates |
+| --- | --- |
+| `verify` | Prisma validate/generate, lint, typecheck, unit tests, production build (DB-free) |
+| `integration` | Billing, usage-ledger, rate-limit, retention, and workflow tests against real Postgres 17 + ffmpeg |
+| `e2e` | The Playwright Phase 6/7 church workflow in Chromium |
+
+All three must be **required status checks** — the `integration` job is the only place billing
+and ledger correctness are exercised in CI, so without branch protection a broken money path can
+merge green. Human actions (GitHub settings, once):
+
+1. Push this repository to GitHub (no remote is configured at the time of writing) and confirm
+   all three jobs pass.
+2. Settings → Branches → add a branch protection rule for `main`: require status checks to pass
+   before merging, and select `verify`, `integration`, and `e2e` as required checks.
+3. Verify from a terminal: `gh api repos/<owner>/<repo>/branches/main/protection --jq
+   '.required_status_checks.contexts'` should list all three.
+
 ## Monitoring & Alerting
 
 - **Error monitoring (Sentry, errors only):** set `SENTRY_DSN` on both web and worker. The web
