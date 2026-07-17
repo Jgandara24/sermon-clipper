@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Compiled worker bundle (esbuild output, see worker:build):
+    "dist/**",
   ]),
 ]);
 

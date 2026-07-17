@@ -634,3 +634,36 @@ referrer expires; bounded and harmless. Reliability integration tests switched t
 type from CLEANUP to PREVIEW_RENDER since CLEANUP now executes real work.
 
 Status: Active.
+
+## 2026-07-16 - The Production Worker Ships Compiled, Not tsx-Interpreted
+
+Decision: `worker:prod` now runs `node --enable-source-maps dist/worker/run-jobs.cjs` instead of
+`tsx src/worker/run-jobs.ts`. A new `worker:build` script runs `tsc --noEmit` (full type check of
+the worker's import graph) then bundles the entrypoint with esbuild (`--bundle --platform=node
+--packages=external`, so node_modules — including the native Prisma client — stay external and
+only first-party `src/` code with its `@/` aliases is bundled). `tsx` moved from dependencies to
+devDependencies; local development keeps `npm run worker` (tsx watch). `Dockerfile.worker` runs
+`worker:build` in the full-deps builder stage and ships only `dist/`, the production
+`node_modules`, and the generated Prisma client — no TypeScript source, no on-the-fly transpiler.
+
+Why: Phase 8 review flagged that the worker shipped raw TS executed by tsx at runtime — no
+build-time type enforcement (a type error would only surface in production), slower cold start,
+and a dev-tool transpiler in the production dependency tree. Now a type error anywhere in the
+worker graph fails the Docker build, and the runtime is plain Node with source maps for stack
+traces. Verified by bundling locally and running the compiled worker against real Postgres (it
+polled and wrote its `worker_heartbeats` row), and by building the image.
+
+Exercising the image also surfaced a latent bug inherited from the first draft of
+`Dockerfile.worker`: whisper.cpp built shared libraries, so the copied `whisper-cli` binary could
+never execute in the runtime stage (exit 127, missing `libwhisper.so`) — every production
+transcription would have failed at the readiness gate. The build now uses
+`-DBUILD_SHARED_LIBS=OFF` for a self-contained static binary plus a build-time
+`whisper-cli --help` canary, and the boot path was proven end-to-end in the container (entrypoint
+→ readiness pass → poll loop → visible DB error on a bogus `DATABASE_URL`).
+
+Tradeoff: One more build artifact and script to know about; `dist/` is gitignored and must be
+rebuilt after source changes (bare-metal release steps updated accordingly). Launch/ops scripts
+(`smoke:production`, launch-evidence) still run via tsx as a devDependency — they are
+operator-side tools, not production processes.
+
+Status: Active.

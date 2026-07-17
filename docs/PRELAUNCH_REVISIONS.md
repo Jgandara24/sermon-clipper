@@ -87,7 +87,11 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   (playwright, eslint, vitest, typescript ship to production). Restructure: full install → build
   steps → production layer with `npm ci --omit=dev`. Keep the ffmpeg `subtitles` filter check and
   pinned whisper.cpp build.
-- [ ] **R2.4 Typecheck/compile the worker at build time.** The worker ships raw TS run by `tsx`
+- [x] **R2.4 Typecheck/compile the worker at build time.** (`worker:build` = `tsc --noEmit` +
+  esbuild bundle; `worker:prod` = plain `node dist/worker/run-jobs.cjs`; tsx moved to
+  devDependencies. Bonus fix: whisper-cli was dynamically linked and could never execute in the
+  runtime image — now statically linked with a build-time execution canary. Verified end-to-end
+  in the container.) The worker ships raw TS run by `tsx`
   with zero build-time type enforcement. Minimum: add `tsc --noEmit` to the Docker build.
   Preferred: compile/bundle the worker (tsc or esbuild) and run compiled JS via `node`, removing
   `tsx` from production dependencies in `package.json` (it can stay a devDependency for local

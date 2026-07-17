@@ -24,7 +24,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "worker": "tsx watch src/worker/run-jobs.ts",
-    "worker:prod": "tsx src/worker/run-jobs.ts"
+    "worker:build": "tsc --noEmit && esbuild src/worker/run-jobs.ts --bundle --platform=node --packages=external --sourcemap --outfile=dist/worker/run-jobs.cjs",
+    "worker:prod": "node --enable-source-maps dist/worker/run-jobs.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -37,7 +38,6 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "stripe": "^22.3.0",
-    "tsx": "^4.23.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -46,10 +46,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.28.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
+    "tsx": "^4.23.1",
     "typescript": "^5",
     "vitest": "^4.1.9"
   }

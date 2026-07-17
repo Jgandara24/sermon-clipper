@@ -133,9 +133,13 @@ npm run db:migrate:deploy
 npm run start
 ```
 
-5. Start at least one worker process separately from the web process.
+5. Build and start at least one worker process separately from the web process. The worker ships
+   as a compiled bundle: `worker:build` typechecks (`tsc --noEmit`) and bundles to
+   `dist/worker/run-jobs.cjs`; `worker:prod` runs it with plain `node`. The Railway worker image
+   does both at image build time.
 
 ```sh
+npm run worker:build
 npm run worker:prod
 ```
 
