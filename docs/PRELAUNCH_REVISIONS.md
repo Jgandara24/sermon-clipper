@@ -78,7 +78,12 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   (in `docs/DEPLOYMENT.md`) the required persistent volume mounted at the `WHISPER_MODEL_PATH`
   directory (without it the ~142MB model re-downloads every deploy) and the full per-service env
   var list. Anything the schema can't express goes in the runbook as an explicit dashboard step.
-- [ ] **R2.3 Slim the worker image.** `Dockerfile.worker` runs `npm ci` with full devDependencies
+- [x] **R2.3 Slim the worker image.** (Four-stage build: whisper-builder → app-builder (full deps,
+  prisma generate) → prod-deps (`npm ci --omit=dev`) → runtime. Verified by building and probing
+  the image: eslint/vitest gone, ffmpeg+libass and whisper-cli present, Prisma client generated,
+  `NODE_ENV=production` set. Note: `typescript` and `playwright` copies remain as *transitive
+  production* edges (`@prisma/client`→typescript, `next`→@playwright/test) — lockfile-driven, not
+  devDependency leakage.) `Dockerfile.worker` runs `npm ci` with full devDependencies
   (playwright, eslint, vitest, typescript ship to production). Restructure: full install → build
   steps → production layer with `npm ci --omit=dev`. Keep the ffmpeg `subtitles` filter check and
   pinned whisper.cpp build.
