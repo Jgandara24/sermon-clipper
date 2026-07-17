@@ -667,3 +667,30 @@ rebuilt after source changes (bare-metal release steps updated accordingly). Lau
 operator-side tools, not production processes.
 
 Status: Active.
+
+## 2026-07-16 - Expensive Routes Get DB-Counted Per-Workspace Rate Limits
+
+Decision: `src/lib/rate-limit.ts` adds per-workspace caps enforced in the API routes: exports are
+limited to `EXPORT_MAX_CONCURRENT_JOBS` (default 4) active renders and `EXPORT_DAILY_JOB_LIMIT`
+(default 50) new jobs per rolling 24h; upload presigns are limited to
+`UPLOAD_PRESIGN_HOURLY_LIMIT` (default 30) per rolling hour. Counting is DB-backed over existing
+rows — active/recent `export_jobs` for exports, and the `upload_presigned` operational events the
+presign route already emits for uploads — the same pattern as the email-OTP rate limit, with no
+new infrastructure. Rejections return the standard apiError shape with code `RATE_LIMITED`,
+HTTP 429, `retryable: true`, and record warning-severity operational events. Idempotent
+re-requests of an existing export job bypass the check (they create no new render), which also
+closes the unlimited-render loophole: only genuinely new (clip, version, filename) combinations
+count against the caps.
+
+Why: Phase 8 review flagged that only OTP was rate-limited while each export burns worker CPU and
+each upload can trigger paid transcription/analysis; the export idempotency key varies by
+filename, so renaming spawned unbounded render jobs. Uploads are the sole user-facing entry to
+the ANALYZE pipeline (analysis chains worker-side from transcription), so capping presigns caps
+provider spend.
+
+Tradeoff: Conditional count-then-insert is race-tolerant, not race-proof — two simultaneous
+requests at the boundary may both pass, so the effective cap is "limit, give or take one," which
+is fine for abuse control. Limits are static env values, not plan-differentiated; move them into
+`billing/plans.ts` when paid tiers should buy higher throughput.
+
+Status: Active.

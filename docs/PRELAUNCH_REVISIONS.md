@@ -115,7 +115,11 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
 
 ## R3 — Cost & abuse controls (launch blocker — margin protection)
 
-- [ ] **R3.1 Rate limits / daily caps on expensive routes.** Add per-workspace limits on:
+- [x] **R3.1 Rate limits / daily caps on expensive routes.** (Exports: concurrent cap 4 + rolling
+  daily cap 50, idempotent re-requests exempt — closes the filename-variation loophole. Presign:
+  30/hour counted off the existing `upload_presigned` events; uploads are the sole user entry to
+  the paid ANALYZE pipeline, so this caps provider spend too. 429 `RATE_LIMITED` + warning
+  events on rejection; 7 integration + 4 unit tests.) Add per-workspace limits on:
   `POST /api/clips/[id]/exports`, `POST /api/uploads/presign`, and analysis enqueueing. Close the
   unlimited-render loophole: the export idempotency key varies by filename
   (`export:{clipId}:v{version}:{filename}`), so renaming spawns unbounded ffmpeg jobs — cap

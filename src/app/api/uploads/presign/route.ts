@@ -6,6 +6,7 @@ import { formatBytes, planForCode } from "@/lib/billing/plans";
 import { createSignedUploadUrl, DEFAULT_UPLOAD_URL_TTL_SECONDS } from "@/lib/media/signed-url";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
+import { checkUploadPresignLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   filename: z.string().trim().min(1).max(255),
@@ -63,6 +64,24 @@ export async function POST(request: Request) {
       `This needs minutes to process; you have ${workspace.minuteBalance.toString()}.`,
       { status: 402 },
     );
+  }
+
+  const rateLimit = await checkUploadPresignLimit(prisma, workspace.id);
+  if (!rateLimit.allowed) {
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: workspace.id,
+      category: "upload",
+      eventType: "upload_rejected_rate_limited",
+      severity: "warning",
+      message: "Upload presign rejected by the workspace hourly rate limit.",
+      metadata: {
+        filename: parsed.data.filename,
+        reason: rateLimit.reason,
+        limit: rateLimit.limit,
+        current: rateLimit.current,
+      },
+    });
+    return apiError("RATE_LIMITED", rateLimit.message, { status: 429, retryable: true });
   }
 
   const uploadId = randomUUID();
