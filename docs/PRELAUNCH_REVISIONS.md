@@ -163,7 +163,10 @@ actions and the live evidence collection described in `docs/PHASE8_COMPLETION_AU
   granted balance history), and refund handling. If a handler for any of these doesn't exist in
   `src/lib/billing/stripe.ts`, implement it (webhook events are already idempotent via
   `stripe_webhook_events`) — don't test-around a missing handler.
-- [ ] **R4.3 Ledger concurrency test.** Add an integration test where two concurrent
+- [x] **R4.3 Ledger concurrency test.** (Two tests on isolated workspaces: pairwise race where
+  funds cover one — exactly one winner, loser gets InsufficientBalanceError, balance 0; and an
+  eight-way race against a balance covering three — exactly 3 succeed, 5 rejected, no persisted
+  balanceAfter ever negative. Exercises the in-UPDATE guard on real pooled connections.) Add an integration test where two concurrent
   `reserveMinutesForJob` calls race one balance; assert exactly one wins when funds cover only one
   and the balance never goes negative (the in-UPDATE guard in `src/lib/usage-ledger.ts` is the
   mechanism under test).

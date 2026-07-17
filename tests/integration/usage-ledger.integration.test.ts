@@ -165,3 +165,109 @@ describe("usage ledger against a real database", () => {
     expect(grant.balanceAfter.toString()).toBe(before.minuteBalance.add(5).toString());
   });
 });
+
+describe("concurrent reservations against one balance", () => {
+  async function createIsolatedWorkspace(balance: string) {
+    const workspace = await prisma.workspace.create({
+      data: {
+        name: `Race Test ${uniqueKey("ws")}`,
+        ownerId: userId,
+        minuteBalance: new Prisma.Decimal(balance),
+      },
+    });
+    const project = await prisma.project.create({
+      data: { workspaceId: workspace.id, name: "Race Test Project" },
+    });
+    const jobs = (count: number) =>
+      Promise.all(
+        Array.from({ length: count }, () =>
+          prisma.processingJob.create({
+            data: {
+              projectId: project.id,
+              type: ProcessingJobType.FINALIZE,
+              idempotencyKey: uniqueKey("race-job"),
+            },
+          }),
+        ),
+      );
+    return { workspace, project, jobs };
+  }
+
+  it("lets exactly one of two simultaneous reservations win when funds cover only one", async () => {
+    const { workspace, project, jobs } = await createIsolatedWorkspace("10.00");
+    const [jobA, jobB] = await jobs(2);
+
+    // Both reservations fire concurrently on separate pooled connections; the in-UPDATE
+    // balance guard (usage-ledger.ts applyLedgerMutation) is the mechanism under test.
+    const results = await Promise.allSettled([
+      reserveMinutesForJob(prisma, {
+        workspaceId: workspace.id,
+        projectId: project.id,
+        jobId: jobA.id,
+        minutes: 10,
+      }),
+      reserveMinutesForJob(prisma, {
+        workspaceId: workspace.id,
+        projectId: project.id,
+        jobId: jobB.id,
+        minutes: 10,
+      }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter(
+      (r): r is PromiseRejectedResult => r.status === "rejected",
+    );
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBeInstanceOf(InsufficientBalanceError);
+
+    const after = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(after.minuteBalance.toString()).toBe("0");
+    await expect(
+      prisma.usageLedger.count({ where: { workspaceId: workspace.id, kind: "PROCESSING" } }),
+    ).resolves.toBe(1);
+
+    await prisma.workspace.delete({ where: { id: workspace.id } });
+  });
+
+  it("never over-reserves under an eight-way race and never goes negative", async () => {
+    // Balance covers exactly 3 of 8 identical reservations.
+    const { workspace, project, jobs } = await createIsolatedWorkspace("30.00");
+    const raceJobs = await jobs(8);
+
+    const results = await Promise.allSettled(
+      raceJobs.map((job) =>
+        reserveMinutesForJob(prisma, {
+          workspaceId: workspace.id,
+          projectId: project.id,
+          jobId: job.id,
+          minutes: 10,
+        }),
+      ),
+    );
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter(
+      (r): r is PromiseRejectedResult => r.status === "rejected",
+    );
+    expect(fulfilled).toHaveLength(3);
+    expect(rejected).toHaveLength(5);
+    for (const failure of rejected) {
+      expect(failure.reason).toBeInstanceOf(InsufficientBalanceError);
+    }
+
+    const after = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(after.minuteBalance.toString()).toBe("0");
+    const ledgerRows = await prisma.usageLedger.findMany({
+      where: { workspaceId: workspace.id, kind: "PROCESSING" },
+    });
+    expect(ledgerRows).toHaveLength(3);
+    // Every persisted balanceAfter must be non-negative — no transient negative states.
+    for (const row of ledgerRows) {
+      expect(row.balanceAfter.greaterThanOrEqualTo(0)).toBe(true);
+    }
+
+    await prisma.workspace.delete({ where: { id: workspace.id } });
+  });
+});
