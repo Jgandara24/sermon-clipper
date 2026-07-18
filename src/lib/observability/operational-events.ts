@@ -30,7 +30,7 @@ export async function recordOperationalEvent(
   client: OperationalEventClient,
   input: OperationalEventInput,
 ) {
-  return client.operationalEvent.create({
+  const event = await client.operationalEvent.create({
     data: {
       workspaceId: input.workspaceId ?? undefined,
       category: input.category,
@@ -43,6 +43,14 @@ export async function recordOperationalEvent(
       metadata: input.metadata ?? {},
     },
   });
+
+  if ((input.severity ?? "info") === "error") {
+    // Fire-and-forget so alert delivery never extends a transaction or fails the caller.
+    const { dispatchOperationalAlertSafely } = await import("@/lib/observability/alerts");
+    void dispatchOperationalAlertSafely(input);
+  }
+
+  return event;
 }
 
 export async function recordOperationalEventSafely(

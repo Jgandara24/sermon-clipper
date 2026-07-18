@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prepare": "git config core.hooksPath .githooks || true",
     "build": "npm run prisma:generate && next build",
     "start": "next start",
     "lint": "eslint",

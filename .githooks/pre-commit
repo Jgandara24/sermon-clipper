@@ -1,0 +1,11 @@
+#!/bin/sh
+# Block commits containing secrets. Installed via `npm run prepare` (core.hooksPath).
+# Bypass for a false positive with: git commit --no-verify (then add an allowlist rule
+# to .gitleaks.toml so the bypass isn't needed twice).
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks not installed (brew install gitleaks) — skipping secret scan" >&2
+  exit 0
+fi
+
+exec gitleaks git --pre-commit --staged --redact --no-banner

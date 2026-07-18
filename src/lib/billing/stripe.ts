@@ -186,20 +186,56 @@ async function handleCheckoutCompleted(client: PrismaClient, session: Stripe.Che
   });
 }
 
+/**
+ * The exact subscription-id match always wins. The customer-id fallback only exists for
+ * subscriptions Stripe creates before checkout.session.completed has persisted the id — and it
+ * must not apply when the workspace already tracks a different subscription, or a late webhook
+ * for a superseded subscription (e.g. subscription.deleted after an upgrade) would clobber the
+ * live subscription's plan state.
+ */
+async function findWorkspaceForSubscription(
+  client: PrismaClient,
+  subscription: Stripe.Subscription,
+  customerId: string | null,
+) {
+  const bySubscription = await client.workspace.findUnique({
+    where: { stripeSubscriptionId: subscription.id },
+  });
+  if (bySubscription) return bySubscription;
+  if (!customerId) return null;
+
+  const byCustomer = await client.workspace.findUnique({
+    where: { stripeCustomerId: customerId },
+  });
+  if (!byCustomer) return null;
+
+  if (byCustomer.stripeSubscriptionId && byCustomer.stripeSubscriptionId !== subscription.id) {
+    await recordOperationalEventSafely(client, {
+      workspaceId: byCustomer.id,
+      category: "billing",
+      eventType: "stripe_subscription_event_ignored",
+      severity: "warning",
+      message:
+        "Ignored a Stripe subscription event that matched this workspace's customer but not its tracked subscription.",
+      metadata: {
+        eventSubscriptionId: subscription.id,
+        trackedSubscriptionId: byCustomer.stripeSubscriptionId,
+        customerId,
+        status: subscription.status,
+      },
+    });
+    return null;
+  }
+  return byCustomer;
+}
+
 async function handleSubscriptionUpdated(client: PrismaClient, subscription: Stripe.Subscription) {
   const customerId = stringId(subscription.customer);
   const priceId = firstSubscriptionPriceId(subscription);
   const planCode = subscriptionStatusPlanCode(subscription);
   const currentPeriodEnd = timestampToDate(subscription.items.data[0]?.current_period_end);
 
-  const workspace = await client.workspace.findFirst({
-    where: {
-      OR: [
-        { stripeSubscriptionId: subscription.id },
-        customerId ? { stripeCustomerId: customerId } : undefined,
-      ].filter(Boolean) as Array<{ stripeSubscriptionId: string } | { stripeCustomerId: string }>,
-    },
-  });
+  const workspace = await findWorkspaceForSubscription(client, subscription, customerId);
   if (!workspace) return;
 
   await client.workspace.update({

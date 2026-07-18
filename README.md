@@ -209,6 +209,10 @@ full requirement-by-requirement completion gate.
 
 ## Notes
 
+- Secret hygiene: `npm ci` configures `core.hooksPath` to `.githooks/`, whose pre-commit hook
+  runs [gitleaks](https://github.com/gitleaks/gitleaks) (`brew install gitleaks`) against staged
+  changes; false positives get an allowlist entry in `.gitleaks.toml`, not `--no-verify`. GitHub
+  secret scanning and push protection are enabled on the repository as a second layer.
 - `.env.example` contains only local development placeholders.
 - Publishing providers are intentionally absent — see DECISIONS.md for what's stubbed and why.
   Stripe Checkout/Portal billing is wired for paid plans, and minute-balance enforcement is real:

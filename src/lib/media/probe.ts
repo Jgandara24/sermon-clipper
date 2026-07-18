@@ -1,9 +1,6 @@
-import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 
 export type ProbeResult = {
   durationS: number;
@@ -72,15 +69,11 @@ export function parseFfprobeOutput(raw: string): ProbeResult {
 
 export async function probeVideoFile(filePath: string): Promise<ProbeResult> {
   const ffprobePath = process.env.FFPROBE_PATH || "ffprobe";
-  const { stdout } = await execFileAsync(ffprobePath, [
-    "-v",
-    "error",
-    "-print_format",
-    "json",
-    "-show_format",
-    "-show_streams",
-    filePath,
-  ]);
+  const { stdout } = await execFileWithTimeout(
+    ffprobePath,
+    ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", filePath],
+    { timeoutMs: envTimeoutMs("FFPROBE_TIMEOUT_MS", 60_000) },
+  );
   return parseFfprobeOutput(stdout);
 }
 
@@ -91,22 +84,20 @@ export async function extractThumbnail(
 ): Promise<void> {
   const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
   await mkdir(path.dirname(outPath), { recursive: true });
-  await execFileAsync(ffmpegPath, [
-    "-y",
-    "-ss",
-    String(Math.max(0, atSeconds)),
-    "-i",
-    filePath,
-    "-frames:v",
-    "1",
-    "-q:v",
-    "3",
-    outPath,
-  ]);
+  await execFileWithTimeout(
+    ffmpegPath,
+    ["-y", "-ss", String(Math.max(0, atSeconds)), "-i", filePath, "-frames:v", "1", "-q:v", "3", outPath],
+    { timeoutMs: envTimeoutMs("FFMPEG_THUMBNAIL_TIMEOUT_MS", 120_000) },
+  );
 }
 
 export async function extractAudio(filePath: string, outPath: string): Promise<void> {
   const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
   await mkdir(path.dirname(outPath), { recursive: true });
-  await execFileAsync(ffmpegPath, ["-y", "-i", filePath, "-vn", "-ac", "1", "-ar", "16000", outPath]);
+  await execFileWithTimeout(
+    ffmpegPath,
+    ["-y", "-i", filePath, "-vn", "-ac", "1", "-ar", "16000", outPath],
+    // Audio extraction reads the full source (up to 3 h) but runs much faster than realtime.
+    { timeoutMs: envTimeoutMs("FFMPEG_AUDIO_EXTRACT_TIMEOUT_MS", 600_000) },
+  );
 }

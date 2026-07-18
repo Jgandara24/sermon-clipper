@@ -1,11 +1,8 @@
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
+import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import type { TimeRange } from "./kept-ranges";
-
-const execFileAsync = promisify(execFile);
 
 export class RenderError extends Error {}
 
@@ -37,7 +34,12 @@ export function buildExportFilterGraph(
 
 async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
   try {
-    await execFileAsync(ffmpegPath, args, { maxBuffer: 1024 * 1024 * 64 });
+    await execFileWithTimeout(ffmpegPath, args, {
+      maxBuffer: 1024 * 1024 * 64,
+      // Per encode pass; clip exports are seconds-to-minutes of output, so a pass that runs
+      // this long is wedged, not slow.
+      timeoutMs: envTimeoutMs("EXPORT_FFMPEG_TIMEOUT_MS", 900_000),
+    });
   } catch (error) {
     throw new RenderError(`ffmpeg failed: ${(error as Error).message}`);
   }
