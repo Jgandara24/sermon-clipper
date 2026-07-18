@@ -118,7 +118,7 @@ and polling on top of the now-working fetch adapter.
 - [ ] **3.1** `src/worker/run-jobs.ts`: add `lastChannelPollAt` + `CHANNEL_POLL_INTERVAL_MS`
       (default ~45 min), following the exact `lastCleanupScanAt`/`enqueueDueCleanupJobs`
       timestamp-comparison-in-loop pattern used for the CLEANUP reaper.
-- [ ] **3.2** `src/lib/integrations/channel-poller.ts`: `pollDueChannelImportSources(prisma)` —
+- [x] **3.2** `src/lib/integrations/channel-poller.ts`: `pollDueChannelImportSources(prisma)` —
       for each due, enabled source: list recent uploads, stop at the first already-seen video ID
       or `publishedAt <= lastPolledAt`, and for each new video call
       `createDraftProjectForWorkspace` (Phase 1) with the video URL, recording a
