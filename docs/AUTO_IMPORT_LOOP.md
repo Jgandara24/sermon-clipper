@@ -140,7 +140,7 @@ and polling on top of the now-working fetch adapter.
       emit `channel_registered`, `channel_poll_ran`, `channel_import_created`,
       `channel_import_skipped_cap`, `channel_poll_failed` at the appropriate call sites in
       Phases 2–3.
-- [ ] **4.3** `docs/DEPLOYMENT.md`: document new env vars (`YOUTUBE_API_KEY`, `YTDLP_PATH`,
+- [x] **4.3** `docs/DEPLOYMENT.md`: document new env vars (`YOUTUBE_API_KEY`, `YTDLP_PATH`,
       `CHANNEL_POLL_INTERVAL_MS`, `CHANNEL_IMPORT_DAILY_LIMIT`) and a short "Auto-Import" runbook
       section (how to register a channel, how to read poll failures from
       `lastPollErrorMessage`/`/app/settings/operations`).

@@ -70,6 +70,17 @@ TWILIO_AUTH_TOKEN=...
 TWILIO_MESSAGING_FROM=+15555550100
 FFMPEG_PATH=ffmpeg
 FFPROBE_PATH=ffprobe
+YTDLP_PATH=yt-dlp
+YOUTUBE_API_KEY=<youtube-data-api-v3-key>
+```
+
+URL import and channel auto-import (see [Auto-Import](#auto-import-youtube-channels)):
+
+```sh
+YTDLP_METADATA_TIMEOUT_MS=30000
+YTDLP_DOWNLOAD_TIMEOUT_MS=1200000
+CHANNEL_POLL_INTERVAL_MS=2700000
+CHANNEL_IMPORT_DAILY_LIMIT=10
 ```
 
 ## Railway Service Configuration
@@ -355,8 +366,8 @@ collecting launch evidence.
   prove a real sermon was transcribed by the deployed worker.
 - Configure `ANTHROPIC_API_KEY` for production clip scoring. The heuristic scorer remains useful
   for local development, but Phase 8 launch readiness requires Claude-backed analysis evidence.
-- Monitor `/app/settings/operations` for `worker`, `processing`, `transcription`, `analysis`, and
-  `export` events.
+- Monitor `/app/settings/operations` for `worker`, `processing`, `transcription`, `analysis`,
+  `export`, and `channel_import` events.
 - If a worker dies mid-job, another worker will recover stale `RUNNING` jobs after
   `WORKER_STALE_JOB_TIMEOUT_MS`.
 - Workers run the retention reaper: every `WORKER_CLEANUP_INTERVAL_MS` (default hourly) they
@@ -365,6 +376,48 @@ collecting launch evidence.
   Database records (projects, clips, transcripts, ledger, audit events) are kept. Watch for
   `retention_cleanup` events in `/app/settings/operations`.
 - Workers need local disk space for temporary ffmpeg/whisper files.
+
+## Auto-Import (YouTube Channels)
+
+Workspaces can register a public YouTube channel at `/app/settings/imports` (gated on the
+`MANAGE_OPERATIONS` permission). The worker polls every registered channel each
+`CHANNEL_POLL_INTERVAL_MS` (default 45 minutes) and turns uploads published *after registration*
+into draft projects through the same URL-import pipeline a manual paste uses — there is no bulk
+backfill; old videos can still be pasted manually.
+
+Environment:
+
+- `YOUTUBE_API_KEY` — YouTube Data API v3 key, set on **both** web and worker: the web process
+  resolves the channel at registration time, the worker polls uploads. Mint it in a Google Cloud
+  project with only the YouTube Data API v3 enabled and restrict the key to that API. Without it,
+  channel registration fails at the form and polls fail with a clear key error.
+- `YTDLP_PATH` — worker; defaults to `yt-dlp` on `PATH` (installed by `Dockerfile.worker`).
+  Production workers fail startup when the binary is missing, same as ffmpeg/ffprobe.
+- `YTDLP_METADATA_TIMEOUT_MS` / `YTDLP_DOWNLOAD_TIMEOUT_MS` — worker; hard timeouts for the
+  yt-dlp metadata probe (default 30s) and video download (default 20 min).
+- `CHANNEL_POLL_INTERVAL_MS` — worker; polling cadence (default 45 min). Each poll costs 1
+  YouTube quota unit per registered channel (`playlistItems.list` only, never `search.list`).
+- `CHANNEL_IMPORT_DAILY_LIMIT` — worker; auto-imports a workspace may gain per rolling 24h
+  (default 10). Over-cap uploads are recorded as `skipped_cap` and retried on a later poll —
+  pacing, not rejection.
+
+Runbook:
+
+- **Register a channel:** `/app/settings/imports` → paste an `@handle`, a `UC...` channel id, or
+  a youtube.com channel URL. Registration resolves the channel synchronously, so a bad handle or
+  a missing/invalid `YOUTUBE_API_KEY` fails right at the form instead of creating a silently
+  broken source.
+- **Read poll failures:** each source's last poll error (`lastPollErrorAt`/
+  `lastPollErrorMessage`) is shown on `/app/settings/imports`, and the worker records
+  `channel_import` events (`channel_poll_ran`, `channel_import_created`,
+  `channel_import_skipped_cap`, `channel_poll_failed`) in `/app/settings/operations`. Poll
+  failures are warning severity and self-heal on the next cycle — investigate only when they
+  persist across polls (revoked key, exhausted quota, deleted channel).
+- **Cap deferrals:** `channel_import_skipped_cap` warnings mean the workspace hit
+  `CHANNEL_IMPORT_DAILY_LIMIT`; deferred uploads import automatically once the rolling 24h
+  window has room. Raise the limit if deferrals are routine for a legitimate workload.
+- **Pause a channel:** disable it from `/app/settings/imports`; disabled sources are skipped by
+  the poller until re-enabled.
 
 ## Smoke Test
 
@@ -495,7 +548,8 @@ merge green. Human actions (GitHub settings, once):
 
 Where to look, in order: `curl -fsS <url>/api/health` (readiness + per-check status + commit),
 `/app/settings/operations` as owner/admin (upload/processing/transcription/analysis/export/
-approval/billing/worker event feed with severities), Sentry (if configured), then platform logs
+approval/billing/worker/channel_import event feed with severities), Sentry (if configured), then
+platform logs
 for the web and worker services.
 
 ### Severity levels
