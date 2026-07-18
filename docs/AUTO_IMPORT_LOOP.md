@@ -109,7 +109,7 @@ and polling on top of the now-working fetch adapter.
       `src/app/app/settings/imports/page.tsx` (new route, gated on `MANAGE_OPERATIONS`),
       following the zod-validate → `requirePrimaryWorkspacePermission` → service-call → revalidate
       shape already used by `src/app/actions/projects.ts`.
-- [ ] **2.5** Unit tests for `youtube.ts` (injected `fetch`, canned Data API v3 JSON fixtures:
+- [x] **2.5** Unit tests for `youtube.ts` (injected `fetch`, canned Data API v3 JSON fixtures:
       happy path, 404 unknown channel, 403 quota/key error) and the registration service
       (duplicate-channel rejection via the unique constraint, bad-input rejection).
 
