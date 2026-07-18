@@ -150,8 +150,8 @@ const fieldSchemas = {
   WORKER_PROCESS_HEARTBEAT_INTERVAL_MS: rawNumber(30_000),
   WORKER_STALE_JOB_TIMEOUT_MS: rawNumber(15 * 60_000),
   // Channel auto-import polling cadence (worker loop, same timestamp-comparison pattern as
-  // WORKER_CLEANUP_INTERVAL_MS). Default ~45 minutes.
-  CHANNEL_POLL_INTERVAL_MS: rawNumber(45 * 60_000),
+  // WORKER_CLEANUP_INTERVAL_MS). Default 60 minutes.
+  CHANNEL_POLL_INTERVAL_MS: rawNumber(60 * 60_000),
 } satisfies Record<string, z.ZodType>;
 
 type EnvSchemaMap = typeof fieldSchemas;

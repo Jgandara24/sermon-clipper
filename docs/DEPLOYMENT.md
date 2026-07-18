@@ -79,7 +79,7 @@ URL import and channel auto-import (see [Auto-Import](#auto-import-youtube-chann
 ```sh
 YTDLP_METADATA_TIMEOUT_MS=30000
 YTDLP_DOWNLOAD_TIMEOUT_MS=1200000
-CHANNEL_POLL_INTERVAL_MS=2700000
+CHANNEL_POLL_INTERVAL_MS=3600000
 CHANNEL_IMPORT_DAILY_LIMIT=10
 ```
 
@@ -381,7 +381,7 @@ collecting launch evidence.
 
 Workspaces can register a public YouTube channel at `/app/settings/imports` (gated on the
 `MANAGE_OPERATIONS` permission). The worker polls every registered channel each
-`CHANNEL_POLL_INTERVAL_MS` (default 45 minutes) and turns uploads published *after registration*
+`CHANNEL_POLL_INTERVAL_MS` (default 60 minutes) and turns uploads published *after registration*
 into draft projects through the same URL-import pipeline a manual paste uses — there is no bulk
 backfill; old videos can still be pasted manually.
 
@@ -395,7 +395,7 @@ Environment:
   Production workers fail startup when the binary is missing, same as ffmpeg/ffprobe.
 - `YTDLP_METADATA_TIMEOUT_MS` / `YTDLP_DOWNLOAD_TIMEOUT_MS` — worker; hard timeouts for the
   yt-dlp metadata probe (default 30s) and video download (default 20 min).
-- `CHANNEL_POLL_INTERVAL_MS` — worker; polling cadence (default 45 min). Each poll costs 1
+- `CHANNEL_POLL_INTERVAL_MS` — worker; polling cadence (default 60 min). Each poll costs 1
   YouTube quota unit per registered channel (`playlistItems.list` only, never `search.list`).
 - `CHANNEL_IMPORT_DAILY_LIMIT` — worker; auto-imports a workspace may gain per rolling 24h
   (default 10). Over-cap uploads are recorded as `skipped_cap` and retried on a later poll —
