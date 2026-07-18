@@ -124,6 +124,9 @@ const fieldSchemas = {
   ANALYSIS_MODEL_CLASSIFY: optionalString,
   ANALYSIS_MODEL_SCORING: optionalString,
 
+  // YouTube Data API v3 (channel auto-import). App-level key, like ANTHROPIC_API_KEY.
+  YOUTUBE_API_KEY: optionalString,
+
   // Observability
   SENTRY_DSN: optionalString,
   ALERTS_THROTTLE_MS: numberOrFallback(30 * 60 * 1000),
