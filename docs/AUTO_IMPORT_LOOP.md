@@ -76,7 +76,7 @@ and polling on top of the now-working fetch adapter.
       download), download into the existing `mkdtemp` workDir, `storage.uploadFile(key, tmpPath,
       "video/mp4")` (no storage-layer change needed), update `sourceVideo.storageKey`, then fall
       through into the unchanged probe/reserve/enqueue-PROBE flow.
-- [ ] **1.3** `src/lib/worker/reliability.ts`: extend `checkWorkerRuntimeEnvironment` with a
+- [x] **1.3** `src/lib/worker/reliability.ts`: extend `checkWorkerRuntimeEnvironment` with a
       `YTDLP_PATH` check, following the exact `FFMPEG_PATH`/`FFPROBE_PATH` injected-
       `commandAvailable` pattern (unit test alongside the existing fakes in
       `tests/worker-reliability.test.ts`).

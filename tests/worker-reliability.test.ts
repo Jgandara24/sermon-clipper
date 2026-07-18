@@ -39,6 +39,7 @@ describe("worker reliability helpers", () => {
         WORKER_ID: "worker-1",
         FFMPEG_PATH: "missing-ffmpeg",
         FFPROBE_PATH: "missing-ffprobe",
+        YTDLP_PATH: "missing-yt-dlp",
         WHISPER_CPP_BINARY: "missing-whisper",
         WHISPER_MODEL_PATH: "/models/missing.bin",
       },
@@ -50,9 +51,29 @@ describe("worker reliability helpers", () => {
       expect.arrayContaining([
         expect.objectContaining({ name: "FFMPEG_PATH", status: "fail" }),
         expect.objectContaining({ name: "FFPROBE_PATH", status: "fail" }),
+        expect.objectContaining({ name: "YTDLP_PATH", status: "fail" }),
         expect.objectContaining({ name: "WHISPER_CPP_BINARY", status: "fail" }),
         expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "fail" }),
       ]),
+    );
+  });
+
+  it("probes yt-dlp with --version (yt-dlp rejects ffmpeg-style -version)", () => {
+    const probed: Array<{ command: string; versionFlag?: string }> = [];
+    checkWorkerRuntimeEnvironment(
+      { NODE_ENV: "production", WORKER_ID: "worker-1" },
+      (command, versionFlag) => {
+        probed.push({ command, versionFlag });
+        return true;
+      },
+      () => true,
+    );
+
+    expect(probed).toEqual(
+      expect.arrayContaining([{ command: "yt-dlp", versionFlag: "--version" }]),
+    );
+    expect(probed.filter((call) => call.command !== "yt-dlp").every((call) => call.versionFlag === undefined)).toBe(
+      true,
     );
   });
 
@@ -63,6 +84,7 @@ describe("worker reliability helpers", () => {
         WORKER_ID: "worker-1",
         FFMPEG_PATH: "ffmpeg",
         FFPROBE_PATH: "ffprobe",
+        YTDLP_PATH: "yt-dlp",
         WHISPER_CPP_BINARY: "whisper-cli",
         WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
       },
@@ -73,6 +95,7 @@ describe("worker reliability helpers", () => {
     expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "WORKER_ID", status: "ok" })]));
     expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "FFMPEG_PATH", status: "ok" })]));
     expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "FFPROBE_PATH", status: "ok" })]));
+    expect(checks).toEqual(expect.arrayContaining([expect.objectContaining({ name: "YTDLP_PATH", status: "ok" })]));
     expect(checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "WHISPER_CPP_BINARY", status: "ok" })]),
     );
