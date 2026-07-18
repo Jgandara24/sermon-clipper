@@ -11,11 +11,10 @@ export class ChildProcessTimeoutError extends Error {}
  * otherwise blocks the (serial) worker until stale-heartbeat recovery reaps the whole job
  * ~15 minutes later, and because the process kept heartbeating it may never be reaped at all.
  * SIGKILL rather than SIGTERM — a wedged encoder can't be trusted to honor a polite signal.
+ *
+ * Timeout parsing lives in @/lib/env; re-exported here so media call sites keep one import.
  */
-export function envTimeoutMs(envVar: string, defaultMs: number): number {
-  const parsed = Number(process.env[envVar] ?? defaultMs);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultMs;
-}
+export { envTimeoutMs } from "@/lib/env";
 
 export async function execFileWithTimeout(
   binaryPath: string,

@@ -1,4 +1,5 @@
 import { NotificationStatus } from "@prisma/client";
+import { env, operationsAlertFromEmail } from "@/lib/env";
 import { sendViaResend } from "@/lib/notifications/email-provider";
 import type { OperationalEventInput } from "@/lib/observability/operational-events";
 
@@ -9,7 +10,6 @@ import type { OperationalEventInput } from "@/lib/observability/operational-even
  * in-process — web and worker each alert at most once per window, which is acceptable
  * double-delivery for a two-process deployment, not a correctness concern.
  */
-const DEFAULT_THROTTLE_MS = 30 * 60 * 1000;
 const lastAlertAt = new Map<string, number>();
 
 export function __resetAlertThrottleForTests() {
@@ -20,14 +20,13 @@ export async function dispatchOperationalAlertSafely(input: OperationalEventInpu
   try {
     if ((input.severity ?? "info") !== "error") return;
 
-    const to = process.env.OPERATIONS_ALERT_EMAIL;
-    const apiKey = process.env.RESEND_API_KEY;
-    const fromEmail = process.env.NOTIFICATIONS_FROM_EMAIL || process.env.AUTH_EMAIL_FROM;
+    const to = env.OPERATIONS_ALERT_EMAIL;
+    const apiKey = env.RESEND_API_KEY;
+    const fromEmail = operationsAlertFromEmail();
     // Unconfigured (local dev, CI): the operational event row is still the durable record.
     if (!to || !apiKey || !fromEmail) return;
 
-    const throttleMs =
-      Number(process.env.ALERTS_THROTTLE_MS ?? DEFAULT_THROTTLE_MS) || DEFAULT_THROTTLE_MS;
+    const throttleMs = env.ALERTS_THROTTLE_MS;
     const key = `${input.category}:${input.eventType}`;
     const now = Date.now();
     const last = lastAlertAt.get(key);
@@ -52,7 +51,7 @@ export async function dispatchOperationalAlertSafely(input: OperationalEventInpu
       apiKey,
       to,
       fromEmail,
-      fromName: process.env.NOTIFICATIONS_FROM_EMAIL_NAME || "Sermon Clipper Ops",
+      fromName: env.NOTIFICATIONS_FROM_EMAIL_NAME || "Sermon Clipper Ops",
       subject: `[sermon-clipper] ${input.category} error: ${input.eventType}`,
       text: lines.join("\n"),
     });

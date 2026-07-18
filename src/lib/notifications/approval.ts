@@ -1,4 +1,5 @@
 import { NotificationChannel, NotificationStatus } from "@prisma/client";
+import { env } from "@/lib/env";
 import { sendViaResend } from "@/lib/notifications/email-provider";
 
 type ApprovalNotificationInput = {
@@ -29,8 +30,8 @@ export async function sendApprovalNotification(
 async function sendApprovalEmail(
   input: ApprovalNotificationInput,
 ): Promise<ApprovalNotificationResult> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.NOTIFICATIONS_FROM_EMAIL;
+  const apiKey = env.RESEND_API_KEY;
+  const fromEmail = env.NOTIFICATIONS_FROM_EMAIL;
 
   if (!apiKey || !fromEmail) {
     console.info(`[notifications] Review email skipped for ${input.recipient}: ${input.reviewUrl}`);
@@ -56,16 +57,16 @@ async function sendApprovalEmail(
       .filter(Boolean)
       .join("\n"),
     fromEmail,
-    fromName: process.env.NOTIFICATIONS_FROM_NAME ?? "Sermon Clipper",
+    fromName: env.NOTIFICATIONS_FROM_NAME ?? "Sermon Clipper",
   });
 
   return { provider: "resend", ...result };
 }
 
 async function sendApprovalSms(input: ApprovalNotificationInput): Promise<ApprovalNotificationResult> {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_MESSAGING_FROM;
+  const accountSid = env.TWILIO_ACCOUNT_SID;
+  const authToken = env.TWILIO_AUTH_TOKEN;
+  const from = env.TWILIO_MESSAGING_FROM;
 
   if (!accountSid || !authToken || !from) {
     console.info(`[notifications] Review SMS skipped for ${input.recipient}: ${input.reviewUrl}`);

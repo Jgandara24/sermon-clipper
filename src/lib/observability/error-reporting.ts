@@ -4,21 +4,23 @@
  * is a no-op, so no Sentry code loads and nothing leaves the machine.
  */
 
+import { env } from "@/lib/env";
+
 type SentryNodeModule = typeof import("@sentry/node");
 
 let sentryPromise: Promise<SentryNodeModule | null> | null = null;
 
 function loadSentry(): Promise<SentryNodeModule | null> {
-  if (!process.env.SENTRY_DSN) {
+  if (!env.SENTRY_DSN) {
     return Promise.resolve(null);
   }
   if (!sentryPromise) {
     sentryPromise = import("@sentry/node")
       .then((sentry) => {
         sentry.init({
-          dsn: process.env.SENTRY_DSN,
+          dsn: env.SENTRY_DSN,
           environment: process.env.NODE_ENV ?? "development",
-          release: process.env.SERMON_CLIPPER_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA,
+          release: env.SERMON_CLIPPER_COMMIT_SHA || env.RAILWAY_GIT_COMMIT_SHA,
           // Errors only — tracing volume isn't worth the cost at this stage.
           tracesSampleRate: 0,
         });

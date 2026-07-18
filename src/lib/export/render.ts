@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { ffmpegPath as resolveFfmpegPath } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import type { TimeRange } from "./kept-ranges";
 
@@ -66,7 +67,7 @@ export async function renderClipExport(params: RenderClipExportParams): Promise<
     throw new RenderError("Nothing survived the edits — every word in this clip was deleted.");
   }
 
-  const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
+  const ffmpegPath = resolveFfmpegPath();
   const workDir = await mkdtemp(path.join(tmpdir(), "sermon-clipper-export-"));
 
   try {

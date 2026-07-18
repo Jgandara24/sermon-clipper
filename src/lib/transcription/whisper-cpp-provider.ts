@@ -1,6 +1,7 @@
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { env } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import {
   TranscriptionProviderUnavailableError,
@@ -64,8 +65,8 @@ export class WhisperCppTranscriptionProvider implements TranscriptionProvider {
   private readonly modelPath: string | undefined;
 
   constructor(binaryPath?: string, modelPath?: string) {
-    this.binaryPath = binaryPath ?? process.env.WHISPER_CPP_BINARY ?? "whisper-cli";
-    this.modelPath = modelPath ?? process.env.WHISPER_MODEL_PATH;
+    this.binaryPath = binaryPath ?? env.WHISPER_CPP_BINARY ?? "whisper-cli";
+    this.modelPath = modelPath ?? env.WHISPER_MODEL_PATH;
   }
 
   async isAvailable(): Promise<boolean> {

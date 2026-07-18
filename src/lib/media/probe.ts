@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { ffmpegPath as resolveFfmpegPath, ffprobePath as resolveFfprobePath } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 
 export type ProbeResult = {
@@ -68,7 +69,7 @@ export function parseFfprobeOutput(raw: string): ProbeResult {
 }
 
 export async function probeVideoFile(filePath: string): Promise<ProbeResult> {
-  const ffprobePath = process.env.FFPROBE_PATH || "ffprobe";
+  const ffprobePath = resolveFfprobePath();
   const { stdout } = await execFileWithTimeout(
     ffprobePath,
     ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", filePath],
@@ -82,7 +83,7 @@ export async function extractThumbnail(
   outPath: string,
   atSeconds: number,
 ): Promise<void> {
-  const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
+  const ffmpegPath = resolveFfmpegPath();
   await mkdir(path.dirname(outPath), { recursive: true });
   await execFileWithTimeout(
     ffmpegPath,
@@ -92,7 +93,7 @@ export async function extractThumbnail(
 }
 
 export async function extractAudio(filePath: string, outPath: string): Promise<void> {
-  const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
+  const ffmpegPath = resolveFfmpegPath();
   await mkdir(path.dirname(outPath), { recursive: true });
   await execFileWithTimeout(
     ffmpegPath,

@@ -3,6 +3,7 @@ import { recoverStaleExportJobs } from "@/lib/exports/queue";
 import { applyStaleFailureSideEffects, recoverStaleProcessingJobs } from "@/lib/jobs/queue";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { jobHandlers } from "@/lib/jobs/handlers";
+import { env } from "@/lib/env";
 import {
   captureErrorSafely,
   flushErrorReporting,
@@ -19,9 +20,9 @@ import {
 } from "@/lib/worker/reliability";
 import type { ProcessingJobType } from "@prisma/client";
 
-const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
-const RECOVERY_INTERVAL_MS = Number(process.env.WORKER_RECOVERY_INTERVAL_MS ?? 60_000);
-const CLEANUP_SCAN_INTERVAL_MS = Number(process.env.WORKER_CLEANUP_INTERVAL_MS ?? 3_600_000);
+const POLL_INTERVAL_MS = env.WORKER_POLL_INTERVAL_MS;
+const RECOVERY_INTERVAL_MS = env.WORKER_RECOVERY_INTERVAL_MS;
+const CLEANUP_SCAN_INTERVAL_MS = env.WORKER_CLEANUP_INTERVAL_MS;
 const WORKER_PROCESS_HEARTBEAT_INTERVAL_MS = workerProcessHeartbeatIntervalMs();
 let shuttingDown = false;
 let lastRecoveryAt = 0;
@@ -127,7 +128,7 @@ try {
 
 console.log(`[worker] polling for processing jobs every ${POLL_INTERVAL_MS}ms`);
 // Sentry (errors only) when SENTRY_DSN is set; also captures unhandled rejections by default.
-initErrorReporting({ process: "worker", workerId: process.env.WORKER_ID ?? "unknown" }).catch(
+initErrorReporting({ process: "worker", workerId: env.WORKER_ID ?? "unknown" }).catch(
   () => {},
 );
 recordWorkerProcessHeartbeat(prisma, {

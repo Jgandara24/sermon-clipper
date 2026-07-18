@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, type Workspace } from "@prisma/client";
 import Stripe from "stripe";
 import { planForCode, planForStripePriceId, stripePriceIdForPlan } from "@/lib/billing/plans";
+import { env } from "@/lib/env";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { grantMinutesForBillingPeriod, revokeMinutesForRefundedInvoice } from "@/lib/usage-ledger";
 
@@ -16,17 +17,18 @@ type WorkspaceForBilling = Pick<
 >;
 
 export function getStripeClient() {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const secretKey = env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
     throw new StripeConfigurationError("STRIPE_SECRET_KEY is required.");
   }
 
-  return new Stripe(process.env.STRIPE_SECRET_KEY, {
+  return new Stripe(secretKey, {
     apiVersion: STRIPE_API_VERSION as never,
   });
 }
 
 function getAppUrl() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const appUrl = env.NEXT_PUBLIC_APP_URL;
   if (!appUrl) {
     throw new StripeConfigurationError("NEXT_PUBLIC_APP_URL is required.");
   }
@@ -131,7 +133,7 @@ export async function createBillingPortalSession(workspace: WorkspaceForBilling)
 }
 
 export function constructStripeWebhookEvent(requestBody: string, signature: string | null) {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     throw new StripeConfigurationError("STRIPE_WEBHOOK_SECRET is required.");
   }

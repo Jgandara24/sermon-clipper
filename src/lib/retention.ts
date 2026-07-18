@@ -1,4 +1,5 @@
 import { ProcessingJobType, type PrismaClient } from "@prisma/client";
+import { env } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { getStorageProvider } from "@/lib/storage";
 
@@ -10,11 +11,8 @@ import { getStorageProvider } from "@/lib/storage";
  * so the archive, billing history, and audit trails stay intact.
  */
 
-const DEFAULT_EXPORT_FILE_RETENTION_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
-
 export function exportFileRetentionGraceMs(): number {
-  const raw = Number(process.env.EXPORT_FILE_RETENTION_GRACE_MS ?? DEFAULT_EXPORT_FILE_RETENTION_GRACE_MS);
-  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_EXPORT_FILE_RETENTION_GRACE_MS;
+  return env.EXPORT_FILE_RETENTION_GRACE_MS;
 }
 
 /** Exported files whose download link expired before this cutoff are eligible for deletion. */

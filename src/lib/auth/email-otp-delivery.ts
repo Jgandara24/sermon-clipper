@@ -1,4 +1,5 @@
 import { NotificationStatus } from "@prisma/client";
+import { authEmailFrom, authEmailFromName, env } from "@/lib/env";
 import { sendViaResend } from "@/lib/notifications/email-provider";
 
 export type EmailOtpDeliveryInput = {
@@ -14,9 +15,9 @@ export type EmailOtpDeliveryResult = {
 };
 
 export async function sendEmailOtp(input: EmailOtpDeliveryInput): Promise<EmailOtpDeliveryResult> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.AUTH_EMAIL_FROM ?? process.env.NOTIFICATIONS_FROM_EMAIL;
-  const fromName = process.env.AUTH_EMAIL_FROM_NAME ?? process.env.NOTIFICATIONS_FROM_NAME ?? "Sermon Clipper";
+  const apiKey = env.RESEND_API_KEY;
+  const fromEmail = authEmailFrom();
+  const fromName = authEmailFromName();
 
   if (!apiKey || !fromEmail) {
     if (process.env.NODE_ENV !== "production") {

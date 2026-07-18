@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { env } from "@/lib/env";
 import { computePlatformFit, computeSpeakerEnergy } from "./computed-subscores";
 import { buildChurchSubscores } from "./church-scoring";
 import { detectScriptureReferences } from "./scripture";
@@ -23,11 +24,11 @@ const DEFAULT_CLASSIFY_MODEL = "claude-haiku-4-5";
 const DEFAULT_SCORING_MODEL = "claude-sonnet-5";
 
 export function classifyModel(): string {
-  return process.env.ANALYSIS_MODEL_CLASSIFY || DEFAULT_CLASSIFY_MODEL;
+  return env.ANALYSIS_MODEL_CLASSIFY || DEFAULT_CLASSIFY_MODEL;
 }
 
 export function scoringModel(): string {
-  return process.env.ANALYSIS_MODEL_SCORING || DEFAULT_SCORING_MODEL;
+  return env.ANALYSIS_MODEL_SCORING || DEFAULT_SCORING_MODEL;
 }
 
 const MAX_STAGE_B_CANDIDATES = 25;
@@ -101,7 +102,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
   lastUsage: AnalysisUsage | null = null;
 
   async isAvailable(): Promise<boolean> {
-    return Boolean(process.env.ANTHROPIC_API_KEY);
+    return Boolean(env.ANTHROPIC_API_KEY);
   }
 
   async scoreCandidates(

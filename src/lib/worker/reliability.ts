@@ -2,6 +2,7 @@ import os from "node:os";
 import { accessSync, constants } from "node:fs";
 import { spawnSync } from "node:child_process";
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { env } from "@/lib/env";
 
 export const PROCESSING_MAX_ATTEMPTS = 3;
 export const EXPORT_MAX_ATTEMPTS = 3;
@@ -32,7 +33,7 @@ function defaultFileReadable(filePath: string): boolean {
 }
 
 export function workerId(): string {
-  return process.env.WORKER_ID ?? `${os.hostname()}:${process.pid}`;
+  return env.WORKER_ID ?? `${os.hostname()}:${process.pid}`;
 }
 
 export function checkWorkerRuntimeEnvironment(
@@ -103,15 +104,15 @@ export function assertWorkerRuntimeReady(
 }
 
 export function heartbeatIntervalMs(): number {
-  return Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 30_000);
+  return env.WORKER_HEARTBEAT_INTERVAL_MS;
 }
 
 export function workerProcessHeartbeatIntervalMs(): number {
-  return Number(process.env.WORKER_PROCESS_HEARTBEAT_INTERVAL_MS ?? 30_000);
+  return env.WORKER_PROCESS_HEARTBEAT_INTERVAL_MS;
 }
 
 export function staleJobTimeoutMs(): number {
-  return Number(process.env.WORKER_STALE_JOB_TIMEOUT_MS ?? 15 * 60_000);
+  return env.WORKER_STALE_JOB_TIMEOUT_MS;
 }
 
 export async function recordWorkerProcessHeartbeat(
