@@ -85,7 +85,7 @@ and polling on top of the now-working fetch adapter.
       as `state: QUEUED` with `idempotencyKey: finalize:${project.id}` and `status: QUEUED`
       (mirroring `createProjectFromUploadedSourceVideo`) instead of the `WAITING`/
       `URL_IMPORT_UNAVAILABLE` stub. Update/remove its now-stale doc comment.
-- [ ] **1.6** `DECISIONS.md`: add a dated entry superseding "2026-07-06 — Phase 2 Upload Is Real;
+- [x] **1.6** `DECISIONS.md`: add a dated entry superseding "2026-07-06 — Phase 2 Upload Is Real;
       URL Import Stays Stubbed."
 - [ ] **1.7** Unit tests for 1.1 and 1.3; integration test proving a pasted URL now produces a
       `QUEUED` FINALIZE job that runs the fetch branch against an injected fake and proceeds to

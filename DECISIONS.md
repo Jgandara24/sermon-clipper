@@ -304,7 +304,8 @@ Why: ffmpeg/ffprobe are free, local, self-hosted binaries, not paid providers, s
 
 Tradeoff: The dashboard's "Or paste a link" form is honestly labeled as not-yet-functional. Churches can upload files today; link-based import is a follow-up within Phase 2 (or an early Phase 3 task) before the phase's URL-import surface is considered done.
 
-Status: Active.
+Status: Superseded by the 2026-07-18 URL import decision — the yt-dlp fetch adapter is now real
+and pasted URLs enqueue a working FINALIZE job.
 
 ## 2026-07-06 - Local-Disk StorageProvider Stands In For S3/R2
 
@@ -778,3 +779,37 @@ sending domain) is intentionally out of scope here and left as a future decision
 
 Status: Active. Code/tests/docs migrated and `npm run verify` green; production env vars and a
 live send still need operator action (RESEND_API_KEY).
+
+## 2026-07-18 - URL Import Is Real: yt-dlp Fetch Adapter Wired Into FINALIZE
+
+Decision: Pasting a URL now imports the video for real, superseding "2026-07-06 - Phase 2 Upload
+Is Real; URL Import Stays Stubbed." `src/lib/media/ytdlp.ts` provides a pure metadata parser
+(`parseYtDlpMetadataJson`, mirroring `parseFfprobeOutput`) plus `fetchYtDlpMetadata` and
+`downloadYtDlpVideo`, both taking an injectable subprocess-exec function and hard timeouts
+(`YTDLP_METADATA_TIMEOUT_MS`/`YTDLP_DOWNLOAD_TIMEOUT_MS`). The FINALIZE handler grew a URL
+branch: for a `URL`-origin source video with no `storageKey`, it fetches metadata first and
+enforces `MAX_VIDEO_DURATION_S` (`VIDEO_TOO_LONG`) and the workspace plan limit
+(`PLAN_LIMIT_EXCEEDED`) *before* downloading, then downloads into the handler's temp workDir
+(capped at `MAX_UPLOAD_BYTES`; fetch/download failures fail as `URL_IMPORT_FAILED`), uploads via
+the storage provider, sets `sourceVideo.storageKey`, and falls through to the unchanged
+probe/reserve/PROBE flow. `createDraftProjectForWorkspace` enqueues FINALIZE as `QUEUED` with
+`idempotencyKey: finalize:<projectId>` (mirroring the upload path) instead of the
+`WAITING`/`URL_IMPORT_UNAVAILABLE` stub, worker readiness now requires a working `yt-dlp`
+(`YTDLP_PATH`, probed with `--version`), and `Dockerfile.worker` installs the standalone Linux
+binary in the runtime stage.
+
+Why: Closes the honest-but-stubbed URL-paste gap as a standalone win, and it is the fetch
+foundation the auto-import channel-polling work (Phases 2-4 of `docs/AUTO_IMPORT_LOOP.md`)
+builds on — the poller creates URL projects and relies on this exact pipeline.
+
+Tradeoff: yt-dlp is a moving target (extractor breakage whenever YouTube changes), so the Docker
+install is deliberately unpinned — a pinned release goes stale in weeks, and image builds trade
+bit-reproducibility for a binary that still works; `--version` fails the build fast if the
+download breaks. The pre-download duration gate trusts yt-dlp metadata; the authoritative
+ffprobe duration is still re-checked after download by the unchanged finalize flow. Tests fake
+only the subprocess boundary (same trust line as ffprobe/whisper); CI never shells out to a real
+yt-dlp. The web process's best-effort inline job runner (`after()` in the upload action) could
+claim a URL FINALIZE job on an image without yt-dlp — that failure is retryable and the worker
+picks it up, accepted at MVP scale.
+
+Status: Active.
