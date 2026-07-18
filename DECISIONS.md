@@ -868,3 +868,36 @@ which is fine for a single-worker poller. A channel that uploads more than the c
 falls progressively behind until the operator raises `CHANNEL_IMPORT_DAILY_LIMIT`.
 
 Status: Active.
+
+## 2026-07-18 - Sermon Clipper Is the Intended Long-Term Successor to Pulpit Engine; No Piecemeal Renaming Before a Deliberate Cutover
+
+Decision: Sermon Clipper is the operator's intended flagship product going forward — the old
+Pulpit Engine build (`euphoric-patrol-493623-b8` in Google Cloud, `pulpitengine.com`, the
+`pulpit-engine` Dropbox workspace) will eventually be retired, and Sermon Clipper is expected to
+take over the Pulpit Engine name and, likely, its domain. Until that happens, infrastructure and
+codebase naming stays **"sermon-clipper"** everywhere — repo name, Railway project/services, and
+any new cloud resources (e.g. the dedicated Google Cloud project created for `YOUTUBE_API_KEY` is
+named `sermon-clipper-prod`, fully separate from the old project). Do not rename, alias, or
+partially brand any individual resource as "Pulpit Engine" before the cutover.
+
+Why: Two live things both named "Pulpit Engine" — the old build and a newly-created resource — is
+strictly more confusing than the current state, not less, and it's the exact failure mode that
+caused this cycle's credential-hygiene incidents (resources that *look* related get reached for
+by mistake, by humans and agents alike). The isolation work already done for this reason —
+dedicated Resend sending subdomain instead of reusing `pulpitengine.com`, a dedicated
+`sermon-clipper-prod` GCP project instead of reusing `euphoric-patrol-493623-b8` — is not in
+tension with the eventual consolidation; it's what makes that consolidation a clean, deliberate
+event later instead of an accidental one now. Domain reuse in particular (email sender reputation,
+DNS, auth) needs a real migration plan, not an incidental one.
+
+Tradeoff: Some near-term friction from having "sermon-clipper"-branded infra for a product whose
+eventual public name will be "Pulpit Engine" — acceptable, since GCP project IDs are the only
+piece of this that's genuinely permanent, and everything else (repo, Railway project, domain)
+renames cleanly with redirects when the operator is ready.
+
+Migration trigger: When the operator decides to retire the old Pulpit Engine build, treat the
+rename as one atomic, planned migration (domain/DNS, email sending domain, Railway project name,
+GCP project display name, repo name with GitHub redirect, Stripe account naming, marketing) —
+not a rolling series of one-off renames.
+
+Status: Active.
