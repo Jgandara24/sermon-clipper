@@ -43,6 +43,9 @@ async function main() {
           churchProfile: {
             timezone: "America/Chicago",
             serviceDay: "Sunday",
+            sermonsPerWeek: 1,
+            secondServiceDay: null,
+            postsPerDay: 1,
           },
           defaultProcessingConfig: {
             language: "en",

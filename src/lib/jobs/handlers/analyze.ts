@@ -7,7 +7,8 @@ import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 
 const MIN_CANDIDATE_MS = 20_000;
 const MAX_CANDIDATE_MS = 90_000;
-const TARGET_CLIP_COUNT = 8;
+const CANDIDATE_POOL_SIZE = 18;
+const DEFAULT_TARGET_CLIP_COUNT = 6;
 
 function readGenre(processingConfig: unknown): string {
   if (processingConfig && typeof processingConfig === "object" && "genre" in processingConfig) {
@@ -15,6 +16,19 @@ function readGenre(processingConfig: unknown): string {
     if (typeof genre === "string" && genre.length > 0) return genre;
   }
   return "sermon";
+}
+
+/**
+ * Set at project creation from the church's sermons-per-week (docs/BUSINESS_OVERVIEW.md):
+ * 6 for a once-a-week church, 3 for a twice-a-week church. This is the size of the
+ * primary daily-posting set within the larger CANDIDATE_POOL_SIZE we keep as clips.
+ */
+function readTargetClipCount(processingConfig: unknown): number {
+  if (processingConfig && typeof processingConfig === "object" && "targetClipCount" in processingConfig) {
+    const value = (processingConfig as { targetClipCount?: unknown }).targetClipCount;
+    if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  }
+  return DEFAULT_TARGET_CLIP_COUNT;
 }
 
 /**
@@ -45,6 +59,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
   }));
 
   const genre = readGenre(project.processingConfig);
+  const targetClipCount = readTargetClipCount(project.processingConfig);
   const candidates = buildCandidateWindows(segments, {
     minMs: MIN_CANDIDATE_MS,
     maxMs: MAX_CANDIDATE_MS,
@@ -99,7 +114,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
     refined.map((clip) => ({ ...clip, score: clip.total })),
     0.5,
   );
-  const kept = deduped.sort((a, b) => b.total - a.total).slice(0, TARGET_CLIP_COUNT);
+  const kept = deduped.sort((a, b) => b.total - a.total).slice(0, CANDIDATE_POOL_SIZE);
 
   await prisma.$transaction(async (tx) => {
     await tx.scriptureReference.deleteMany({ where: { projectId: project.id } });
@@ -164,6 +179,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
       candidateCount: candidates.length,
       scoredCount: scored.length,
       keptCount: kept.length,
+      targetClipCount,
       genre,
       ...(usage ? { usage } : {}),
     },

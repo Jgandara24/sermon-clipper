@@ -40,4 +40,20 @@ describe("draft project creation data", () => {
   it("rejects blank project names", () => {
     expect(() => normalizeProjectName(" ")).toThrow("Project name must be at least 2 characters.");
   });
+
+  it("targets 6 clips for a once-a-week church by default", () => {
+    expect(buildDefaultProcessingConfig()).toMatchObject({ targetClipCount: 6 });
+  });
+
+  it("targets 3 clips for a twice-a-week church", () => {
+    expect(buildDefaultProcessingConfig(2)).toMatchObject({ targetClipCount: 3 });
+
+    const record = buildDraftProjectRecord(
+      "workspace-a",
+      { name: "Wednesday Night" },
+      undefined,
+      2,
+    );
+    expect(record.processingConfig).toMatchObject({ targetClipCount: 3 });
+  });
 });

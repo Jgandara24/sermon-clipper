@@ -32,6 +32,8 @@ const onboardingSchema = z.object({
   workspaceName: z.string().trim().min(2).max(80),
   timezone: z.string().trim().min(2).max(80),
   serviceDay: z.string().trim().min(2).max(24),
+  sermonsPerWeek: z.coerce.number().int().min(1).max(2).default(1),
+  secondServiceDay: z.string().trim().min(2).max(24).optional(),
 });
 
 function safeNextPath(value: string | null | undefined) {
@@ -220,6 +222,8 @@ export async function createWorkspaceAction(formData: FormData) {
     workspaceName: formData.get("workspaceName"),
     timezone: formData.get("timezone"),
     serviceDay: formData.get("serviceDay"),
+    sermonsPerWeek: formData.get("sermonsPerWeek") || undefined,
+    secondServiceDay: formData.get("secondServiceDay") || undefined,
   });
 
   if (!parsed.success) {
@@ -235,6 +239,10 @@ export async function createWorkspaceAction(formData: FormData) {
           churchProfile: {
             timezone: parsed.data.timezone,
             serviceDay: parsed.data.serviceDay,
+            sermonsPerWeek: parsed.data.sermonsPerWeek,
+            secondServiceDay:
+              parsed.data.sermonsPerWeek === 2 ? (parsed.data.secondServiceDay || "Wednesday") : null,
+            postsPerDay: 1,
           },
           defaultProcessingConfig: {
             language: "en",
