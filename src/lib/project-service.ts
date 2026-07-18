@@ -64,10 +64,10 @@ export function buildDraftProjectRecord(
 }
 
 /**
- * URL-based import (paste a YouTube/link). The yt-dlp fetch adapter isn't wired up yet (see
- * DECISIONS.md), so this still only records the intent: a source_videos row with the pasted URL
- * and a WAITING job that's honest in the UI about not running yet. Real upload goes through
- * createProjectFromUploadedSourceVideo instead, which enqueues a real FINALIZE job.
+ * URL-based import (paste a YouTube/link). Creates a source_videos row with the pasted URL and
+ * enqueues a real FINALIZE job; the worker's FINALIZE URL branch fetches the video via yt-dlp
+ * and then follows the same probe/reserve pipeline as an uploaded file. Uploads go through
+ * createProjectFromUploadedSourceVideo instead.
  */
 export async function createDraftProjectForWorkspace(
   client: PrismaClient,
@@ -102,7 +102,10 @@ export async function createDraftProjectForWorkspace(
       : null;
 
     const project = await tx.project.create({
-      data: buildDraftProjectRecord(workspaceId, input, sourceVideo?.id),
+      data: {
+        ...buildDraftProjectRecord(workspaceId, input, sourceVideo?.id),
+        ...(sourceVideo ? { status: ProjectStatus.QUEUED } : {}),
+      },
     });
 
     if (sourceVideo) {
@@ -110,10 +113,8 @@ export async function createDraftProjectForWorkspace(
         data: {
           projectId: project.id,
           type: ProcessingJobType.FINALIZE,
-          state: ProcessingJobState.WAITING,
-          idempotencyKey: `url-import-unavailable:${project.id}`,
-          errorCode: "URL_IMPORT_UNAVAILABLE",
-          errorMessageUser: "Importing from a link isn't available yet — upload the file directly.",
+          state: ProcessingJobState.QUEUED,
+          idempotencyKey: `finalize:${project.id}`,
         },
       });
     }

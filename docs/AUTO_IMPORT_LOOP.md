@@ -81,7 +81,7 @@ and polling on top of the now-working fetch adapter.
       `commandAvailable` pattern (unit test alongside the existing fakes in
       `tests/worker-reliability.test.ts`).
 - [x] **1.4** `Dockerfile.worker`: install the `yt-dlp` static binary in the runtime stage.
-- [ ] **1.5** `src/lib/project-service.ts`: `createDraftProjectForWorkspace` now enqueues FINALIZE
+- [x] **1.5** `src/lib/project-service.ts`: `createDraftProjectForWorkspace` now enqueues FINALIZE
       as `state: QUEUED` with `idempotencyKey: finalize:${project.id}` and `status: QUEUED`
       (mirroring `createProjectFromUploadedSourceVideo`) instead of the `WAITING`/
       `URL_IMPORT_UNAVAILABLE` stub. Update/remove its now-stale doc comment.

@@ -54,8 +54,8 @@ export default async function DashboardPage() {
             <h2 className="text-lg font-semibold">Or paste a link</h2>
           </div>
           <p className="mt-2 text-sm text-stone-500">
-            Fetching from a URL isn&apos;t available yet — this creates a draft record you can
-            revisit once URL import ships.
+            Paste a public video link (like YouTube) and we&apos;ll fetch it and start processing
+            automatically.
           </p>
           <div className="mt-5 grid gap-4">
             <div>
