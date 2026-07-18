@@ -41,7 +41,7 @@ can be honestly collected without the operator. Decisions already made: **privat
 - [ ] `railway whoami` succeeds (operator ran `railway login`). If not: this is the ONLY wait
       state — sleep the loop ~20 min and re-check; log the wait.
 - [ ] `.env.production.local` exists and contains non-placeholder values for:
-      `ANTHROPIC_API_KEY`, `SENDGRID_API_KEY`, `AUTH_EMAIL_FROM`, `STRIPE_SECRET_KEY` (must be
+      `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, `STRIPE_SECRET_KEY` (must be
       `sk_test_`), `STORAGE_S3_BUCKET`, `STORAGE_S3_ENDPOINT`, `STORAGE_S3_ACCESS_KEY_ID`,
       `STORAGE_S3_SECRET_ACCESS_KEY`. Optional: `NOTIFICATIONS_FROM_EMAIL`, `TWILIO_*`,
       `SENTRY_DSN`. Missing required keys → wait state as above.
@@ -193,6 +193,14 @@ via the Gmail connector. Use `jake+approver@jakegandara.com` as the second user 
   observability). Needs the operator to top up or upgrade the SendGrid account (or swap in a
   different provider/API key) before Phase F can resume. Recorded as `failed` with this evidence
   in `docs/phase8-launch-evidence.json` rather than skipped silently.
+- **2026-07-18, resolved by switching providers:** rather than fix the SendGrid account, the
+  operator chose to migrate transactional email (auth OTP, workspace invitations, approval
+  notifications) from SendGrid to Resend — better-suited to low-volume transactional mail, and
+  planned future cold-outbound email will run through separate tooling/domain entirely rather than
+  share a provider with transactional. Code, tests, and docs updated across the codebase (env var
+  renamed `SENDGRID_API_KEY` → `RESEND_API_KEY`, endpoint swapped to `api.resend.com`). Still
+  requires the operator to sign up for Resend and provide `RESEND_API_KEY` before Phase F can
+  resume — I cannot create third-party accounts on the operator's behalf.
 
 ## Night result
 

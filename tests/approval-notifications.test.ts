@@ -10,8 +10,8 @@ afterEach(() => {
 });
 
 describe("approval notifications", () => {
-  it("skips email delivery when SendGrid is not configured", async () => {
-    delete process.env.SENDGRID_API_KEY;
+  it("skips email delivery when Resend is not configured", async () => {
+    delete process.env.RESEND_API_KEY;
     delete process.env.NOTIFICATIONS_FROM_EMAIL;
 
     const result = await sendApprovalNotification({
@@ -23,13 +23,13 @@ describe("approval notifications", () => {
     });
 
     expect(result).toMatchObject({
-      provider: "sendgrid",
+      provider: "resend",
       status: NotificationStatus.SKIPPED,
     });
   });
 
-  it("sends email through SendGrid when configured", async () => {
-    process.env.SENDGRID_API_KEY = "sendgrid-key";
+  it("sends email through Resend when configured", async () => {
+    process.env.RESEND_API_KEY = "resend-key";
     process.env.NOTIFICATIONS_FROM_EMAIL = "clips@example.com";
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 202 }),
@@ -46,10 +46,10 @@ describe("approval notifications", () => {
 
     expect(result.status).toBe(NotificationStatus.SENT);
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.sendgrid.com/v3/mail/send",
+      "https://api.resend.com/emails",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ Authorization: "Bearer sendgrid-key" }),
+        headers: expect.objectContaining({ Authorization: "Bearer resend-key" }),
       }),
     );
   });

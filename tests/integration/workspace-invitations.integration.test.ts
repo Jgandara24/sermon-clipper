@@ -13,7 +13,7 @@ const originalEnv = { ...process.env };
 
 beforeAll(() => {
   process.env = { ...process.env, NODE_ENV: "test" };
-  delete process.env.SENDGRID_API_KEY;
+  delete process.env.RESEND_API_KEY;
   delete process.env.NOTIFICATIONS_FROM_EMAIL;
   delete process.env.AUTH_EMAIL_FROM;
 });

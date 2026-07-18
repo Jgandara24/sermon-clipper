@@ -9,6 +9,7 @@ import {
 import { hashSecret } from "@/lib/auth/email-otp";
 import { normalizeEmail } from "@/lib/auth/email-otp";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
+import { sendViaResend } from "@/lib/notifications/email-provider";
 
 export const WORKSPACE_INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -44,7 +45,7 @@ export async function sendWorkspaceInvitationEmail(input: {
   invitationUrl: string;
   expiresAt: Date;
 }): Promise<WorkspaceInvitationDeliveryResult> {
-  const apiKey = process.env.SENDGRID_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.NOTIFICATIONS_FROM_EMAIL ?? process.env.AUTH_EMAIL_FROM;
   const fromName = process.env.NOTIFICATIONS_FROM_NAME ?? process.env.AUTH_EMAIL_FROM_NAME ?? "Sermon Clipper";
 
@@ -54,53 +55,35 @@ export async function sendWorkspaceInvitationEmail(input: {
       return {
         provider: "development-log",
         status: NotificationStatus.SKIPPED,
-        errorMessage: "SENDGRID_API_KEY and NOTIFICATIONS_FROM_EMAIL/AUTH_EMAIL_FROM are required to send email.",
+        errorMessage: "RESEND_API_KEY and NOTIFICATIONS_FROM_EMAIL/AUTH_EMAIL_FROM are required to send email.",
       };
     }
 
     return {
-      provider: "sendgrid",
+      provider: "resend",
       status: NotificationStatus.FAILED,
-      errorMessage: "SENDGRID_API_KEY and NOTIFICATIONS_FROM_EMAIL/AUTH_EMAIL_FROM are required in production.",
+      errorMessage: "RESEND_API_KEY and NOTIFICATIONS_FROM_EMAIL/AUTH_EMAIL_FROM are required in production.",
     };
   }
 
-  const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      personalizations: [
-        {
-          to: [{ email: input.email }],
-          subject: `Join ${input.workspaceName} on Sermon Clipper`,
-        },
-      ],
-      from: { email: fromEmail, name: fromName },
-      content: [
-        {
-          type: "text/plain",
-          value: [
-            `${input.inviterEmail} invited you to join ${input.workspaceName} as ${input.role.toLowerCase()}.`,
-            "",
-            "Accept the invitation:",
-            input.invitationUrl,
-            "",
-            `This invitation expires at ${input.expiresAt.toISOString()}.`,
-            "If you did not expect this invitation, you can ignore this email.",
-          ].join("\n"),
-        },
-      ],
-    }),
+  const result = await sendViaResend({
+    apiKey,
+    to: input.email,
+    subject: `Join ${input.workspaceName} on Sermon Clipper`,
+    text: [
+      `${input.inviterEmail} invited you to join ${input.workspaceName} as ${input.role.toLowerCase()}.`,
+      "",
+      "Accept the invitation:",
+      input.invitationUrl,
+      "",
+      `This invitation expires at ${input.expiresAt.toISOString()}.`,
+      "If you did not expect this invitation, you can ignore this email.",
+    ].join("\n"),
+    fromEmail,
+    fromName,
   });
 
-  if (!response.ok) {
-    return { provider: "sendgrid", status: NotificationStatus.FAILED, errorMessage: await response.text() };
-  }
-
-  return { provider: "sendgrid", status: NotificationStatus.SENT };
+  return { provider: "resend", ...result };
 }
 
 export async function createWorkspaceInvitation(

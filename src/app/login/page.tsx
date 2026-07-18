@@ -105,7 +105,7 @@ export default async function LoginPage({
                 Verify code
               </button>
               <p className="text-xs text-teal-900">
-                Check your email for the code. Local development logs the code when SendGrid is not
+                Check your email for the code. Local development logs the code when Resend is not
                 configured.
               </p>
             </form>
