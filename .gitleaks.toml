@@ -1,0 +1,11 @@
+# Gitleaks config — extends the default ruleset.
+# Add allowlist entries here instead of using `git commit --no-verify`.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local placeholders that are not real credentials"
+paths = [
+  '''\.env\.example$''',
+]

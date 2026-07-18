@@ -1,4 +1,5 @@
 import { ProcessingJobState, type PrismaClient } from "@prisma/client";
+import { env } from "@/lib/env";
 
 /**
  * Per-workspace limits on the expensive operations (worker CPU for exports, the whole
@@ -11,24 +12,19 @@ import { ProcessingJobState, type PrismaClient } from "@prisma/client";
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-function envLimit(name: string, fallback: number): number {
-  const raw = Number(process.env[name] ?? fallback);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
-}
-
 /** Renders a workspace may have queued/running at once. */
 export function exportConcurrentJobLimit(): number {
-  return envLimit("EXPORT_MAX_CONCURRENT_JOBS", 4);
+  return env.EXPORT_MAX_CONCURRENT_JOBS;
 }
 
 /** New export jobs a workspace may create per rolling 24h. */
 export function exportDailyJobLimit(): number {
-  return envLimit("EXPORT_DAILY_JOB_LIMIT", 50);
+  return env.EXPORT_DAILY_JOB_LIMIT;
 }
 
 /** Signed upload URLs a workspace may mint per rolling hour. */
 export function uploadPresignHourlyLimit(): number {
-  return envLimit("UPLOAD_PRESIGN_HOURLY_LIMIT", 30);
+  return env.UPLOAD_PRESIGN_HOURLY_LIMIT;
 }
 
 export type RateLimitDecision =

@@ -6,6 +6,7 @@ import {
   type ClipApproval,
   type PrismaClient,
 } from "@prisma/client";
+import { env } from "@/lib/env";
 import { sendApprovalNotification } from "@/lib/notifications/approval";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 
@@ -295,7 +296,7 @@ export async function revokeClipApprovalReviewLink(params: {
   });
 }
 
-export function buildReviewUrl(reviewToken: string, appBaseUrl = process.env.NEXT_PUBLIC_APP_URL): string {
+export function buildReviewUrl(reviewToken: string, appBaseUrl = env.NEXT_PUBLIC_APP_URL): string {
   const path = `/review/${reviewToken}`;
   if (!appBaseUrl) return path;
   return new URL(path, appBaseUrl).toString();

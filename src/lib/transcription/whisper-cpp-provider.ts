@@ -1,15 +1,13 @@
-import { execFile } from "node:child_process";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
+import { env } from "@/lib/env";
+import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import {
   TranscriptionProviderUnavailableError,
   type TranscriptionProvider,
   type TranscriptionResult,
 } from "./types";
-
-const execFileAsync = promisify(execFile);
 
 type WhisperCppToken = {
   text: string;
@@ -67,8 +65,8 @@ export class WhisperCppTranscriptionProvider implements TranscriptionProvider {
   private readonly modelPath: string | undefined;
 
   constructor(binaryPath?: string, modelPath?: string) {
-    this.binaryPath = binaryPath ?? process.env.WHISPER_CPP_BINARY ?? "whisper-cli";
-    this.modelPath = modelPath ?? process.env.WHISPER_MODEL_PATH;
+    this.binaryPath = binaryPath ?? env.WHISPER_CPP_BINARY ?? "whisper-cli";
+    this.modelPath = modelPath ?? env.WHISPER_MODEL_PATH;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -98,18 +96,12 @@ export class WhisperCppTranscriptionProvider implements TranscriptionProvider {
     const outputBase = path.join(tmpDir, "output");
 
     try {
-      await execFileAsync(this.binaryPath, [
-        "-m",
-        this.modelPath as string,
-        "-f",
-        audioPath,
-        "-l",
-        language ?? "auto",
-        "-ojf",
-        "-of",
-        outputBase,
-        "-np",
-      ]);
+      await execFileWithTimeout(
+        this.binaryPath,
+        ["-m", this.modelPath as string, "-f", audioPath, "-l", language ?? "auto", "-ojf", "-of", outputBase, "-np"],
+        // CPU ASR of a 3 h sermon can legitimately take over an hour on a small worker.
+        { timeoutMs: envTimeoutMs("WHISPER_TIMEOUT_MS", 5_400_000) },
+      );
 
       const raw = await readFile(`${outputBase}.json`, "utf-8");
       return parseWhisperCppOutput(raw);

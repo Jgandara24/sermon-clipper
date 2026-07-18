@@ -1,11 +1,9 @@
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
+import { ffmpegPath as resolveFfmpegPath } from "@/lib/env";
+import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import type { TimeRange } from "./kept-ranges";
-
-const execFileAsync = promisify(execFile);
 
 export class RenderError extends Error {}
 
@@ -37,7 +35,12 @@ export function buildExportFilterGraph(
 
 async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
   try {
-    await execFileAsync(ffmpegPath, args, { maxBuffer: 1024 * 1024 * 64 });
+    await execFileWithTimeout(ffmpegPath, args, {
+      maxBuffer: 1024 * 1024 * 64,
+      // Per encode pass; clip exports are seconds-to-minutes of output, so a pass that runs
+      // this long is wedged, not slow.
+      timeoutMs: envTimeoutMs("EXPORT_FFMPEG_TIMEOUT_MS", 900_000),
+    });
   } catch (error) {
     throw new RenderError(`ffmpeg failed: ${(error as Error).message}`);
   }
@@ -64,7 +67,7 @@ export async function renderClipExport(params: RenderClipExportParams): Promise<
     throw new RenderError("Nothing survived the edits — every word in this clip was deleted.");
   }
 
-  const ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg";
+  const ffmpegPath = resolveFfmpegPath();
   const workDir = await mkdtemp(path.join(tmpdir(), "sermon-clipper-export-"));
 
   try {

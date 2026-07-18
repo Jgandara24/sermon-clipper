@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, type Workspace } from "@prisma/client";
 import Stripe from "stripe";
 import { planForCode, planForStripePriceId, stripePriceIdForPlan } from "@/lib/billing/plans";
+import { env } from "@/lib/env";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { grantMinutesForBillingPeriod, revokeMinutesForRefundedInvoice } from "@/lib/usage-ledger";
 
@@ -16,17 +17,18 @@ type WorkspaceForBilling = Pick<
 >;
 
 export function getStripeClient() {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const secretKey = env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
     throw new StripeConfigurationError("STRIPE_SECRET_KEY is required.");
   }
 
-  return new Stripe(process.env.STRIPE_SECRET_KEY, {
+  return new Stripe(secretKey, {
     apiVersion: STRIPE_API_VERSION as never,
   });
 }
 
 function getAppUrl() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const appUrl = env.NEXT_PUBLIC_APP_URL;
   if (!appUrl) {
     throw new StripeConfigurationError("NEXT_PUBLIC_APP_URL is required.");
   }
@@ -131,7 +133,7 @@ export async function createBillingPortalSession(workspace: WorkspaceForBilling)
 }
 
 export function constructStripeWebhookEvent(requestBody: string, signature: string | null) {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     throw new StripeConfigurationError("STRIPE_WEBHOOK_SECRET is required.");
   }
@@ -186,20 +188,56 @@ async function handleCheckoutCompleted(client: PrismaClient, session: Stripe.Che
   });
 }
 
+/**
+ * The exact subscription-id match always wins. The customer-id fallback only exists for
+ * subscriptions Stripe creates before checkout.session.completed has persisted the id — and it
+ * must not apply when the workspace already tracks a different subscription, or a late webhook
+ * for a superseded subscription (e.g. subscription.deleted after an upgrade) would clobber the
+ * live subscription's plan state.
+ */
+async function findWorkspaceForSubscription(
+  client: PrismaClient,
+  subscription: Stripe.Subscription,
+  customerId: string | null,
+) {
+  const bySubscription = await client.workspace.findUnique({
+    where: { stripeSubscriptionId: subscription.id },
+  });
+  if (bySubscription) return bySubscription;
+  if (!customerId) return null;
+
+  const byCustomer = await client.workspace.findUnique({
+    where: { stripeCustomerId: customerId },
+  });
+  if (!byCustomer) return null;
+
+  if (byCustomer.stripeSubscriptionId && byCustomer.stripeSubscriptionId !== subscription.id) {
+    await recordOperationalEventSafely(client, {
+      workspaceId: byCustomer.id,
+      category: "billing",
+      eventType: "stripe_subscription_event_ignored",
+      severity: "warning",
+      message:
+        "Ignored a Stripe subscription event that matched this workspace's customer but not its tracked subscription.",
+      metadata: {
+        eventSubscriptionId: subscription.id,
+        trackedSubscriptionId: byCustomer.stripeSubscriptionId,
+        customerId,
+        status: subscription.status,
+      },
+    });
+    return null;
+  }
+  return byCustomer;
+}
+
 async function handleSubscriptionUpdated(client: PrismaClient, subscription: Stripe.Subscription) {
   const customerId = stringId(subscription.customer);
   const priceId = firstSubscriptionPriceId(subscription);
   const planCode = subscriptionStatusPlanCode(subscription);
   const currentPeriodEnd = timestampToDate(subscription.items.data[0]?.current_period_end);
 
-  const workspace = await client.workspace.findFirst({
-    where: {
-      OR: [
-        { stripeSubscriptionId: subscription.id },
-        customerId ? { stripeCustomerId: customerId } : undefined,
-      ].filter(Boolean) as Array<{ stripeSubscriptionId: string } | { stripeCustomerId: string }>,
-    },
-  });
+  const workspace = await findWorkspaceForSubscription(client, subscription, customerId);
   if (!workspace) return;
 
   await client.workspace.update({

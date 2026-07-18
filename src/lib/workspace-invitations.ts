@@ -6,6 +6,7 @@ import {
   WorkspaceRole,
   type PrismaClient,
 } from "@prisma/client";
+import { env, notificationsFromEmail, notificationsFromName } from "@/lib/env";
 import { hashSecret } from "@/lib/auth/email-otp";
 import { normalizeEmail } from "@/lib/auth/email-otp";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
@@ -33,7 +34,7 @@ export function workspaceInvitationPath(token: string): string {
 }
 
 export function workspaceInvitationUrl(token: string): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+  const appUrl = env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
   return `${appUrl}${workspaceInvitationPath(token)}`;
 }
 
@@ -45,9 +46,9 @@ export async function sendWorkspaceInvitationEmail(input: {
   invitationUrl: string;
   expiresAt: Date;
 }): Promise<WorkspaceInvitationDeliveryResult> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.NOTIFICATIONS_FROM_EMAIL ?? process.env.AUTH_EMAIL_FROM;
-  const fromName = process.env.NOTIFICATIONS_FROM_NAME ?? process.env.AUTH_EMAIL_FROM_NAME ?? "Sermon Clipper";
+  const apiKey = env.RESEND_API_KEY;
+  const fromEmail = notificationsFromEmail();
+  const fromName = notificationsFromName();
 
   if (!apiKey || !fromEmail) {
     if (process.env.NODE_ENV !== "production") {

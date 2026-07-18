@@ -481,6 +481,10 @@ merge green. Human actions (GitHub settings, once):
   project, copy its DSN into both services, and configure alert rules (notify on any new issue).
   Optional: wire source-map upload later via `withSentryConfig` + `SENTRY_AUTH_TOKEN`; not
   required for readable server-side stack traces.
+- **Operator alert emails:** set `OPERATIONS_ALERT_EMAIL` (both services) to email the operator
+  whenever an error-severity operational event is recorded, throttled to one email per
+  category:eventType per `ALERTS_THROTTLE_MS` (default 30 min). Handled API 5xx responses are
+  also reported to Sentry via `apiError`, so "gracefully failed" routes are visible too.
 - **Uptime monitoring:** point an external pinger (UptimeRobot, Better Stack, or similar — human
   action) at `https://<domain>/api/health` with a 60s interval, alerting on non-200 or on the
   word `"fail"` in the body. `/api/health` already covers DB, storage, providers, migrations, and

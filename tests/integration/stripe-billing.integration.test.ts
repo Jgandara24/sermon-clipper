@@ -172,6 +172,76 @@ describe("Stripe billing integration", () => {
     expect(ledger.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("ignores a late event for a superseded subscription instead of clobbering the live one", async () => {
+    const workspace = await createWorkspace();
+    const customerId = `cus_stale_${runId}`;
+    const liveSubId = `sub_live_${runId}`;
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { stripeCustomerId: customerId, stripeSubscriptionId: liveSubId, planCode: "pro" },
+    });
+
+    // A subscription.deleted for the customer's OLD subscription arrives after an upgrade.
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_stale_del_${runId}`, "customer.subscription.deleted", {
+        id: `sub_old_${runId}`,
+        object: "subscription",
+        customer: customerId,
+        status: "canceled",
+        items: { data: [{ price: { id: "price_starter" }, current_period_end: 1786046400 }] },
+      }),
+    );
+
+    const updated = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(updated.planCode).toBe("pro");
+    expect(updated.stripeSubscriptionId).toBe(liveSubId);
+
+    const ignored = await prisma.operationalEvent.findMany({
+      where: { workspaceId: workspace.id, eventType: "stripe_subscription_event_ignored" },
+    });
+    expect(ignored).toHaveLength(1);
+
+    // An event for the live subscription still applies normally.
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_live_upd_${runId}`, "customer.subscription.updated", {
+        id: liveSubId,
+        object: "subscription",
+        customer: customerId,
+        status: "active",
+        items: { data: [{ price: { id: "price_pro" }, current_period_end: 1786046400 }] },
+      }),
+    );
+    const afterLive = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(afterLive.stripeSubscriptionStatus).toBe("active");
+  });
+
+  it("adopts a pre-checkout subscription via the customer fallback when none is tracked yet", async () => {
+    const workspace = await createWorkspace();
+    const customerId = `cus_adopt_${runId}`;
+    const subId = `sub_adopt_${runId}`;
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { stripeCustomerId: customerId, stripeSubscriptionId: null },
+    });
+
+    await handleStripeWebhookEvent(
+      prisma,
+      event(`evt_adopt_${runId}`, "customer.subscription.created", {
+        id: subId,
+        object: "subscription",
+        customer: customerId,
+        status: "active",
+        items: { data: [{ price: { id: "price_starter" }, current_period_end: 1786046400 }] },
+      }),
+    );
+
+    const updated = await prisma.workspace.findUniqueOrThrow({ where: { id: workspace.id } });
+    expect(updated.stripeSubscriptionId).toBe(subId);
+    expect(updated.planCode).toBe("starter");
+  });
+
   it("records a dunning warning on invoice.payment_failed without touching plan state", async () => {
     const workspace = await createWorkspace();
     const subId = `sub_dun_${runId}`;
