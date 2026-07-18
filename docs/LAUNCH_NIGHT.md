@@ -88,11 +88,9 @@ can be honestly collected without the operator. Decisions already made: **privat
 - [x] Worker logs confirmed: whisper model downloaded, `[worker] polling for processing jobs every
       2000ms` running without errors (after fixing a Prisma `binaryTargets` bug — see PR #2).
 - [ ] Postgres backups: not yet confirmed/enabled. Morning to-do.
-- [ ] Follow-up (non-blocking): worker's `WHISPER_MODEL_PATH` still literally reads
-      `/data/models/ggml-base.en.bin`, which no longer matches the volume's `/models` mount — it
-      re-downloads the model on every restart instead of reusing the persisted copy. Update the var
-      to `/models/ggml-base.en.bin` and confirm the existing `/data/models/...` copy (if any) can be
-      ignored/cleaned up.
+- [x] Fixed `WHISPER_MODEL_PATH` on worker (was `/data/models/ggml-base.en.bin`, didn't match the
+      volume's `/models` mount). Now `/models/ggml-base.en.bin` — deploy log confirms the model
+      downloaded there and will persist across restarts instead of re-downloading every time.
 
 ## Phase D — Stripe (test mode) via API
 
