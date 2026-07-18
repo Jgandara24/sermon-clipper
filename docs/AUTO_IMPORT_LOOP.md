@@ -69,7 +69,7 @@ and polling on top of the now-working fetch adapter.
       (`yt-dlp --dump-json --skip-download`), `downloadYtDlpVideo(url, destPath, { maxBytes })`.
       Both fetch/download functions must accept an injectable subprocess-execution function so
       tests never shell out for real.
-- [ ] **1.2** `src/lib/jobs/handlers/finalize.ts`: before the existing
+- [x] **1.2** `src/lib/jobs/handlers/finalize.ts`: before the existing
       `if (!project.sourceVideo?.storageKey)` throw, branch on `origin === URL && !storageKey`:
       fetch metadata, check duration against `MAX_VIDEO_DURATION_S` and the workspace's plan limit
       *before* downloading (fail with `URL_IMPORT_FAILED`/`VIDEO_TOO_LONG`, not a partial
