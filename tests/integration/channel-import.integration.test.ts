@@ -147,6 +147,27 @@ describe("pollDueChannelImportSources", () => {
     expect(polledOnce.lastPollErrorAt).toBeNull();
     expect(polledOnce.lastPollErrorMessage).toBeNull();
 
+    // Phase 4.2: one channel_import_created event per auto-created project, and at least one
+    // workspace-agnostic channel_poll_ran liveness event from this run (other parallel suites
+    // may add more, so the run-level event is a lower bound).
+    const createdEvents = await prisma.operationalEvent.findMany({
+      where: { workspaceId, category: "channel_import", eventType: "channel_import_created" },
+    });
+    expect(createdEvents).toHaveLength(2);
+    expect(new Set(createdEvents.map((event) => event.projectId))).toEqual(
+      new Set(projects.map((project) => project.id)),
+    );
+    expect(createdEvents.every((event) => event.severity === "info")).toBe(true);
+    expect(
+      await prisma.operationalEvent.count({
+        where: {
+          category: "channel_import",
+          eventType: "channel_poll_ran",
+          createdAt: { gte: polledOnce.lastPolledAt! },
+        },
+      }),
+    ).toBeGreaterThanOrEqual(1);
+
     // Second poll over the identical list: nothing new is created (dedup proof).
     const secondPass = await pollDueChannelImportSources(prisma, { listUploads });
     expect(secondPass.videosImported).toBe(0);
@@ -157,6 +178,11 @@ describe("pollDueChannelImportSources", () => {
       await prisma.channelImportedVideo.count({ where: { channelImportSourceId: source.id } }),
     ).toBe(2);
     expect(await prisma.project.count({ where: { workspaceId } })).toBe(2);
+    expect(
+      await prisma.operationalEvent.count({
+        where: { workspaceId, category: "channel_import", eventType: "channel_import_created" },
+      }),
+    ).toBe(2);
 
     const polledTwice = await prisma.channelImportSource.findUniqueOrThrow({
       where: { id: source.id },
@@ -241,5 +267,15 @@ describe("pollDueChannelImportSources", () => {
     expect(healthyRows[0].platformVideoId).toBe("vidhealthy1");
     expect(healthyRows[0].status).toBe("imported");
     expect(healthyRows[0].projectId).not.toBeNull();
+
+    // Phase 4.2: the failed source records a warning-severity channel_poll_failed event —
+    // warning, not error, so a single flaky poll never emails the operator.
+    const failureEvents = await prisma.operationalEvent.findMany({
+      where: { workspaceId, category: "channel_import", eventType: "channel_poll_failed" },
+    });
+    expect(failureEvents).toHaveLength(1);
+    expect(failureEvents[0].severity).toBe("warning");
+    expect(failureEvents[0].message).toContain("quotaExceeded");
+    expect(failureEvents[0].message).toContain("Broken Channel");
   });
 });

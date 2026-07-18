@@ -12,7 +12,8 @@ export type OperationalEventCategory =
   | "export"
   | "approval"
   | "billing"
-  | "worker";
+  | "worker"
+  | "channel_import";
 
 export type OperationalEventInput = {
   workspaceId?: string | null;

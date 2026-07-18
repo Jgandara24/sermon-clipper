@@ -91,6 +91,14 @@ describe("registerChannelImportSource", () => {
       where: { channelImportSourceId: source.id },
     });
     expect(seeded).toBe(0);
+
+    // Registration records a channel_registered operational event for the workspace.
+    const registeredEvents = await prisma.operationalEvent.findMany({
+      where: { workspaceId, category: "channel_import", eventType: "channel_registered" },
+    });
+    expect(registeredEvents).toHaveLength(1);
+    expect(registeredEvents[0].severity).toBe("info");
+    expect(registeredEvents[0].message).toContain("Grace Church");
   });
 
   it("rejects a duplicate channel for the same workspace via the unique constraint", async () => {

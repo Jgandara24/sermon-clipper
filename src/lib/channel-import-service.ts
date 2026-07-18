@@ -1,5 +1,6 @@
 import { ChannelImportPlatform, Prisma, type PrismaClient } from "@prisma/client";
 import { resolveUploadsPlaylist, type YouTubeChannel } from "@/lib/integrations/youtube";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { assertWorkspaceScope } from "@/lib/project-service";
 
 /**
@@ -97,7 +98,7 @@ export async function registerChannelImportSource(
   const channel = await resolveChannel(idOrHandle);
 
   try {
-    return await client.channelImportSource.create({
+    const source = await client.channelImportSource.create({
       data: {
         workspaceId,
         platform: ChannelImportPlatform.YOUTUBE,
@@ -107,6 +108,18 @@ export async function registerChannelImportSource(
         uploadsPlaylistId: channel.uploadsPlaylistId,
       },
     });
+    await recordOperationalEventSafely(client, {
+      workspaceId,
+      category: "channel_import",
+      eventType: "channel_registered",
+      message: `${channel.title} registered for auto-import.`,
+      metadata: {
+        channelImportSourceId: source.id,
+        channelId: channel.channelId,
+        channelTitle: channel.title,
+      },
+    });
+    return source;
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       throw new DuplicateChannelImportError(

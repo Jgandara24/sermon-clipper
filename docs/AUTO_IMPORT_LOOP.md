@@ -136,7 +136,7 @@ and polling on top of the now-working fetch adapter.
       `checkExportJobLimits`/`checkUploadPresignLimit`. Wire into the Phase 3 poller itself — over
       cap, record `status: "skipped_cap"` and retry the same video on a later poll (pacing, not
       permanent rejection).
-- [ ] **4.2** `src/lib/observability/operational-events.ts`: add a `"channel_import"` category;
+- [x] **4.2** `src/lib/observability/operational-events.ts`: add a `"channel_import"` category;
       emit `channel_registered`, `channel_poll_ran`, `channel_import_created`,
       `channel_import_skipped_cap`, `channel_poll_failed` at the appropriate call sites in
       Phases 2–3.

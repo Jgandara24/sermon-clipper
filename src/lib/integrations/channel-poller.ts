@@ -1,7 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
 import { listRecentUploads, type YouTubeUploadItem } from "@/lib/integrations/youtube";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { createDraftProjectForWorkspace } from "@/lib/project-service";
-import { checkChannelImportLimit } from "@/lib/rate-limit";
+import { channelImportDailyProjectLimit, checkChannelImportLimit } from "@/lib/rate-limit";
 
 /**
  * Channel auto-import polling (worker-side).
@@ -39,7 +40,19 @@ import { checkChannelImportLimit } from "@/lib/rate-limit";
  *
  * Testability: the YouTube client is injectable (`listUploads`), the same trust boundary as
  * the injected fetch in youtube.ts — tests never call googleapis.com. `now` is injectable so
- * tests can roll the cap window forward. Operational events are Phase 4.2.
+ * tests can roll the cap window forward.
+ *
+ * Operational events (`category: "channel_import"`, all recorded via the *Safely helper so
+ * observability can never break polling), with severities chosen deliberately — only "error"
+ * emails the operator (alerts.ts), and nothing here is error-worthy:
+ * - `channel_poll_ran` (info): once per run when any enabled source exists — the liveness
+ *   signal for the runbook — carrying the run summary as metadata.
+ * - `channel_import_created` (info): one per project auto-created from an upload.
+ * - `channel_import_skipped_cap` (warning): once per source-poll when videos are *newly*
+ *   deferred by the daily cap — a nudge that `CHANNEL_IMPORT_DAILY_LIMIT` may be too low.
+ *   Re-deferrals on later polls stay silent so a capped source doesn't warn every 45 minutes.
+ * - `channel_poll_failed` (warning, not error): a single source's failed poll self-heals on
+ *   the next cycle and is durably recorded on the source row where the settings UI shows it.
  */
 
 export type ListUploads = (
@@ -82,6 +95,7 @@ export function youtubeWatchUrl(videoId: string): string {
 type PollableSource = {
   id: string;
   workspaceId: string;
+  channelTitle: string;
   uploadsPlaylistId: string;
   registeredAt: Date;
   lastPolledAt: Date | null;
@@ -138,7 +152,27 @@ export async function pollDueChannelImportSources(
           errorMessage(updateError),
         );
       }
+      // Warning, not error: one source's failed poll self-heals next cycle; the durable
+      // record lives on the source row where /app/settings/imports surfaces it.
+      await recordOperationalEventSafely(client, {
+        workspaceId: source.workspaceId,
+        category: "channel_import",
+        eventType: "channel_poll_failed",
+        severity: "warning",
+        message: `Polling ${source.channelTitle} failed: ${truncateErrorMessage(errorMessage(error))}`,
+        metadata: { channelImportSourceId: source.id, channelTitle: source.channelTitle },
+      });
     }
+  }
+
+  if (sources.length > 0) {
+    // Liveness signal (workspace-agnostic — one poll run spans every registered workspace).
+    await recordOperationalEventSafely(client, {
+      category: "channel_import",
+      eventType: "channel_poll_ran",
+      message: "Channel import poll completed.",
+      metadata: { ...summary },
+    });
   }
 
   return summary;
@@ -185,6 +219,9 @@ async function pollOneSource(
   const done = new Set(
     seenRows.filter((row) => row.status !== "skipped_cap").map((row) => row.platformVideoId),
   );
+  const previouslySkipped = new Set(
+    seenRows.filter((row) => row.status === "skipped_cap").map((row) => row.platformVideoId),
+  );
 
   // Import oldest-first so project creation order matches publication order.
   const freshVideos = candidates
@@ -193,6 +230,7 @@ async function pollOneSource(
 
   let videosImported = 0;
   let videosSkippedCap = 0;
+  const newlySkippedVideoIds: string[] = [];
   const videoFailures: string[] = [];
   // Once the cap is hit it stays hit for this poll (the imported-count only grows), so the
   // remaining, newer videos skip without re-querying.
@@ -211,6 +249,9 @@ async function pollOneSource(
     }
     if (overCap) {
       videosSkippedCap++;
+      if (!previouslySkipped.has(video.videoId)) {
+        newlySkippedVideoIds.push(video.videoId);
+      }
       try {
         // Upsert: the video may already carry a skipped_cap row from an earlier capped poll.
         await client.channelImportedVideo.upsert({
@@ -253,6 +294,19 @@ async function pollOneSource(
         },
       });
       videosImported++;
+      await recordOperationalEventSafely(client, {
+        workspaceId: source.workspaceId,
+        category: "channel_import",
+        eventType: "channel_import_created",
+        message: `Imported "${video.title}" from ${source.channelTitle}.`,
+        projectId: project.id,
+        metadata: {
+          channelImportSourceId: source.id,
+          channelTitle: source.channelTitle,
+          videoId: video.videoId,
+          publishedAt: video.publishedAt.toISOString(),
+        },
+      });
     } catch (error) {
       videoFailures.push(`${video.videoId}: ${errorMessage(error)}`);
       try {
@@ -274,6 +328,25 @@ async function pollOneSource(
         );
       }
     }
+  }
+
+  if (newlySkippedVideoIds.length > 0) {
+    // One aggregate event per source-poll, and only for *newly* deferred videos — a capped
+    // source retrying every cycle must not warn every 45 minutes.
+    await recordOperationalEventSafely(client, {
+      workspaceId: source.workspaceId,
+      category: "channel_import",
+      eventType: "channel_import_skipped_cap",
+      severity: "warning",
+      message: `Daily import cap deferred ${newlySkippedVideoIds.length} upload(s) from ${source.channelTitle} — they retry on a later poll.`,
+      metadata: {
+        channelImportSourceId: source.id,
+        channelTitle: source.channelTitle,
+        videoIds: newlySkippedVideoIds,
+        deferredThisPoll: videosSkippedCap,
+        limit: channelImportDailyProjectLimit(),
+      },
+    });
   }
 
   // The poll itself succeeded (we saw the upload list), so advance the cutoff even when
