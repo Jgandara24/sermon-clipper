@@ -185,6 +185,16 @@ via the Gmail connector. Use `jake+approver@jakegandara.com` as the second user 
   `requiredMountPath`). It currently works by re-downloading the model onto ephemeral storage on
   every restart. Fix: update the var to `/models/ggml-base.en.bin`.
 - **2026-07-17:** Postgres backup confirmation not done.
+- **2026-07-17, Phase F blocked at the first step:** SendGrid rejects every send with `401
+  "Maximum credits exceeded"` (confirmed via direct curl to the SendGrid API using the configured
+  `SENDGRID_API_KEY` — not an app bug, `/api/health` shows SendGrid config as `ok`). Production
+  login requires a real email OTP (no dev-login fallback under `NODE_ENV=production`), so this
+  blocks sign-in entirely, which cascades to blocking nearly all of Phase F: `authEmail`,
+  `workspaceJoin` (needs a second user's OTP), `approvalNotification`, and everything downstream
+  of being logged in (upload, processing, branding, review, export, billing, usage limits,
+  observability). Needs the operator to top up or upgrade the SendGrid account (or swap in a
+  different provider/API key) before Phase F can resume. Recorded as `failed` with this evidence
+  in `docs/phase8-launch-evidence.json` rather than skipped silently.
 
 ## Night result
 
