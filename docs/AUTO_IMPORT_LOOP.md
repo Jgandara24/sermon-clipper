@@ -93,7 +93,7 @@ and polling on top of the now-working fetch adapter.
 
 ## Phase 2 — Channel registration model + settings UI
 
-- [ ] **2.1** `prisma/schema.prisma` + migration: `ChannelImportPlatform` enum (`YOUTUBE`),
+- [x] **2.1** `prisma/schema.prisma` + migration: `ChannelImportPlatform` enum (`YOUTUBE`),
       `ChannelImportSource` (workspaceId, platform, channelId, channelHandle, channelTitle,
       uploadsPlaylistId, enabled, registeredAt, lastPolledAt, lastPollErrorAt/Message,
       `@@unique([workspaceId, platform, channelId])`), `ChannelImportedVideo`

@@ -135,6 +135,12 @@ enum NotificationStatus {
   @@map("notification_status")
 }
 
+enum ChannelImportPlatform {
+  YOUTUBE @map("youtube")
+
+  @@map("channel_import_platform")
+}
+
 model User {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String       @unique
@@ -223,6 +229,7 @@ model Workspace {
   clipApprovalAuditEvents ClipApprovalAuditEvent[]
   operationalEvents       OperationalEvent[]
   billingPeriodCredits    BillingPeriodCredit[]
+  channelImportSources    ChannelImportSource[]
 
   @@index([ownerId])
   @@map("workspaces")
@@ -378,12 +385,13 @@ model Project {
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
-  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  sourceVideo         SourceVideo?         @relation(fields: [sourceVideoId], references: [id], onDelete: SetNull)
-  processingJobs      ProcessingJob[]
-  usageLedger         UsageLedger[]
-  generatedClips      GeneratedClip[]
-  scriptureReferences ScriptureReference[]
+  workspace             Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceVideo           SourceVideo?           @relation(fields: [sourceVideoId], references: [id], onDelete: SetNull)
+  processingJobs        ProcessingJob[]
+  usageLedger           UsageLedger[]
+  generatedClips        GeneratedClip[]
+  scriptureReferences   ScriptureReference[]
+  channelImportedVideos ChannelImportedVideo[]
 
   @@index([workspaceId])
   @@index([sourceVideoId])
@@ -718,4 +726,48 @@ model OperationalEvent {
   @@index([jobId])
   @@index([exportJobId])
   @@map("operational_events")
+}
+
+model ChannelImportSource {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId          String                @map("workspace_id") @db.Uuid
+  platform             ChannelImportPlatform
+  channelId            String                @map("channel_id")
+  channelHandle        String?               @map("channel_handle")
+  channelTitle         String                @map("channel_title")
+  uploadsPlaylistId    String                @map("uploads_playlist_id")
+  enabled              Boolean               @default(true)
+  registeredAt         DateTime              @default(now()) @map("registered_at")
+  lastPolledAt         DateTime?             @map("last_polled_at")
+  lastPollErrorAt      DateTime?             @map("last_poll_error_at")
+  lastPollErrorMessage String?               @map("last_poll_error_message")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+
+  workspace      Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  importedVideos ChannelImportedVideo[]
+
+  @@unique([workspaceId, platform, channelId])
+  @@index([workspaceId])
+  @@map("channel_import_sources")
+}
+
+// status is a plain string ("imported" | "failed", with more outcomes added by the polling
+// phases) mirroring OperationalEvent.category/severity rather than a schema enum.
+model ChannelImportedVideo {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  channelImportSourceId String   @map("channel_import_source_id") @db.Uuid
+  platformVideoId       String   @map("platform_video_id")
+  projectId             String?  @map("project_id") @db.Uuid
+  publishedAt           DateTime @map("published_at")
+  status                String
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  channelImportSource ChannelImportSource @relation(fields: [channelImportSourceId], references: [id], onDelete: Cascade)
+  project             Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@unique([channelImportSourceId, platformVideoId])
+  @@index([projectId])
+  @@map("channel_imported_videos")
 }
