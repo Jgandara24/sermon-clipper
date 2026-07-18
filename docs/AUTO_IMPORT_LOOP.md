@@ -131,7 +131,7 @@ and polling on top of the now-working fetch adapter.
 
 ## Phase 4 — Rate limits + observability + docs
 
-- [ ] **4.1** `src/lib/rate-limit.ts`: `channelImportDailyProjectLimit()` (env
+- [x] **4.1** `src/lib/rate-limit.ts`: `channelImportDailyProjectLimit()` (env
       `CHANNEL_IMPORT_DAILY_LIMIT`) + `checkChannelImportLimit`, same shape as
       `checkExportJobLimits`/`checkUploadPresignLimit`. Wire into the Phase 3 poller itself — over
       cap, record `status: "skipped_cap"` and retry the same video on a later poll (pacing, not

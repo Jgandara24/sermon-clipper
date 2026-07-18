@@ -101,7 +101,8 @@ async function loop() {
           channelPoll.sourcesPolled ||
           channelPoll.sourcesFailed ||
           channelPoll.videosImported ||
-          channelPoll.videosFailed
+          channelPoll.videosFailed ||
+          channelPoll.videosSkippedCap
         ) {
           console.log("[worker] channel import poll", { channelPoll });
         }

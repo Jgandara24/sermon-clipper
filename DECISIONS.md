@@ -841,3 +841,30 @@ label can go stale until re-registered. Users who genuinely want old videos impo
 those URLs manually through the existing URL-import path.
 
 Status: Active.
+
+## 2026-07-18 - Channel Import Daily Cap Counts "imported" Rows Per Workspace Over A Rolling 24h; Over-Cap Videos Are Retryable "skipped_cap" Rows
+
+Decision: `checkChannelImportLimit` (`src/lib/rate-limit.ts`, env `CHANNEL_IMPORT_DAILY_LIMIT`,
+default 10) caps channel auto-imports per workspace over a rolling 24h window, counted from
+`ChannelImportedVideo` rows with `status: "imported"` created within the window (joined through
+the source's workspace). Over-cap videos get a `"skipped_cap"` row — retryable, unlike terminal
+`"failed"` — and the poller lowers its listing cutoff to just before the oldest pending skip so
+those videos re-enter the candidate list and import once the window has room. Cap skips never
+touch `lastPollErrorAt`/`lastPollErrorMessage`: pacing is not an error.
+
+Why: The existing limits count the domain rows the limited action creates (`checkExportJobLimits`
+counts `exportJob` rows over `now - 24h`), so the channel cap mirrors that shape rather than
+inventing an event-based or calendar-day counter. "imported" rows map 1:1 to auto-created
+projects, so the cap measures exactly the cost it exists to bound (each import runs the full
+paid transcription/analysis pipeline) while manual uploads/URL pastes never consume it and
+failed or deferred attempts don't either. Retry-by-cutoff-lowering keeps the no-backfill
+invariant: a skipped_cap row only ever exists for a video strictly newer than some earlier
+cutoff (>= registeredAt), so the effective cutoff never drops below registration.
+
+Tradeoff: Rolling-window counting means a burst that fills the cap at 9pm still throttles until
+9pm the next day (no midnight reset a user might expect). The DB-count check is race-tolerant
+like the other limits — near-simultaneous imports may both pass within one row of the limit —
+which is fine for a single-worker poller. A channel that uploads more than the cap every day
+falls progressively behind until the operator raises `CHANNEL_IMPORT_DAILY_LIMIT`.
+
+Status: Active.
