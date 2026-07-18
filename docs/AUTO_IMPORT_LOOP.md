@@ -105,7 +105,7 @@ and polling on top of the now-working fetch adapter.
 - [x] **2.3** `src/lib/channel-import-service.ts`: registration (resolves the channel
       synchronously so a bad handle/URL fails fast with a clear error, not a silently-broken row)
       and workspace-scoped listing/disable.
-- [ ] **2.4** `src/app/actions/channel-imports.ts` (server actions) +
+- [x] **2.4** `src/app/actions/channel-imports.ts` (server actions) +
       `src/app/app/settings/imports/page.tsx` (new route, gated on `MANAGE_OPERATIONS`),
       following the zod-validate → `requirePrimaryWorkspacePermission` → service-call → revalidate
       shape already used by `src/app/actions/projects.ts`.
