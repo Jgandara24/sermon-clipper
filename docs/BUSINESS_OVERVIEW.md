@@ -56,3 +56,39 @@ Based on that, Pulpit Engine handles clips like this:
 - A `servicesPerWeek` (or equivalent) field on the church/workspace record, set at onboarding.
 - Frequency-aware clip-count logic replacing the flat `TARGET_CLIP_COUNT = 8` in `analyze.ts`.
 - A Facebook scheduling/posting subsystem: `ScheduledPost`-style model, day-of-week assignment logic (Mon-Sat, skip Sunday), and actual Facebook Page publishing integration — none of which exist in the codebase today.
+
+## Product Phases
+
+### Phase 1 (MVP): Video Reels Only
+
+Goal: one highlight reel per day, with simple but future-proof settings.
+
+**Onboarding**
+- Ask: "How many sermons do you typically stream or upload each week? (1 or 2)"
+- If 2: assume Sunday & Wednesday for now.
+
+**Default posting rule**
+- `Total posts per day` (integer, default = 1).
+- Content types available in Phase 1: video reels only.
+- Post schedule:
+  - 1 sermon/week: generate at least 6 highlight clips from the Sunday sermon; auto-schedule 1 clip per day, Mon-Sat.
+  - 2 sermons/week: generate at least 3 clips from the Sunday sermon and 3 from the Wednesday sermon; auto-schedule Sunday's clips to Mon/Tue/Wed and Wednesday's clips to Thu/Fri/Sat.
+- No posts on Sunday in Phase 1.
+
+**UI expectation (Phase 1)**
+- Simple control, per account:
+  - `Total posts per day: [integer stepper]` (default 1)
+  - `Video reels per day: [integer stepper]` — must equal total posts per day in Phase 1.
+
+### Future Phase: Multiple Content Types
+
+Adds generated text posts and infographic/image posts alongside video reels.
+
+**Desired behavior**
+- User sets `Total posts per day: [integer stepper]` (e.g., 3), then a breakdown by type:
+  - `Video reels per day: [int]`
+  - `Text posts per day: [int]`
+  - `Infographic/image posts per day: [int]`
+  - Rule: sum of all content-type counts must equal total posts per day.
+- Sermon-based logic stays the same: 1 sermon/week spreads content Mon-Sat from that sermon; 2 sermons/week has the Sunday sermon power Mon-Wed and the Wednesday sermon power Thu-Sat.
+- The scheduling engine should always back into: how many posts of each type are needed per day, and how many sermon "days" each upload must cover, based on whether the church has 1 or 2 weekly sermons.
