@@ -124,6 +124,9 @@ const fieldSchemas = {
   ANALYSIS_MODEL_CLASSIFY: optionalString,
   ANALYSIS_MODEL_SCORING: optionalString,
 
+  // YouTube Data API v3 (channel auto-import). App-level key, like ANTHROPIC_API_KEY.
+  YOUTUBE_API_KEY: optionalString,
+
   // Observability
   SENTRY_DSN: optionalString,
   ALERTS_THROTTLE_MS: numberOrFallback(30 * 60 * 1000),
@@ -132,6 +135,7 @@ const fieldSchemas = {
   EXPORT_MAX_CONCURRENT_JOBS: positiveInt(4),
   EXPORT_DAILY_JOB_LIMIT: positiveInt(50),
   UPLOAD_PRESIGN_HOURLY_LIMIT: positiveInt(30),
+  CHANNEL_IMPORT_DAILY_LIMIT: positiveInt(10),
 
   // Retention (non-negative or fallback; 0 is a valid "no grace period")
   EXPORT_FILE_RETENTION_GRACE_MS: nonNegativeNumber(30 * 24 * 60 * 60 * 1000),
@@ -145,6 +149,9 @@ const fieldSchemas = {
   WORKER_HEARTBEAT_INTERVAL_MS: rawNumber(30_000),
   WORKER_PROCESS_HEARTBEAT_INTERVAL_MS: rawNumber(30_000),
   WORKER_STALE_JOB_TIMEOUT_MS: rawNumber(15 * 60_000),
+  // Channel auto-import polling cadence (worker loop, same timestamp-comparison pattern as
+  // WORKER_CLEANUP_INTERVAL_MS). Default 60 minutes.
+  CHANNEL_POLL_INTERVAL_MS: rawNumber(60 * 60_000),
 } satisfies Record<string, z.ZodType>;
 
 type EnvSchemaMap = typeof fieldSchemas;

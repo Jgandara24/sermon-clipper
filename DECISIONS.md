@@ -304,7 +304,8 @@ Why: ffmpeg/ffprobe are free, local, self-hosted binaries, not paid providers, s
 
 Tradeoff: The dashboard's "Or paste a link" form is honestly labeled as not-yet-functional. Churches can upload files today; link-based import is a follow-up within Phase 2 (or an early Phase 3 task) before the phase's URL-import surface is considered done.
 
-Status: Active.
+Status: Superseded by the 2026-07-18 URL import decision — the yt-dlp fetch adapter is now real
+and pasted URLs enqueue a working FINALIZE job.
 
 ## 2026-07-06 - Local-Disk StorageProvider Stands In For S3/R2
 
@@ -778,3 +779,125 @@ sending domain) is intentionally out of scope here and left as a future decision
 
 Status: Active. Code/tests/docs migrated and `npm run verify` green; production env vars and a
 live send still need operator action (RESEND_API_KEY).
+
+## 2026-07-18 - URL Import Is Real: yt-dlp Fetch Adapter Wired Into FINALIZE
+
+Decision: Pasting a URL now imports the video for real, superseding "2026-07-06 - Phase 2 Upload
+Is Real; URL Import Stays Stubbed." `src/lib/media/ytdlp.ts` provides a pure metadata parser
+(`parseYtDlpMetadataJson`, mirroring `parseFfprobeOutput`) plus `fetchYtDlpMetadata` and
+`downloadYtDlpVideo`, both taking an injectable subprocess-exec function and hard timeouts
+(`YTDLP_METADATA_TIMEOUT_MS`/`YTDLP_DOWNLOAD_TIMEOUT_MS`). The FINALIZE handler grew a URL
+branch: for a `URL`-origin source video with no `storageKey`, it fetches metadata first and
+enforces `MAX_VIDEO_DURATION_S` (`VIDEO_TOO_LONG`) and the workspace plan limit
+(`PLAN_LIMIT_EXCEEDED`) *before* downloading, then downloads into the handler's temp workDir
+(capped at `MAX_UPLOAD_BYTES`; fetch/download failures fail as `URL_IMPORT_FAILED`), uploads via
+the storage provider, sets `sourceVideo.storageKey`, and falls through to the unchanged
+probe/reserve/PROBE flow. `createDraftProjectForWorkspace` enqueues FINALIZE as `QUEUED` with
+`idempotencyKey: finalize:<projectId>` (mirroring the upload path) instead of the
+`WAITING`/`URL_IMPORT_UNAVAILABLE` stub, worker readiness now requires a working `yt-dlp`
+(`YTDLP_PATH`, probed with `--version`), and `Dockerfile.worker` installs the standalone Linux
+binary in the runtime stage.
+
+Why: Closes the honest-but-stubbed URL-paste gap as a standalone win, and it is the fetch
+foundation the auto-import channel-polling work (Phases 2-4 of `docs/AUTO_IMPORT_LOOP.md`)
+builds on — the poller creates URL projects and relies on this exact pipeline.
+
+Tradeoff: yt-dlp is a moving target (extractor breakage whenever YouTube changes), so the Docker
+install is deliberately unpinned — a pinned release goes stale in weeks, and image builds trade
+bit-reproducibility for a binary that still works; `--version` fails the build fast if the
+download breaks. The pre-download duration gate trusts yt-dlp metadata; the authoritative
+ffprobe duration is still re-checked after download by the unchanged finalize flow. Tests fake
+only the subprocess boundary (same trust line as ffprobe/whisper); CI never shells out to a real
+yt-dlp. The web process's best-effort inline job runner (`after()` in the upload action) could
+claim a URL FINALIZE job on an image without yt-dlp — that failure is retryable and the worker
+picks it up, accepted at MVP scale.
+
+Status: Active.
+
+## 2026-07-18 - Channel Registration Resolves Synchronously; No Bulk Backfill On Registration
+
+Decision: Registering a YouTube channel for auto-import (`src/lib/channel-import-service.ts`)
+resolves the channel against the YouTube Data API *during* registration — normalizing flexible
+input (@handle, bare handle, UC... channel id, or youtube.com channel URL) and persisting the
+resolved `channelId`/`channelTitle`/`uploadsPlaylistId` — so a bad handle or URL fails fast with
+a clear, typed error instead of creating a silently-broken row the poller would grind on. No
+bulk backfill happens on registration: no `ChannelImportedVideo` rows are seeded and no
+historical uploads are imported — only videos published after registration are ever imported
+(the poller compares against `lastPolledAt`/already-seen video ids). Legacy `/c/` and `/user/`
+URLs are rejected with guidance to use the @handle, since `channels.list` cannot resolve legacy
+custom URLs reliably. Duplicate registration is enforced by the
+`@@unique([workspaceId, platform, channelId])` constraint, surfaced as a friendly error.
+
+Why: A church registering its channel almost certainly wants *future* sermons clipped, not a
+surprise import of years of archive (and the quota, minutes, and storage bill that implies).
+Synchronous resolution keeps the failure at the moment the user can fix it, and storing the
+uploads playlist id at registration means the poller never needs `channels.list` again —
+`playlistItems.list` only, 1 quota unit per poll.
+
+Tradeoff: Registration requires the YouTube API to be reachable and `YOUTUBE_API_KEY` configured
+(a quota outage blocks new registrations, not just polling). A channel whose handle changes
+keeps working — polling is keyed to the immutable channel/playlist ids — but the stored handle
+label can go stale until re-registered. Users who genuinely want old videos imported must paste
+those URLs manually through the existing URL-import path.
+
+Status: Active.
+
+## 2026-07-18 - Channel Import Daily Cap Counts "imported" Rows Per Workspace Over A Rolling 24h; Over-Cap Videos Are Retryable "skipped_cap" Rows
+
+Decision: `checkChannelImportLimit` (`src/lib/rate-limit.ts`, env `CHANNEL_IMPORT_DAILY_LIMIT`,
+default 10) caps channel auto-imports per workspace over a rolling 24h window, counted from
+`ChannelImportedVideo` rows with `status: "imported"` created within the window (joined through
+the source's workspace). Over-cap videos get a `"skipped_cap"` row — retryable, unlike terminal
+`"failed"` — and the poller lowers its listing cutoff to just before the oldest pending skip so
+those videos re-enter the candidate list and import once the window has room. Cap skips never
+touch `lastPollErrorAt`/`lastPollErrorMessage`: pacing is not an error.
+
+Why: The existing limits count the domain rows the limited action creates (`checkExportJobLimits`
+counts `exportJob` rows over `now - 24h`), so the channel cap mirrors that shape rather than
+inventing an event-based or calendar-day counter. "imported" rows map 1:1 to auto-created
+projects, so the cap measures exactly the cost it exists to bound (each import runs the full
+paid transcription/analysis pipeline) while manual uploads/URL pastes never consume it and
+failed or deferred attempts don't either. Retry-by-cutoff-lowering keeps the no-backfill
+invariant: a skipped_cap row only ever exists for a video strictly newer than some earlier
+cutoff (>= registeredAt), so the effective cutoff never drops below registration.
+
+Tradeoff: Rolling-window counting means a burst that fills the cap at 9pm still throttles until
+9pm the next day (no midnight reset a user might expect). The DB-count check is race-tolerant
+like the other limits — near-simultaneous imports may both pass within one row of the limit —
+which is fine for a single-worker poller. A channel that uploads more than the cap every day
+falls progressively behind until the operator raises `CHANNEL_IMPORT_DAILY_LIMIT`.
+
+Status: Active.
+
+## 2026-07-18 - Sermon Clipper Is the Intended Long-Term Successor to Pulpit Engine; No Piecemeal Renaming Before a Deliberate Cutover
+
+Decision: Sermon Clipper is the operator's intended flagship product going forward — the old
+Pulpit Engine build (`euphoric-patrol-493623-b8` in Google Cloud, `pulpitengine.com`, the
+`pulpit-engine` Dropbox workspace) will eventually be retired, and Sermon Clipper is expected to
+take over the Pulpit Engine name and, likely, its domain. Until that happens, infrastructure and
+codebase naming stays **"sermon-clipper"** everywhere — repo name, Railway project/services, and
+any new cloud resources (e.g. the dedicated Google Cloud project created for `YOUTUBE_API_KEY` is
+named `sermon-clipper-prod`, fully separate from the old project). Do not rename, alias, or
+partially brand any individual resource as "Pulpit Engine" before the cutover.
+
+Why: Two live things both named "Pulpit Engine" — the old build and a newly-created resource — is
+strictly more confusing than the current state, not less, and it's the exact failure mode that
+caused this cycle's credential-hygiene incidents (resources that *look* related get reached for
+by mistake, by humans and agents alike). The isolation work already done for this reason —
+dedicated Resend sending subdomain instead of reusing `pulpitengine.com`, a dedicated
+`sermon-clipper-prod` GCP project instead of reusing `euphoric-patrol-493623-b8` — is not in
+tension with the eventual consolidation; it's what makes that consolidation a clean, deliberate
+event later instead of an accidental one now. Domain reuse in particular (email sender reputation,
+DNS, auth) needs a real migration plan, not an incidental one.
+
+Tradeoff: Some near-term friction from having "sermon-clipper"-branded infra for a product whose
+eventual public name will be "Pulpit Engine" — acceptable, since GCP project IDs are the only
+piece of this that's genuinely permanent, and everything else (repo, Railway project, domain)
+renames cleanly with redirects when the operator is ready.
+
+Migration trigger: When the operator decides to retire the old Pulpit Engine build, treat the
+rename as one atomic, planned migration (domain/DNS, email sending domain, Railway project name,
+GCP project display name, repo name with GitHub redirect, Stripe account naming, marketing) —
+not a rolling series of one-off renames.
+
+Status: Active.

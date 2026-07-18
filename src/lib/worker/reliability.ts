@@ -15,11 +15,13 @@ export type WorkerReadinessCheck = {
 };
 
 type EnvLike = Record<string, string | undefined>;
-type CommandAvailable = (command: string) => boolean;
+type CommandAvailable = (command: string, versionFlag?: string) => boolean;
 type FileReadable = (filePath: string) => boolean;
 
-function defaultCommandAvailable(command: string): boolean {
-  const result = spawnSync(command, ["-version"], { stdio: "ignore" });
+// ffmpeg-family binaries answer `-version`; yt-dlp only accepts `--version`, so each check
+// passes the flag its binary understands.
+function defaultCommandAvailable(command: string, versionFlag = "-version"): boolean {
+  const result = spawnSync(command, [versionFlag], { stdio: "ignore" });
   return result.status === 0;
 }
 
@@ -47,6 +49,7 @@ export function checkWorkerRuntimeEnvironment(
 
   const ffmpegPath = env.FFMPEG_PATH || "ffmpeg";
   const ffprobePath = env.FFPROBE_PATH || "ffprobe";
+  const ytDlpBinary = env.YTDLP_PATH || "yt-dlp";
   const whisperBinary = env.WHISPER_CPP_BINARY || "whisper-cli";
 
   const checks: WorkerReadinessCheck[] = [
@@ -70,6 +73,13 @@ export function checkWorkerRuntimeEnvironment(
           name: "FFPROBE_PATH",
           status: "fail",
           message: `ffprobe is required on production workers. Checked: ${ffprobePath}.`,
+        },
+    commandAvailable(ytDlpBinary, "--version")
+      ? { name: "YTDLP_PATH", status: "ok", message: `yt-dlp is available at ${ytDlpBinary}.` }
+      : {
+          name: "YTDLP_PATH",
+          status: "fail",
+          message: `yt-dlp is required on production workers for URL imports. Checked: ${ytDlpBinary}.`,
         },
     commandAvailable(whisperBinary)
       ? { name: "WHISPER_CPP_BINARY", status: "ok", message: `Whisper binary is available at ${whisperBinary}.` }

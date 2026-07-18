@@ -27,6 +27,11 @@ export function uploadPresignHourlyLimit(): number {
   return env.UPLOAD_PRESIGN_HOURLY_LIMIT;
 }
 
+/** Projects a workspace may gain from channel auto-import per rolling 24h. */
+export function channelImportDailyProjectLimit(): number {
+  return env.CHANNEL_IMPORT_DAILY_LIMIT;
+}
+
 export type RateLimitDecision =
   | { allowed: true }
   | { allowed: false; reason: string; message: string; limit: number; current: number };
@@ -71,6 +76,40 @@ export async function checkExportJobLimits(
     };
   }
 
+  return { allowed: true };
+}
+
+/**
+ * Daily cap on channel auto-imports. Counting basis: per-workspace over a rolling 24h window,
+ * counted from `ChannelImportedVideo` rows with `status: "imported"` created within the window
+ * (joined through the source's workspace) — the same "count the domain rows the limited action
+ * creates" shape as `checkExportJobLimits` counting `exportJob` rows, chosen over counting
+ * projects because "imported" rows map 1:1 to auto-created projects while manual uploads/URL
+ * pastes never consume the cap, and failed or capped attempts don't either. Over-cap videos are
+ * recorded as `"skipped_cap"` and retried on a later poll (pacing, not permanent rejection).
+ */
+export async function checkChannelImportLimit(
+  client: PrismaClient,
+  workspaceId: string,
+  now = new Date(),
+): Promise<RateLimitDecision> {
+  const limit = channelImportDailyProjectLimit();
+  const current = await client.channelImportedVideo.count({
+    where: {
+      status: "imported",
+      createdAt: { gte: new Date(now.getTime() - DAY_MS) },
+      channelImportSource: { workspaceId },
+    },
+  });
+  if (current >= limit) {
+    return {
+      allowed: false,
+      reason: "channel_import_daily_limit",
+      message: `This workspace reached its ${limit} channel auto-imports for the day — remaining uploads import on a later poll.`,
+      limit,
+      current,
+    };
+  }
   return { allowed: true };
 }
 

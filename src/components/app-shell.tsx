@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import type { WorkspaceRole } from "@prisma/client";
-import { Activity, CreditCard, Download, FolderOpen, Home, LogOut, Palette, Settings } from "lucide-react";
+import { Activity, CreditCard, Download, FolderOpen, Home, LogOut, Palette, Rss, Settings } from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/app/actions/auth";
 import { formatMinutes } from "@/lib/format";
@@ -26,6 +26,7 @@ const navItems = [
   { href: "/app/exports", label: "Exports", icon: Download },
   { href: "/app/settings", label: "Settings", icon: Settings },
   { href: "/app/settings/billing", label: "Billing", icon: CreditCard, permission: "MANAGE_BILLING" },
+  { href: "/app/settings/imports", label: "Auto-import", icon: Rss, permission: "MANAGE_OPERATIONS" },
   { href: "/app/settings/operations", label: "Operations", icon: Activity, permission: "MANAGE_OPERATIONS" },
 ] satisfies Array<{
   href: string;
