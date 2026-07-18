@@ -135,6 +135,21 @@ export async function pollDueChannelImportSources(
       summary.videosFailed += result.videosFailed;
       summary.videosSkippedCap += result.videosSkippedCap;
     } catch (error) {
+      // A source deleted while its poll ran (workspace removed, registration deleted) is not
+      // a failure — there is no row left to mark and nobody left to notify. Only skip when the
+      // row is provably gone; if the existence check itself errors, treat it as a real failure.
+      let stillExists = true;
+      try {
+        stillExists =
+          (await client.channelImportSource.findUnique({
+            where: { id: source.id },
+            select: { id: true },
+          })) !== null;
+      } catch {
+        // Keep stillExists = true: an unreachable database is a failure, not a deletion.
+      }
+      if (!stillExists) continue;
+
       // Per-source isolation: record the failure on this source and keep polling the rest.
       summary.sourcesFailed++;
       try {

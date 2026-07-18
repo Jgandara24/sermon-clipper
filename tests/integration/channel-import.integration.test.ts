@@ -277,5 +277,140 @@ describe("pollDueChannelImportSources", () => {
     expect(failureEvents[0].severity).toBe("warning");
     expect(failureEvents[0].message).toContain("quotaExceeded");
     expect(failureEvents[0].message).toContain("Broken Channel");
+
+    // Keep these sources out of the next test's poll runs.
+    await prisma.channelImportSource.updateMany({
+      where: { id: { in: [failingSource.id, healthySource.id] } },
+      data: { enabled: false },
+    });
+  });
+
+  it("defers the video over the daily cap as skipped_cap and imports it once the window rolls over", async () => {
+    // The env accessor re-reads process.env on every access, and tests within this file run
+    // sequentially, so a scoped override is safe. No other suite reads this variable.
+    const previousLimit = process.env.CHANNEL_IMPORT_DAILY_LIMIT;
+    process.env.CHANNEL_IMPORT_DAILY_LIMIT = "2";
+    try {
+      const workspaceId = await createWorkspace("Channel Poll Cap");
+      const channelId = uniqueChannelId();
+      const source = await registerChannelImportSource(
+        prisma,
+        workspaceId,
+        channelId,
+        fakeResolver(channelId, "Busy Church"),
+      );
+
+      const registeredAt = source.registeredAt.getTime();
+      const uploads = [
+        // Newest first, like the real playlistItems.list response.
+        upload("vidcap3", "Capped Sermon 3", new Date(registeredAt + 3_000)),
+        upload("vidcap2", "Capped Sermon 2", new Date(registeredAt + 2_000)),
+        upload("vidcap1", "Capped Sermon 1", new Date(registeredAt + 1_000)),
+      ];
+      const listUploads = uploadsForPlaylists({ [source.uploadsPlaylistId]: uploads });
+
+      // First poll: the cap (2/day) admits the two oldest videos; the third is deferred.
+      const firstPoll = await pollDueChannelImportSources(prisma, { listUploads });
+      expect(firstPoll.videosImported).toBe(2);
+      expect(firstPoll.videosSkippedCap).toBe(1);
+      expect(firstPoll.videosFailed).toBe(0);
+      expect(firstPoll.sourcesFailed).toBe(0);
+
+      const rowsAfterFirst = await prisma.channelImportedVideo.findMany({
+        where: { channelImportSourceId: source.id },
+        orderBy: { publishedAt: "asc" },
+      });
+      expect(rowsAfterFirst.map((row) => [row.platformVideoId, row.status])).toEqual([
+        ["vidcap1", "imported"],
+        ["vidcap2", "imported"],
+        ["vidcap3", "skipped_cap"],
+      ]);
+      expect(rowsAfterFirst[2].projectId).toBeNull();
+      expect(await prisma.project.count({ where: { workspaceId } })).toBe(2);
+
+      // A cap deferral is pacing, not an error: the source stays clean and warns once.
+      const afterFirst = await prisma.channelImportSource.findUniqueOrThrow({
+        where: { id: source.id },
+      });
+      expect(afterFirst.lastPollErrorAt).toBeNull();
+      expect(afterFirst.lastPollErrorMessage).toBeNull();
+      const capEvents = await prisma.operationalEvent.findMany({
+        where: { workspaceId, category: "channel_import", eventType: "channel_import_skipped_cap" },
+      });
+      expect(capEvents).toHaveLength(1);
+      expect(capEvents[0].severity).toBe("warning");
+      expect(capEvents[0].metadata).toMatchObject({ videoIds: ["vidcap3"], limit: 2 });
+
+      // Second poll inside the same window: still deferred (the skipped_cap row is retryable,
+      // not "seen and done"), no duplicate project, and the re-deferral stays silent.
+      const secondPoll = await pollDueChannelImportSources(prisma, { listUploads });
+      expect(secondPoll.videosImported).toBe(0);
+      expect(secondPoll.videosSkippedCap).toBe(1);
+      expect(await prisma.project.count({ where: { workspaceId } })).toBe(2);
+      expect(
+        (
+          await prisma.channelImportedVideo.findUniqueOrThrow({
+            where: {
+              channelImportSourceId_platformVideoId: {
+                channelImportSourceId: source.id,
+                platformVideoId: "vidcap3",
+              },
+            },
+          })
+        ).status,
+      ).toBe("skipped_cap");
+      expect(
+        await prisma.operationalEvent.count({
+          where: { workspaceId, category: "channel_import", eventType: "channel_import_skipped_cap" },
+        }),
+      ).toBe(1);
+
+      // Third poll after the rolling 24h window has passed: the deferred video imports even
+      // though its publishedAt now sits *before* lastPolledAt — the pending skip lowers the
+      // listing cutoff without readmitting anything older (no-backfill still holds).
+      const rolledOver = () => new Date(Date.now() + 25 * 60 * 60 * 1000);
+      const thirdPoll = await pollDueChannelImportSources(prisma, {
+        listUploads,
+        now: rolledOver,
+      });
+      expect(thirdPoll.videosImported).toBe(1);
+      expect(thirdPoll.videosSkippedCap).toBe(0);
+      expect(thirdPoll.videosFailed).toBe(0);
+
+      const retriedRow = await prisma.channelImportedVideo.findUniqueOrThrow({
+        where: {
+          channelImportSourceId_platformVideoId: {
+            channelImportSourceId: source.id,
+            platformVideoId: "vidcap3",
+          },
+        },
+      });
+      expect(retriedRow.status).toBe("imported");
+      expect(retriedRow.projectId).not.toBeNull();
+      expect(
+        await prisma.channelImportedVideo.count({ where: { channelImportSourceId: source.id } }),
+      ).toBe(3);
+
+      const projects = await prisma.project.findMany({
+        where: { workspaceId },
+        include: { sourceVideo: true },
+      });
+      expect(projects).toHaveLength(3);
+      const retried = projects.find((project) => project.id === retriedRow.projectId);
+      expect(retried?.name).toBe("Capped Sermon 3");
+      expect(retried?.sourceVideo?.originUrl).toBe(youtubeWatchUrl("vidcap3"));
+
+      // Keep this source (with its far-future lastPolledAt) out of any later poll runs.
+      await prisma.channelImportSource.update({
+        where: { id: source.id },
+        data: { enabled: false },
+      });
+    } finally {
+      if (previousLimit === undefined) {
+        delete process.env.CHANNEL_IMPORT_DAILY_LIMIT;
+      } else {
+        process.env.CHANNEL_IMPORT_DAILY_LIMIT = previousLimit;
+      }
+    }
   });
 });

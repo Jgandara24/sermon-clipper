@@ -144,7 +144,7 @@ and polling on top of the now-working fetch adapter.
       `CHANNEL_POLL_INTERVAL_MS`, `CHANNEL_IMPORT_DAILY_LIMIT`) and a short "Auto-Import" runbook
       section (how to register a channel, how to read poll failures from
       `lastPollErrorMessage`/`/app/settings/operations`).
-- [ ] **4.4** Integration test seeding the daily cap and asserting the (N+1)th video for the day
+- [x] **4.4** Integration test seeding the daily cap and asserting the (N+1)th video for the day
       is `skipped_cap` and gets imported on the next poll once the cap window rolls over.
 
 ---
@@ -165,5 +165,79 @@ and polling on top of the now-working fetch adapter.
 
 ## Loop result
 
-_(Filled in when the loop reaches its stop condition — what shipped, what's blocked, and the
-prioritized next-session to-do list.)_
+**Stop condition reached 2026-07-18.** Every checklist item is `[x]` — implemented, verified
+(`npm run verify` green before every commit; `npm run test:integration` green for every
+DB-backed item, 14 files / 140+ tests), and committed locally on `auto-import-loop`. Nothing
+was pushed and no cloud resources were touched, per rules 7–8.
+
+### What shipped (one commit per sub-item)
+
+Phase 1 — yt-dlp fetch adapter (also fixed manual URL-paste):
+
+- `1eee4f1` (1.1) yt-dlp adapter: pure metadata parser + injectable subprocess exec
+- `6089b83` (1.2) FINALIZE fetches URL-imported source videos with pre-download limit checks
+- `bc1a079` (1.3) worker readiness requires yt-dlp (YTDLP_PATH pattern match)
+- `89ba6a5` (1.4) standalone yt-dlp binary in `Dockerfile.worker`
+- `d5284fd` (1.5) pasted-URL projects enqueue a real QUEUED FINALIZE job (stub removed)
+- `f951c7f` (1.6) DECISIONS.md entry superseding the stubbed-URL-import decision
+- `878e169` (1.7) unit + integration proof of the URL-paste → FINALIZE fetch branch
+
+Phase 2 — channel registration model + settings UI:
+
+- `6d4bbca` (2.1) `ChannelImportSource`/`ChannelImportedVideo` models + migration
+- `538689c` (2.2) fetch-based YouTube Data API client (`channels.list`/`playlistItems.list`)
+- `3417575` (2.3) registration service with synchronous channel resolution
+- `f8a8a20` (2.4) `/app/settings/imports` page + server actions (MANAGE_OPERATIONS)
+- `c96a68f` (2.5) YouTube client fixtures + real-DB registration constraint tests
+
+Phase 3 — worker polling loop:
+
+- `6943b55` (3.2) `pollDueChannelImportSources` turning new uploads into draft projects
+- `1dcfef5` (3.1) worker loop schedules polling on `CHANNEL_POLL_INTERVAL_MS`
+- `20c9ab6` (3.3) integration proof of dedup, no-backfill cutoff, per-source error isolation
+
+Phase 4 — rate limits + observability + docs:
+
+- `118b074` (4.1) `CHANNEL_IMPORT_DAILY_LIMIT` (default 10) + `checkChannelImportLimit`,
+  wired into the poller as retryable `skipped_cap` pacing. Counting basis: per-workspace over
+  a rolling 24h window, counted from `ChannelImportedVideo` rows with `status: "imported"`
+  created in the window — mirrors `checkExportJobLimits` counting the domain rows the limited
+  action creates (see the dated DECISIONS.md entry). The poller retries pending skips by
+  lowering its listing cutoff to just before the oldest pending skip, which provably cannot
+  reintroduce backfill (skip rows only exist for videos newer than a prior cutoff).
+- `356edfc` (4.2) `"channel_import"` operational-event category; `channel_registered` (info),
+  `channel_poll_ran` (info, per run with summary), `channel_import_created` (info, per
+  project), `channel_import_skipped_cap` (warning, only for *newly* deferred videos so a
+  capped source doesn't warn every cycle), `channel_poll_failed` (warning, not error — a
+  single failed poll self-heals and must not email the operator).
+- `1d97c91` (4.3) DEPLOYMENT.md: env vars (`YOUTUBE_API_KEY`, `YTDLP_PATH`,
+  `YTDLP_METADATA_TIMEOUT_MS`, `YTDLP_DOWNLOAD_TIMEOUT_MS`, `CHANNEL_POLL_INTERVAL_MS`,
+  `CHANNEL_IMPORT_DAILY_LIMIT`) + "Auto-Import (YouTube Channels)" runbook section.
+- Final commit (4.4 + this section): cap/rollover integration test — the (N+1)th video of the
+  day becomes `skipped_cap`, stays deferred (and silent) on a same-window re-poll, then
+  imports on the next poll after the 24h window rolls over (injected `now`).
+
+### Blocked on human actions (unchanged from "Human actions required")
+
+- **Mint `YOUTUBE_API_KEY`:** create/enable YouTube Data API v3 in a Google Cloud project,
+  mint a key restricted to that API, put it in `.env.production.local` (and Railway at deploy
+  time). Until then, real (non-mocked) registration and polling cannot be exercised.
+- **Real yt-dlp manual verification:** install `yt-dlp` locally and paste a real short public
+  YouTube URL through the dev UI to watch the full pipeline run (automated tests use injected
+  fakes at the subprocess boundary by design).
+- **Railway deploy:** set the new env vars on web + worker, redeploy both (worker image now
+  installs yt-dlp), out of scope for this loop per rule 8.
+
+### Next-session to-do list (in order)
+
+1. Human: mint `YOUTUBE_API_KEY` → `.env.production.local`; install local `yt-dlp`.
+2. Manually verify end-to-end locally: register a real channel at `/app/settings/imports`,
+   run the worker, confirm a fresh upload imports through FINALIZE → PROBE → pipeline.
+3. Review the branch and merge `auto-import-loop` → `main` (18+ commits, no push has
+   happened; nothing in CTO.md/OUTPUTS/ is committed).
+4. Deploy: set `YOUTUBE_API_KEY` (web + worker) and any tuning vars on Railway, redeploy
+   both services, then follow the DEPLOYMENT.md Auto-Import runbook to register the first
+   production channel and watch `/app/settings/operations` for `channel_import` events.
+5. Optional hardening ideas surfaced during the loop (not blocking): per-channel poll
+   metrics on the settings page, an explicit retry/backoff budget for repeatedly-failing
+   sources, and a bulk "import this old video" affordance reusing the manual URL path.
