@@ -42,6 +42,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && ffmpeg -filters | grep -q subtitles
 
+# yt-dlp fetches URL-imported source videos (FINALIZE URL branch). The standalone Linux binary
+# bundles its Python runtime, so no python3 apt package is needed. Deliberately unpinned:
+# yt-dlp must track YouTube-side changes, so a pinned release goes stale in weeks; each image
+# build takes the latest release and `--version` fails the build fast if the download broke.
+RUN curl -fsSL -o /usr/local/bin/yt-dlp \
+      https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
+    && chmod +x /usr/local/bin/yt-dlp \
+    && /usr/local/bin/yt-dlp --version
+
 COPY --from=whisper-builder /build/build/bin/whisper-cli /usr/local/bin/whisper-cli
 RUN chmod +x /usr/local/bin/whisper-cli
 
@@ -60,6 +69,7 @@ ENV NODE_ENV=production
 ENV WHISPER_CPP_BINARY=whisper-cli
 ENV FFMPEG_PATH=ffmpeg
 ENV FFPROBE_PATH=ffprobe
+ENV YTDLP_PATH=yt-dlp
 
 ENTRYPOINT ["scripts/worker-entrypoint.sh"]
 CMD ["node", "--enable-source-maps", "dist/worker/run-jobs.cjs"]

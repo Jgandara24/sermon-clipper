@@ -80,7 +80,7 @@ and polling on top of the now-working fetch adapter.
       `YTDLP_PATH` check, following the exact `FFMPEG_PATH`/`FFPROBE_PATH` injected-
       `commandAvailable` pattern (unit test alongside the existing fakes in
       `tests/worker-reliability.test.ts`).
-- [ ] **1.4** `Dockerfile.worker`: install the `yt-dlp` static binary in the runtime stage.
+- [x] **1.4** `Dockerfile.worker`: install the `yt-dlp` static binary in the runtime stage.
 - [ ] **1.5** `src/lib/project-service.ts`: `createDraftProjectForWorkspace` now enqueues FINALIZE
       as `state: QUEUED` with `idempotencyKey: finalize:${project.id}` and `status: QUEUED`
       (mirroring `createProjectFromUploadedSourceVideo`) instead of the `WAITING`/
