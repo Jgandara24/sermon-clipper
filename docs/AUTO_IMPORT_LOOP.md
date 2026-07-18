@@ -115,7 +115,7 @@ and polling on top of the now-working fetch adapter.
 
 ## Phase 3 — Worker polling loop (depends on Phases 1 and 2)
 
-- [ ] **3.1** `src/worker/run-jobs.ts`: add `lastChannelPollAt` + `CHANNEL_POLL_INTERVAL_MS`
+- [x] **3.1** `src/worker/run-jobs.ts`: add `lastChannelPollAt` + `CHANNEL_POLL_INTERVAL_MS`
       (default ~45 min), following the exact `lastCleanupScanAt`/`enqueueDueCleanupJobs`
       timestamp-comparison-in-loop pattern used for the CLEANUP reaper.
 - [x] **3.2** `src/lib/integrations/channel-poller.ts`: `pollDueChannelImportSources(prisma)` —
