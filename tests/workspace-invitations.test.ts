@@ -29,9 +29,9 @@ describe("workspace invitations", () => {
     expect(workspaceInvitationUrl("abc123")).toBe("https://clips.example.com/join/abc123");
   });
 
-  it("logs and skips invitation delivery in development when SendGrid is not configured", async () => {
+  it("logs and skips invitation delivery in development when Resend is not configured", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    delete process.env.SENDGRID_API_KEY;
+    delete process.env.RESEND_API_KEY;
     delete process.env.NOTIFICATIONS_FROM_EMAIL;
     delete process.env.AUTH_EMAIL_FROM;
     const infoMock = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -52,8 +52,8 @@ describe("workspace invitations", () => {
     expect(infoMock).toHaveBeenCalledWith(expect.stringContaining("https://clips.example.com/join/token"));
   });
 
-  it("sends invitation email through SendGrid when configured", async () => {
-    process.env.SENDGRID_API_KEY = "sendgrid-key";
+  it("sends invitation email through Resend when configured", async () => {
+    process.env.RESEND_API_KEY = "resend-key";
     process.env.NOTIFICATIONS_FROM_EMAIL = "clips@example.com";
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 202 }));
 
@@ -66,12 +66,12 @@ describe("workspace invitations", () => {
       expiresAt: new Date("2026-07-21T12:00:00.000Z"),
     });
 
-    expect(result).toEqual({ provider: "sendgrid", status: NotificationStatus.SENT });
+    expect(result).toEqual({ provider: "resend", status: NotificationStatus.SENT });
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.sendgrid.com/v3/mail/send",
+      "https://api.resend.com/emails",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ Authorization: "Bearer sendgrid-key" }),
+        headers: expect.objectContaining({ Authorization: "Bearer resend-key" }),
       }),
     );
   });

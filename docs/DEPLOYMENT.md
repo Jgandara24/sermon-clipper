@@ -10,10 +10,10 @@ bucket.
 - S3-compatible object storage bucket. Cloudflare R2 works with `STORAGE_S3_REGION=auto` and the
   account-specific `STORAGE_S3_ENDPOINT`.
 - A public HTTPS domain used by `NEXT_PUBLIC_APP_URL`.
-- SendGrid credentials for email OTP sign-in.
+- Resend credentials for email OTP sign-in.
 - Stripe account with Starter and Pro recurring Prices plus a webhook endpoint for
   `/api/stripe/webhook`.
-- SendGrid notification email or Twilio SMS credentials for production approval notifications.
+- Resend notification email or Twilio SMS credentials for production approval notifications.
 - `ffmpeg`/`ffprobe` available on worker hosts, with libass enabled for caption burn-in.
 - `whisper-cli` plus a local ggml model on every worker host for sermon transcription.
 - Anthropic API access for Claude-backed sermon clip classification and scoring.
@@ -30,7 +30,7 @@ MEDIA_URL_SECRET=<long-random-secret-at-least-32-characters>
 NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=<stable-32-byte-base64-key>
 SERMON_CLIPPER_COMMIT_SHA=<deployed-git-sha>
 
-SENDGRID_API_KEY=SG...
+RESEND_API_KEY=re_...
 AUTH_EMAIL_FROM=auth@example.org
 AUTH_EMAIL_FROM_NAME=Sermon Clipper
 
@@ -106,7 +106,7 @@ Which service consumes which variables:
 | `NODE_ENV`, `DATABASE_URL`, `STORAGE_PROVIDER` + `STORAGE_S3_*` | ✅ | ✅ |
 | `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (readiness reporting) | ✅ (does the work) |
 | `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | ✅ | — |
-| `SENDGRID_API_KEY`, `AUTH_EMAIL_*`, `NOTIFICATIONS_*`, `TWILIO_*` | ✅ | — |
+| `RESEND_API_KEY`, `AUTH_EMAIL_*`, `NOTIFICATIONS_*`, `TWILIO_*` | ✅ | — |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` | ✅ | — |
 | `WORKER_ID`, `WORKER_*` tuning, `WORKER_CLEANUP_INTERVAL_MS`, `EXPORT_FILE_RETENTION_GRACE_MS` | — | ✅ |
 | `WHISPER_CPP_BINARY`, `FFMPEG_PATH`, `FFPROBE_PATH` | — | defaulted in the image |
@@ -562,7 +562,7 @@ notes.
 
 **Email/SMS not delivering** (OTP or approval notifications missing)
 
-1. Check SendGrid activity feed / Twilio logs for bounces, suppressions, or auth failures.
+1. Check Resend activity feed / Twilio logs for bounces, suppressions, or auth failures.
 2. Approval notification attempts are persisted — check `approval` events in operations for the
    recorded error.
 3. OTP requests are rate-limited (3 per 15 minutes per email) — "no email" may just be the limit;

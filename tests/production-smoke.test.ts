@@ -20,7 +20,7 @@ function healthPayload(overrides: Record<string, unknown> = {}) {
     "DATABASE_URL",
     "NEXT_PUBLIC_APP_URL",
     "MEDIA_URL_SECRET",
-    "SENDGRID_API_KEY",
+    "RESEND_API_KEY",
     "AUTH_EMAIL_FROM",
     "approval_notifications",
     "STRIPE_SECRET_KEY",

@@ -18,7 +18,7 @@ let workspaceId: string;
 let userId: string;
 let projectId: string;
 let clipId: string;
-const originalSendgridApiKey = process.env.SENDGRID_API_KEY;
+const originalResendApiKey = process.env.RESEND_API_KEY;
 const originalFromEmail = process.env.NOTIFICATIONS_FROM_EMAIL;
 
 function uniqueKey(label: string) {
@@ -26,7 +26,7 @@ function uniqueKey(label: string) {
 }
 
 beforeAll(async () => {
-  process.env.SENDGRID_API_KEY = "";
+  process.env.RESEND_API_KEY = "";
   process.env.NOTIFICATIONS_FROM_EMAIL = "";
 
   const user = await prisma.user.create({
@@ -63,7 +63,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  process.env.SENDGRID_API_KEY = originalSendgridApiKey;
+  process.env.RESEND_API_KEY = originalResendApiKey;
   process.env.NOTIFICATIONS_FROM_EMAIL = originalFromEmail;
   await prisma.workspace.delete({ where: { id: workspaceId } });
   await prisma.user.delete({ where: { id: userId } });

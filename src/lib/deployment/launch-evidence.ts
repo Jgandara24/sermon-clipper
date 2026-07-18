@@ -55,7 +55,7 @@ export const launchEvidenceItems = [
     label: "Database migrations",
     proof: "npm run db:migrate:deploy completed successfully against production.",
   },
-  { key: "authEmail", label: "Auth email", proof: "A real user received and verified an email OTP through SendGrid." },
+  { key: "authEmail", label: "Auth email", proof: "A real user received and verified an email OTP through Resend." },
   { key: "workspaceCreate", label: "Workspace create", proof: "A real user created a workspace in production." },
   {
     key: "workspaceJoin",
@@ -181,7 +181,7 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
   authEmail: (proof) => {
     const required = [
       { label: "email OTP", pattern: /\bemail\b.*\bOTP\b|\bOTP\b.*\bemail\b/i },
-      { label: "SendGrid", pattern: /\bsendgrid\b/i },
+      { label: "Resend", pattern: /\bresend\b/i },
       { label: "verified", pattern: /\bverified\b|\bverification\b|\bsign(?:ed)?\s+in\b/i },
     ];
     const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
@@ -304,7 +304,7 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
     const required = [
       { label: "real approval email or SMS", pattern: /\breal\b.*\bapproval\b.*\b(?:email|SMS)\b|\bapproval\b.*\b(?:email|SMS)\b/i },
       { label: "delivered", pattern: /\bdelivered\b|\bsent\b/i },
-      { label: "SendGrid or Twilio", pattern: /\bsendgrid\b|\btwilio\b/i },
+      { label: "Resend or Twilio", pattern: /\bresend\b|\btwilio\b/i },
     ];
     const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
     if (missing.length > 0) {

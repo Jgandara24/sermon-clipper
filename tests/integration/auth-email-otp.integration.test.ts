@@ -80,12 +80,12 @@ describe("email OTP integration", () => {
     const updated = await markEmailOtpDelivery(prisma, {
       challengeId: challenge.id,
       status: NotificationStatus.SENT,
-      provider: "sendgrid",
+      provider: "resend",
       now: sentAt,
     });
 
     expect(updated.deliveryStatus).toBe(NotificationStatus.SENT);
-    expect(updated.deliveryProvider).toBe("sendgrid");
+    expect(updated.deliveryProvider).toBe("resend");
     expect(updated.deliveryErrorMessage).toBeNull();
     expect(updated.sentAt?.toISOString()).toBe(sentAt.toISOString());
   });

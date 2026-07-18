@@ -1,4 +1,5 @@
 import { NotificationStatus } from "@prisma/client";
+import { sendViaResend } from "@/lib/notifications/email-provider";
 
 export type EmailOtpDeliveryInput = {
   email: string;
@@ -13,7 +14,7 @@ export type EmailOtpDeliveryResult = {
 };
 
 export async function sendEmailOtp(input: EmailOtpDeliveryInput): Promise<EmailOtpDeliveryResult> {
-  const apiKey = process.env.SENDGRID_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.AUTH_EMAIL_FROM ?? process.env.NOTIFICATIONS_FROM_EMAIL;
   const fromName = process.env.AUTH_EMAIL_FROM_NAME ?? process.env.NOTIFICATIONS_FROM_NAME ?? "Sermon Clipper";
 
@@ -23,54 +24,32 @@ export async function sendEmailOtp(input: EmailOtpDeliveryInput): Promise<EmailO
       return {
         provider: "development-log",
         status: NotificationStatus.SKIPPED,
-        errorMessage: "SENDGRID_API_KEY and AUTH_EMAIL_FROM/NOTIFICATIONS_FROM_EMAIL are required to send email.",
+        errorMessage: "RESEND_API_KEY and AUTH_EMAIL_FROM/NOTIFICATIONS_FROM_EMAIL are required to send email.",
       };
     }
 
     return {
-      provider: "sendgrid",
+      provider: "resend",
       status: NotificationStatus.FAILED,
-      errorMessage: "SENDGRID_API_KEY and AUTH_EMAIL_FROM/NOTIFICATIONS_FROM_EMAIL are required in production.",
+      errorMessage: "RESEND_API_KEY and AUTH_EMAIL_FROM/NOTIFICATIONS_FROM_EMAIL are required in production.",
     };
   }
 
-  const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      personalizations: [
-        {
-          to: [{ email: input.email }],
-          subject: "Your Sermon Clipper sign-in code",
-        },
-      ],
-      from: { email: fromEmail, name: fromName },
-      content: [
-        {
-          type: "text/plain",
-          value: [
-            "Use this code to sign in to Sermon Clipper:",
-            "",
-            input.code,
-            "",
-            `This code expires at ${input.expiresAt.toISOString()}.`,
-            "If you did not request this code, you can ignore this email.",
-          ].join("\n"),
-        },
-      ],
-    }),
+  const result = await sendViaResend({
+    apiKey,
+    to: input.email,
+    subject: "Your Sermon Clipper sign-in code",
+    text: [
+      "Use this code to sign in to Sermon Clipper:",
+      "",
+      input.code,
+      "",
+      `This code expires at ${input.expiresAt.toISOString()}.`,
+      "If you did not request this code, you can ignore this email.",
+    ].join("\n"),
+    fromEmail,
+    fromName,
   });
 
-  if (!response.ok) {
-    return {
-      provider: "sendgrid",
-      status: NotificationStatus.FAILED,
-      errorMessage: await response.text(),
-    };
-  }
-
-  return { provider: "sendgrid", status: NotificationStatus.SENT };
+  return { provider: "resend", ...result };
 }

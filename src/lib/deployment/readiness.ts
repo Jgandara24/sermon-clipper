@@ -90,12 +90,12 @@ function checkAuthEmailEnv(env: EnvLike): ReadinessCheck[] {
   if (env.NODE_ENV !== "production") return [];
 
   return [
-    env.SENDGRID_API_KEY
-      ? { name: "SENDGRID_API_KEY", status: "ok", message: "SendGrid is configured for auth email." }
+    env.RESEND_API_KEY
+      ? { name: "RESEND_API_KEY", status: "ok", message: "Resend is configured for auth email." }
       : {
-          name: "SENDGRID_API_KEY",
+          name: "RESEND_API_KEY",
           status: "fail",
-          message: "SENDGRID_API_KEY is required in production for email OTP sign-in.",
+          message: "RESEND_API_KEY is required in production for email OTP sign-in.",
         },
     env.AUTH_EMAIL_FROM || env.NOTIFICATIONS_FROM_EMAIL
       ? {
@@ -114,7 +114,7 @@ function checkAuthEmailEnv(env: EnvLike): ReadinessCheck[] {
 function checkApprovalNotificationEnv(env: EnvLike): ReadinessCheck[] {
   if (env.NODE_ENV !== "production") return [];
 
-  const emailConfigured = !!env.SENDGRID_API_KEY && !!env.NOTIFICATIONS_FROM_EMAIL;
+  const emailConfigured = !!env.RESEND_API_KEY && !!env.NOTIFICATIONS_FROM_EMAIL;
   const smsConfigured = !!env.TWILIO_ACCOUNT_SID && !!env.TWILIO_AUTH_TOKEN && !!env.TWILIO_MESSAGING_FROM;
 
   return [
@@ -128,7 +128,7 @@ function checkApprovalNotificationEnv(env: EnvLike): ReadinessCheck[] {
           name: "approval_notifications",
           status: "fail",
           message:
-            "Configure NOTIFICATIONS_FROM_EMAIL with SENDGRID_API_KEY or Twilio SMS credentials for production approval notifications.",
+            "Configure NOTIFICATIONS_FROM_EMAIL with RESEND_API_KEY or Twilio SMS credentials for production approval notifications.",
         },
   ];
 }

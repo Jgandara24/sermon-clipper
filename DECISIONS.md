@@ -750,3 +750,31 @@ presign write is enforced by code path (strict recorder + early return) — faul
 testing of a failing events table is left out as impractical in the integration harness.
 
 Status: Active.
+
+## 2026-07-18 - Transactional Email Provider Switch: SendGrid to Resend
+
+Decision: Migrated all transactional email (auth OTP, workspace invitations, approval
+notifications) from SendGrid to Resend. Consolidated the three previously-independent
+`fetch("https://api.sendgrid.com/v3/mail/send", ...)` call sites into one shared helper
+(`src/lib/notifications/email-provider.ts`) that wraps `api.resend.com/emails`; each call site
+keeps its own subject/body/from-email-resolution logic. `SENDGRID_API_KEY` renamed to
+`RESEND_API_KEY` throughout readiness checks, production-smoke required checks, launch-evidence
+proof validators, and all related tests/docs.
+
+Why: The SendGrid account hit a hard `401 Maximum credits exceeded` during tonight's launch-night
+Phase F evidence collection, blocking production login entirely (no dev-login fallback under
+`NODE_ENV=production`). Rather than just fix billing on that account, the operator is also
+planning a much larger volume of *cold outbound* email in the near future (hundreds/day) —
+a fundamentally different use case from transactional mail that risks damaging shared sender
+reputation if run through the same provider/domain. Decided to move transactional mail onto
+Resend now (generous recurring free tier, avoids the credit-exhaustion failure mode that just
+happened, clean split from whatever cold-outbound tool gets picked later) rather than untangle
+billing on an account already showing problems.
+
+Tradeoff: Requires the operator to sign up for Resend and provide a fresh `RESEND_API_KEY` before
+Phase F can resume — this could not be done autonomously (creating third-party accounts requires
+operator identity/payment). Cold-outbound tooling itself (Instantly/Smartlead/etc., a separate
+sending domain) is intentionally out of scope here and left as a future decision.
+
+Status: Active. Code/tests/docs migrated and `npm run verify` green; production env vars and a
+live send still need operator action (RESEND_API_KEY).

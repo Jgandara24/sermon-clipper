@@ -1,4 +1,5 @@
 import { NotificationChannel, NotificationStatus } from "@prisma/client";
+import { sendViaResend } from "@/lib/notifications/email-provider";
 
 type ApprovalNotificationInput = {
   channel: NotificationChannel;
@@ -28,59 +29,37 @@ export async function sendApprovalNotification(
 async function sendApprovalEmail(
   input: ApprovalNotificationInput,
 ): Promise<ApprovalNotificationResult> {
-  const apiKey = process.env.SENDGRID_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.NOTIFICATIONS_FROM_EMAIL;
 
   if (!apiKey || !fromEmail) {
     console.info(`[notifications] Review email skipped for ${input.recipient}: ${input.reviewUrl}`);
     return {
-      provider: "sendgrid",
+      provider: "resend",
       status: NotificationStatus.SKIPPED,
-      errorMessage: "SENDGRID_API_KEY and NOTIFICATIONS_FROM_EMAIL are required to send email.",
+      errorMessage: "RESEND_API_KEY and NOTIFICATIONS_FROM_EMAIL are required to send email.",
     };
   }
 
-  const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      personalizations: [
-        {
-          to: [{ email: input.recipient }],
-          subject: `Review sermon clip: ${input.clipTitle}`,
-        },
-      ],
-      from: { email: fromEmail, name: process.env.NOTIFICATIONS_FROM_NAME ?? "Sermon Clipper" },
-      content: [
-        {
-          type: "text/plain",
-          value: [
-            `${input.workspaceName} sent a sermon clip for review.`,
-            "",
-            `Clip: ${input.clipTitle}`,
-            input.requesterEmail ? `Requested by: ${input.requesterEmail}` : null,
-            "",
-            `Review link: ${input.reviewUrl}`,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        },
-      ],
-    }),
+  const result = await sendViaResend({
+    apiKey,
+    to: input.recipient,
+    subject: `Review sermon clip: ${input.clipTitle}`,
+    text: [
+      `${input.workspaceName} sent a sermon clip for review.`,
+      "",
+      `Clip: ${input.clipTitle}`,
+      input.requesterEmail ? `Requested by: ${input.requesterEmail}` : null,
+      "",
+      `Review link: ${input.reviewUrl}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    fromEmail,
+    fromName: process.env.NOTIFICATIONS_FROM_NAME ?? "Sermon Clipper",
   });
 
-  if (!response.ok) {
-    return {
-      provider: "sendgrid",
-      status: NotificationStatus.FAILED,
-      errorMessage: await response.text(),
-    };
-  }
-
-  return { provider: "sendgrid", status: NotificationStatus.SENT };
+  return { provider: "resend", ...result };
 }
 
 async function sendApprovalSms(input: ApprovalNotificationInput): Promise<ApprovalNotificationResult> {

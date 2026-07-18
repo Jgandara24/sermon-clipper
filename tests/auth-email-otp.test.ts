@@ -42,9 +42,9 @@ describe("email OTP auth helpers", () => {
 });
 
 describe("email OTP delivery", () => {
-  it("logs and skips delivery in development when SendGrid is not configured", async () => {
+  it("logs and skips delivery in development when Resend is not configured", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    delete process.env.SENDGRID_API_KEY;
+    delete process.env.RESEND_API_KEY;
     delete process.env.AUTH_EMAIL_FROM;
     delete process.env.NOTIFICATIONS_FROM_EMAIL;
     const infoMock = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -62,9 +62,9 @@ describe("email OTP delivery", () => {
     expect(infoMock).toHaveBeenCalledWith(expect.stringContaining("123456"));
   });
 
-  it("fails closed in production when SendGrid is not configured", async () => {
+  it("fails closed in production when Resend is not configured", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    delete process.env.SENDGRID_API_KEY;
+    delete process.env.RESEND_API_KEY;
     delete process.env.AUTH_EMAIL_FROM;
     delete process.env.NOTIFICATIONS_FROM_EMAIL;
     const infoMock = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -76,15 +76,15 @@ describe("email OTP delivery", () => {
     });
 
     expect(result).toMatchObject({
-      provider: "sendgrid",
+      provider: "resend",
       status: NotificationStatus.FAILED,
     });
     expect(infoMock).not.toHaveBeenCalled();
   });
 
-  it("sends through SendGrid when configured", async () => {
+  it("sends through Resend when configured", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    process.env.SENDGRID_API_KEY = "sendgrid-key";
+    process.env.RESEND_API_KEY = "resend-key";
     process.env.AUTH_EMAIL_FROM = "auth@example.com";
     process.env.AUTH_EMAIL_FROM_NAME = "Sermon Clipper Auth";
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 202 }));
@@ -95,12 +95,12 @@ describe("email OTP delivery", () => {
       expiresAt: new Date("2026-07-07T12:00:00.000Z"),
     });
 
-    expect(result).toEqual({ provider: "sendgrid", status: NotificationStatus.SENT });
+    expect(result).toEqual({ provider: "resend", status: NotificationStatus.SENT });
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.sendgrid.com/v3/mail/send",
+      "https://api.resend.com/emails",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ Authorization: "Bearer sendgrid-key" }),
+        headers: expect.objectContaining({ Authorization: "Bearer resend-key" }),
       }),
     );
   });

@@ -21,7 +21,7 @@ function completeEvidence(): LaunchEvidence {
     webProcess: "Vercel deployment platform shows the web process running deployed commit SHA fe09434.",
     databaseMigrations:
       "npm run db:migrate:deploy completed successfully against the production database for commit fe09434.",
-    authEmail: "Real user owner@example.org received an email OTP through SendGrid and verified the code to sign in.",
+    authEmail: "Real user owner@example.org received an email OTP through Resend and verified the code to sign in.",
     workspaceCreate: "Real user owner@example.org created production workspace ws_prod_123.",
     workspaceJoin:
       "Second user editor@example.org accepted the workspace invitation through /join/prod-token and joined the workspace.",
@@ -38,7 +38,7 @@ function completeEvidence(): LaunchEvidence {
       "Ranked clips appeared with church-aware scoring, scripture relevance, biblical_usefulness, theological_clarity, and pastoral_tone subscores.",
     branding: "Brand template Sunday Lower Third was applied in the production editor to the ranked clip.",
     approvalNotification:
-      "Real approval email was sent through SendGrid and delivered to approver@example.org for project prod_project_123.",
+      "Real approval email was sent through Resend and delivered to approver@example.org for project prod_project_123.",
     reviewApproval:
       "Secure /review/prod-review-token link was viewed by approver@example.org and approved for export.",
     export: "Approved clip prod_clip_123 exported through worker-1 as MP4 export prod_export_123.",
@@ -213,7 +213,7 @@ describe("launch evidence validation", () => {
     );
   });
 
-  it("fails when auth email proof does not mention OTP, SendGrid, and verification", () => {
+  it("fails when auth email proof does not mention OTP, Resend, and verification", () => {
     const evidence = completeEvidence();
     evidence.items.authEmail = {
       status: "passed",
