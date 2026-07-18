@@ -198,9 +198,15 @@ via the Gmail connector. Use `jake+approver@jakegandara.com` as the second user 
   notifications) from SendGrid to Resend — better-suited to low-volume transactional mail, and
   planned future cold-outbound email will run through separate tooling/domain entirely rather than
   share a provider with transactional. Code, tests, and docs updated across the codebase (env var
-  renamed `SENDGRID_API_KEY` → `RESEND_API_KEY`, endpoint swapped to `api.resend.com`). Still
-  requires the operator to sign up for Resend and provide `RESEND_API_KEY` before Phase F can
-  resume — I cannot create third-party accounts on the operator's behalf.
+  renamed `SENDGRID_API_KEY` → `RESEND_API_KEY`, endpoint swapped to `api.resend.com`).
+- **2026-07-18, fully unblocked:** operator connected Resend via GitHub SSO; agent added the
+  `pulpitengine.com` domain in Resend (DKIM/SPF/MX records added in GoDaddy DNS alongside the
+  existing Google Workspace + SendGrid records with zero conflicts), created a sending-scoped
+  `RESEND_API_KEY`, set it on Railway `web`, and redeployed. Waited out DNS propagation (~15–20
+  min); domain shows `Verified` in Resend. Confirmed end-to-end: a direct Resend API test send and
+  a real OTP request through the live `/login` page both succeeded, and Resend's own delivery log
+  shows both messages `Delivered` to jake@jakegandara.com. `authEmail` is unblocked — Phase F can
+  resume from here.
 
 ## Night result
 
