@@ -813,3 +813,31 @@ claim a URL FINALIZE job on an image without yt-dlp — that failure is retryabl
 picks it up, accepted at MVP scale.
 
 Status: Active.
+
+## 2026-07-18 - Channel Registration Resolves Synchronously; No Bulk Backfill On Registration
+
+Decision: Registering a YouTube channel for auto-import (`src/lib/channel-import-service.ts`)
+resolves the channel against the YouTube Data API *during* registration — normalizing flexible
+input (@handle, bare handle, UC... channel id, or youtube.com channel URL) and persisting the
+resolved `channelId`/`channelTitle`/`uploadsPlaylistId` — so a bad handle or URL fails fast with
+a clear, typed error instead of creating a silently-broken row the poller would grind on. No
+bulk backfill happens on registration: no `ChannelImportedVideo` rows are seeded and no
+historical uploads are imported — only videos published after registration are ever imported
+(the poller compares against `lastPolledAt`/already-seen video ids). Legacy `/c/` and `/user/`
+URLs are rejected with guidance to use the @handle, since `channels.list` cannot resolve legacy
+custom URLs reliably. Duplicate registration is enforced by the
+`@@unique([workspaceId, platform, channelId])` constraint, surfaced as a friendly error.
+
+Why: A church registering its channel almost certainly wants *future* sermons clipped, not a
+surprise import of years of archive (and the quota, minutes, and storage bill that implies).
+Synchronous resolution keeps the failure at the moment the user can fix it, and storing the
+uploads playlist id at registration means the poller never needs `channels.list` again —
+`playlistItems.list` only, 1 quota unit per poll.
+
+Tradeoff: Registration requires the YouTube API to be reachable and `YOUTUBE_API_KEY` configured
+(a quota outage blocks new registrations, not just polling). A channel whose handle changes
+keeps working — polling is keyed to the immutable channel/playlist ids — but the stored handle
+label can go stale until re-registered. Users who genuinely want old videos imported must paste
+those URLs manually through the existing URL-import path.
+
+Status: Active.

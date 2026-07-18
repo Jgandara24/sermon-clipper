@@ -102,7 +102,7 @@ and polling on top of the now-working fetch adapter.
 - [x] **2.2** `src/lib/integrations/youtube.ts`: `resolveUploadsPlaylist(channelIdOrHandle)` via
       `channels.list`, `listRecentUploads(playlistId, { after })` via `playlistItems.list`
       (never `search.list`), using `YOUTUBE_API_KEY`. Plain `fetch`, no `googleapis` dependency.
-- [ ] **2.3** `src/lib/channel-import-service.ts`: registration (resolves the channel
+- [x] **2.3** `src/lib/channel-import-service.ts`: registration (resolves the channel
       synchronously so a bad handle/URL fails fast with a clear error, not a silently-broken row)
       and workspace-scoped listing/disable.
 - [ ] **2.4** `src/app/actions/channel-imports.ts` (server actions) +
