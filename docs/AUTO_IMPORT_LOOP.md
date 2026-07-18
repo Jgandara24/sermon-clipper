@@ -124,7 +124,7 @@ and polling on top of the now-working fetch adapter.
       `createDraftProjectForWorkspace` (Phase 1) with the video URL, recording a
       `ChannelImportedVideo` row per outcome (`imported` | `failed`). Update
       `lastPolledAt`/`lastPollErrorAt`/`lastPollErrorMessage` on the source.
-- [ ] **3.3** Integration test (`tests/integration/channel-import.integration.test.ts`): register
+- [x] **3.3** Integration test (`tests/integration/channel-import.integration.test.ts`): register
       a source, poll against a mocked `youtube.ts` client twice — assert exactly one project per
       new video on the first pass and zero new projects/rows on the identical second pass (dedup
       proof).
