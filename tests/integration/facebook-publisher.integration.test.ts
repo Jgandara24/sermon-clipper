@@ -1,6 +1,7 @@
 import {
   AuthProvider,
   GeneratedClipStatus,
+  Prisma,
   PrismaClient,
   ProcessingJobState,
   WorkspaceRole,
@@ -54,7 +55,9 @@ async function createWorkspace(
     data: { email: `${uniqueKey(label)}@example.com`, authProvider: AuthProvider.DEV },
   });
   createdUserIds.push(user.id);
-  const workspace = await prisma.workspace.create({ data: { name: label, ownerId: user.id, settings } });
+  const workspace = await prisma.workspace.create({
+    data: { name: label, ownerId: user.id, settings: settings as Prisma.InputJsonValue },
+  });
   createdWorkspaceIds.push(workspace.id);
   await prisma.workspaceMember.create({
     data: { workspaceId: workspace.id, userId: user.id, role: WorkspaceRole.OWNER },
