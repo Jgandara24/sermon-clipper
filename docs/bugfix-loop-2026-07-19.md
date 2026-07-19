@@ -159,7 +159,12 @@ increment `attemptCount` on recovery so a poison post still terminates). Record 
 operational event on recovery.
 **Tests:** stale row recovered; fresh IN_PROGRESS row untouched.
 
-### - [ ] 7. Stop re-analysis from destroying publish records / double-posting
+### - [x] 7. Stop re-analysis from destroying publish records / double-posting
+
+> Done. Migration `20260719090000_scheduled_post_clip_set_null` (clip_id nullable,
+> ON DELETE SET NULL; applied manually like item 5). Re-analysis now clears only
+> NOT_STARTED/FAILED slots and never re-arms a slot with a SUCCEEDED/IN_PROGRESS post;
+> publisher and calendar handle null clipId.
 
 `src/lib/jobs/handlers/analyze.ts:122` deletes all generated clips inside re-analysis,
 and `scheduled_posts.clip_id` is `ON DELETE CASCADE` — so a re-run (reachable via the

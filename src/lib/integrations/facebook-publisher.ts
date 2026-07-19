@@ -175,6 +175,8 @@ export async function publishDueScheduledPosts(
       platform: "FACEBOOK",
       publishStatus: "NOT_STARTED",
       scheduledDate: { lte: now() },
+      // Detached history rows (clip regenerated after publish) are never publishable.
+      clipId: { not: null },
       OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now() } }],
     },
     orderBy: { scheduledDate: "asc" },
@@ -208,7 +210,13 @@ export async function publishDueScheduledPosts(
       }
       const pageId = facebookConnection.pageId;
 
-      const exportedStorageKey = post.clip.exportJobs[0]?.outputFile?.storageKey;
+      // The due query filters clipId NOT NULL; this narrows the type and defends in depth.
+      const clip = post.clip;
+      if (!clip) {
+        continue;
+      }
+
+      const exportedStorageKey = clip.exportJobs[0]?.outputFile?.storageKey;
       if (!exportedStorageKey) {
         summary.postsSkippedNotExported++;
         continue;
@@ -244,7 +252,7 @@ export async function publishDueScheduledPosts(
           pageId,
           pageAccessToken,
           fileUrl,
-          caption: buildCaption(post.clip),
+          caption: buildCaption(clip),
           scheduledPublishAt: publishImmediately ? undefined : desiredPublishAt,
         });
 

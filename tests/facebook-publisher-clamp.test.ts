@@ -141,5 +141,7 @@ describe("publishDueScheduledPosts retry behavior", () => {
       { nextAttemptAt: null },
       { nextAttemptAt: { lte: new Date(nowIso) } },
     ]);
+    // Detached history rows (clip regenerated after publish) are never selected as due.
+    expect(findManyWheres[0].clipId).toEqual({ not: null });
   });
 });
