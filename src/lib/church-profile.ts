@@ -91,3 +91,33 @@ export function deriveServiceSlot(date: Date, profile: ChurchProfile): ServiceSl
   const secondDay = profile.secondServiceDay.trim().toLowerCase();
   return weekday === secondDay ? "SECONDARY" : "PRIMARY";
 }
+
+/**
+ * The reverse of calendarDateInTimezone: given a calendar date and a wall-clock hour, returns
+ * the actual UTC instant that hour represents in the given timezone (Tier 3 needs this to turn
+ * a ScheduledPost's date-only scheduledDate into the real unix timestamp Meta's API requires).
+ * Standard "guess, then correct by the observed offset" approach — exact for all real timezones
+ * including DST transitions, without a timezone-database dependency.
+ */
+export function wallClockInstantInTimezone(
+  calendarDate: Date,
+  hour: number,
+  timezone: string,
+): Date {
+  const guess = new Date(
+    Date.UTC(calendarDate.getUTCFullYear(), calendarDate.getUTCMonth(), calendarDate.getUTCDate(), hour),
+  );
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(guess);
+
+  const observedHour = Number(parts.find((part) => part.type === "hour")?.value);
+  const observedMinute = Number(parts.find((part) => part.type === "minute")?.value);
+  const driftMinutes = hour * 60 - (observedHour * 60 + observedMinute);
+
+  return new Date(guess.getTime() + driftMinutes * 60_000);
+}

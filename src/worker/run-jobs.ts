@@ -4,6 +4,7 @@ import { applyStaleFailureSideEffects, recoverStaleProcessingJobs } from "@/lib/
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { jobHandlers } from "@/lib/jobs/handlers";
 import { env } from "@/lib/env";
+import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher";
 import { pollDueChannelImportSources } from "@/lib/integrations/channel-poller";
 import {
   captureErrorSafely,
@@ -25,11 +26,13 @@ const POLL_INTERVAL_MS = env.WORKER_POLL_INTERVAL_MS;
 const RECOVERY_INTERVAL_MS = env.WORKER_RECOVERY_INTERVAL_MS;
 const CLEANUP_SCAN_INTERVAL_MS = env.WORKER_CLEANUP_INTERVAL_MS;
 const CHANNEL_POLL_INTERVAL_MS = env.CHANNEL_POLL_INTERVAL_MS;
+const FACEBOOK_PUBLISH_POLL_INTERVAL_MS = env.FACEBOOK_PUBLISH_POLL_INTERVAL_MS;
 const WORKER_PROCESS_HEARTBEAT_INTERVAL_MS = workerProcessHeartbeatIntervalMs();
 let shuttingDown = false;
 let lastRecoveryAt = 0;
 let lastCleanupScanAt = 0;
 let lastChannelPollAt = 0;
+let lastFacebookPublishPollAt = 0;
 let lastWorkerHeartbeatAt = 0;
 const SUPPORTED_TYPES = Object.keys(jobHandlers) as ProcessingJobType[];
 
@@ -107,6 +110,17 @@ async function loop() {
           console.log("[worker] channel import poll", { channelPoll });
         }
         lastChannelPollAt = now;
+      }
+      if (now - lastFacebookPublishPollAt >= FACEBOOK_PUBLISH_POLL_INTERVAL_MS) {
+        // Tier 3 Facebook auto-posting: publishes due ScheduledPost rows for workspaces that
+        // have explicitly gone live (facebookConnection.autoPostEnabled). No-ops entirely if
+        // META_SYSTEM_USER_TOKEN isn't configured. Per-post errors are isolated inside the
+        // poller, so one failing post never aborts the run.
+        const facebookPublishPoll = await publishDueScheduledPosts(prisma);
+        if (facebookPublishPoll.postsScanned) {
+          console.log("[worker] facebook publish poll", { facebookPublishPoll });
+        }
+        lastFacebookPublishPollAt = now;
       }
 
       processed = await runOnePendingJob();

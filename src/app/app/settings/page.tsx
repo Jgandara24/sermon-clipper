@@ -1,8 +1,11 @@
+import { updateFacebookConnectionAction } from "@/app/actions/facebook-connection";
 import { inviteWorkspaceMemberAction } from "@/app/actions/members";
 import { updateChurchProfileAction } from "@/app/actions/workspace-profile";
 import { requireCurrentUser, requirePrimaryWorkspaceMembership } from "@/lib/auth";
 import { hasWorkspacePermission } from "@/lib/authorization";
 import { parseChurchProfile } from "@/lib/church-profile";
+import { env } from "@/lib/env";
+import { parseFacebookConnection } from "@/lib/facebook-connection";
 import { formatDate, titleCaseStatus } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -32,10 +35,21 @@ function profileMessage(status: string | undefined) {
   }
 }
 
+function facebookMessage(status: string | undefined) {
+  switch (status) {
+    case "saved":
+      return "Facebook connection updated.";
+    case "invalid":
+      return "Enter a valid numeric Facebook Page ID.";
+    default:
+      return null;
+  }
+}
+
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string; profile?: string }>;
+  searchParams: Promise<{ invite?: string; profile?: string; facebook?: string }>;
 }) {
   const user = await requireCurrentUser();
   const membership = await requirePrimaryWorkspaceMembership(user.id);
@@ -43,8 +57,12 @@ export default async function SettingsPage({
   const params = await searchParams;
   const canManageMembers = hasWorkspacePermission(membership.role, "MANAGE_MEMBERS");
   const canManageProfile = hasWorkspacePermission(membership.role, "MANAGE_WORKSPACE_PROFILE");
+  const canManageFacebook = hasWorkspacePermission(membership.role, "MANAGE_FACEBOOK_CONNECTION");
   const churchProfile = parseChurchProfile(workspace.settings);
+  const facebookConnection = parseFacebookConnection(workspace.settings);
+  const metaCredentialsConfigured = Boolean(env.META_SYSTEM_USER_TOKEN);
   const profileStatusMessage = profileMessage(params.profile);
+  const facebookStatusMessage = facebookMessage(params.facebook);
   const [members, invitations] = await Promise.all([
     prisma.workspaceMember.findMany({
       where: { workspaceId: workspace.id },
@@ -176,6 +194,80 @@ export default async function SettingsPage({
               className="w-fit rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
             >
               Save church profile
+            </button>
+          </form>
+        ) : null}
+      </div>
+
+      <div className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
+        <p className="text-sm font-medium text-teal-800">Settings</p>
+        <h2 className="mt-1 text-xl font-semibold">Facebook auto-posting</h2>
+        <p className="mt-1 text-sm text-stone-500">
+          The calendar (see Calendar in the sidebar) only plans clips — nothing posts anywhere until
+          you connect a Page and turn this on. Owner-only, on purpose.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span
+            className={`inline-block rounded-full px-2.5 py-1 text-xs font-medium ${
+              facebookConnection.autoPostEnabled
+                ? "bg-red-100 text-red-800"
+                : "bg-stone-100 text-stone-600"
+            }`}
+          >
+            {facebookConnection.autoPostEnabled ? "LIVE — posting automatically" : "Not live"}
+          </span>
+          <span
+            className={`inline-block rounded-full px-2.5 py-1 text-xs font-medium ${
+              metaCredentialsConfigured ? "bg-teal-100 text-teal-900" : "bg-amber-100 text-amber-900"
+            }`}
+          >
+            Meta credentials: {metaCredentialsConfigured ? "configured" : "not configured"}
+          </span>
+        </div>
+        {facebookStatusMessage ? (
+          <div className="mt-4 rounded-md border border-teal-100 bg-teal-50 p-3 text-sm text-teal-900">
+            {facebookStatusMessage}
+          </div>
+        ) : null}
+        {canManageFacebook ? (
+          <form action={updateFacebookConnectionAction} className="mt-5 grid gap-4">
+            <div className="sm:w-72">
+              <label htmlFor="pageId" className="text-sm font-medium">
+                Facebook Page ID
+              </label>
+              <input
+                id="pageId"
+                name="pageId"
+                inputMode="numeric"
+                placeholder="e.g. 1128280933691493"
+                defaultValue={facebookConnection.pageId ?? ""}
+                className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+              />
+              <p className="mt-1 text-xs text-stone-500">
+                Set after the Page has been granted to the Meta Business Manager System User.
+              </p>
+            </div>
+            <label className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm">
+              <input
+                type="checkbox"
+                name="autoPostEnabled"
+                defaultChecked={facebookConnection.autoPostEnabled}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-semibold text-amber-900">Enable automatic posting.</span>{" "}
+                <span className="text-amber-800">
+                  Once on, the worker will publish this church&apos;s scheduled clips to the Page
+                  above automatically, with no further review step. Only turn this on once you&apos;ve
+                  verified the Page ID and are ready for real posts.
+                </span>
+              </span>
+            </label>
+            <button
+              type="submit"
+              className="w-fit rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+            >
+              Save Facebook connection
             </button>
           </form>
         ) : null}

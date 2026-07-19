@@ -1,6 +1,6 @@
 # Business Overview: Pulpit Engine
 
-> **Status:** This document describes the target product experience and scheduling design, written 2026-07-18. **It is not yet implemented.** As of this date, the codebase has no Facebook posting/scheduling subsystem, no per-church service-frequency setting, and clip generation is a flat `TARGET_CLIP_COUNT = 8` per sermon regardless of church (`src/lib/jobs/handlers/analyze.ts`). Per the approved CTO consultation, publishing/scheduling is one of the features intentionally frozen until at least 3 churches ask for it — see CTO.md and project memory. Treat this as the spec to build against when that freeze lifts, not a description of current behavior.
+> **Status (updated 2026-07-19):** Tiers 1, 2, and 3 are all built and merged. Tier 3 (real Facebook posting) is gated behind a per-workspace `facebookAutoPostEnabled` flag (default off, OWNER-only) — the mechanism exists and can post for real, but a given church's Page only actually goes live once an owner explicitly flips that flag. See DECISIONS.md, "Tier 3 Freeze Lifted", for why the original ≥3-churches freeze no longer applies and what replaced it.
 
 ## What This Business Does (A to Z)
 
@@ -106,6 +106,14 @@ Two pieces:
 1. **Knowing which sermon is which.** The system figures out whether an uploaded sermon was the Sunday one or the Wednesday one, so it can apply the right posting days to its clips.
 2. **A visual weekly calendar of clips, with a platform picker per clip.** Each scheduled slot (e.g., "Monday, Clip 1") is clickable, and clicking it lets you choose which social platform that clip is destined for — Facebook, Instagram, TikTok, or YouTube. **Facebook is the only one that's actually live right now** — Instagram, TikTok, and YouTube show up as selectable options in the calendar so the design is ready for them, but posting to those platforms isn't built yet and won't do anything if picked. This calendar does not post anything by itself — it's a plan, not an action. Someone still has to publish each clip by hand until Tier 3 exists.
 
-### Tier 3 — Automatic Posting (frozen until ≥3 churches ask)
+### Tier 3 — Automatic Posting (built, gated behind a manual go-live flag)
 
-The calendar from Tier 2 posts itself — no manual publishing step. Requires a real integration with each platform (starting with Facebook), including permissions/approval from that platform to allow automatic posting. This is the piece intentionally on hold per the CTO consultation until real demand shows up.
+The calendar from Tier 2 posts itself — no manual publishing step, for a church that has explicitly gone live. Reuses Pulpit Engine's existing Meta App/Business Manager (DECISIONS.md, "Sermon Clipper's Tier 3 Facebook Auto-Posting Will Reuse Pulpit Engine's Meta App/Business Manager") rather than a new app review.
+
+How it works:
+
+1. **Connect**: an owner sets the church's Facebook Page ID in Settings, once that Page has been granted to the Business Manager's System User (a manual, one-time step outside this app, mirroring how Pulpit Engine onboards a church's page today).
+2. **Go live**: the owner flips "Enable automatic posting" — off by default, OWNER-only permission (`MANAGE_FACEBOOK_CONNECTION`), deliberately a bigger speed bump than any other setting in the product.
+3. **Publish**: a worker loop (`src/lib/integrations/facebook-publisher.ts`) scans for due, unposted calendar slots every `FACEBOOK_PUBLISH_POLL_INTERVAL_MS` (default 15 min) and, only for a workspace that is both connected and live, schedules an unpublished Facebook video post via the Meta Graph API — but only once a human has actually exported that clip through the normal review flow; this tier never triggers an export by itself.
+
+Fails closed at three independent layers: no `META_SYSTEM_USER_TOKEN` in the environment means the whole worker is a no-op regardless of any workspace's settings; no Page ID or the flag off means that workspace is skipped; an unexported clip is skipped until it's exported. Idempotent — a scheduled post is never published twice, mirroring the exact state-machine discipline Pulpit Engine already proved in production once.
