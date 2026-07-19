@@ -900,4 +900,88 @@ rename as one atomic, planned migration (domain/DNS, email sending domain, Railw
 GCP project display name, repo name with GitHub redirect, Stripe account naming, marketing) —
 not a rolling series of one-off renames.
 
+Status: Superseded in part — see 2026-07-18 "Sermon Clipper's Email Clean-Room Uses a
+pulpitengine.com Subdomain" for the operator's explicit override on the email-sending-domain
+question specifically. The rest of this entry (no infra renaming, `sermon-clipper-prod` GCP
+project) stands.
+
+## 2026-07-18 - Sermon Clipper's Email Clean-Room Uses a pulpitengine.com Subdomain, Not a New Domain
+
+Decision: Sermon Clipper's transactional email (OTP, workspace invitations, approval
+notifications) sends from `send.pulpitengine.com`, a dedicated Resend-verified subdomain of the
+old Pulpit Engine's existing domain — not `noreply@pulpitengine.com` (the address it shared until
+today), and not a newly-registered domain like `sermonclipper.com`. This is an explicit operator
+override of the "no domain reuse before a deliberate cutover" posture recorded in the entry above,
+scoped narrowly to email.
+
+Why: The operator's stated direction is that `pulpitengine.com` is where the business is
+consolidating regardless, so registering a third domain for an interim period is wasted effort.
+A dedicated subdomain still gets its own DKIM/SPF/DMARC records in Resend, independent from
+whatever the root domain or other subdomains send — it is not the same sending identity as
+`noreply@pulpitengine.com`, which is what the original clean-room recommendation was actually
+trying to avoid (one shared address/reputation stream serving two unrelated products). A
+subdomain does not fully eliminate coupling — the parent domain's registrar/DNS control and any
+domain-level reputation signals are still shared — but it removes the sharpest edge (a single
+sender identity and a single Resend domain-verification record for two products) without a new
+purchase.
+
+Tradeoff: If `pulpitengine.com` at the registrar/DNS level is ever compromised, suspended, or
+loses reputation for reasons entirely outside Sermon Clipper's control, Sermon Clipper's login
+email (OTP-gated auth) goes down with it. This is a real, accepted dependency, not a hypothetical
+— it's the tradeoff of the consolidation direction itself, not a new one introduced here.
+
 Status: Active.
+
+## 2026-07-18 - Defer the app.pulpitengine.com Email Split Until Past the Test-Church Pilot
+
+Decision: The `send.pulpitengine.com`/`app.pulpitengine.com` dedicated-subdomain email split
+(previous entry) is a documented plan, not something executed today. Sermon Clipper keeps sending
+from `noreply@pulpitengine.com` on Resend's Free plan (1 domain, 100 emails/day) through the
+2-3-church test pilot. Migration trigger: upgrade to Resend Pro ($20/mo, 10 domains, 50k
+emails/mo, no daily cap) and execute the subdomain split before real public launch, before
+marketing email exists on `pulpitengine.com`, or immediately if the 100/day cap is ever actually
+hit during testing.
+
+Why: At pilot volume (a handful of OTP logins and invites across 2-3 churches), the reputation-
+isolation problem the subdomain solves has near-zero probability of materializing, and the 100/
+day cap is nowhere close to binding. Spending $20/mo plus DNS and code changes to solve a
+low-stakes-at-this-scale problem is disproportionate to the current stage — consistent with this
+project's standing "simple until earned" posture. The target architecture (confirmed with the
+operator) is `app.pulpitengine.com` as the product/dashboard domain — separable from the email
+question, since pointing DNS at Railway costs nothing and needs no Resend plan change; only the
+`login@`/`notify@` sending addresses on that subdomain depend on the Pro upgrade.
+
+Status: Active.
+
+## 2026-07-19 - Sermon Clipper's Tier 3 Facebook Auto-Posting Will Reuse Pulpit Engine's Meta App/Business Manager
+
+Decision: When Sermon Clipper's Tier 3 (automatic Facebook posting — see `docs/BUSINESS_OVERVIEW.md`)
+is unfrozen, it authenticates through the same Meta App/Business Manager that Pulpit Engine already
+operates, rather than registering a new Meta App and going through app review a second time. This is
+an explicit operator override of the "isolation is permanent — separate repo/DB/keys" posture for
+this one subsystem specifically; the rest of that posture (separate repo, separate database,
+separate non-Meta credentials) is unchanged.
+
+Why: Pulpit Engine already has a Meta App/Business Manager with a working System User token
+(`META_SYSTEM_USER_TOKEN`, Graph API v25.0) that has posted scheduled Facebook Reels for real —
+session `f29711c6` on 2026-06-03 against sandbox page `1128280933691493`, six real scheduled posts,
+`schedule_push_status=succeeded`. That means the slowest, least certain part of Tier 3 — getting a
+Meta App through review for scheduled Page posting — is already done and proven in production, on a
+different product. Registering and re-reviewing a second Meta App for Sermon Clipper would
+duplicate months of already-cleared review lead time for no isolation benefit that matters at this
+stage: a Meta App/Business Manager is a credential boundary, not a data boundary, and each church's
+own Facebook Page token (obtained via that church's own OAuth grant) is what actually scopes access
+to that church's page — the shared App is just the thing Meta reviewed once.
+
+Tradeoff: Sermon Clipper's Facebook posting capability now has an operational dependency on Pulpit
+Engine's Meta App/Business Manager standing — if that App is ever suspended, restricted, or has its
+permissions revoked by Meta for a Pulpit-Engine-side reason, Sermon Clipper's Facebook posting goes
+down with it, with no independent app to fall back to. Credential rotation/management (system user
+tokens, per-church page tokens) needs to account for two products' traffic patterns and rate limits
+sharing one App's quota. This is a deliberate, accepted coupling, scoped narrowly to the Meta
+App/Business Manager identity — not a merger of the two products' repos, databases, or other
+secrets.
+
+Status: Active — decided ahead of Tier 3 implementation; Tier 3 itself remains frozen under the
+90-day-first-customers plan until >=3 churches ask for publishing (see the 2026-07-18 entries above
+and CTO.md).
