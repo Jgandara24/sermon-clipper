@@ -92,3 +92,20 @@ Adds generated text posts and infographic/image posts alongside video reels.
   - Rule: sum of all content-type counts must equal total posts per day.
 - Sermon-based logic stays the same: 1 sermon/week spreads content Mon-Sat from that sermon; 2 sermons/week has the Sunday sermon power Mon-Wed and the Wednesday sermon power Thu-Sat.
 - The scheduling engine should always back into: how many posts of each type are needed per day, and how many sermon "days" each upload must cover, based on whether the church has 1 or 2 weekly sermons.
+
+## Roadmap Tiers (Build Sequencing)
+
+### Tier 1 — Onboarding & Clip Sizing (done)
+
+Churches say how many sermons per week they have, and the number of clips generated per sermon (6 or 3+3) matches that automatically. No posting or scheduling yet — this only affects how many clips get made.
+
+### Tier 2 — Weekly Posting Calendar (next up, no auto-posting yet)
+
+Two pieces:
+
+1. **Knowing which sermon is which.** The system figures out whether an uploaded sermon was the Sunday one or the Wednesday one, so it can apply the right posting days to its clips.
+2. **A visual weekly calendar of clips, with a platform picker per clip.** Each scheduled slot (e.g., "Monday, Clip 1") is clickable, and clicking it lets you choose which social platform that clip is destined for — Facebook, Instagram, TikTok, or YouTube. **Facebook is the only one that's actually live right now** — Instagram, TikTok, and YouTube show up as selectable options in the calendar so the design is ready for them, but posting to those platforms isn't built yet and won't do anything if picked. This calendar does not post anything by itself — it's a plan, not an action. Someone still has to publish each clip by hand until Tier 3 exists.
+
+### Tier 3 — Automatic Posting (frozen until ≥3 churches ask)
+
+The calendar from Tier 2 posts itself — no manual publishing step. Requires a real integration with each platform (starting with Facebook), including permissions/approval from that platform to allow automatic posting. This is the piece intentionally on hold per the CTO consultation until real demand shows up.
