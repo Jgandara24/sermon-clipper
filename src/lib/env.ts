@@ -127,6 +127,14 @@ const fieldSchemas = {
   // YouTube Data API v3 (channel auto-import). App-level key, like ANTHROPIC_API_KEY.
   YOUTUBE_API_KEY: optionalString,
 
+  // Meta Graph API (Tier 3 Facebook auto-posting). Deliberately the same variable names and
+  // App/Business Manager Pulpit Engine already uses (DECISIONS.md, "Sermon Clipper's Tier 3
+  // Facebook Auto-Posting Will Reuse Pulpit Engine's Meta App/Business Manager") — a System
+  // User token, not a per-church OAuth token. Absence of META_SYSTEM_USER_TOKEN must fail
+  // closed (see src/lib/integrations/facebook.ts), never silently no-op.
+  META_SYSTEM_USER_TOKEN: optionalString,
+  META_GRAPH_API_VERSION: z.string().default("v23.0"),
+
   // Observability
   SENTRY_DSN: optionalString,
   ALERTS_THROTTLE_MS: numberOrFallback(30 * 60 * 1000),
@@ -152,6 +160,8 @@ const fieldSchemas = {
   // Channel auto-import polling cadence (worker loop, same timestamp-comparison pattern as
   // WORKER_CLEANUP_INTERVAL_MS). Default 60 minutes.
   CHANNEL_POLL_INTERVAL_MS: rawNumber(60 * 60_000),
+  // Facebook publish-worker polling cadence (Tier 3), same pattern. Default 15 minutes.
+  FACEBOOK_PUBLISH_POLL_INTERVAL_MS: rawNumber(15 * 60_000),
 } satisfies Record<string, z.ZodType>;
 
 type EnvSchemaMap = typeof fieldSchemas;

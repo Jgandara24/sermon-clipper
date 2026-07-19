@@ -135,6 +135,18 @@ enum SocialPlatform {
   @@map("social_platform")
 }
 
+// Tier 3 (docs/BUSINESS_OVERVIEW.md) — mirrors Pulpit Engine's own proven
+// schedule_push_status state machine naming for the same reason: not_started -> in_progress ->
+// succeeded | failed, refuse to reprocess a row that already has a facebookPostId.
+enum SchedulePublishStatus {
+  NOT_STARTED @map("not_started")
+  IN_PROGRESS @map("in_progress")
+  SUCCEEDED   @map("succeeded")
+  FAILED      @map("failed")
+
+  @@map("schedule_publish_status")
+}
+
 enum NotificationChannel {
   EMAIL @map("email")
   SMS   @map("sms")
@@ -506,18 +518,23 @@ model GeneratedClip {
  * anywhere yet (see docs/BUSINESS_OVERVIEW.md, Tier 3).
  */
 model ScheduledPost {
-  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId   String         @map("workspace_id") @db.Uuid
-  clipId        String         @unique @map("clip_id") @db.Uuid
-  scheduledDate DateTime       @map("scheduled_date") @db.Date
-  platform      SocialPlatform @default(FACEBOOK)
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String                @map("workspace_id") @db.Uuid
+  clipId           String                @unique @map("clip_id") @db.Uuid
+  scheduledDate    DateTime              @map("scheduled_date") @db.Date
+  platform         SocialPlatform        @default(FACEBOOK)
+  publishStatus    SchedulePublishStatus @default(NOT_STARTED) @map("publish_status")
+  facebookPostId   String?               @map("facebook_post_id")
+  publishedAt      DateTime?             @map("published_at")
+  lastErrorMessage String?               @map("last_error_message")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
 
   workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   clip      GeneratedClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, scheduledDate])
+  @@index([publishStatus, scheduledDate])
   @@map("scheduled_posts")
 }
 

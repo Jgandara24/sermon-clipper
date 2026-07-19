@@ -4,6 +4,7 @@ import {
   deriveServiceSlot,
   parseChurchProfile,
   targetClipCountFor,
+  wallClockInstantInTimezone,
   type ChurchProfile,
 } from "@/lib/church-profile";
 
@@ -93,5 +94,19 @@ describe("deriveServiceSlot", () => {
     const onceWeekly: ChurchProfile = { ...twiceWeekly, sermonsPerWeek: 1, secondServiceDay: null };
     const wednesday = new Date("2026-07-22T18:00:00Z");
     expect(deriveServiceSlot(wednesday, onceWeekly)).toBe("PRIMARY");
+  });
+});
+
+describe("wallClockInstantInTimezone", () => {
+  it("converts 9am America/Chicago (CDT, UTC-5 in July) to the correct UTC instant", () => {
+    const day = new Date("2026-07-20T00:00:00Z");
+    expect(wallClockInstantInTimezone(day, 9, "America/Chicago").toISOString()).toBe(
+      "2026-07-20T14:00:00.000Z",
+    );
+  });
+
+  it("converts 9am UTC to itself", () => {
+    const day = new Date("2026-07-20T00:00:00Z");
+    expect(wallClockInstantInTimezone(day, 9, "UTC").toISOString()).toBe("2026-07-20T09:00:00.000Z");
   });
 });

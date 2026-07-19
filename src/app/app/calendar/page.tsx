@@ -1,6 +1,7 @@
 import { PlatformPicker } from "@/components/platform-picker";
 import { requireCurrentUser, requirePrimaryWorkspaceMembership } from "@/lib/auth";
 import { hasWorkspacePermission } from "@/lib/authorization";
+import { isEligibleForAutoPost, parseFacebookConnection } from "@/lib/facebook-connection";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -32,10 +33,25 @@ function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function publishStatusBadge(publishStatus: string) {
+  switch (publishStatus) {
+    case "SUCCEEDED":
+      return { label: "Posted", className: "bg-teal-100 text-teal-900" };
+    case "IN_PROGRESS":
+      return { label: "Posting…", className: "bg-amber-100 text-amber-900" };
+    case "FAILED":
+      return { label: "Post failed", className: "bg-red-100 text-red-800" };
+    default:
+      return null;
+  }
+}
+
 export default async function CalendarPage() {
   const user = await requireCurrentUser();
   const membership = await requirePrimaryWorkspaceMembership(user.id);
   const canManageSchedule = hasWorkspacePermission(membership.role, "MANAGE_SCHEDULE");
+  const facebookConnection = parseFacebookConnection(membership.workspace.settings);
+  const isLive = isEligibleForAutoPost(facebookConnection);
 
   const rangeStart = startOfUtcDay(new Date());
   const rangeEnd = addUtcDays(rangeStart, DAYS_AHEAD);
@@ -72,9 +88,19 @@ export default async function CalendarPage() {
         <p className="text-sm font-medium text-teal-800">Calendar</p>
         <h1 className="mt-1 text-2xl font-semibold">Weekly posting plan</h1>
         <p className="mt-2 text-sm text-stone-500">
-          This is a plan, not an action — nothing here posts automatically yet. Facebook is the only
-          platform that&apos;s live today; Instagram, TikTok, and YouTube are shown so the schedule is
-          ready for them later.
+          {isLive ? (
+            <>
+              <span className="font-semibold text-red-700">Live:</span> Facebook posts on this plan
+              publish automatically once exported. Instagram, TikTok, and YouTube are shown for when
+              they&apos;re ready.
+            </>
+          ) : (
+            <>
+              This is a plan, not an action — nothing here posts automatically yet. Facebook is the
+              only platform that&apos;s live today; Instagram, TikTok, and YouTube are shown so the
+              schedule is ready for them later.
+            </>
+          )}
         </p>
       </div>
 
@@ -90,24 +116,36 @@ export default async function CalendarPage() {
                 <p className="mt-3 text-sm text-stone-400">No clips scheduled.</p>
               ) : (
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {posts.map((post) => (
-                    <div key={post.id} className="rounded-md border border-stone-200 p-3">
-                      <p className="text-xs font-medium uppercase tracking-wide text-stone-400">
-                        {post.clip.project.name}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold">{post.clip.title}</p>
-                      <p className="mt-1 text-xs text-stone-500">Rank #{post.clip.rank}</p>
-                      <div className="mt-3">
-                        {canManageSchedule ? (
-                          <PlatformPicker scheduledPostId={post.id} platform={post.platform} />
-                        ) : (
-                          <span className="inline-block rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-600">
-                            {post.platform}
-                          </span>
-                        )}
+                  {posts.map((post) => {
+                    const badge = publishStatusBadge(post.publishStatus);
+                    return (
+                      <div key={post.id} className="rounded-md border border-stone-200 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-stone-400">
+                            {post.clip.project.name}
+                          </p>
+                          {badge ? (
+                            <span
+                              className={`inline-block shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
+                            >
+                              {badge.label}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-sm font-semibold">{post.clip.title}</p>
+                        <p className="mt-1 text-xs text-stone-500">Rank #{post.clip.rank}</p>
+                        <div className="mt-3">
+                          {canManageSchedule ? (
+                            <PlatformPicker scheduledPostId={post.id} platform={post.platform} />
+                          ) : (
+                            <span className="inline-block rounded-full bg-stone-100 px-2 py-1 text-xs font-medium text-stone-600">
+                              {post.platform}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

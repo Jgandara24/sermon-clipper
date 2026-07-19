@@ -13,6 +13,7 @@ export type WorkspacePermission =
   | "MANAGE_OPERATIONS"
   | "MANAGE_WORKSPACE_PROFILE"
   | "MANAGE_SCHEDULE"
+  | "MANAGE_FACEBOOK_CONNECTION"
   | "CANCEL_PROJECT";
 
 const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> = {
@@ -29,6 +30,10 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     "MANAGE_OPERATIONS",
     "MANAGE_WORKSPACE_PROFILE",
     "MANAGE_SCHEDULE",
+    // Deliberately OWNER-only, unlike every other MANAGE_* permission (which ADMIN also has):
+    // this flag is what makes Tier 3 actually post to a real Facebook Page. See DECISIONS.md,
+    // "Tier 3 Freeze Lifted" — the go-live gate is meant to be a real speed bump.
+    "MANAGE_FACEBOOK_CONNECTION",
     "CANCEL_PROJECT",
   ]),
   [WorkspaceRole.ADMIN]: new Set([
