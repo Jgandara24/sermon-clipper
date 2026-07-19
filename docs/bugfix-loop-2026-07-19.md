@@ -284,4 +284,39 @@ mocking patterns).
 
 ## Completion report
 
-(append here when done)
+All 14 items completed, one commit each on `fix/review-findings-2026-07-19`
+(branched from `feature/tier3-facebook-autopost`). Final `npm run verify`: 380/380
+unit tests, lint, typecheck, Next.js build, and worker bundle all green. Nothing
+was pushed.
+
+| # | Item | Commit |
+|---|------|--------|
+| 1 | Guard terminal job transitions (also applied to export queue) | a4fb129 |
+| 2 | Optimistic concurrency for workspace.settings | d551b8c |
+| 3 | Wall-clock timezone wrong-day fix | f8b261d |
+| 4 | Publish immediately when 9am-local is near/past | f0d2d66 |
+| 5 | Retry transient publish failures with backoff (migration) | eed8d41 |
+| 6 | Recover stale IN_PROGRESS scheduled posts | 7729241 |
+| 7 | Preserve publish history on re-analysis (migration) | 767a8e1 |
+| 8 | Validate timezone, degrade to UTC on bad stored values | d4306c5 |
+| 9 | Fail closed on unset/localhost NEXT_PUBLIC_APP_URL | dfc57ea |
+| 10 | yt-dlp metadata maxBuffer 64 MiB | d5a0ce9 |
+| 11 | Enforce URL-import size cap post-download | 1b3b7b7 |
+| 12 | Edit-state race returns 409, not 500 | 87afc44 |
+| 13 | Race-safe idempotent enqueue (also export queue) | c13a21d |
+| 14 | Atomic default-template flip | 27095c8 |
+
+Notes for review:
+- **Migrations (items 5, 7)** were applied to the local dev DB via `prisma db execute`
+  + `prisma migrate resolve --applied` instead of `prisma migrate dev`, because migrate
+  dev demanded a full data-dropping reset over PRE-EXISTING drift: migration
+  `20260718165517_channel_import_sources` was modified after it was applied. Worth
+  investigating how that file changed (git blame it) before the next `migrate dev`.
+  `prisma migrate deploy` in production applies both new migrations normally.
+- **Item 8 nuance:** Node's ICU resolves legacy abbreviations like "CST" (to central
+  time), so those remain accepted; only values Intl cannot resolve (e.g. "Central")
+  are rejected/fall back. The invariant enforced is "a stored value can never make
+  Intl throw downstream."
+- Integration tests were updated where contracts changed (job-reliability,
+  facebook-publisher) and the full integration suite was run against the local DB
+  at the end: 146/146 passed.
