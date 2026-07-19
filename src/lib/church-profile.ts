@@ -104,20 +104,40 @@ export function wallClockInstantInTimezone(
   hour: number,
   timezone: string,
 ): Date {
-  const guess = new Date(
-    Date.UTC(calendarDate.getUTCFullYear(), calendarDate.getUTCMonth(), calendarDate.getUTCDate(), hour),
+  const desired = Date.UTC(
+    calendarDate.getUTCFullYear(),
+    calendarDate.getUTCMonth(),
+    calendarDate.getUTCDate(),
+    hour,
   );
 
+  // The correction must compare full wall-clock timestamps (date + time), not just the
+  // time of day: for a UTC-10 zone the guess reads as 23:00 of the *previous* local day,
+  // and an hour/minute-only drift would land 24 hours early. Two passes make the result
+  // exact across DST transitions.
+  let instant = new Date(desired);
+  for (let pass = 0; pass < 2; pass++) {
+    const observed = observedWallClockUtc(instant, timezone);
+    if (observed === desired) break;
+    instant = new Date(instant.getTime() + (desired - observed));
+  }
+  return instant;
+}
+
+/** Reads an instant as a wall clock in the given timezone, encoded as a Date.UTC timestamp. */
+function observedWallClockUtc(instant: Date, timezone: string): number {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }).formatToParts(guess);
+  }).formatToParts(instant);
 
-  const observedHour = Number(parts.find((part) => part.type === "hour")?.value);
-  const observedMinute = Number(parts.find((part) => part.type === "minute")?.value);
-  const driftMinutes = hour * 60 - (observedHour * 60 + observedMinute);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
 
-  return new Date(guess.getTime() + driftMinutes * 60_000);
+  return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
 }

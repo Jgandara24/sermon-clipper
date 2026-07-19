@@ -82,7 +82,10 @@ call sites — grep for `settings` spreads) onto the helper.
 **Tests:** simulate an interleaved write (mock client whose first `updateMany` returns
 count 0) and assert the retry preserves both changes.
 
-### - [ ] 3. Fix `wallClockInstantInTimezone` wrong-day bug for UTC-10/-11
+### - [x] 3. Fix `wallClockInstantInTimezone` wrong-day bug for UTC-10/-11
+
+> Done. Correction now compares full wall-clock timestamps (date + time) with a second
+> pass for DST-transition exactness.
 
 `src/lib/church-profile.ts:102-123` — the drift correction uses only observed
 hour/minute and ignores the date, so 9 AM in Pacific/Honolulu resolves to 9 AM the
