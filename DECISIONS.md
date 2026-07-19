@@ -982,6 +982,35 @@ sharing one App's quota. This is a deliberate, accepted coupling, scoped narrowl
 App/Business Manager identity — not a merger of the two products' repos, databases, or other
 secrets.
 
-Status: Active — decided ahead of Tier 3 implementation; Tier 3 itself remains frozen under the
-90-day-first-customers plan until >=3 churches ask for publishing (see the 2026-07-18 entries above
-and CTO.md).
+Status: Active — decided ahead of Tier 3 implementation. **Superseded in part** by the 2026-07-19
+entry below ("Tier 3 Freeze Lifted") — the operator explicitly removed the >=3-churches gate the
+same day. This entry's Meta App/Business Manager reuse decision stands unchanged.
+
+## 2026-07-19 - Tier 3 Freeze Lifted; Build Gated Behind a Manual Go-Live Step Instead
+
+Decision: The operator explicitly lifted the ">=3 churches ask" freeze on Tier 3 (Facebook
+auto-posting) recorded in the 2026-07-18 entries above and in CTO.md's feature-freeze framework.
+Tier 3 is now being built. In its place, Tier 3 ships with its own gate: a per-workspace
+`facebookAutoPostEnabled` flag, default `false`, that must be manually flipped before any real
+Graph API call is made for that workspace — mirroring Pulpit Engine's own "mechanism ready, live
+gate separate" pattern (see `pulpit-engine_live-gate-go-no-go_80-81_2026-07-04_v1.md` in that
+repo, where creds/code were proven ready well before the first live run was authorized). No
+workspace auto-posts merely by connecting a Facebook Page; posting requires the flag plus a
+configured Page ID plus real `META_SYSTEM_USER_TOKEN`/`META_GRAPH_API_VERSION` credentials in the
+environment — three independent conditions, all fail-closed if unmet.
+
+Why: The founder judged the original freeze rationale (avoid building a feature nobody's asked
+for yet) no longer the binding constraint, and separately wanted a safety boundary between
+"the code exists" and "it posts to a real church's real Facebook Page" — those are different
+risk levels and shouldn't be the same event. Reusing Pulpit Engine's exact proven pattern (a
+manual, explicit go-live step distinct from code completion) means Tier 3 launches with a
+precedent that's already been exercised successfully once, rather than inventing new go-live
+discipline from scratch.
+
+Tradeoff: Tier 3 code (OAuth/connection storage, the Graph API client, the publish worker, the
+per-workspace enable toggle) can now exist and be merged to `main` before any church has asked for
+it, which is a real reversal of the original "don't build speculative features" reasoning — the
+team accepted that tradeoff explicitly in exchange for de-risking the actual first live post via
+the manual gate.
+
+Status: Active.
