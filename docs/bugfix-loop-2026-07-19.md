@@ -257,7 +257,9 @@ save throws an uncaught P2002 → 500 instead of the intended `EDIT_STATE_CONFLI
 `EDIT_STATE_CONFLICT` response the version check produces.
 **Tests:** mock create throwing P2002 → 409 with the conflict body.
 
-### - [ ] 13. Make `enqueueJob` idempotency race-safe
+### - [x] 13. Make `enqueueJob` idempotency race-safe
+
+> Done. Also applied to enqueueExportJob (identical find-then-create pattern).
 
 `src/lib/jobs/queue.ts:25-40` — find-then-create; two concurrent calls with the same
 `idempotencyKey` race and the loser throws P2002 up as a 500 instead of returning the

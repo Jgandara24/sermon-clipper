@@ -1,4 +1,4 @@
-import { type ExportJob, ProcessingJobState, type PrismaClient } from "@prisma/client";
+import { type ExportJob, Prisma, ProcessingJobState, type PrismaClient } from "@prisma/client";
 import { EXPORT_MAX_ATTEMPTS, retryRunAfter, staleCutoff, workerId } from "@/lib/worker/reliability";
 
 const MAX_ATTEMPTS = EXPORT_MAX_ATTEMPTS; // initial attempt + 2 retries, per guide §15 step 6
@@ -15,15 +15,26 @@ export async function enqueueExportJob(
     return existing;
   }
 
-  return client.exportJob.create({
-    data: {
-      clipId: params.clipId,
-      workspaceId: params.workspaceId,
-      filename: params.filename,
-      idempotencyKey: params.idempotencyKey,
-      state: ProcessingJobState.QUEUED,
-    },
-  });
+  try {
+    return await client.exportJob.create({
+      data: {
+        clipId: params.clipId,
+        workspaceId: params.workspaceId,
+        filename: params.filename,
+        idempotencyKey: params.idempotencyKey,
+        state: ProcessingJobState.QUEUED,
+      },
+    });
+  } catch (error) {
+    // Same race-safe contract as enqueueJob: the loser of a concurrent enqueue returns
+    // the winner's row instead of surfacing the unique-constraint violation.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return client.exportJob.findUniqueOrThrow({
+        where: { idempotencyKey: params.idempotencyKey },
+      });
+    }
+    throw error;
+  }
 }
 
 /** Same conditional-UPDATE claim pattern as the processing-job queue (see jobs/queue.ts). */

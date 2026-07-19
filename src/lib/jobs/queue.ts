@@ -1,5 +1,5 @@
 import {
-  type Prisma,
+  Prisma,
   type PrismaClient,
   type ProcessingJob,
   ProcessingJobState,
@@ -29,15 +29,27 @@ export async function enqueueJob(
     return existing;
   }
 
-  return client.processingJob.create({
-    data: {
-      projectId: params.projectId,
-      type: params.type,
-      state: ProcessingJobState.QUEUED,
-      idempotencyKey: params.idempotencyKey,
-      minutesReserved: params.minutesReserved,
-    },
-  });
+  try {
+    return await client.processingJob.create({
+      data: {
+        projectId: params.projectId,
+        type: params.type,
+        state: ProcessingJobState.QUEUED,
+        idempotencyKey: params.idempotencyKey,
+        minutesReserved: params.minutesReserved,
+      },
+    });
+  } catch (error) {
+    // Two concurrent enqueues (double-click, client retry) can both pass the fast-path
+    // read; the loser's insert hits the unique index — honor the contract and return the
+    // winner's row instead of surfacing a 500.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return client.processingJob.findUniqueOrThrow({
+        where: { idempotencyKey: params.idempotencyKey },
+      });
+    }
+    throw error;
+  }
 }
 
 /**
