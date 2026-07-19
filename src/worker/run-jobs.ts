@@ -4,7 +4,10 @@ import { applyStaleFailureSideEffects, recoverStaleProcessingJobs } from "@/lib/
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { jobHandlers } from "@/lib/jobs/handlers";
 import { env } from "@/lib/env";
-import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher";
+import {
+  publishDueScheduledPosts,
+  recoverStaleScheduledPosts,
+} from "@/lib/integrations/facebook-publisher";
 import { pollDueChannelImportSources } from "@/lib/integrations/channel-poller";
 import {
   captureErrorSafely,
@@ -54,9 +57,10 @@ async function loop() {
         lastWorkerHeartbeatAt = now;
       }
       if (now - lastRecoveryAt >= RECOVERY_INTERVAL_MS) {
-        const [processingRecovery, exportRecovery] = await Promise.all([
+        const [processingRecovery, exportRecovery, scheduledPostRecovery] = await Promise.all([
           recoverStaleProcessingJobs(prisma, SUPPORTED_TYPES),
           recoverStaleExportJobs(prisma),
+          recoverStaleScheduledPosts(prisma),
         ]);
         // CLEANUP jobs are exempted inside the helper — a stale retention job must never mark a
         // healthy project FAILED or release its reservations.
@@ -67,14 +71,28 @@ async function loop() {
               note: "Released after stale worker timeout.",
             }),
         });
-        if (processingRecovery.recovered || processingRecovery.failed || exportRecovery.recovered || exportRecovery.failed) {
-          console.warn("[worker] recovered stale jobs", { processingRecovery, exportRecovery });
+        if (
+          processingRecovery.recovered ||
+          processingRecovery.failed ||
+          exportRecovery.recovered ||
+          exportRecovery.failed ||
+          scheduledPostRecovery.recovered ||
+          scheduledPostRecovery.failed
+        ) {
+          console.warn("[worker] recovered stale jobs", {
+            processingRecovery,
+            exportRecovery,
+            scheduledPostRecovery,
+          });
           await recordOperationalEventSafely(prisma, {
             category: "worker",
             eventType: "stale_jobs_recovered",
-            severity: processingRecovery.failed || exportRecovery.failed ? "error" : "warning",
+            severity:
+              processingRecovery.failed || exportRecovery.failed || scheduledPostRecovery.failed
+                ? "error"
+                : "warning",
             message: "Worker recovered stale running jobs.",
-            metadata: { processingRecovery, exportRecovery },
+            metadata: { processingRecovery, exportRecovery, scheduledPostRecovery },
           });
         }
         lastRecoveryAt = now;

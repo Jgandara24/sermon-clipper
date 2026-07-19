@@ -142,7 +142,10 @@ operational event on every failure.
 **Tests:** transient failure → NOT_STARTED with backoff; 5th failure → FAILED;
 due-query respects `nextAttemptAt`.
 
-### - [ ] 6. Recover stale IN_PROGRESS scheduled posts
+### - [x] 6. Recover stale IN_PROGRESS scheduled posts
+
+> Done. recoverStaleScheduledPosts (15-min updatedAt cutoff) wired into the worker's
+> recovery block; recovery counts as an attempt and fails terminally when exhausted.
 
 `src/lib/integrations/facebook-publisher.ts:144-148` claims NOT_STARTED → IN_PROGRESS,
 but if the worker dies before writing a terminal state, the row is stuck "Posting…"

@@ -89,6 +89,66 @@ export type FacebookPublisherDeps = {
   ) => Promise<{ facebookPostId: string }>;
 };
 
+// A claim older than this with no terminal update means the worker died mid-publish
+// (same recovery idea as recoverStaleProcessingJobs; @updatedAt stamps the claim time).
+const STALE_CLAIM_TIMEOUT_MS = 15 * 60_000;
+
+/**
+ * Re-queues scheduled posts stuck IN_PROGRESS by a worker that died between the claim and
+ * the terminal update. Counts as an attempt (so a poison post still terminates after
+ * MAX_PUBLISH_ATTEMPTS — exhausted rows fail terminally here, mirroring stale job recovery).
+ */
+export async function recoverStaleScheduledPosts(
+  client: PrismaClient,
+  now = new Date(),
+): Promise<{ recovered: number; failed: number }> {
+  const cutoff = new Date(now.getTime() - STALE_CLAIM_TIMEOUT_MS);
+  const staleRows = await client.scheduledPost.findMany({
+    where: { publishStatus: "IN_PROGRESS", updatedAt: { lt: cutoff } },
+    take: 25,
+    select: { id: true, workspaceId: true, attemptCount: true },
+  });
+
+  let recovered = 0;
+  let failed = 0;
+  for (const row of staleRows) {
+    const attemptCount = row.attemptCount + 1;
+    const exhausted = attemptCount >= MAX_PUBLISH_ATTEMPTS;
+    const result = await client.scheduledPost.updateMany({
+      // Re-check the stale condition so a concurrent terminal update wins the race.
+      where: { id: row.id, publishStatus: "IN_PROGRESS", updatedAt: { lt: cutoff } },
+      data: exhausted
+        ? {
+            publishStatus: "FAILED",
+            attemptCount,
+            nextAttemptAt: null,
+            lastErrorMessage: "Publish attempt was interrupted repeatedly and gave up.",
+          }
+        : {
+            publishStatus: "NOT_STARTED",
+            attemptCount,
+            nextAttemptAt: null,
+            lastErrorMessage: "Publish attempt was interrupted (worker restart) and was re-queued.",
+          },
+    });
+    if (result.count === 0) continue;
+    if (exhausted) failed++;
+    else recovered++;
+    await recordOperationalEventSafely(client, {
+      workspaceId: row.workspaceId,
+      category: "facebook_publish",
+      eventType: exhausted ? "facebook_publish_failed" : "facebook_publish_claim_recovered",
+      severity: exhausted ? "error" : "warning",
+      message: exhausted
+        ? `Facebook scheduled post failed permanently after ${attemptCount} interrupted attempts.`
+        : "Facebook scheduled post claim was stale and was re-queued.",
+      metadata: { scheduledPostId: row.id, attemptCount },
+    });
+  }
+
+  return { recovered, failed };
+}
+
 export async function publishDueScheduledPosts(
   client: PrismaClient,
   deps: FacebookPublisherDeps = {},
