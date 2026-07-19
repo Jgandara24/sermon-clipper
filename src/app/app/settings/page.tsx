@@ -1,6 +1,8 @@
 import { inviteWorkspaceMemberAction } from "@/app/actions/members";
+import { updateChurchProfileAction } from "@/app/actions/workspace-profile";
 import { requireCurrentUser, requirePrimaryWorkspaceMembership } from "@/lib/auth";
 import { hasWorkspacePermission } from "@/lib/authorization";
+import { parseChurchProfile } from "@/lib/church-profile";
 import { formatDate, titleCaseStatus } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -19,19 +21,30 @@ function inviteMessage(status: string | undefined) {
   }
 }
 
+function profileMessage(status: string | undefined) {
+  switch (status) {
+    case "saved":
+      return "Church profile updated.";
+    case "invalid":
+      return "Enter valid church profile values.";
+    default:
+      return null;
+  }
+}
+
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string }>;
+  searchParams: Promise<{ invite?: string; profile?: string }>;
 }) {
   const user = await requireCurrentUser();
   const membership = await requirePrimaryWorkspaceMembership(user.id);
   const workspace = membership.workspace;
   const params = await searchParams;
   const canManageMembers = hasWorkspacePermission(membership.role, "MANAGE_MEMBERS");
-  const settings = workspace.settings as {
-    churchProfile?: { timezone?: string; serviceDay?: string };
-  };
+  const canManageProfile = hasWorkspacePermission(membership.role, "MANAGE_WORKSPACE_PROFILE");
+  const churchProfile = parseChurchProfile(workspace.settings);
+  const profileStatusMessage = profileMessage(params.profile);
   const [members, invitations] = await Promise.all([
     prisma.workspaceMember.findMany({
       where: { workspaceId: workspace.id },
@@ -64,13 +77,108 @@ export default async function SettingsPage({
           </div>
           <div className="rounded-md border border-stone-200 p-4">
             <dt className="text-sm text-stone-500">Timezone</dt>
-            <dd className="mt-1 font-semibold">{settings.churchProfile?.timezone ?? "Not set"}</dd>
+            <dd className="mt-1 font-semibold">{churchProfile.timezone}</dd>
           </div>
           <div className="rounded-md border border-stone-200 p-4">
             <dt className="text-sm text-stone-500">Primary service day</dt>
-            <dd className="mt-1 font-semibold">{settings.churchProfile?.serviceDay ?? "Not set"}</dd>
+            <dd className="mt-1 font-semibold">{churchProfile.serviceDay}</dd>
           </div>
         </dl>
+      </div>
+
+      <div className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
+        <p className="text-sm font-medium text-teal-800">Settings</p>
+        <h2 className="mt-1 text-xl font-semibold">Church profile</h2>
+        <p className="mt-1 text-sm text-stone-500">
+          Controls how many clips we generate per sermon and how many posts go out per day.
+        </p>
+        {profileStatusMessage ? (
+          <div className="mt-4 rounded-md border border-teal-100 bg-teal-50 p-3 text-sm text-teal-900">
+            {profileStatusMessage}
+          </div>
+        ) : null}
+        {canManageProfile ? (
+          <form action={updateChurchProfileAction} className="mt-5 grid gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="timezone" className="text-sm font-medium">
+                  Timezone
+                </label>
+                <input
+                  id="timezone"
+                  name="timezone"
+                  required
+                  defaultValue={churchProfile.timezone}
+                  className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+                />
+              </div>
+              <div>
+                <label htmlFor="serviceDay" className="text-sm font-medium">
+                  Primary service day
+                </label>
+                <input
+                  id="serviceDay"
+                  name="serviceDay"
+                  required
+                  defaultValue={churchProfile.serviceDay}
+                  className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="sermonsPerWeek" className="text-sm font-medium">
+                  Sermons per week
+                </label>
+                <select
+                  id="sermonsPerWeek"
+                  name="sermonsPerWeek"
+                  defaultValue={String(churchProfile.sermonsPerWeek)}
+                  className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+                >
+                  <option value="1">1 (Sunday only)</option>
+                  <option value="2">2 (Sunday &amp; Wednesday)</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="secondServiceDay" className="text-sm font-medium">
+                  Second service day
+                </label>
+                <input
+                  id="secondServiceDay"
+                  name="secondServiceDay"
+                  defaultValue={churchProfile.secondServiceDay ?? "Wednesday"}
+                  className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+                />
+                <p className="mt-1 text-xs text-stone-500">Only used if you selected 2 sermons per week.</p>
+              </div>
+            </div>
+            <div className="sm:w-48">
+              <label htmlFor="postsPerDay" className="text-sm font-medium">
+                Total posts per day
+              </label>
+              <input
+                id="postsPerDay"
+                name="postsPerDay"
+                type="number"
+                min={1}
+                max={10}
+                required
+                defaultValue={churchProfile.postsPerDay}
+                className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+              />
+              <p className="mt-1 text-xs text-stone-500">
+                Phase 1 supports video reels only, so this must be 1 for now.
+              </p>
+            </div>
+            <button
+              type="submit"
+              className="w-fit rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+            >
+              Save church profile
+            </button>
+          </form>
+        ) : null}
       </div>
 
       <div className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">

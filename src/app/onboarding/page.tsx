@@ -51,6 +51,34 @@ export default async function OnboardingPage() {
                 />
               </div>
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="sermonsPerWeek" className="text-sm font-medium">
+                  Sermons per week
+                </label>
+                <select
+                  id="sermonsPerWeek"
+                  name="sermonsPerWeek"
+                  defaultValue="1"
+                  className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+                >
+                  <option value="1">1 (Sunday only)</option>
+                  <option value="2">2 (Sunday &amp; Wednesday)</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="secondServiceDay" className="text-sm font-medium">
+                  Second service day
+                </label>
+                <input
+                  id="secondServiceDay"
+                  name="secondServiceDay"
+                  defaultValue="Wednesday"
+                  className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100"
+                />
+                <p className="mt-1 text-xs text-stone-500">Only used if you selected 2 sermons per week.</p>
+              </div>
+            </div>
             <button
               type="submit"
               className="rounded-md bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800"
