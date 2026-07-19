@@ -105,11 +105,16 @@ export type PublishScheduledVideoInput = {
   pageAccessToken: string;
   fileUrl: string;
   caption: string;
-  /** When the post should go live, as a JS Date — converted to Meta's required unix seconds. */
-  scheduledPublishAt: Date;
+  /**
+   * When the post should go live, as a JS Date — converted to Meta's required unix seconds.
+   * Omitted = publish immediately. Meta rejects scheduled_publish_time values that are in the
+   * past or less than ~10 minutes out, so callers must omit this (not send a past instant)
+   * when the target time is already here.
+   */
+  scheduledPublishAt?: Date;
 };
 
-/** Creates an unpublished, scheduled video post on the Page. Returns Meta's post/video id. */
+/** Creates a video post on the Page — scheduled when scheduledPublishAt is set, live otherwise. */
 export async function publishScheduledVideo(
   input: PublishScheduledVideoInput,
   fetchFn: FetchLike = fetch,
@@ -118,10 +123,12 @@ export async function publishScheduledVideo(
   const body = new URLSearchParams({
     file_url: input.fileUrl,
     description: input.caption,
-    published: "false",
-    scheduled_publish_time: String(Math.floor(input.scheduledPublishAt.getTime() / 1000)),
     access_token: input.pageAccessToken,
   });
+  if (input.scheduledPublishAt) {
+    body.set("published", "false");
+    body.set("scheduled_publish_time", String(Math.floor(input.scheduledPublishAt.getTime() / 1000)));
+  }
 
   const json = (await requestJson(fetchFn, url, { method: "POST", body: body.toString() })) as {
     id?: string;

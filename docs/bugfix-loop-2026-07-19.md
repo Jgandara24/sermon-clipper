@@ -99,7 +99,10 @@ observed, including day difference).
 (UTC-11), America/Chicago, UTC, Asia/Tokyo (UTC+9), Australia/Sydney, and
 Pacific/Auckland, on both a DST and non-DST date for the DST zones.
 
-### - [ ] 4. Fix due-time vs publish-time mismatch in the Facebook publisher
+### - [x] 4. Fix due-time vs publish-time mismatch in the Facebook publisher
+
+> Done. Under 15 minutes of lead the publisher posts immediately (no
+> scheduled_publish_time); publishedAt records the actual go-live instant.
 
 `src/lib/integrations/facebook-publisher.ts:104` treats a post as due at UTC midnight
 of `scheduledDate`, but `:160` schedules it for 9 AM church-local — which Meta rejects

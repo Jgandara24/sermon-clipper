@@ -34,6 +34,11 @@ import { recordOperationalEventSafely } from "@/lib/observability/operational-ev
  */
 
 const DEFAULT_POST_HOUR = 9;
+// Meta requires scheduled_publish_time to be at least ~10 minutes in the future; below this
+// lead we publish immediately instead of scheduling. A post becomes "due" at UTC midnight of
+// its scheduledDate, so the 9am-local target is routinely near or already past by the time the
+// poller first sees the row (always, for churches at UTC+9 and east).
+const MIN_SCHEDULE_LEAD_MS = 15 * 60_000;
 // Long enough for Facebook's servers to fetch the file after the scheduling request, short
 // enough to bound how long a signed link stays valid if leaked.
 const MEDIA_URL_TTL_SECONDS = 30 * 60;
@@ -157,11 +162,13 @@ export async function publishDueScheduledPosts(
             disposition: "inline",
           }),
         );
-        const scheduledPublishAt = wallClockInstantInTimezone(
+        const desiredPublishAt = wallClockInstantInTimezone(
           post.scheduledDate,
           DEFAULT_POST_HOUR,
           churchProfile.timezone,
         );
+        const publishImmediately =
+          desiredPublishAt.getTime() - now().getTime() < MIN_SCHEDULE_LEAD_MS;
 
         const pageAccessToken = await resolvePageAccessToken(pageId);
         const { facebookPostId } = await publishScheduledVideo({
@@ -169,7 +176,7 @@ export async function publishDueScheduledPosts(
           pageAccessToken,
           fileUrl,
           caption: buildCaption(post.clip),
-          scheduledPublishAt,
+          scheduledPublishAt: publishImmediately ? undefined : desiredPublishAt,
         });
 
         await client.scheduledPost.update({
@@ -177,7 +184,7 @@ export async function publishDueScheduledPosts(
           data: {
             publishStatus: "SUCCEEDED",
             facebookPostId,
-            publishedAt: now(),
+            publishedAt: publishImmediately ? now() : desiredPublishAt,
             lastErrorMessage: null,
           },
         });
