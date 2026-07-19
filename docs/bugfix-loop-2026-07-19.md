@@ -270,7 +270,9 @@ return the existing job (keep the fast-path `findUnique` first if you like; the 
 is what matters).
 **Tests:** create throwing P2002 → existing job returned.
 
-### - [ ] 14. Make default-template flip atomic
+### - [x] 14. Make default-template flip atomic
+
+> Done. Clear-then-save inside one $transaction.
 
 `src/app/actions/templates.ts:43-61` — the save and the clear-other-defaults
 `updateMany` are separate queries; concurrent saves can leave two defaults.

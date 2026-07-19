@@ -40,25 +40,28 @@ export async function saveBrandTemplateAction(formData: FormData) {
     isDefault: parsed.data.isDefault ?? false,
   };
 
-  let savedTemplateId: string;
   if (typeof templateId === "string" && templateId.length > 0) {
     const existing = await prisma.brandTemplate.findUnique({ where: { id: templateId } });
     if (!existing || existing.workspaceId !== workspace.id) {
       redirect("/app/templates?error=not-found");
     }
-    const updated = await prisma.brandTemplate.update({ where: { id: templateId }, data });
-    savedTemplateId = updated.id;
-  } else {
-    const created = await prisma.brandTemplate.create({ data });
-    savedTemplateId = created.id;
   }
 
-  if (data.isDefault) {
-    await prisma.brandTemplate.updateMany({
-      where: { workspaceId: workspace.id, id: { not: savedTemplateId } },
-      data: { isDefault: false },
-    });
-  }
+  // Clearing other defaults and saving the new one must commit together — as two separate
+  // statements, interleaved saves (or a crash in between) could leave two defaults standing.
+  await prisma.$transaction(async (tx) => {
+    if (data.isDefault) {
+      await tx.brandTemplate.updateMany({
+        where: { workspaceId: workspace.id, isDefault: true },
+        data: { isDefault: false },
+      });
+    }
+    if (typeof templateId === "string" && templateId.length > 0) {
+      await tx.brandTemplate.update({ where: { id: templateId }, data });
+    } else {
+      await tx.brandTemplate.create({ data });
+    }
+  });
 
   revalidatePath("/app/templates");
   revalidatePath("/app");
