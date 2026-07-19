@@ -182,7 +182,10 @@ must exclude null-clip rows).
 **Tests:** re-analysis preserves the SUCCEEDED row (clipId null) and does not re-arm
 that slot; null-clip rows are never selected as due.
 
-### - [ ] 8. Validate timezone as a real IANA zone
+### - [x] 8. Validate timezone as a real IANA zone
+
+> Done. isValidIanaTimezone (Intl-constructor probe, accepts aliases) refines the action
+> schema; church-profile Intl helpers fall back to UTC with a reported error.
 
 `src/app/actions/workspace-profile.ts:10` accepts any 2–80-char string; "CST" saves
 fine, then `Intl.DateTimeFormat` throws on every project creation and in the publisher,

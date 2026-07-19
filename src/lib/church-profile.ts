@@ -1,4 +1,30 @@
+import { captureErrorSafely } from "@/lib/observability/error-reporting";
+
 export type SermonsPerWeek = 1 | 2;
+
+/** Accepts anything Intl resolves — canonical IANA names plus aliases like US/Central. */
+export function isValidIanaTimezone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A bad stored timezone (free-text before validation existed) must degrade to UTC, not
+ * throw — an Intl RangeError here would brick project creation and publishing for the
+ * whole workspace. The bad value is reported so it can be fixed, not silently absorbed.
+ */
+function resolveTimezone(timezone: string): string {
+  if (isValidIanaTimezone(timezone)) return timezone;
+  console.error(`[church-profile] invalid workspace timezone "${timezone}"; falling back to UTC`);
+  void captureErrorSafely(new Error(`Invalid workspace timezone: ${timezone}`), {
+    source: "church-profile",
+  });
+  return "UTC";
+}
 
 export type ChurchProfile = {
   timezone: string;
@@ -61,7 +87,7 @@ export type ServiceSlot = "PRIMARY" | "SECONDARY";
  */
 export function calendarDateInTimezone(date: Date, timezone: string): Date {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
+    timeZone: resolveTimezone(timezone),
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -75,7 +101,9 @@ export function calendarDateInTimezone(date: Date, timezone: string): Date {
 }
 
 function weekdayNameInTimezone(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: timezone }).format(date);
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: resolveTimezone(timezone) }).format(
+    date,
+  );
 }
 
 /**
@@ -104,6 +132,7 @@ export function wallClockInstantInTimezone(
   hour: number,
   timezone: string,
 ): Date {
+  const safeTimezone = resolveTimezone(timezone);
   const desired = Date.UTC(
     calendarDate.getUTCFullYear(),
     calendarDate.getUTCMonth(),
@@ -117,7 +146,7 @@ export function wallClockInstantInTimezone(
   // exact across DST transitions.
   let instant = new Date(desired);
   for (let pass = 0; pass < 2; pass++) {
-    const observed = observedWallClockUtc(instant, timezone);
+    const observed = observedWallClockUtc(instant, safeTimezone);
     if (observed === desired) break;
     instant = new Date(instant.getTime() + (desired - observed));
   }

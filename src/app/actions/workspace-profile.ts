@@ -4,11 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
+import { isValidIanaTimezone } from "@/lib/church-profile";
 import { prisma } from "@/lib/prisma";
 import { updateWorkspaceSettings } from "@/lib/workspace-settings";
 
 const churchProfileSchema = z.object({
-  timezone: z.string().trim().min(2).max(80),
+  timezone: z
+    .string()
+    .trim()
+    .min(2)
+    .max(80)
+    .refine(isValidIanaTimezone, 'Must be a valid timezone like "America/Chicago".'),
   serviceDay: z.string().trim().min(2).max(24),
   sermonsPerWeek: z.coerce.number().int().min(1).max(2),
   secondServiceDay: z.string().trim().min(2).max(24).optional(),
