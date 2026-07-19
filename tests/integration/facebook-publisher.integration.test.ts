@@ -22,16 +22,21 @@ import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher"
 
 const prisma = new PrismaClient();
 const originalToken = process.env.META_SYSTEM_USER_TOKEN;
+const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
 
 beforeAll(() => {
   // Deliberately fake test-only token; never a real credential. Only its presence matters —
   // the publisher fails closed entirely when this is unset.
   process.env.META_SYSTEM_USER_TOKEN = "test-system-user-token-not-real";
+  // The publisher also fails closed on unset/localhost app URLs (finding #9).
+  process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 });
 
 afterAll(async () => {
   if (originalToken === undefined) delete process.env.META_SYSTEM_USER_TOKEN;
   else process.env.META_SYSTEM_USER_TOKEN = originalToken;
+  if (originalAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+  else process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
 });
 
 const createdWorkspaceIds: string[] = [];

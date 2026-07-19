@@ -62,9 +62,16 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function absoluteMediaUrl(path: string): string {
-  const appUrl = env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
-  return `${appUrl}${path}`;
+/**
+ * Meta downloads file_url asynchronously AFTER the POST returns an id — a localhost or
+ * missing app URL would mark rows SUCCEEDED while the video silently never materializes.
+ * Publishing is skipped entirely (rows left NOT_STARTED) until the URL is configured.
+ */
+function resolvePublicAppUrl(): string | null {
+  const appUrl = env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (!appUrl) return null;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)([:/]|$)/i.test(appUrl)) return null;
+  return appUrl;
 }
 
 function buildCaption(clip: { title: string; hookText: string | null }): string {
@@ -78,6 +85,8 @@ export type FacebookPublishSummary = {
   postsSkippedNotEligible: number;
   /** Clip has no completed export yet — this module never triggers one. */
   postsSkippedNotExported: number;
+  /** NEXT_PUBLIC_APP_URL is unset or localhost — Meta could never fetch file_url. */
+  postsSkippedMisconfigured: number;
   postsFailed: number;
 };
 
@@ -158,6 +167,7 @@ export async function publishDueScheduledPosts(
     postsPublished: 0,
     postsSkippedNotEligible: 0,
     postsSkippedNotExported: 0,
+    postsSkippedMisconfigured: 0,
     postsFailed: 0,
   };
 
@@ -199,6 +209,22 @@ export async function publishDueScheduledPosts(
 
   summary.postsScanned = duePosts.length;
 
+  const appUrl = resolvePublicAppUrl();
+  if (!appUrl) {
+    summary.postsSkippedMisconfigured = duePosts.length;
+    if (duePosts.length > 0) {
+      await recordOperationalEventSafely(client, {
+        category: "facebook_publish",
+        eventType: "facebook_publish_misconfigured",
+        severity: "error",
+        message:
+          "Facebook publishing skipped: NEXT_PUBLIC_APP_URL is unset or points at localhost, so Meta could never fetch the video. Due posts were left queued.",
+        metadata: { duePosts: duePosts.length },
+      });
+    }
+    return summary;
+  }
+
   for (const post of duePosts) {
     try {
       const churchProfile = parseChurchProfile(post.workspace.settings);
@@ -230,15 +256,13 @@ export async function publishDueScheduledPosts(
       if (claim.count === 0) continue;
 
       try {
-        const fileUrl = absoluteMediaUrl(
-          createSignedMediaUrl({
-            key: exportedStorageKey,
-            workspaceId: post.workspaceId,
-            expiresInSeconds: MEDIA_URL_TTL_SECONDS,
-            contentType: "video/mp4",
-            disposition: "inline",
-          }),
-        );
+        const fileUrl = `${appUrl}${createSignedMediaUrl({
+          key: exportedStorageKey,
+          workspaceId: post.workspaceId,
+          expiresInSeconds: MEDIA_URL_TTL_SECONDS,
+          contentType: "video/mp4",
+          disposition: "inline",
+        })}`;
         const desiredPublishAt = wallClockInstantInTimezone(
           post.scheduledDate,
           DEFAULT_POST_HOUR,

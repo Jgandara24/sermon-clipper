@@ -202,7 +202,10 @@ creation.
 **Tests:** "CST" rejected by the action; stored-bad-zone falls back to UTC without
 throwing.
 
-### - [ ] 9. Fail closed when `NEXT_PUBLIC_APP_URL` is unset in the worker
+### - [x] 9. Fail closed when `NEXT_PUBLIC_APP_URL` is unset in the worker
+
+> Done. Unset/localhost app URL skips the whole publish pass (rows stay NOT_STARTED),
+> counted as postsSkippedMisconfigured with a facebook_publish_misconfigured error event.
 
 `src/lib/integrations/facebook-publisher.ts:53` falls back to
 `http://localhost:3000` for `file_url`; Meta fetches it asynchronously, so the post is

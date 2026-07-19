@@ -4,14 +4,19 @@ import type { PublishScheduledVideoInput } from "@/lib/integrations/facebook";
 
 // Deliberately fake test-only token; never a real credential.
 const originalToken = process.env.META_SYSTEM_USER_TOKEN;
+const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
 
 beforeAll(() => {
   process.env.META_SYSTEM_USER_TOKEN = "test-system-user-token-not-real";
+  // The publisher fails closed on unset/localhost app URLs (finding #9).
+  process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 });
 
 afterAll(() => {
   if (originalToken === undefined) delete process.env.META_SYSTEM_USER_TOKEN;
   else process.env.META_SYSTEM_USER_TOKEN = originalToken;
+  if (originalAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+  else process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
 });
 
 const eligibleSettings = {
@@ -23,6 +28,7 @@ const eligibleSettings = {
 function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } = {}) {
   const updates: Array<Record<string, unknown>> = [];
   const findManyWheres: Array<Record<string, unknown>> = [];
+  const events: Array<Record<string, unknown>> = [];
   const client = {
     scheduledPost: {
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
@@ -48,9 +54,14 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
         return {};
       },
     },
-    operationalEvent: { create: async () => ({}) },
+    operationalEvent: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        events.push(data);
+        return {};
+      },
+    },
   };
-  return { client, updates, findManyWheres };
+  return { client, updates, findManyWheres, events };
 }
 
 async function runPoller(
@@ -58,7 +69,7 @@ async function runPoller(
   nowIso: string,
   options: { attemptCount?: number; publishError?: Error } = {},
 ) {
-  const { client, updates, findManyWheres } = makeFakeClient(scheduledDate, options);
+  const { client, updates, findManyWheres, events } = makeFakeClient(scheduledDate, options);
   const publishCalls: PublishScheduledVideoInput[] = [];
 
   const summary = await publishDueScheduledPosts(client as never, {
@@ -71,7 +82,7 @@ async function runPoller(
     },
   });
 
-  return { summary, publishCalls, updates, findManyWheres };
+  return { summary, publishCalls, updates, findManyWheres, events };
 }
 
 // scheduledDate 2026-07-20 in America/Chicago (CDT): 9am local = 2026-07-20T14:00:00Z.
@@ -104,6 +115,39 @@ describe("publishDueScheduledPosts publish-time clamp", () => {
   it("still schedules at exactly the minimum lead boundary", async () => {
     const { publishCalls } = await runPoller(scheduledDate, "2026-07-20T13:45:00Z");
     expect(publishCalls[0].scheduledPublishAt?.toISOString()).toBe("2026-07-20T14:00:00.000Z");
+  });
+});
+
+describe("publishDueScheduledPosts app-URL misconfiguration", () => {
+  async function runWithAppUrl(value: string | undefined) {
+    const saved = process.env.NEXT_PUBLIC_APP_URL;
+    if (value === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+    else process.env.NEXT_PUBLIC_APP_URL = value;
+    try {
+      return await runPoller(scheduledDate, "2026-07-20T15:00:00Z");
+    } finally {
+      if (saved === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+      else process.env.NEXT_PUBLIC_APP_URL = saved;
+    }
+  }
+
+  it("skips publishing entirely when NEXT_PUBLIC_APP_URL is unset", async () => {
+    const { summary, publishCalls, updates, events } = await runWithAppUrl(undefined);
+
+    expect(publishCalls).toHaveLength(0);
+    expect(updates).toHaveLength(0);
+    expect(summary.postsSkippedMisconfigured).toBe(1);
+    expect(events).toHaveLength(1);
+    expect(events[0].eventType).toBe("facebook_publish_misconfigured");
+    expect(events[0].severity).toBe("error");
+  });
+
+  it("treats a localhost app URL the same as unset", async () => {
+    const { publishCalls, updates, summary } = await runWithAppUrl("http://localhost:3000");
+
+    expect(publishCalls).toHaveLength(0);
+    expect(updates).toHaveLength(0);
+    expect(summary.postsSkippedMisconfigured).toBe(1);
   });
 });
 
