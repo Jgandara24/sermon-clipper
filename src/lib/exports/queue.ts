@@ -64,9 +64,18 @@ export async function claimNextExportJob(client: PrismaClient): Promise<ExportJo
   return client.exportJob.findUniqueOrThrow({ where: { id: candidate.id } });
 }
 
-export async function markExportJobSucceeded(client: PrismaClient, jobId: string, outputFileId: string) {
-  return client.exportJob.update({
-    where: { id: jobId },
+/**
+ * Guarded on state RUNNING (same conditional-UPDATE pattern as claimNextExportJob) so a
+ * finishing handler can never overwrite a concurrent stale recovery. Returns whether the
+ * transition applied.
+ */
+export async function markExportJobSucceeded(
+  client: PrismaClient,
+  jobId: string,
+  outputFileId: string,
+): Promise<boolean> {
+  const result = await client.exportJob.updateMany({
+    where: { id: jobId, state: ProcessingJobState.RUNNING },
     data: {
       state: ProcessingJobState.SUCCEEDED,
       progress: 100,
@@ -78,7 +87,10 @@ export async function markExportJobSucceeded(client: PrismaClient, jobId: string
       minutesCharged: 0,
     },
   });
+  return result.count > 0;
 }
+
+export type ExportJobFailureOutcome = "RETRYING" | "FAILED" | "SKIPPED";
 
 /**
  * Requeues the job (up to MAX_ATTEMPTS total) rather than failing it outright, per guide §15
@@ -89,10 +101,10 @@ export async function markExportJobFailedOrRetry(
   client: PrismaClient,
   job: ExportJob,
   error: { code: string; message: string },
-) {
+): Promise<ExportJobFailureOutcome> {
   if (job.attempt < MAX_ATTEMPTS) {
-    return client.exportJob.update({
-      where: { id: job.id },
+    const result = await client.exportJob.updateMany({
+      where: { id: job.id, state: ProcessingJobState.RUNNING },
       data: {
         state: ProcessingJobState.RETRYING,
         errorCode: error.code,
@@ -103,10 +115,11 @@ export async function markExportJobFailedOrRetry(
         workerId: null,
       },
     });
+    return result.count > 0 ? "RETRYING" : "SKIPPED";
   }
 
-  return client.exportJob.update({
-    where: { id: job.id },
+  const result = await client.exportJob.updateMany({
+    where: { id: job.id, state: ProcessingJobState.RUNNING },
     data: {
       state: ProcessingJobState.FAILED,
       errorCode: error.code,
@@ -117,6 +130,7 @@ export async function markExportJobFailedOrRetry(
       workerId: null,
     },
   });
+  return result.count > 0 ? "FAILED" : "SKIPPED";
 }
 
 export async function heartbeatExportJob(client: PrismaClient, jobId: string) {

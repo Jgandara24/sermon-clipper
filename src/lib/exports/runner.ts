@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
-import { withHeartbeat } from "@/lib/worker/reliability";
+import { HeartbeatLostError, withHeartbeat } from "@/lib/worker/reliability";
 import { ExportFailureError, runExportJob } from "./handler";
 import {
   claimNextExportJob,
@@ -18,10 +18,20 @@ export async function runOnePendingExportJob(): Promise<boolean> {
 
   try {
     const outputFileId = await withHeartbeat(
-      () => heartbeatExportJob(prisma, job.id),
+      async () => {
+        const beat = await heartbeatExportJob(prisma, job.id);
+        if (beat.count === 0) {
+          throw new HeartbeatLostError(job.id);
+        }
+      },
       () => runExportJob(prisma, job),
     );
-    await markExportJobSucceeded(prisma, job.id, outputFileId);
+    const succeeded = await markExportJobSucceeded(prisma, job.id, outputFileId);
+    if (!succeeded) {
+      // Stale-recovered and re-claimed while rendering; the other claim owns the state now.
+      console.warn(`[worker] export job ${job.id} finished after losing its claim; state left untouched`);
+      return true;
+    }
     await recordOperationalEventSafely(prisma, {
       workspaceId: job.workspaceId,
       category: "export",
@@ -31,6 +41,12 @@ export async function runOnePendingExportJob(): Promise<boolean> {
       metadata: { clipId: job.clipId, outputFileId, filename: job.filename, attempt: job.attempt },
     });
   } catch (error) {
+    if (error instanceof HeartbeatLostError) {
+      // Claim lost mid-render (stale recovery re-claim): abandon without marking failed.
+      console.warn(`[worker] export job ${job.id} lost its claim mid-run; abandoning`);
+      return true;
+    }
+
     const failure =
       error instanceof ExportFailureError
         ? { code: error.code, message: error.userMessage }
@@ -40,13 +56,17 @@ export async function runOnePendingExportJob(): Promise<boolean> {
       console.error(`[worker] export job ${job.id} failed unexpectedly`, error);
     }
 
-    const updatedJob = await markExportJobFailedOrRetry(prisma, job, failure);
+    const outcome = await markExportJobFailedOrRetry(prisma, job, failure);
+    if (outcome === "SKIPPED") {
+      console.warn(`[worker] export job ${job.id} failed after losing its claim; state left untouched`);
+      return true;
+    }
     await recordOperationalEventSafely(prisma, {
       workspaceId: job.workspaceId,
       category: "export",
-      eventType: updatedJob.state === "FAILED" ? "export_job_failed" : "export_job_retrying",
-      severity: updatedJob.state === "FAILED" ? "error" : "warning",
-      message: `Export job ${updatedJob.state === "FAILED" ? "failed" : "will retry"}.`,
+      eventType: outcome === "FAILED" ? "export_job_failed" : "export_job_retrying",
+      severity: outcome === "FAILED" ? "error" : "warning",
+      message: `Export job ${outcome === "FAILED" ? "failed" : "will retry"}.`,
       exportJobId: job.id,
       metadata: {
         clipId: job.clipId,

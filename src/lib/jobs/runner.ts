@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { captureErrorSafely } from "@/lib/observability/error-reporting";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { releaseReservationsForProject } from "@/lib/usage-ledger";
-import { withHeartbeat } from "@/lib/worker/reliability";
+import { HeartbeatLostError, withHeartbeat } from "@/lib/worker/reliability";
 import { jobHandlers } from "./handlers";
 import { claimNextJob, heartbeatJob, markJobFailed, markJobFailedOrRetry, markJobSucceeded } from "./queue";
 import { JobFailureError } from "./types";
@@ -42,10 +42,21 @@ export async function runOnePendingJob(): Promise<boolean> {
 
   try {
     const result = await withHeartbeat(
-      () => heartbeatJob(prisma, job.id),
+      async () => {
+        const beat = await heartbeatJob(prisma, job.id);
+        if (beat.count === 0) {
+          throw new HeartbeatLostError(job.id);
+        }
+      },
       () => handler({ job, prisma }),
     );
-    await markJobSucceeded(prisma, job.id);
+    const succeeded = await markJobSucceeded(prisma, job.id);
+    if (!succeeded) {
+      // The job was canceled or stale-recovered while the handler ran; its state is
+      // authoritative now, so leave it (and the project) untouched.
+      console.warn(`[worker] job ${job.id} (${job.type}) finished after losing its claim; state left untouched`);
+      return true;
+    }
     await recordOperationalEventSafely(prisma, {
       workspaceId: project?.workspaceId,
       category: job.type === "TRANSCRIBE" ? "transcription" : job.type === "ANALYZE" ? "analysis" : "processing",
@@ -56,6 +67,13 @@ export async function runOnePendingJob(): Promise<boolean> {
       metadata: { type: job.type, attempt: job.attempt, ...(result?.metadata ?? {}) },
     });
   } catch (error) {
+    if (error instanceof HeartbeatLostError) {
+      // Claim lost mid-run (user cancel or stale recovery re-claim): whoever took the claim
+      // owns the job's state now — abandon without marking failed.
+      console.warn(`[worker] job ${job.id} (${job.type}) lost its claim mid-run; abandoning`);
+      return true;
+    }
+
     const failure =
       error instanceof JobFailureError
         ? { code: error.code, message: error.userMessage, retryable: error.retryable }
@@ -68,13 +86,20 @@ export async function runOnePendingJob(): Promise<boolean> {
       await captureErrorSafely(error, { jobId: job.id, jobType: job.type });
     }
 
-    const updatedJob =
+    const outcome =
       failure.retryable === false
-        ? await markJobFailed(prisma, job.id, failure)
+        ? (await markJobFailed(prisma, job.id, failure))
+          ? "FAILED"
+          : "SKIPPED"
         : await markJobFailedOrRetry(prisma, job, failure);
+    if (outcome === "SKIPPED") {
+      // Canceled or stale-recovered while the handler ran; the concurrent transition wins.
+      console.warn(`[worker] job ${job.id} (${job.type}) failed after losing its claim; state left untouched`);
+      return true;
+    }
     // CLEANUP is background maintenance on a possibly-healthy project: its failure must not
     // fail the project or touch minute reservations the way a pipeline-stage failure does.
-    if (updatedJob.state === "FAILED" && job.type !== ProcessingJobType.CLEANUP) {
+    if (outcome === "FAILED" && job.type !== ProcessingJobType.CLEANUP) {
       await releaseReservationsForProject(prisma, {
         projectId: job.projectId,
         note: `Released after failure: ${failure.code}`,
@@ -86,9 +111,9 @@ export async function runOnePendingJob(): Promise<boolean> {
     await recordOperationalEventSafely(prisma, {
       workspaceId: project?.workspaceId,
       category: job.type === "TRANSCRIBE" ? "transcription" : job.type === "ANALYZE" ? "analysis" : "processing",
-      eventType: updatedJob.state === "FAILED" ? "processing_job_failed" : "processing_job_retrying",
-      severity: updatedJob.state === "FAILED" ? "error" : "warning",
-      message: `${job.type} job ${updatedJob.state === "FAILED" ? "failed" : "will retry"}.`,
+      eventType: outcome === "FAILED" ? "processing_job_failed" : "processing_job_retrying",
+      severity: outcome === "FAILED" ? "error" : "warning",
+      message: `${job.type} job ${outcome === "FAILED" ? "failed" : "will retry"}.`,
       projectId: job.projectId,
       jobId: job.id,
       metadata: {

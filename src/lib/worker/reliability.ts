@@ -150,21 +150,44 @@ export async function recordWorkerProcessHeartbeat(
   });
 }
 
+/**
+ * Thrown by a heartbeat callback when the job row is no longer RUNNING under this worker
+ * (canceled by the user, or stale-recovered and re-claimed elsewhere). Signals the runner to
+ * abandon the in-flight handler without writing any terminal state.
+ */
+export class HeartbeatLostError extends Error {
+  jobId: string;
+
+  constructor(jobId: string) {
+    super(`Job ${jobId} is no longer running under this worker; abandoning the in-flight handler.`);
+    this.jobId = jobId;
+  }
+}
+
 export async function withHeartbeat<T>(
   heartbeat: () => Promise<unknown>,
   work: () => Promise<T>,
   intervalMs = heartbeatIntervalMs(),
 ): Promise<T> {
   await heartbeat();
+  let claimLost!: (error: unknown) => void;
+  const lostClaim = new Promise<never>((_, reject) => {
+    claimLost = reject;
+  });
   const interval = setInterval(() => {
     heartbeat().catch((error) => {
+      // A lost claim aborts the work; transient heartbeat failures (e.g. a DB blip) do not.
+      if (error instanceof HeartbeatLostError) {
+        claimLost(error);
+        return;
+      }
       console.error("[worker] failed to record heartbeat", error);
     });
   }, intervalMs);
   interval.unref?.();
 
   try {
-    return await work();
+    return await Promise.race([work(), lostClaim]);
   } finally {
     clearInterval(interval);
   }
