@@ -39,6 +39,14 @@ const DEFAULT_POST_HOUR = 9;
 // its scheduledDate, so the 9am-local target is routinely near or already past by the time the
 // poller first sees the row (always, for churches at UTC+9 and east).
 const MIN_SCHEDULE_LEAD_MS = 15 * 60_000;
+// Transient failures (network blips, momentary API errors) re-queue with backoff; FAILED is
+// reserved for attempts exhausted. Backoff: 5min, 30min, 2h, then 8h before the final attempt.
+const MAX_PUBLISH_ATTEMPTS = 5;
+const RETRY_BACKOFF_MS = [5 * 60_000, 30 * 60_000, 2 * 3_600_000, 8 * 3_600_000];
+
+function retryBackoffMs(attemptCount: number): number {
+  return RETRY_BACKOFF_MS[Math.min(Math.max(attemptCount - 1, 0), RETRY_BACKOFF_MS.length - 1)];
+}
 // Long enough for Facebook's servers to fetch the file after the scheduling request, short
 // enough to bound how long a signed link stays valid if leaked.
 const MEDIA_URL_TTL_SECONDS = 30 * 60;
@@ -107,6 +115,7 @@ export async function publishDueScheduledPosts(
       platform: "FACEBOOK",
       publishStatus: "NOT_STARTED",
       scheduledDate: { lte: now() },
+      OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now() } }],
     },
     orderBy: { scheduledDate: "asc" },
     include: {
@@ -186,23 +195,36 @@ export async function publishDueScheduledPosts(
             facebookPostId,
             publishedAt: publishImmediately ? now() : desiredPublishAt,
             lastErrorMessage: null,
+            nextAttemptAt: null,
           },
         });
         summary.postsPublished++;
       } catch (error) {
         summary.postsFailed++;
         const message = truncateErrorMessage(errorMessage(error));
+        const attemptCount = post.attemptCount + 1;
+        const exhausted = attemptCount >= MAX_PUBLISH_ATTEMPTS;
         await client.scheduledPost.update({
           where: { id: post.id },
-          data: { publishStatus: "FAILED", lastErrorMessage: message },
+          data: exhausted
+            ? { publishStatus: "FAILED", lastErrorMessage: message, attemptCount, nextAttemptAt: null }
+            : {
+                // Back to NOT_STARTED so the next poll past nextAttemptAt re-claims it.
+                publishStatus: "NOT_STARTED",
+                lastErrorMessage: message,
+                attemptCount,
+                nextAttemptAt: new Date(now().getTime() + retryBackoffMs(attemptCount)),
+              },
         });
         await recordOperationalEventSafely(client, {
           workspaceId: post.workspaceId,
           category: "facebook_publish",
-          eventType: "facebook_publish_failed",
-          severity: "error",
-          message: `Facebook scheduled post failed: ${message}`,
-          metadata: { scheduledPostId: post.id },
+          eventType: exhausted ? "facebook_publish_failed" : "facebook_publish_retrying",
+          severity: exhausted ? "error" : "warning",
+          message: exhausted
+            ? `Facebook scheduled post failed permanently after ${attemptCount} attempts: ${message}`
+            : `Facebook scheduled post attempt ${attemptCount} failed, will retry: ${message}`,
+          metadata: { scheduledPostId: post.id, attemptCount, willRetry: !exhausted },
         });
       }
     } catch (error) {

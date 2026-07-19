@@ -19,24 +19,29 @@ const eligibleSettings = {
   facebookConnection: { pageId: "1128280933691493", autoPostEnabled: true },
 };
 
-/** One due row + capture of the scheduledPost.update payload; no real DB. */
-function makeFakeClient(scheduledDate: Date) {
+/** One due row + capture of the scheduledPost query/update payloads; no real DB. */
+function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } = {}) {
   const updates: Array<Record<string, unknown>> = [];
+  const findManyWheres: Array<Record<string, unknown>> = [];
   const client = {
     scheduledPost: {
-      findMany: async () => [
-        {
-          id: "post-1",
-          workspaceId: "ws-1",
-          scheduledDate,
-          workspace: { settings: eligibleSettings },
-          clip: {
-            title: "Clip title",
-            hookText: "You need to hear this.",
-            exportJobs: [{ outputFile: { storageKey: "exports/ws-1/clip.mp4" } }],
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        findManyWheres.push(where);
+        return [
+          {
+            id: "post-1",
+            workspaceId: "ws-1",
+            scheduledDate,
+            attemptCount: options.attemptCount ?? 0,
+            workspace: { settings: eligibleSettings },
+            clip: {
+              title: "Clip title",
+              hookText: "You need to hear this.",
+              exportJobs: [{ outputFile: { storageKey: "exports/ws-1/clip.mp4" } }],
+            },
           },
-        },
-      ],
+        ];
+      },
       updateMany: async () => ({ count: 1 }),
       update: async ({ data }: { data: Record<string, unknown> }) => {
         updates.push(data);
@@ -45,23 +50,28 @@ function makeFakeClient(scheduledDate: Date) {
     },
     operationalEvent: { create: async () => ({}) },
   };
-  return { client, updates };
+  return { client, updates, findManyWheres };
 }
 
-async function runPoller(scheduledDate: Date, nowIso: string) {
-  const { client, updates } = makeFakeClient(scheduledDate);
+async function runPoller(
+  scheduledDate: Date,
+  nowIso: string,
+  options: { attemptCount?: number; publishError?: Error } = {},
+) {
+  const { client, updates, findManyWheres } = makeFakeClient(scheduledDate, options);
   const publishCalls: PublishScheduledVideoInput[] = [];
 
   const summary = await publishDueScheduledPosts(client as never, {
     now: () => new Date(nowIso),
     resolvePageAccessToken: async () => "page-token-abc",
     publishScheduledVideo: async (input) => {
+      if (options.publishError) throw options.publishError;
       publishCalls.push(input);
       return { facebookPostId: "fb-video-123" };
     },
   });
 
-  return { summary, publishCalls, updates };
+  return { summary, publishCalls, updates, findManyWheres };
 }
 
 // scheduledDate 2026-07-20 in America/Chicago (CDT): 9am local = 2026-07-20T14:00:00Z.
@@ -94,5 +104,42 @@ describe("publishDueScheduledPosts publish-time clamp", () => {
   it("still schedules at exactly the minimum lead boundary", async () => {
     const { publishCalls } = await runPoller(scheduledDate, "2026-07-20T13:45:00Z");
     expect(publishCalls[0].scheduledPublishAt?.toISOString()).toBe("2026-07-20T14:00:00.000Z");
+  });
+});
+
+describe("publishDueScheduledPosts retry behavior", () => {
+  const nowIso = "2026-07-20T15:00:00Z";
+
+  it("re-queues a transient failure with backoff instead of failing terminally", async () => {
+    const { summary, updates } = await runPoller(scheduledDate, nowIso, {
+      publishError: new Error("Could not reach the Facebook Graph API (network failure)."),
+    });
+
+    expect(summary.postsFailed).toBe(1);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].publishStatus).toBe("NOT_STARTED");
+    expect(updates[0].attemptCount).toBe(1);
+    // First retry backs off 5 minutes.
+    expect((updates[0].nextAttemptAt as Date).toISOString()).toBe("2026-07-20T15:05:00.000Z");
+  });
+
+  it("fails terminally on the final attempt", async () => {
+    const { updates } = await runPoller(scheduledDate, nowIso, {
+      attemptCount: 4,
+      publishError: new Error("HTTP 500"),
+    });
+
+    expect(updates[0].publishStatus).toBe("FAILED");
+    expect(updates[0].attemptCount).toBe(5);
+    expect(updates[0].nextAttemptAt).toBeNull();
+  });
+
+  it("only queries rows whose nextAttemptAt is unset or due", async () => {
+    const { findManyWheres } = await runPoller(scheduledDate, nowIso);
+
+    expect(findManyWheres[0].OR).toEqual([
+      { nextAttemptAt: null },
+      { nextAttemptAt: { lte: new Date(nowIso) } },
+    ]);
   });
 });

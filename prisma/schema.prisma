@@ -527,6 +527,10 @@ model ScheduledPost {
   facebookPostId   String?               @map("facebook_post_id")
   publishedAt      DateTime?             @map("published_at")
   lastErrorMessage String?               @map("last_error_message")
+  // Transient publish failures re-queue with backoff instead of failing terminally;
+  // FAILED is reserved for attempts exhausted (see facebook-publisher.ts).
+  attemptCount     Int                   @default(0) @map("attempt_count")
+  nextAttemptAt    DateTime?             @map("next_attempt_at")
   createdAt        DateTime              @default(now()) @map("created_at")
   updatedAt        DateTime              @updatedAt @map("updated_at")
 

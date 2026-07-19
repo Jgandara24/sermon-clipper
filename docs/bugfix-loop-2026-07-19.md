@@ -120,7 +120,14 @@ correct).
 **Tests:** past-time → immediate publish params (no `scheduled_publish_time`);
 future-time → scheduled params; boundary at exactly now+15min.
 
-### - [ ] 5. Make FAILED scheduled posts retryable
+### - [x] 5. Make FAILED scheduled posts retryable
+
+> Done. Migration `20260719083000_add_scheduled_post_retry` was hand-written and applied
+> via `prisma db execute` + `migrate resolve --applied` instead of `prisma migrate dev`:
+> migrate dev demanded a full reset because the pre-existing migration
+> `20260718165517_channel_import_sources` was modified after being applied (drift that
+> predates this branch — worth investigating separately). `prisma migrate deploy` will
+> apply the new migration normally in production.
 
 `src/lib/integrations/facebook-publisher.ts:185-191` — any error (including a network
 blip) marks the row FAILED, and nothing ever re-queries FAILED rows. One hiccup =
