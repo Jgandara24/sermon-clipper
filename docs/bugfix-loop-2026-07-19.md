@@ -230,7 +230,10 @@ the import fails with a generic internal error.
 **Tests:** existing ytdlp tests still pass; add one asserting the option is passed if
 the mocking pattern makes that natural, otherwise skip the test.
 
-### - [ ] 11. Enforce download size cap post-download
+### - [x] 11. Enforce download size cap post-download
+
+> Done. Authoritative stat check in resolveDownloadedFile; oversized files deleted and
+> surfaced as a non-retryable VIDEO_TOO_LARGE job failure.
 
 `src/lib/media/ytdlp.ts:91-100` — `--max-filesize` is per-format, pre-merge, and
 skipped for unknown-size formats, so merged output can exceed `maxBytes`.

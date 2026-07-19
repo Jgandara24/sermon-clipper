@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   YtDlpDownloadError,
+  YtDlpFileTooLargeError,
   YtDlpParseError,
   downloadYtDlpVideo,
   fetchYtDlpMetadata,
@@ -138,6 +139,30 @@ describe("downloadYtDlpVideo", () => {
         "https://youtube.com/watch?v=dQw4w9WgXcQ",
       ]),
     );
+    await expect(stat(destPath)).resolves.toBeTruthy();
+  });
+
+  it("rejects and deletes a merged file that exceeds maxBytes (per-format cap can undercount)", async () => {
+    const destPath = path.join(workDir, "oversized", "source-video");
+    const fakeExec = async () => {
+      await writeFile(destPath, Buffer.alloc(64));
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      downloadYtDlpVideo("https://youtube.com/watch?v=big", destPath, { maxBytes: 32 }, fakeExec),
+    ).rejects.toThrow(YtDlpFileTooLargeError);
+    await expect(stat(destPath)).rejects.toThrow();
+  });
+
+  it("accepts a file exactly at maxBytes", async () => {
+    const destPath = path.join(workDir, "at-limit", "source-video");
+    const fakeExec = async () => {
+      await writeFile(destPath, Buffer.alloc(32));
+      return { stdout: "", stderr: "" };
+    };
+
+    await downloadYtDlpVideo("https://youtube.com/watch?v=ok", destPath, { maxBytes: 32 }, fakeExec);
     await expect(stat(destPath)).resolves.toBeTruthy();
   });
 

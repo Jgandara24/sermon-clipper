@@ -1,4 +1,4 @@
-import { mkdir, readdir, rename, stat } from "node:fs/promises";
+import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { ytDlpPath as resolveYtDlpPath } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
@@ -26,6 +26,9 @@ type ExecFile = (
 export class YtDlpParseError extends Error {}
 
 export class YtDlpDownloadError extends Error {}
+
+/** The merged download landed over the byte cap — the file has already been deleted. */
+export class YtDlpFileTooLargeError extends Error {}
 
 /** Pure parser for `yt-dlp --dump-json --skip-download` output. */
 export function parseYtDlpMetadataJson(raw: string): YtDlpMetadata {
@@ -106,7 +109,7 @@ export async function downloadYtDlpVideo(
     ],
     { timeoutMs: envTimeoutMs("YTDLP_DOWNLOAD_TIMEOUT_MS", 20 * 60_000) },
   );
-  await resolveDownloadedFile(destPath);
+  await resolveDownloadedFile(destPath, opts.maxBytes);
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -117,21 +120,28 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-async function resolveDownloadedFile(destPath: string): Promise<void> {
-  if (await fileExists(destPath)) {
-    return;
-  }
-
-  const dir = path.dirname(destPath);
-  const prefix = `${path.basename(destPath)}.`;
-  const entries = await readdir(dir).catch(() => [] as string[]);
-  const produced = entries.find((entry) => entry.startsWith(prefix) && !entry.endsWith(".part"));
-  if (produced) {
+async function resolveDownloadedFile(destPath: string, maxBytes: number): Promise<void> {
+  if (!(await fileExists(destPath))) {
+    const dir = path.dirname(destPath);
+    const prefix = `${path.basename(destPath)}.`;
+    const entries = await readdir(dir).catch(() => [] as string[]);
+    const produced = entries.find((entry) => entry.startsWith(prefix) && !entry.endsWith(".part"));
+    if (!produced) {
+      throw new YtDlpDownloadError(
+        "yt-dlp did not produce a video file (the download may exceed the size cap or the URL may not be a downloadable video).",
+      );
+    }
     await rename(path.join(dir, produced), destPath);
-    return;
   }
 
-  throw new YtDlpDownloadError(
-    "yt-dlp did not produce a video file (the download may exceed the size cap or the URL may not be a downloadable video).",
-  );
+  // --max-filesize is checked per selected format, pre-merge, and skipped entirely for
+  // formats with unknown size — so the merged output can still exceed the cap. The stat
+  // here is the authoritative enforcement.
+  const { size } = await stat(destPath);
+  if (size > maxBytes) {
+    await rm(destPath, { force: true });
+    throw new YtDlpFileTooLargeError(
+      `Downloaded video is ${size} bytes, over the ${maxBytes}-byte limit.`,
+    );
+  }
 }
