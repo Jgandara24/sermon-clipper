@@ -85,7 +85,12 @@ describe("publishScheduledVideo", () => {
   });
 
   it("omits scheduling fields to publish immediately when scheduledPublishAt is absent", async () => {
-    const { scheduledPublishAt: _omitted, ...immediateInput } = input;
+    const immediateInput = {
+      pageId: input.pageId,
+      pageAccessToken: input.pageAccessToken,
+      fileUrl: input.fileUrl,
+      caption: input.caption,
+    };
     const result = await publishScheduledVideo(immediateInput, async (url, init) => {
       const body = new URLSearchParams(init?.body ?? "");
       expect(body.get("file_url")).toBe(input.fileUrl);

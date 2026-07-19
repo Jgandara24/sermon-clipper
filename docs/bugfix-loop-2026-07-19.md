@@ -245,7 +245,9 @@ error to a user-facing "video too large" message wherever download errors are al
 classified (check the callers, e.g. the finalize/import handler).
 **Tests:** oversized file → typed error + file removed; at-limit file passes.
 
-### - [ ] 12. Return 409 (not 500) on concurrent clip-editor saves
+### - [x] 12. Return 409 (not 500) on concurrent clip-editor saves
+
+> Done. P2002 from the insert maps to the same EDIT_STATE_CONFLICT 409.
 
 `src/app/api/clips/[id]/edit-state/route.ts:96-158` — the version check isn't atomic
 with `clipEdit.create` (`@@unique([clipId, version])`), so an autosave racing a manual

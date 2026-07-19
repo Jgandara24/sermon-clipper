@@ -1,5 +1,4 @@
-import type { Prisma } from "@prisma/client";
-import { ClipApprovalState } from "@prisma/client";
+import { ClipApprovalState, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
@@ -107,41 +106,56 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const nextApprovalState = approvalStateAfterEditorSave(currentApproval?.state);
 
   const nextVersion = currentVersion + 1;
-  const created = await prisma.$transaction(async (tx) => {
-    const edit = await tx.clipEdit.create({
-      data: {
-        clipId: id,
-        version: nextVersion,
-        editorState: { ...parsed.data.state, version: nextVersion } as Prisma.InputJsonValue,
-        isAutosave: parsed.data.isAutosave ?? false,
-        savedBy: auth.user.id,
-      },
-    });
-
-    if (nextApprovalState === ClipApprovalState.DRAFT) {
-      await tx.clipApproval.updateMany({
-        where: { clipId: id, state: ClipApprovalState.APPROVED },
+  let created;
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      const edit = await tx.clipEdit.create({
         data: {
-          state: ClipApprovalState.DRAFT,
-          decidedAt: null,
-          reviewTokenRevokedAt: new Date(),
-          comment: "Edited after approval; send this clip for review again before exporting.",
+          clipId: id,
+          version: nextVersion,
+          editorState: { ...parsed.data.state, version: nextVersion } as Prisma.InputJsonValue,
+          isAutosave: parsed.data.isAutosave ?? false,
+          savedBy: auth.user.id,
         },
       });
-      if (currentApproval) {
-        await tx.clipApprovalAuditEvent.create({
+
+      if (nextApprovalState === ClipApprovalState.DRAFT) {
+        await tx.clipApproval.updateMany({
+          where: { clipId: id, state: ClipApprovalState.APPROVED },
           data: {
-            approvalId: currentApproval.id,
-            workspaceId: currentApproval.workspaceId,
-            eventType: "review_link_revoked",
-            metadata: { reason: "clip_edited_after_approval" },
+            state: ClipApprovalState.DRAFT,
+            decidedAt: null,
+            reviewTokenRevokedAt: new Date(),
+            comment: "Edited after approval; send this clip for review again before exporting.",
           },
         });
+        if (currentApproval) {
+          await tx.clipApprovalAuditEvent.create({
+            data: {
+              approvalId: currentApproval.id,
+              workspaceId: currentApproval.workspaceId,
+              eventType: "review_link_revoked",
+              metadata: { reason: "clip_edited_after_approval" },
+            },
+          });
+        }
       }
-    }
 
-    return edit;
-  });
+      return edit;
+    });
+  } catch (error) {
+    // The version check above isn't atomic with the insert; @@unique([clipId, version])
+    // catches the race (e.g. an autosave landing alongside a manual save). Surface it as
+    // the same 409 the version check produces so the client's conflict recovery runs.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return apiError(
+        "EDIT_STATE_CONFLICT",
+        "This clip changed elsewhere — refresh to see the latest edit.",
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
 
   return apiData({
     version: created.version,
