@@ -119,6 +119,22 @@ enum ClipApprovalState {
   @@map("clip_approval_state")
 }
 
+enum ServiceSlot {
+  PRIMARY   @map("primary")
+  SECONDARY @map("secondary")
+
+  @@map("service_slot")
+}
+
+enum SocialPlatform {
+  FACEBOOK  @map("facebook")
+  INSTAGRAM @map("instagram")
+  TIKTOK    @map("tiktok")
+  YOUTUBE   @map("youtube")
+
+  @@map("social_platform")
+}
+
 enum NotificationChannel {
   EMAIL @map("email")
   SMS   @map("sms")
@@ -230,6 +246,7 @@ model Workspace {
   operationalEvents       OperationalEvent[]
   billingPeriodCredits    BillingPeriodCredit[]
   channelImportSources    ChannelImportSource[]
+  scheduledPosts          ScheduledPost[]
 
   @@index([ownerId])
   @@map("workspaces")
@@ -381,6 +398,8 @@ model Project {
   folder           String?
   series           String?
   speaker          String?
+  sermonDate       DateTime?     @map("sermon_date") @db.Date
+  serviceSlot      ServiceSlot   @default(PRIMARY) @map("service_slot")
   expiresAt        DateTime?     @map("expires_at")
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
@@ -473,11 +492,33 @@ model GeneratedClip {
   exportJobs          ExportJob[]
   scriptureReferences ScriptureReference[]
   approvals           ClipApproval[]
+  scheduledPosts      ScheduledPost[]
 
   @@unique([projectId, rank])
   @@index([workspaceId])
   @@index([projectId])
   @@map("generated_clips")
+}
+
+/**
+ * A calendar slot for one clip: which day it's earmarked to go out and which platform
+ * it's destined for. Tier 2 — this is a plan, not an action; nothing here actually posts
+ * anywhere yet (see docs/BUSINESS_OVERVIEW.md, Tier 3).
+ */
+model ScheduledPost {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId   String         @map("workspace_id") @db.Uuid
+  clipId        String         @unique @map("clip_id") @db.Uuid
+  scheduledDate DateTime       @map("scheduled_date") @db.Date
+  platform      SocialPlatform @default(FACEBOOK)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clip      GeneratedClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, scheduledDate])
+  @@map("scheduled_posts")
 }
 
 // Editor state is one versioned JSON document per save (guide §12). Each save creates a new

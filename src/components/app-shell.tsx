@@ -1,6 +1,17 @@
 import type { Prisma } from "@prisma/client";
 import type { WorkspaceRole } from "@prisma/client";
-import { Activity, CreditCard, Download, FolderOpen, Home, LogOut, Palette, Rss, Settings } from "lucide-react";
+import {
+  Activity,
+  Calendar,
+  CreditCard,
+  Download,
+  FolderOpen,
+  Home,
+  LogOut,
+  Palette,
+  Rss,
+  Settings,
+} from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/app/actions/auth";
 import { formatMinutes } from "@/lib/format";
@@ -22,6 +33,7 @@ type AppShellProps = {
 
 const navItems = [
   { href: "/app", label: "Home", icon: Home },
+  { href: "/app/calendar", label: "Calendar", icon: Calendar },
   { href: "/app/templates", label: "Templates", icon: Palette, permission: "MANAGE_TEMPLATES" },
   { href: "/app/exports", label: "Exports", icon: Download },
   { href: "/app/settings", label: "Settings", icon: Settings },

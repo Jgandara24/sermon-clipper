@@ -6,13 +6,23 @@ import {
   SourceOrigin,
   type PrismaClient,
 } from "@prisma/client";
-import { parseChurchProfile, targetClipCountFor, type SermonsPerWeek } from "@/lib/church-profile";
+import {
+  calendarDateInTimezone,
+  deriveServiceSlot,
+  parseChurchProfile,
+  targetClipCountFor,
+  type ChurchProfile,
+  type SermonsPerWeek,
+  type ServiceSlot,
+} from "@/lib/church-profile";
 
 export type DraftProjectInput = {
   name: string;
   sourceUrl?: string;
   series?: string;
   speaker?: string;
+  /** The sermon/video's original publish timestamp, when known (e.g. auto-import from YouTube). */
+  publishedAt?: Date;
 };
 
 export function assertWorkspaceScope(
@@ -54,6 +64,10 @@ export function buildDraftProjectRecord(
   input: DraftProjectInput,
   sourceVideoId?: string,
   sermonsPerWeek: SermonsPerWeek = 1,
+  serviceContext: { sermonDate: Date; serviceSlot: ServiceSlot } = {
+    sermonDate: calendarDateInTimezone(new Date(), "America/Chicago"),
+    serviceSlot: "PRIMARY",
+  },
 ): Prisma.ProjectUncheckedCreateInput {
   return {
     workspaceId,
@@ -63,15 +77,33 @@ export function buildDraftProjectRecord(
     series: input.series?.trim() || null,
     speaker: input.speaker?.trim() || null,
     processingConfig: buildDefaultProcessingConfig(sermonsPerWeek),
+    sermonDate: serviceContext.sermonDate,
+    serviceSlot: serviceContext.serviceSlot,
   };
 }
 
-async function getSermonsPerWeek(tx: PrismaClient | Prisma.TransactionClient, workspaceId: string) {
+async function getChurchProfile(
+  tx: PrismaClient | Prisma.TransactionClient,
+  workspaceId: string,
+): Promise<ChurchProfile> {
   const workspace = await tx.workspace.findUniqueOrThrow({
     where: { id: workspaceId },
     select: { settings: true },
   });
-  return parseChurchProfile(workspace.settings).sermonsPerWeek;
+  return parseChurchProfile(workspace.settings);
+}
+
+/**
+ * Classifies which weekly service a sermon belongs to (Sunday vs. Wednesday, etc.) from its
+ * publish timestamp — or "now" for a direct upload with no known publish date — and normalizes
+ * it to a timezone-correct calendar date for the Project.sermonDate column.
+ */
+function buildServiceContext(profile: ChurchProfile, publishedAt?: Date) {
+  const instant = publishedAt ?? new Date();
+  return {
+    sermonDate: calendarDateInTimezone(instant, profile.timezone),
+    serviceSlot: deriveServiceSlot(instant, profile),
+  };
 }
 
 /**
@@ -100,7 +132,8 @@ export async function createDraftProjectForWorkspace(
       throw new Error("Workspace access denied for project creation.");
     }
 
-    const sermonsPerWeek = await getSermonsPerWeek(tx, workspaceId);
+    const churchProfile = await getChurchProfile(tx, workspaceId);
+    const serviceContext = buildServiceContext(churchProfile, input.publishedAt);
 
     const sourceUrl = input.sourceUrl?.trim();
     const sourceVideo = sourceUrl
@@ -116,7 +149,13 @@ export async function createDraftProjectForWorkspace(
 
     const project = await tx.project.create({
       data: {
-        ...buildDraftProjectRecord(workspaceId, input, sourceVideo?.id, sermonsPerWeek),
+        ...buildDraftProjectRecord(
+          workspaceId,
+          input,
+          sourceVideo?.id,
+          churchProfile.sermonsPerWeek,
+          serviceContext,
+        ),
         ...(sourceVideo ? { status: ProjectStatus.QUEUED } : {}),
       },
     });
@@ -164,11 +203,18 @@ export async function createProjectFromUploadedSourceVideo(
     const sourceVideo = await tx.sourceVideo.findUniqueOrThrow({ where: { id: input.sourceVideoId } });
     assertWorkspaceScope(sourceVideo.workspaceId, workspaceId, "source video");
 
-    const sermonsPerWeek = await getSermonsPerWeek(tx, workspaceId);
+    const churchProfile = await getChurchProfile(tx, workspaceId);
+    const serviceContext = buildServiceContext(churchProfile);
 
     const project = await tx.project.create({
       data: {
-        ...buildDraftProjectRecord(workspaceId, input, sourceVideo.id, sermonsPerWeek),
+        ...buildDraftProjectRecord(
+          workspaceId,
+          input,
+          sourceVideo.id,
+          churchProfile.sermonsPerWeek,
+          serviceContext,
+        ),
         status: ProjectStatus.QUEUED,
       },
     });

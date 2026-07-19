@@ -51,3 +51,43 @@ export function parseChurchProfile(settings: unknown): ChurchProfile {
 export function targetClipCountFor(sermonsPerWeek: SermonsPerWeek): number {
   return sermonsPerWeek === 2 ? 3 : 6;
 }
+
+export type ServiceSlot = "PRIMARY" | "SECONDARY";
+
+/**
+ * Normalizes an instant to the calendar date (Y-M-D, midnight UTC) it falls on in the
+ * given timezone. Doing this once, up front, means every later "add N days" is plain
+ * UTC date arithmetic — no further timezone or DST handling required.
+ */
+export function calendarDateInTimezone(date: Date, timezone: string): Date {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function weekdayNameInTimezone(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: timezone }).format(date);
+}
+
+/**
+ * Classifies a sermon date as the church's primary or secondary weekly service by
+ * comparing its weekday (in the church's own timezone) against serviceDay/secondServiceDay.
+ * Falls back to PRIMARY for a once-a-week church, or when the date lands on neither
+ * configured day (e.g. a sermon uploaded on an atypical day).
+ */
+export function deriveServiceSlot(date: Date, profile: ChurchProfile): ServiceSlot {
+  if (profile.sermonsPerWeek !== 2 || !profile.secondServiceDay) return "PRIMARY";
+
+  const weekday = weekdayNameInTimezone(date, profile.timezone).trim().toLowerCase();
+  const secondDay = profile.secondServiceDay.trim().toLowerCase();
+  return weekday === secondDay ? "SECONDARY" : "PRIMARY";
+}
