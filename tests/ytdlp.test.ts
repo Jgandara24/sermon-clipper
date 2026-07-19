@@ -69,9 +69,13 @@ describe("parseYtDlpMetadataJson", () => {
 
 describe("fetchYtDlpMetadata", () => {
   it("invokes yt-dlp with --dump-json --skip-download and parses stdout", async () => {
-    const calls: Array<{ binary: string; args: string[] }> = [];
-    const fakeExec = async (binary: string, args: string[]) => {
-      calls.push({ binary, args });
+    const calls: Array<{ binary: string; args: string[]; options: { timeoutMs: number; maxBuffer?: number } }> = [];
+    const fakeExec = async (
+      binary: string,
+      args: string[],
+      options: { timeoutMs: number; maxBuffer?: number },
+    ) => {
+      calls.push({ binary, args, options });
       return { stdout: fixture(), stderr: "" };
     };
 
@@ -83,6 +87,8 @@ describe("fetchYtDlpMetadata", () => {
     expect(calls[0].args).toEqual(
       expect.arrayContaining(["--dump-json", "--skip-download", "--no-playlist", "https://youtube.com/watch?v=dQw4w9WgXcQ"]),
     );
+    // Node's 1 MiB default kills yt-dlp on routine videos with large format/caption lists.
+    expect(calls[0].options.maxBuffer).toBe(64 * 1024 * 1024);
   });
 
   it("propagates parse errors from malformed output", async () => {

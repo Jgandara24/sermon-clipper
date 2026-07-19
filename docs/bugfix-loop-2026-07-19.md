@@ -218,7 +218,9 @@ summary, record a single `severity: "error"` operational event
 FAILED.
 **Tests:** unset URL → no Graph calls, rows untouched, event recorded.
 
-### - [ ] 10. Add `maxBuffer` to yt-dlp metadata fetch
+### - [x] 10. Add `maxBuffer` to yt-dlp metadata fetch
+
+> Done. 64 MiB, matching render.ts.
 
 `src/lib/media/ytdlp.ts:62-67` — promisified `execFile` defaults to 1 MiB stdout;
 `--dump-json` for a normal YouTube video with many formats/auto-captions exceeds it and

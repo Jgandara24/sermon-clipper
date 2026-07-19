@@ -62,7 +62,12 @@ export async function fetchYtDlpMetadata(
   const { stdout } = await execFile(
     ytDlpPath,
     ["--dump-json", "--skip-download", "--no-playlist", url],
-    { timeoutMs: envTimeoutMs("YTDLP_METADATA_TIMEOUT_MS", 30_000) },
+    {
+      timeoutMs: envTimeoutMs("YTDLP_METADATA_TIMEOUT_MS", 30_000),
+      // --dump-json routinely exceeds Node's 1 MiB default (large formats lists plus
+      // auto-caption entries for ~150 languages) — same 64 MiB headroom as render.ts.
+      maxBuffer: 64 * 1024 * 1024,
+    },
   );
   return parseYtDlpMetadataJson(stdout);
 }
