@@ -63,7 +63,10 @@ fine).
 **Tests:** cancel-then-succeed and cancel-then-fail scenarios assert state stays
 CANCELED; lost-heartbeat scenario asserts the handler aborts.
 
-### - [ ] 2. Fix lost-update race on `workspace.settings`
+### - [x] 2. Fix lost-update race on `workspace.settings`
+
+> Done. New helper `src/lib/workspace-settings.ts` (optimistic guard on `updatedAt`,
+> 3 attempts); both actions migrated. No other settings write sites existed.
 
 `src/app/actions/facebook-connection.ts:38-62` and
 `src/app/actions/workspace-profile.ts:33-57` both read the settings JSON, spread, and
