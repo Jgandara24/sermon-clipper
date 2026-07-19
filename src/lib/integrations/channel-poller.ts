@@ -293,7 +293,7 @@ async function pollOneSource(
       const project = await createDraftProjectForWorkspace(
         client,
         source.workspaceId,
-        { name: video.title, sourceUrl: youtubeWatchUrl(video.videoId) },
+        { name: video.title, sourceUrl: youtubeWatchUrl(video.videoId), publishedAt: video.publishedAt },
         source.workspace.ownerId,
       );
       // Upserts (not creates): a retried skipped_cap row transitions in place to its outcome.

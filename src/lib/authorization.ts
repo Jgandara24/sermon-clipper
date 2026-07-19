@@ -12,6 +12,7 @@ export type WorkspacePermission =
   | "MANAGE_BILLING"
   | "MANAGE_OPERATIONS"
   | "MANAGE_WORKSPACE_PROFILE"
+  | "MANAGE_SCHEDULE"
   | "CANCEL_PROJECT";
 
 const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> = {
@@ -27,6 +28,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     "MANAGE_BILLING",
     "MANAGE_OPERATIONS",
     "MANAGE_WORKSPACE_PROFILE",
+    "MANAGE_SCHEDULE",
     "CANCEL_PROJECT",
   ]),
   [WorkspaceRole.ADMIN]: new Set([
@@ -41,6 +43,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     "MANAGE_BILLING",
     "MANAGE_OPERATIONS",
     "MANAGE_WORKSPACE_PROFILE",
+    "MANAGE_SCHEDULE",
     "CANCEL_PROJECT",
   ]),
   [WorkspaceRole.EDITOR]: new Set([
@@ -49,6 +52,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     "EDIT_CLIP",
     "EXPORT_CLIP",
     "REQUEST_APPROVAL",
+    "MANAGE_SCHEDULE",
     "CANCEL_PROJECT",
   ]),
   [WorkspaceRole.APPROVER]: new Set(["VIEW_WORKSPACE", "REVIEW_CLIP"]),

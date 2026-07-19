@@ -4,6 +4,7 @@ import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/a
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
+import { scheduledDateForRank } from "@/lib/scheduling";
 
 const MIN_CANDIDATE_MS = 20_000;
 const MAX_CANDIDATE_MS = 90_000;
@@ -161,6 +162,20 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
             verseEnd: ref.verseEnd,
             confidence: ref.confidence,
           })),
+        });
+      }
+
+      // Only the primary daily-posting set (rank <= targetClipCount) gets a calendar slot;
+      // the rest of the CANDIDATE_POOL_SIZE stays available as unscheduled extras. Skips
+      // legacy projects created before Project.sermonDate existed (schema default is nullable).
+      const rank = idx + 1;
+      if (rank <= targetClipCount && project.sermonDate) {
+        await tx.scheduledPost.create({
+          data: {
+            workspaceId: project.workspaceId,
+            clipId: created.id,
+            scheduledDate: scheduledDateForRank(project.sermonDate, rank),
+          },
         });
       }
     }
