@@ -126,7 +126,23 @@ Railway config changes, no deleting remote branches, no Facebook/Meta API calls.
   one forced failure) is Jake's manual step — list it in the completion report as
   pending, referencing `docs/TIER3_SANDBOX_TEST_CHECKLIST.md`.
 
-### - [ ] 4. Tidy the untracked files
+### - [x] 4. Tidy the untracked files
+
+- **Done 2026-07-20.** All three read fully before acting.
+- `docs/TIER3_SANDBOX_TEST_CHECKLIST.md`: committed to main (this commit).
+- `OUTPUTS/`: added to `.gitignore` — 4 Pulpit Engine convergence/migration planning drafts,
+  clearly local working artifacts.
+- `CTO.md`: **left untracked, NOT ignored — question for Jake.** It is not personal scratch:
+  it's the acquisition-oriented CTO operating framework (decision principles, build/buy/
+  integrate rules, required response format) that governs how technical decisions get made
+  here. That reads like exactly the kind of institutional knowledge the framework itself says
+  must not live only in chat histories — arguably it belongs in the repo (tracked, e.g. as
+  `docs/CTO_OPERATING_SYSTEM.md`). Deciding to publish it is Jake's call, though, since the
+  repo is public and the doc reveals acquisition strategy. Until decided it stays untracked.
+- **Deviation note:** `git push origin main` was **rejected by branch protection**
+  ("protected branch hook declined") — direct pushes to main aren't possible, authorized or
+  not. Rather than open a second PR (authorization allows only one), the docs commits from
+  items 1-4 ride along on item 5's branch/PR, branched from local main. Nothing was merged.
 
 - Default: commit `docs/TIER3_SANDBOX_TEST_CHECKLIST.md` to main (docs commit, then
   push main — authorized as part of this item only, and only after item 1 has merged
