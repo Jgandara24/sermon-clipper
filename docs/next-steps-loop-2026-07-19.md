@@ -93,7 +93,26 @@ Railway config changes, no deleting remote branches, no Facebook/Meta API calls.
   or the DBs may have run different variants): STOP — write exactly what changed, when,
   and both variants' diffs into the notes here for Jake to decide.
 
-### - [ ] 3. Verify Tier 3 worker environment (verification only — no changes)
+### - [x] 3. Verify Tier 3 worker environment (verification only — no changes)
+
+- **Checked 2026-07-20 (read-only, no variables changed). One gap found.**
+- WORKER service variables (presence only):
+  - `META_SYSTEM_USER_TOKEN`: **present** ✓
+  - `META_GRAPH_API_VERSION`: present ✓
+  - `NEXT_PUBLIC_APP_URL`: **ABSENT** ✗ — the worker has no such variable at all (the
+    Railway-provided `RAILWAY_SERVICE_WEB_URL` exists but the publisher doesn't read it).
+- **Consequence (by design, review finding #9):** `resolvePublicAppUrl()` returns null, so
+  the publish poll will skip every due post and emit `facebook_publish_misconfigured`. With
+  the flag absent, Tier 3 cannot publish anything — fail-closed is working as intended.
+- Post-deploy logs show **no** `facebook_publish_misconfigured` events, but that is NOT
+  evidence of health: the event only fires when due posts exist (facebook-publisher.ts:213-225),
+  and no workspace has `autoPostEnabled=true` yet, so no posts are ever due.
+- **MANUAL ACTION FOR JAKE:** set `NEXT_PUBLIC_APP_URL=https://web-production-2a243.up.railway.app`
+  (or the canonical public app URL) on the **worker** Railway service before running the
+  sandbox test — without it, step 6 of `docs/TIER3_SANDBOX_TEST_CHECKLIST.md` will skip
+  with `facebook_publish_misconfigured`.
+- Live Facebook sandbox test remains **pending, Jake-manual** — see
+  `docs/TIER3_SANDBOX_TEST_CHECKLIST.md`.
 
 - Using the railway MCP tools (list_variables for the worker service), confirm
   `NEXT_PUBLIC_APP_URL` (set, non-localhost) and `META_SYSTEM_USER_TOKEN` (present)
