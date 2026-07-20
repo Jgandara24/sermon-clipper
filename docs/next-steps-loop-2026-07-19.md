@@ -53,7 +53,34 @@ Railway config changes, no deleting remote branches, no Facebook/Meta API calls.
   d. Run `npm run smoke:production` and record the result in the notes.
 - Afterwards: `git checkout main && git pull` so local main matches.
 
-### - [ ] 2. Reconcile the migration drift on `20260718165517_channel_import_sources`
+### - [x] 2. Reconcile the migration drift on `20260718165517_channel_import_sources`
+
+- **Resolved 2026-07-20 — the premise was wrong: the file never changed.** `git log --follow`
+  shows exactly one commit touching it (`072b878`, PR #10) and the working tree is
+  byte-identical to that commit (sha256 `a908e8ea…`).
+- **Actual cause:** the local dev DB's `_prisma_migrations` had TWO rows for this migration:
+  1. checksum `d16dec54…`, started 2026-07-18 11:55:17, **failed** ("column search_vector of
+     relation transcripts is a generated column", error 42601), `applied_steps_count = 0`,
+     marked `rolled_back_at` 11:56:28 — this was the raw auto-generated variant, before the
+     hand-edit removed the destructive statements.
+  2. checksum `a908e8ea…` (= current file), finished 11:56:30 — applied successfully.
+  Prisma 6.19.3's `migrate dev` compares the file against the *failed rolled-back* row's
+  checksum too, and reports "modified after it was applied". Local schema verified healthy:
+  `transcripts_search_vector_idx` + generated `search_vector` column present,
+  `processing_jobs_state_type_idx` dropped, `…_run_after_idx` present — i.e. the DB state
+  matches the committed file. Production applied the committed file cleanly via
+  `migrate deploy` (separate ledger, unaffected).
+- **Fix applied:** deleted the debris row (rolled back, 0 steps applied) from the LOCAL dev
+  DB's `_prisma_migrations`. Probe `npx prisma migrate dev --create-only --name drift_probe`
+  then ran clean — no reset demanded. Probe migration deleted afterwards; no reset ever run.
+- **Residual footgun for Jake:** the probe was NOT empty — `migrate dev` still regenerates
+  `DROP INDEX "transcripts_search_vector_idx"` and `ALTER TABLE "transcripts" ALTER COLUMN
+  "search_vector" DROP DEFAULT` every time, because the raw-SQL generated column + GIN index
+  from `20260706075745_add_transcripts` can't be fully expressed in schema.prisma (the column
+  is already `Unsupported("tsvector")?`, line 373). Every future hand-run of `migrate dev`
+  must keep stripping those two statements (the warning comment inside the
+  channel_import_sources migration documents this). Worth a look at declaring the GIN index
+  via `@@index(..., type: Gin)` or accepting the ritual.
 
 - Investigate: `git log -p --follow prisma/migrations/20260718165517_channel_import_sources/migration.sql`
   to find what changed after the migration was first committed/applied.
