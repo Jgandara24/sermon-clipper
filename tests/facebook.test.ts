@@ -84,6 +84,24 @@ describe("publishScheduledVideo", () => {
     expect(facebookPostId).toBe("fb-video-123");
   });
 
+  it("omits scheduling fields to publish immediately when scheduledPublishAt is absent", async () => {
+    const immediateInput = {
+      pageId: input.pageId,
+      pageAccessToken: input.pageAccessToken,
+      fileUrl: input.fileUrl,
+      caption: input.caption,
+    };
+    const result = await publishScheduledVideo(immediateInput, async (url, init) => {
+      const body = new URLSearchParams(init?.body ?? "");
+      expect(body.get("file_url")).toBe(input.fileUrl);
+      expect(body.has("published")).toBe(false);
+      expect(body.has("scheduled_publish_time")).toBe(false);
+      return jsonResponse(200, { id: "fb-video-456" });
+    });
+
+    expect(result.facebookPostId).toBe("fb-video-456");
+  });
+
   it("throws FacebookApiError on a non-2xx response", async () => {
     await expect(
       publishScheduledVideo(input, async () =>

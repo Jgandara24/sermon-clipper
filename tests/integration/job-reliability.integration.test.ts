@@ -137,13 +137,15 @@ describe("processing job reliability", () => {
       },
     });
 
-    const retryResult = await markJobFailedOrRetry(prisma, retryingJob, {
+    const retryOutcome = await markJobFailedOrRetry(prisma, retryingJob, {
       code: "TEST_FAILURE",
       message: "Temporary failure.",
     });
 
-    expect(retryResult.state).toBe(ProcessingJobState.RETRYING);
-    expect(retryResult.runAfter.getTime()).toBeGreaterThan(Date.now());
+    expect(retryOutcome).toBe("RETRYING");
+    const retried = await prisma.processingJob.findUniqueOrThrow({ where: { id: retryingJob.id } });
+    expect(retried.state).toBe(ProcessingJobState.RETRYING);
+    expect(retried.runAfter.getTime()).toBeGreaterThan(Date.now());
 
     const exhaustedJob = await prisma.processingJob.create({
       data: {
@@ -156,13 +158,15 @@ describe("processing job reliability", () => {
       },
     });
 
-    const failedResult = await markJobFailedOrRetry(prisma, exhaustedJob, {
+    const failedOutcome = await markJobFailedOrRetry(prisma, exhaustedJob, {
       code: "TEST_FAILURE",
       message: "Permanent failure.",
     });
 
-    expect(failedResult.state).toBe(ProcessingJobState.FAILED);
-    expect(failedResult.finishedAt).toBeInstanceOf(Date);
+    expect(failedOutcome).toBe("FAILED");
+    const failed = await prisma.processingJob.findUniqueOrThrow({ where: { id: exhaustedJob.id } });
+    expect(failed.state).toBe(ProcessingJobState.FAILED);
+    expect(failed.finishedAt).toBeInstanceOf(Date);
   });
 
   it("recovers stale running jobs or fails them after max attempts", async () => {
@@ -224,13 +228,15 @@ describe("export job reliability", () => {
       },
     });
 
-    const retryResult = await markExportJobFailedOrRetry(prisma, exportJob, {
+    const retryOutcome = await markExportJobFailedOrRetry(prisma, exportJob, {
       code: "RENDER_FAILED",
       message: "Temporary render failure.",
     });
 
-    expect(retryResult.state).toBe(ProcessingJobState.RETRYING);
-    expect(retryResult.runAfter.getTime()).toBeGreaterThan(Date.now());
+    expect(retryOutcome).toBe("RETRYING");
+    const retriedExport = await prisma.exportJob.findUniqueOrThrow({ where: { id: exportJob.id } });
+    expect(retriedExport.state).toBe(ProcessingJobState.RETRYING);
+    expect(retriedExport.runAfter.getTime()).toBeGreaterThan(Date.now());
 
     const staleTime = new Date("2026-07-07T14:00:00.000Z");
     const now = new Date("2026-07-07T15:00:00.000Z");

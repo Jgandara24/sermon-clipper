@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   YtDlpDownloadError,
+  YtDlpFileTooLargeError,
   YtDlpParseError,
   downloadYtDlpVideo,
   fetchYtDlpMetadata,
@@ -69,9 +70,13 @@ describe("parseYtDlpMetadataJson", () => {
 
 describe("fetchYtDlpMetadata", () => {
   it("invokes yt-dlp with --dump-json --skip-download and parses stdout", async () => {
-    const calls: Array<{ binary: string; args: string[] }> = [];
-    const fakeExec = async (binary: string, args: string[]) => {
-      calls.push({ binary, args });
+    const calls: Array<{ binary: string; args: string[]; options: { timeoutMs: number; maxBuffer?: number } }> = [];
+    const fakeExec = async (
+      binary: string,
+      args: string[],
+      options: { timeoutMs: number; maxBuffer?: number },
+    ) => {
+      calls.push({ binary, args, options });
       return { stdout: fixture(), stderr: "" };
     };
 
@@ -83,6 +88,8 @@ describe("fetchYtDlpMetadata", () => {
     expect(calls[0].args).toEqual(
       expect.arrayContaining(["--dump-json", "--skip-download", "--no-playlist", "https://youtube.com/watch?v=dQw4w9WgXcQ"]),
     );
+    // Node's 1 MiB default kills yt-dlp on routine videos with large format/caption lists.
+    expect(calls[0].options.maxBuffer).toBe(64 * 1024 * 1024);
   });
 
   it("propagates parse errors from malformed output", async () => {
@@ -132,6 +139,30 @@ describe("downloadYtDlpVideo", () => {
         "https://youtube.com/watch?v=dQw4w9WgXcQ",
       ]),
     );
+    await expect(stat(destPath)).resolves.toBeTruthy();
+  });
+
+  it("rejects and deletes a merged file that exceeds maxBytes (per-format cap can undercount)", async () => {
+    const destPath = path.join(workDir, "oversized", "source-video");
+    const fakeExec = async () => {
+      await writeFile(destPath, Buffer.alloc(64));
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      downloadYtDlpVideo("https://youtube.com/watch?v=big", destPath, { maxBytes: 32 }, fakeExec),
+    ).rejects.toThrow(YtDlpFileTooLargeError);
+    await expect(stat(destPath)).rejects.toThrow();
+  });
+
+  it("accepts a file exactly at maxBytes", async () => {
+    const destPath = path.join(workDir, "at-limit", "source-video");
+    const fakeExec = async () => {
+      await writeFile(destPath, Buffer.alloc(32));
+      return { stdout: "", stderr: "" };
+    };
+
+    await downloadYtDlpVideo("https://youtube.com/watch?v=ok", destPath, { maxBytes: 32 }, fakeExec);
     await expect(stat(destPath)).resolves.toBeTruthy();
   });
 

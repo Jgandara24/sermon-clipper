@@ -1,5 +1,5 @@
 import {
-  type Prisma,
+  Prisma,
   type PrismaClient,
   type ProcessingJob,
   ProcessingJobState,
@@ -29,15 +29,27 @@ export async function enqueueJob(
     return existing;
   }
 
-  return client.processingJob.create({
-    data: {
-      projectId: params.projectId,
-      type: params.type,
-      state: ProcessingJobState.QUEUED,
-      idempotencyKey: params.idempotencyKey,
-      minutesReserved: params.minutesReserved,
-    },
-  });
+  try {
+    return await client.processingJob.create({
+      data: {
+        projectId: params.projectId,
+        type: params.type,
+        state: ProcessingJobState.QUEUED,
+        idempotencyKey: params.idempotencyKey,
+        minutesReserved: params.minutesReserved,
+      },
+    });
+  } catch (error) {
+    // Two concurrent enqueues (double-click, client retry) can both pass the fast-path
+    // read; the loser's insert hits the unique index — honor the contract and return the
+    // winner's row instead of surfacing a 500.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return client.processingJob.findUniqueOrThrow({
+        where: { idempotencyKey: params.idempotencyKey },
+      });
+    }
+    throw error;
+  }
 }
 
 /**
@@ -86,9 +98,20 @@ export async function claimNextJob(
   return client.processingJob.findUniqueOrThrow({ where: { id: candidate.id } });
 }
 
-export async function markJobSucceeded(client: PrismaClient, jobId: string) {
-  return client.processingJob.update({
-    where: { id: jobId },
+/**
+ * Outcome of a terminal transition attempt. SKIPPED means the job was no longer RUNNING
+ * (canceled or stale-recovered) and the caller must not apply any follow-on side effects.
+ */
+export type JobTerminalOutcome = "SUCCEEDED" | "FAILED" | "RETRYING" | "SKIPPED";
+
+/**
+ * Terminal transitions are guarded on state RUNNING (same conditional-UPDATE pattern as
+ * claimNextJob/heartbeatJob) so a finishing handler can never overwrite a concurrent
+ * cancellation or stale recovery. Returns whether the transition applied.
+ */
+export async function markJobSucceeded(client: PrismaClient, jobId: string): Promise<boolean> {
+  const result = await client.processingJob.updateMany({
+    where: { id: jobId, state: ProcessingJobState.RUNNING },
     data: {
       state: ProcessingJobState.SUCCEEDED,
       progress: 100,
@@ -97,15 +120,16 @@ export async function markJobSucceeded(client: PrismaClient, jobId: string) {
       workerId: null,
     },
   });
+  return result.count > 0;
 }
 
 export async function markJobFailed(
   client: PrismaClient,
   jobId: string,
   error: { code: string; message: string },
-) {
-  return client.processingJob.update({
-    where: { id: jobId },
+): Promise<boolean> {
+  const result = await client.processingJob.updateMany({
+    where: { id: jobId, state: ProcessingJobState.RUNNING },
     data: {
       state: ProcessingJobState.FAILED,
       errorCode: error.code,
@@ -116,19 +140,20 @@ export async function markJobFailed(
       workerId: null,
     },
   });
+  return result.count > 0;
 }
 
 export async function markJobFailedOrRetry(
   client: PrismaClient,
   job: ProcessingJob,
   error: { code: string; message: string },
-) {
+): Promise<JobTerminalOutcome> {
   const now = new Date();
   const maxAttempts = job.maxAttempts || PROCESSING_MAX_ATTEMPTS;
 
   if (job.attempt < maxAttempts) {
-    return client.processingJob.update({
-      where: { id: job.id },
+    const result = await client.processingJob.updateMany({
+      where: { id: job.id, state: ProcessingJobState.RUNNING },
       data: {
         state: ProcessingJobState.RETRYING,
         errorCode: error.code,
@@ -139,9 +164,10 @@ export async function markJobFailedOrRetry(
         workerId: null,
       },
     });
+    return result.count > 0 ? "RETRYING" : "SKIPPED";
   }
 
-  return markJobFailed(client, job.id, error);
+  return (await markJobFailed(client, job.id, error)) ? "FAILED" : "SKIPPED";
 }
 
 export async function heartbeatJob(client: PrismaClient, jobId: string) {

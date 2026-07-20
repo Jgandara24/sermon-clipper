@@ -4,7 +4,11 @@ import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/a
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
-import { scheduledDateForRank } from "@/lib/scheduling";
+import {
+  clearReschedulableScheduledPosts,
+  scheduledDateForRank,
+  slotAlreadyPublished,
+} from "@/lib/scheduling";
 
 const MIN_CANDIDATE_MS = 20_000;
 const MAX_CANDIDATE_MS = 90_000;
@@ -119,6 +123,12 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
 
   await prisma.$transaction(async (tx) => {
     await tx.scriptureReference.deleteMany({ where: { projectId: project.id } });
+    // Unfired calendar slots are re-derived below; published/in-flight rows survive the clip
+    // deleteMany as history (clip_id is ON DELETE SET NULL).
+    await clearReschedulableScheduledPosts(tx, {
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+    });
     await tx.generatedClip.deleteMany({ where: { projectId: project.id } });
 
     for (const [idx, clip] of kept.entries()) {
@@ -170,13 +180,22 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
       // legacy projects created before Project.sermonDate existed (schema default is nullable).
       const rank = idx + 1;
       if (rank <= targetClipCount && project.sermonDate) {
-        await tx.scheduledPost.create({
-          data: {
-            workspaceId: project.workspaceId,
-            clipId: created.id,
-            scheduledDate: scheduledDateForRank(project.sermonDate, rank),
-          },
+        const scheduledDate = scheduledDateForRank(project.sermonDate, rank);
+        // Never re-arm a slot whose post already went out (or is going out) — a re-analysis
+        // after publishing would otherwise duplicate content on the Page.
+        const published = await slotAlreadyPublished(tx, {
+          workspaceId: project.workspaceId,
+          scheduledDate,
         });
+        if (!published) {
+          await tx.scheduledPost.create({
+            data: {
+              workspaceId: project.workspaceId,
+              clipId: created.id,
+              scheduledDate,
+            },
+          });
+        }
       }
     }
 

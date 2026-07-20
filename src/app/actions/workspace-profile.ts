@@ -4,10 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
+import { isValidIanaTimezone } from "@/lib/church-profile";
 import { prisma } from "@/lib/prisma";
+import { updateWorkspaceSettings } from "@/lib/workspace-settings";
 
 const churchProfileSchema = z.object({
-  timezone: z.string().trim().min(2).max(80),
+  timezone: z
+    .string()
+    .trim()
+    .min(2)
+    .max(80)
+    .refine(isValidIanaTimezone, 'Must be a valid timezone like "America/Chicago".'),
   serviceDay: z.string().trim().min(2).max(24),
   sermonsPerWeek: z.coerce.number().int().min(1).max(2),
   secondServiceDay: z.string().trim().min(2).max(24).optional(),
@@ -30,31 +37,17 @@ export async function updateChurchProfileAction(formData: FormData) {
     redirect("/app/settings?profile=invalid");
   }
 
-  const workspace = await prisma.workspace.findUniqueOrThrow({
-    where: { id: membership.workspace.id },
-    select: { settings: true },
-  });
-  const currentSettings =
-    workspace.settings && typeof workspace.settings === "object"
-      ? (workspace.settings as Record<string, unknown>)
-      : {};
-
-  await prisma.workspace.update({
-    where: { id: membership.workspace.id },
-    data: {
-      settings: {
-        ...currentSettings,
-        churchProfile: {
-          timezone: parsed.data.timezone,
-          serviceDay: parsed.data.serviceDay,
-          sermonsPerWeek: parsed.data.sermonsPerWeek,
-          secondServiceDay:
-            parsed.data.sermonsPerWeek === 2 ? (parsed.data.secondServiceDay || "Wednesday") : null,
-          postsPerDay: parsed.data.postsPerDay,
-        },
-      },
+  await updateWorkspaceSettings(prisma, membership.workspace.id, (settings) => ({
+    ...settings,
+    churchProfile: {
+      timezone: parsed.data.timezone,
+      serviceDay: parsed.data.serviceDay,
+      sermonsPerWeek: parsed.data.sermonsPerWeek,
+      secondServiceDay:
+        parsed.data.sermonsPerWeek === 2 ? (parsed.data.secondServiceDay || "Wednesday") : null,
+      postsPerDay: parsed.data.postsPerDay,
     },
-  });
+  }));
 
   revalidatePath("/app/settings");
   redirect("/app/settings?profile=saved");

@@ -34,6 +34,19 @@ import { recordOperationalEventSafely } from "@/lib/observability/operational-ev
  */
 
 const DEFAULT_POST_HOUR = 9;
+// Meta requires scheduled_publish_time to be at least ~10 minutes in the future; below this
+// lead we publish immediately instead of scheduling. A post becomes "due" at UTC midnight of
+// its scheduledDate, so the 9am-local target is routinely near or already past by the time the
+// poller first sees the row (always, for churches at UTC+9 and east).
+const MIN_SCHEDULE_LEAD_MS = 15 * 60_000;
+// Transient failures (network blips, momentary API errors) re-queue with backoff; FAILED is
+// reserved for attempts exhausted. Backoff: 5min, 30min, 2h, then 8h before the final attempt.
+const MAX_PUBLISH_ATTEMPTS = 5;
+const RETRY_BACKOFF_MS = [5 * 60_000, 30 * 60_000, 2 * 3_600_000, 8 * 3_600_000];
+
+function retryBackoffMs(attemptCount: number): number {
+  return RETRY_BACKOFF_MS[Math.min(Math.max(attemptCount - 1, 0), RETRY_BACKOFF_MS.length - 1)];
+}
 // Long enough for Facebook's servers to fetch the file after the scheduling request, short
 // enough to bound how long a signed link stays valid if leaked.
 const MEDIA_URL_TTL_SECONDS = 30 * 60;
@@ -49,9 +62,16 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function absoluteMediaUrl(path: string): string {
-  const appUrl = env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
-  return `${appUrl}${path}`;
+/**
+ * Meta downloads file_url asynchronously AFTER the POST returns an id — a localhost or
+ * missing app URL would mark rows SUCCEEDED while the video silently never materializes.
+ * Publishing is skipped entirely (rows left NOT_STARTED) until the URL is configured.
+ */
+function resolvePublicAppUrl(): string | null {
+  const appUrl = env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (!appUrl) return null;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)([:/]|$)/i.test(appUrl)) return null;
+  return appUrl;
 }
 
 function buildCaption(clip: { title: string; hookText: string | null }): string {
@@ -65,6 +85,8 @@ export type FacebookPublishSummary = {
   postsSkippedNotEligible: number;
   /** Clip has no completed export yet — this module never triggers one. */
   postsSkippedNotExported: number;
+  /** NEXT_PUBLIC_APP_URL is unset or localhost — Meta could never fetch file_url. */
+  postsSkippedMisconfigured: number;
   postsFailed: number;
 };
 
@@ -76,6 +98,66 @@ export type FacebookPublisherDeps = {
   ) => Promise<{ facebookPostId: string }>;
 };
 
+// A claim older than this with no terminal update means the worker died mid-publish
+// (same recovery idea as recoverStaleProcessingJobs; @updatedAt stamps the claim time).
+const STALE_CLAIM_TIMEOUT_MS = 15 * 60_000;
+
+/**
+ * Re-queues scheduled posts stuck IN_PROGRESS by a worker that died between the claim and
+ * the terminal update. Counts as an attempt (so a poison post still terminates after
+ * MAX_PUBLISH_ATTEMPTS — exhausted rows fail terminally here, mirroring stale job recovery).
+ */
+export async function recoverStaleScheduledPosts(
+  client: PrismaClient,
+  now = new Date(),
+): Promise<{ recovered: number; failed: number }> {
+  const cutoff = new Date(now.getTime() - STALE_CLAIM_TIMEOUT_MS);
+  const staleRows = await client.scheduledPost.findMany({
+    where: { publishStatus: "IN_PROGRESS", updatedAt: { lt: cutoff } },
+    take: 25,
+    select: { id: true, workspaceId: true, attemptCount: true },
+  });
+
+  let recovered = 0;
+  let failed = 0;
+  for (const row of staleRows) {
+    const attemptCount = row.attemptCount + 1;
+    const exhausted = attemptCount >= MAX_PUBLISH_ATTEMPTS;
+    const result = await client.scheduledPost.updateMany({
+      // Re-check the stale condition so a concurrent terminal update wins the race.
+      where: { id: row.id, publishStatus: "IN_PROGRESS", updatedAt: { lt: cutoff } },
+      data: exhausted
+        ? {
+            publishStatus: "FAILED",
+            attemptCount,
+            nextAttemptAt: null,
+            lastErrorMessage: "Publish attempt was interrupted repeatedly and gave up.",
+          }
+        : {
+            publishStatus: "NOT_STARTED",
+            attemptCount,
+            nextAttemptAt: null,
+            lastErrorMessage: "Publish attempt was interrupted (worker restart) and was re-queued.",
+          },
+    });
+    if (result.count === 0) continue;
+    if (exhausted) failed++;
+    else recovered++;
+    await recordOperationalEventSafely(client, {
+      workspaceId: row.workspaceId,
+      category: "facebook_publish",
+      eventType: exhausted ? "facebook_publish_failed" : "facebook_publish_claim_recovered",
+      severity: exhausted ? "error" : "warning",
+      message: exhausted
+        ? `Facebook scheduled post failed permanently after ${attemptCount} interrupted attempts.`
+        : "Facebook scheduled post claim was stale and was re-queued.",
+      metadata: { scheduledPostId: row.id, attemptCount },
+    });
+  }
+
+  return { recovered, failed };
+}
+
 export async function publishDueScheduledPosts(
   client: PrismaClient,
   deps: FacebookPublisherDeps = {},
@@ -85,6 +167,7 @@ export async function publishDueScheduledPosts(
     postsPublished: 0,
     postsSkippedNotEligible: 0,
     postsSkippedNotExported: 0,
+    postsSkippedMisconfigured: 0,
     postsFailed: 0,
   };
 
@@ -102,6 +185,9 @@ export async function publishDueScheduledPosts(
       platform: "FACEBOOK",
       publishStatus: "NOT_STARTED",
       scheduledDate: { lte: now() },
+      // Detached history rows (clip regenerated after publish) are never publishable.
+      clipId: { not: null },
+      OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now() } }],
     },
     orderBy: { scheduledDate: "asc" },
     include: {
@@ -123,6 +209,22 @@ export async function publishDueScheduledPosts(
 
   summary.postsScanned = duePosts.length;
 
+  const appUrl = resolvePublicAppUrl();
+  if (!appUrl) {
+    summary.postsSkippedMisconfigured = duePosts.length;
+    if (duePosts.length > 0) {
+      await recordOperationalEventSafely(client, {
+        category: "facebook_publish",
+        eventType: "facebook_publish_misconfigured",
+        severity: "error",
+        message:
+          "Facebook publishing skipped: NEXT_PUBLIC_APP_URL is unset or points at localhost, so Meta could never fetch the video. Due posts were left queued.",
+        metadata: { duePosts: duePosts.length },
+      });
+    }
+    return summary;
+  }
+
   for (const post of duePosts) {
     try {
       const churchProfile = parseChurchProfile(post.workspace.settings);
@@ -134,7 +236,13 @@ export async function publishDueScheduledPosts(
       }
       const pageId = facebookConnection.pageId;
 
-      const exportedStorageKey = post.clip.exportJobs[0]?.outputFile?.storageKey;
+      // The due query filters clipId NOT NULL; this narrows the type and defends in depth.
+      const clip = post.clip;
+      if (!clip) {
+        continue;
+      }
+
+      const exportedStorageKey = clip.exportJobs[0]?.outputFile?.storageKey;
       if (!exportedStorageKey) {
         summary.postsSkippedNotExported++;
         continue;
@@ -148,28 +256,28 @@ export async function publishDueScheduledPosts(
       if (claim.count === 0) continue;
 
       try {
-        const fileUrl = absoluteMediaUrl(
-          createSignedMediaUrl({
-            key: exportedStorageKey,
-            workspaceId: post.workspaceId,
-            expiresInSeconds: MEDIA_URL_TTL_SECONDS,
-            contentType: "video/mp4",
-            disposition: "inline",
-          }),
-        );
-        const scheduledPublishAt = wallClockInstantInTimezone(
+        const fileUrl = `${appUrl}${createSignedMediaUrl({
+          key: exportedStorageKey,
+          workspaceId: post.workspaceId,
+          expiresInSeconds: MEDIA_URL_TTL_SECONDS,
+          contentType: "video/mp4",
+          disposition: "inline",
+        })}`;
+        const desiredPublishAt = wallClockInstantInTimezone(
           post.scheduledDate,
           DEFAULT_POST_HOUR,
           churchProfile.timezone,
         );
+        const publishImmediately =
+          desiredPublishAt.getTime() - now().getTime() < MIN_SCHEDULE_LEAD_MS;
 
         const pageAccessToken = await resolvePageAccessToken(pageId);
         const { facebookPostId } = await publishScheduledVideo({
           pageId,
           pageAccessToken,
           fileUrl,
-          caption: buildCaption(post.clip),
-          scheduledPublishAt,
+          caption: buildCaption(clip),
+          scheduledPublishAt: publishImmediately ? undefined : desiredPublishAt,
         });
 
         await client.scheduledPost.update({
@@ -177,25 +285,38 @@ export async function publishDueScheduledPosts(
           data: {
             publishStatus: "SUCCEEDED",
             facebookPostId,
-            publishedAt: now(),
+            publishedAt: publishImmediately ? now() : desiredPublishAt,
             lastErrorMessage: null,
+            nextAttemptAt: null,
           },
         });
         summary.postsPublished++;
       } catch (error) {
         summary.postsFailed++;
         const message = truncateErrorMessage(errorMessage(error));
+        const attemptCount = post.attemptCount + 1;
+        const exhausted = attemptCount >= MAX_PUBLISH_ATTEMPTS;
         await client.scheduledPost.update({
           where: { id: post.id },
-          data: { publishStatus: "FAILED", lastErrorMessage: message },
+          data: exhausted
+            ? { publishStatus: "FAILED", lastErrorMessage: message, attemptCount, nextAttemptAt: null }
+            : {
+                // Back to NOT_STARTED so the next poll past nextAttemptAt re-claims it.
+                publishStatus: "NOT_STARTED",
+                lastErrorMessage: message,
+                attemptCount,
+                nextAttemptAt: new Date(now().getTime() + retryBackoffMs(attemptCount)),
+              },
         });
         await recordOperationalEventSafely(client, {
           workspaceId: post.workspaceId,
           category: "facebook_publish",
-          eventType: "facebook_publish_failed",
-          severity: "error",
-          message: `Facebook scheduled post failed: ${message}`,
-          metadata: { scheduledPostId: post.id },
+          eventType: exhausted ? "facebook_publish_failed" : "facebook_publish_retrying",
+          severity: exhausted ? "error" : "warning",
+          message: exhausted
+            ? `Facebook scheduled post failed permanently after ${attemptCount} attempts: ${message}`
+            : `Facebook scheduled post attempt ${attemptCount} failed, will retry: ${message}`,
+          metadata: { scheduledPostId: post.id, attemptCount, willRetry: !exhausted },
         });
       }
     } catch (error) {

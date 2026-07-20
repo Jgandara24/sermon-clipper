@@ -520,18 +520,24 @@ model GeneratedClip {
 model ScheduledPost {
   id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId      String                @map("workspace_id") @db.Uuid
-  clipId           String                @unique @map("clip_id") @db.Uuid
+  // Nullable + SET NULL: a SUCCEEDED row is the only record a real Facebook post exists,
+  // so it must survive clip regeneration (re-analysis deletes and recreates clips).
+  clipId           String?               @unique @map("clip_id") @db.Uuid
   scheduledDate    DateTime              @map("scheduled_date") @db.Date
   platform         SocialPlatform        @default(FACEBOOK)
   publishStatus    SchedulePublishStatus @default(NOT_STARTED) @map("publish_status")
   facebookPostId   String?               @map("facebook_post_id")
   publishedAt      DateTime?             @map("published_at")
   lastErrorMessage String?               @map("last_error_message")
+  // Transient publish failures re-queue with backoff instead of failing terminally;
+  // FAILED is reserved for attempts exhausted (see facebook-publisher.ts).
+  attemptCount     Int                   @default(0) @map("attempt_count")
+  nextAttemptAt    DateTime?             @map("next_attempt_at")
   createdAt        DateTime              @default(now()) @map("created_at")
   updatedAt        DateTime              @updatedAt @map("updated_at")
 
-  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  clip      GeneratedClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clip      GeneratedClip? @relation(fields: [clipId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, scheduledDate])
   @@index([publishStatus, scheduledDate])

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { updateWorkspaceSettings } from "@/lib/workspace-settings";
 
 const facebookConnectionSchema = z.object({
   pageId: z
@@ -35,31 +36,17 @@ export async function updateFacebookConnectionAction(formData: FormData) {
     redirect("/app/settings?facebook=invalid");
   }
 
-  const workspace = await prisma.workspace.findUniqueOrThrow({
-    where: { id: membership.workspace.id },
-    select: { settings: true },
-  });
-  const currentSettings =
-    workspace.settings && typeof workspace.settings === "object"
-      ? (workspace.settings as Record<string, unknown>)
-      : {};
-
   const pageId = parsed.data.pageId?.trim() || null;
 
-  await prisma.workspace.update({
-    where: { id: membership.workspace.id },
-    data: {
-      settings: {
-        ...currentSettings,
-        facebookConnection: {
-          pageId,
-          // A workspace can't go live without a Page ID configured, regardless of the
-          // checkbox — closes the "checked the box, forgot to set the page" gap.
-          autoPostEnabled: parsed.data.autoPostEnabled && pageId !== null,
-        },
-      },
+  await updateWorkspaceSettings(prisma, membership.workspace.id, (settings) => ({
+    ...settings,
+    facebookConnection: {
+      pageId,
+      // A workspace can't go live without a Page ID configured, regardless of the
+      // checkbox — closes the "checked the box, forgot to set the page" gap.
+      autoPostEnabled: parsed.data.autoPostEnabled && pageId !== null,
     },
-  });
+  }));
 
   revalidatePath("/app/settings");
   redirect("/app/settings?facebook=saved");

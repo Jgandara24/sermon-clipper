@@ -7,7 +7,7 @@ import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import { MAX_UPLOAD_BYTES, MAX_VIDEO_DURATION_S } from "@/lib/limits";
 import { probeVideoFile } from "@/lib/media/probe";
-import { downloadYtDlpVideo, fetchYtDlpMetadata } from "@/lib/media/ytdlp";
+import { downloadYtDlpVideo, fetchYtDlpMetadata, YtDlpFileTooLargeError } from "@/lib/media/ytdlp";
 import { getStorageProvider, type StorageProvider } from "@/lib/storage";
 import { InsufficientBalanceError, reserveMinutesForJob } from "@/lib/usage-ledger";
 
@@ -71,6 +71,13 @@ async function importSourceVideoFromUrl(params: {
     await deps.downloadVideo(originUrl, downloadPath, { maxBytes: MAX_UPLOAD_BYTES });
     await storage.uploadFile(storageKey, downloadPath, "video/mp4");
   } catch (error) {
+    if (error instanceof YtDlpFileTooLargeError) {
+      throw new JobFailureError(
+        "VIDEO_TOO_LARGE",
+        `That video is larger than the ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024 * 1024))} GB import limit.`,
+        { cause: error, retryable: false },
+      );
+    }
     throw new JobFailureError(
       "URL_IMPORT_FAILED",
       "We couldn't download the video from that link. Try again, or upload the file directly.",

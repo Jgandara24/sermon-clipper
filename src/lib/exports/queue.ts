@@ -1,4 +1,4 @@
-import { type ExportJob, ProcessingJobState, type PrismaClient } from "@prisma/client";
+import { type ExportJob, Prisma, ProcessingJobState, type PrismaClient } from "@prisma/client";
 import { EXPORT_MAX_ATTEMPTS, retryRunAfter, staleCutoff, workerId } from "@/lib/worker/reliability";
 
 const MAX_ATTEMPTS = EXPORT_MAX_ATTEMPTS; // initial attempt + 2 retries, per guide §15 step 6
@@ -15,15 +15,26 @@ export async function enqueueExportJob(
     return existing;
   }
 
-  return client.exportJob.create({
-    data: {
-      clipId: params.clipId,
-      workspaceId: params.workspaceId,
-      filename: params.filename,
-      idempotencyKey: params.idempotencyKey,
-      state: ProcessingJobState.QUEUED,
-    },
-  });
+  try {
+    return await client.exportJob.create({
+      data: {
+        clipId: params.clipId,
+        workspaceId: params.workspaceId,
+        filename: params.filename,
+        idempotencyKey: params.idempotencyKey,
+        state: ProcessingJobState.QUEUED,
+      },
+    });
+  } catch (error) {
+    // Same race-safe contract as enqueueJob: the loser of a concurrent enqueue returns
+    // the winner's row instead of surfacing the unique-constraint violation.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return client.exportJob.findUniqueOrThrow({
+        where: { idempotencyKey: params.idempotencyKey },
+      });
+    }
+    throw error;
+  }
 }
 
 /** Same conditional-UPDATE claim pattern as the processing-job queue (see jobs/queue.ts). */
@@ -64,9 +75,18 @@ export async function claimNextExportJob(client: PrismaClient): Promise<ExportJo
   return client.exportJob.findUniqueOrThrow({ where: { id: candidate.id } });
 }
 
-export async function markExportJobSucceeded(client: PrismaClient, jobId: string, outputFileId: string) {
-  return client.exportJob.update({
-    where: { id: jobId },
+/**
+ * Guarded on state RUNNING (same conditional-UPDATE pattern as claimNextExportJob) so a
+ * finishing handler can never overwrite a concurrent stale recovery. Returns whether the
+ * transition applied.
+ */
+export async function markExportJobSucceeded(
+  client: PrismaClient,
+  jobId: string,
+  outputFileId: string,
+): Promise<boolean> {
+  const result = await client.exportJob.updateMany({
+    where: { id: jobId, state: ProcessingJobState.RUNNING },
     data: {
       state: ProcessingJobState.SUCCEEDED,
       progress: 100,
@@ -78,7 +98,10 @@ export async function markExportJobSucceeded(client: PrismaClient, jobId: string
       minutesCharged: 0,
     },
   });
+  return result.count > 0;
 }
+
+export type ExportJobFailureOutcome = "RETRYING" | "FAILED" | "SKIPPED";
 
 /**
  * Requeues the job (up to MAX_ATTEMPTS total) rather than failing it outright, per guide §15
@@ -89,10 +112,10 @@ export async function markExportJobFailedOrRetry(
   client: PrismaClient,
   job: ExportJob,
   error: { code: string; message: string },
-) {
+): Promise<ExportJobFailureOutcome> {
   if (job.attempt < MAX_ATTEMPTS) {
-    return client.exportJob.update({
-      where: { id: job.id },
+    const result = await client.exportJob.updateMany({
+      where: { id: job.id, state: ProcessingJobState.RUNNING },
       data: {
         state: ProcessingJobState.RETRYING,
         errorCode: error.code,
@@ -103,10 +126,11 @@ export async function markExportJobFailedOrRetry(
         workerId: null,
       },
     });
+    return result.count > 0 ? "RETRYING" : "SKIPPED";
   }
 
-  return client.exportJob.update({
-    where: { id: job.id },
+  const result = await client.exportJob.updateMany({
+    where: { id: job.id, state: ProcessingJobState.RUNNING },
     data: {
       state: ProcessingJobState.FAILED,
       errorCode: error.code,
@@ -117,6 +141,7 @@ export async function markExportJobFailedOrRetry(
       workerId: null,
     },
   });
+  return result.count > 0 ? "FAILED" : "SKIPPED";
 }
 
 export async function heartbeatExportJob(client: PrismaClient, jobId: string) {

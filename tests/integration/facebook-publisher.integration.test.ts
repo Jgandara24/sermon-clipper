@@ -22,16 +22,21 @@ import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher"
 
 const prisma = new PrismaClient();
 const originalToken = process.env.META_SYSTEM_USER_TOKEN;
+const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
 
 beforeAll(() => {
   // Deliberately fake test-only token; never a real credential. Only its presence matters —
   // the publisher fails closed entirely when this is unset.
   process.env.META_SYSTEM_USER_TOKEN = "test-system-user-token-not-real";
+  // The publisher also fails closed on unset/localhost app URLs (finding #9).
+  process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 });
 
 afterAll(async () => {
   if (originalToken === undefined) delete process.env.META_SYSTEM_USER_TOKEN;
   else process.env.META_SYSTEM_USER_TOKEN = originalToken;
+  if (originalAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+  else process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
 });
 
 const createdWorkspaceIds: string[] = [];
@@ -225,23 +230,43 @@ describe("publishDueScheduledPosts", () => {
     expect(untouched.publishStatus).toBe("NOT_STARTED");
   });
 
-  it("marks a row FAILED with the error message when the Facebook client throws", async () => {
+  it("re-queues a failed row with backoff, and fails terminally once attempts are exhausted", async () => {
     const workspaceId = await createWorkspace("Publish Failure", eligibleSettings);
     const scheduledPostId = await createDueScheduledPost(workspaceId, "failure");
 
-    const summary = await publishDueScheduledPosts(prisma, {
+    const failingDeps = {
       now: () => new Date("2026-07-20T12:00:00Z"),
       resolvePageAccessToken: async () => "page-token-abc",
       publishScheduledVideo: async () => {
         throw new Error("Facebook API rejected the request (HTTP 403, Invalid OAuth access token).");
       },
-    });
+    };
 
+    const summary = await publishDueScheduledPosts(prisma, failingDeps);
     expect(summary.postsFailed).toBeGreaterThanOrEqual(1);
 
-    const updated = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
-    expect(updated.publishStatus).toBe("FAILED");
-    expect(updated.lastErrorMessage).toContain("Invalid OAuth access token");
+    // First failure is transient: back to NOT_STARTED with a future nextAttemptAt.
+    const retried = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    expect(retried.publishStatus).toBe("NOT_STARTED");
+    expect(retried.attemptCount).toBe(1);
+    expect(retried.lastErrorMessage).toContain("Invalid OAuth access token");
+    expect(retried.nextAttemptAt?.getTime()).toBeGreaterThan(new Date("2026-07-20T12:00:00Z").getTime());
+
+    // A poll before nextAttemptAt must not pick the row up again (attemptCount unchanged).
+    await publishDueScheduledPosts(prisma, failingDeps);
+    const untouched = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    expect(untouched.attemptCount).toBe(1);
+    expect(untouched.publishStatus).toBe("NOT_STARTED");
+
+    // Exhausted attempts fail terminally.
+    await prisma.scheduledPost.update({
+      where: { id: scheduledPostId },
+      data: { attemptCount: 4, nextAttemptAt: null },
+    });
+    await publishDueScheduledPosts(prisma, failingDeps);
+    const failed = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    expect(failed.publishStatus).toBe("FAILED");
+    expect(failed.attemptCount).toBe(5);
   });
 
   it("no-ops entirely when META_SYSTEM_USER_TOKEN is unset", async () => {

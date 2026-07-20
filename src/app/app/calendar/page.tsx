@@ -122,7 +122,7 @@ export default async function CalendarPage() {
                       <div key={post.id} className="rounded-md border border-stone-200 p-3">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-xs font-medium uppercase tracking-wide text-stone-400">
-                            {post.clip.project.name}
+                            {post.clip?.project.name ?? "Earlier clip set"}
                           </p>
                           {badge ? (
                             <span
@@ -132,8 +132,12 @@ export default async function CalendarPage() {
                             </span>
                           ) : null}
                         </div>
-                        <p className="mt-1 text-sm font-semibold">{post.clip.title}</p>
-                        <p className="mt-1 text-xs text-stone-500">Rank #{post.clip.rank}</p>
+                        <p className="mt-1 text-sm font-semibold">
+                          {post.clip?.title ?? "Posted clip (regenerated since)"}
+                        </p>
+                        {post.clip ? (
+                          <p className="mt-1 text-xs text-stone-500">Rank #{post.clip.rank}</p>
+                        ) : null}
                         <div className="mt-3">
                           {canManageSchedule ? (
                             <PlatformPicker scheduledPostId={post.id} platform={post.platform} />
