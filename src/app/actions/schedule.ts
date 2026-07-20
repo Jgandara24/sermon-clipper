@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
-import { assertWorkspaceScope } from "@/lib/project-service";
 import { prisma } from "@/lib/prisma";
 
 const updatePlatformSchema = z.object({
@@ -36,10 +35,14 @@ export async function updateScheduledPostPlatformAction(formData: FormData) {
     redirect("/app/calendar?error=invalid");
   }
 
-  const scheduledPost = await prisma.scheduledPost.findUniqueOrThrow({
+  // Nonexistent and cross-workspace IDs get the same denial so the response
+  // doesn't reveal whether the post exists.
+  const scheduledPost = await prisma.scheduledPost.findUnique({
     where: { id: parsed.data.scheduledPostId },
   });
-  assertWorkspaceScope(scheduledPost.workspaceId, membership.workspace.id, "scheduled post");
+  if (!scheduledPost || scheduledPost.workspaceId !== membership.workspace.id) {
+    redirect("/app/calendar?error=invalid");
+  }
 
   await prisma.scheduledPost.update({
     where: { id: parsed.data.scheduledPostId },

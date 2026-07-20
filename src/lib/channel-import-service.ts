@@ -1,7 +1,6 @@
 import { ChannelImportPlatform, Prisma, type PrismaClient } from "@prisma/client";
 import { resolveUploadsPlaylist, type YouTubeChannel } from "@/lib/integrations/youtube";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
-import { assertWorkspaceScope } from "@/lib/project-service";
 
 /**
  * Channel auto-import registration and workspace-scoped management.
@@ -145,11 +144,12 @@ export async function setChannelImportSourceEnabled(
   sourceId: string,
   enabled: boolean,
 ) {
+  // Cross-workspace IDs get the same not-found denial as deleted ones so the
+  // response doesn't reveal whether the source exists.
   const source = await client.channelImportSource.findUnique({ where: { id: sourceId } });
-  if (!source) {
+  if (!source || source.workspaceId !== workspaceId) {
     throw new ChannelImportInputError("That channel registration no longer exists.");
   }
-  assertWorkspaceScope(source.workspaceId, workspaceId, "channel import source");
 
   return client.channelImportSource.update({
     where: { id: source.id },
