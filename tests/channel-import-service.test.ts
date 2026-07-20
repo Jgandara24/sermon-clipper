@@ -4,6 +4,7 @@ import {
   ChannelImportInputError,
   normalizeChannelInput,
   registerChannelImportSource,
+  setChannelImportSourceEnabled,
 } from "@/lib/channel-import-service";
 
 const CHANNEL_ID = "UCAOHpXtnB1c9BW7hqLg-3gQ";
@@ -74,5 +75,46 @@ describe("registerChannelImportSource input rejection", () => {
       registerChannelImportSource(client, "workspace-id", "https://vimeo.com/x", resolver),
     ).rejects.toThrow(ChannelImportInputError);
     expect(resolverCalls).toBe(0);
+  });
+});
+
+describe("setChannelImportSourceEnabled denial paths", () => {
+  function clientWithSource(source: { id: string; workspaceId: string } | null) {
+    let updateCalls = 0;
+    const client = {
+      channelImportSource: {
+        findUnique: async () => source,
+        update: async () => {
+          updateCalls += 1;
+          return source;
+        },
+      },
+    } as unknown as PrismaClient;
+    return { client, updateCount: () => updateCalls };
+  }
+
+  it("throws ChannelImportInputError for a nonexistent source id", async () => {
+    const { client, updateCount } = clientWithSource(null);
+
+    await expect(
+      setChannelImportSourceEnabled(client, "ws-1", "source-1", false),
+    ).rejects.toThrow(ChannelImportInputError);
+    expect(updateCount()).toBe(0);
+  });
+
+  it("throws the same ChannelImportInputError for a source in another workspace", async () => {
+    const { client, updateCount } = clientWithSource({ id: "source-1", workspaceId: "ws-other" });
+
+    await expect(
+      setChannelImportSourceEnabled(client, "ws-1", "source-1", false),
+    ).rejects.toThrow("That channel registration no longer exists.");
+    expect(updateCount()).toBe(0);
+  });
+
+  it("updates the source when it belongs to the workspace", async () => {
+    const { client, updateCount } = clientWithSource({ id: "source-1", workspaceId: "ws-1" });
+
+    await setChannelImportSourceEnabled(client, "ws-1", "source-1", true);
+    expect(updateCount()).toBe(1);
   });
 });

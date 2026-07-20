@@ -1,6 +1,7 @@
 import { AuthProvider, ChannelImportPlatform, PrismaClient, WorkspaceRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  ChannelImportInputError,
   DuplicateChannelImportError,
   listChannelImportSources,
   registerChannelImportSource,
@@ -164,9 +165,10 @@ describe("setChannelImportSourceEnabled", () => {
   it("refuses to touch a source belonging to another workspace", async () => {
     const [foreign] = await listChannelImportSources(prisma, otherWorkspaceId);
 
+    // Cross-workspace denial is deliberately indistinguishable from not-found.
     await expect(
       setChannelImportSourceEnabled(prisma, workspaceId, foreign.id, false),
-    ).rejects.toThrow(/Workspace access denied/);
+    ).rejects.toThrow(ChannelImportInputError);
 
     const untouched = await prisma.channelImportSource.findUniqueOrThrow({
       where: { id: foreign.id },

@@ -51,3 +51,6 @@ next-env.d.ts
 
 # compiled worker output
 /dist
+
+# local working artifacts (planning scratch, not project docs)
+/OUTPUTS/
