@@ -154,7 +154,7 @@ Railway config changes, no deleting remote branches, no Facebook/Meta API calls.
   personal notes, leave it untracked instead of ignoring it and flag the question in
   the notes.
 
-### - [ ] 5. Cleanup PR: graceful denials for forged/stale entity IDs
+### - [x] 5. Cleanup PR: graceful denials for forged/stale entity IDs
 
 - The review's remaining low-severity finding: `src/app/actions/schedule.ts` (39-42)
   uses `findUniqueOrThrow` + `assertWorkspaceScope`, so a forged or stale
@@ -172,4 +172,47 @@ Railway config changes, no deleting remote branches, no Facebook/Meta API calls.
 
 ## Completion report
 
-(append here when done)
+Run 2026-07-20 (UTC), all five items done. Per item:
+
+1. **PR #17 merged and deployed.** Merge commit `aa17451`; web + worker Railway deploys
+   SUCCESS; migrations `20260719083000_add_scheduled_post_retry` and
+   `20260719090000_scheduled_post_clip_set_null` applied at 04:56:23 UTC;
+   `npm run smoke:production` → status ok (10/10 checks).
+   *Watch item:* the worker deployed ~90s before web's pre-deploy migration and spammed
+   P2022 (`scheduled_posts.attempt_count` missing) until the migration landed, then
+   self-healed. Only web has `preDeployCommand: npm run db:migrate:deploy` — every future
+   deploy that pairs a migration with new worker code repeats this window. Consider gating
+   the worker on migrations.
+
+2. **Migration "drift" resolved — it was never a file edit.** The committed file is
+   byte-identical to when it landed (PR #10). The local dev DB had a leftover
+   rolled-back/failed attempt row (the pre-hand-edit variant, 0 steps applied) in
+   `_prisma_migrations`, which Prisma 6.19.3 misreports as "modified after applied".
+   Deleted that debris row (local dev DB only); drift probe now clean; no reset run;
+   production unaffected. *Watch item:* `migrate dev` still regenerates the two destructive
+   transcripts statements every run (generated tsvector column + GIN index can't be fully
+   modeled in schema.prisma) — they must be hand-stripped each time, per the warning comment
+   in the channel_import_sources migration.
+
+3. **Tier 3 worker env: one gap.** `META_SYSTEM_USER_TOKEN` and `META_GRAPH_API_VERSION`
+   present on the worker; **`NEXT_PUBLIC_APP_URL` is ABSENT** — the publisher fail-closes,
+   so nothing can post until it's set. No `facebook_publish_misconfigured` events in logs,
+   but the event only fires when posts are due, and none are.
+   **FOR JAKE (manual, in order):**
+   - Set `NEXT_PUBLIC_APP_URL` (public app URL, non-localhost) on the **worker** Railway
+     service.
+   - Then run the live sandbox end-to-end test: `docs/TIER3_SANDBOX_TEST_CHECKLIST.md`
+     (still entirely pending).
+
+4. **Untracked files tidied.** Sandbox checklist committed; `OUTPUTS/` gitignored;
+   **`CTO.md` left untracked — Jake's call** whether to track it (institutional-knowledge
+   argument for; public-repo exposure of acquisition strategy against).
+   *Deviation:* direct push to main was rejected by branch protection, so the docs commits
+   from items 1-4 ride on this PR instead of a direct push. Nothing was merged by the loop.
+
+5. **This PR.** Forged/stale `scheduledPostId` now redirects to the calendar error state;
+   cross-workspace channel-import source ids throw `ChannelImportInputError` (mapped to the
+   existing not-found redirect), same message as deleted ids — no existence oracle. Unit
+   tests added for all denial + success paths (`tests/schedule-forged-id-denial.test.ts`,
+   `tests/channel-import-service.test.ts`). `npm run verify`: 54 files / 386 tests passed,
+   build clean. **Do not merge without review.**
