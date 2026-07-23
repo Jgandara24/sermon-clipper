@@ -121,9 +121,21 @@ export async function runOnePendingJob(): Promise<boolean> {
         attempt: job.attempt,
         errorCode: failure.code,
         retryable: failure.retryable ?? true,
+        ...(error instanceof JobFailureError ? { detail: causeDetail(error.cause) } : {}),
       },
     });
   }
 
   return true;
+}
+
+/**
+ * Surfaces the underlying cause of a JobFailureError (e.g. yt-dlp's stderr, which Node's
+ * execFile bakes into the rejected error's message) into operational event metadata — without
+ * this, on-call debugging has only a generic error code and no way to see what actually failed.
+ */
+function causeDetail(cause: unknown): string | undefined {
+  if (!cause) return undefined;
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return message.length > 1000 ? `${message.slice(0, 1000)}…` : message;
 }
