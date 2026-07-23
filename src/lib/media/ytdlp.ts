@@ -56,6 +56,14 @@ export function parseYtDlpMetadataJson(raw: string): YtDlpMetadata {
   };
 }
 
+/**
+ * YouTube's extractor requires executing a JS challenge to produce working stream/format URLs;
+ * yt-dlp only auto-enables its bundled `deno` runtime for this, which isn't installed in the
+ * worker image. The worker's own Node binary satisfies yt-dlp's alternate `node` runtime option,
+ * so this reuses `process.execPath` instead of shipping a second JS runtime.
+ */
+const JS_RUNTIME_ARGS = ["--js-runtimes", `node:${process.execPath}`];
+
 /** Resolves metadata (duration, title) for a URL without downloading it, so limits can be checked first. */
 export async function fetchYtDlpMetadata(
   url: string,
@@ -64,7 +72,7 @@ export async function fetchYtDlpMetadata(
   const ytDlpPath = resolveYtDlpPath();
   const { stdout } = await execFile(
     ytDlpPath,
-    ["--dump-json", "--skip-download", "--no-playlist", url],
+    [...JS_RUNTIME_ARGS, "--dump-json", "--skip-download", "--no-playlist", url],
     {
       timeoutMs: envTimeoutMs("YTDLP_METADATA_TIMEOUT_MS", 30_000),
       // --dump-json routinely exceeds Node's 1 MiB default (large formats lists plus
@@ -96,6 +104,7 @@ export async function downloadYtDlpVideo(
   await execFile(
     ytDlpPath,
     [
+      ...JS_RUNTIME_ARGS,
       "-f",
       "bv*[height<=1080]+ba/b[height<=1080]",
       "--merge-output-format",
