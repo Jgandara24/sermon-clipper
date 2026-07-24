@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { env } from "@/lib/env";
+import { computeIoU } from "./chunking";
 import { computePlatformFit, computeSpeakerEnergy } from "./computed-subscores";
 import { buildChurchSubscores } from "./church-scoring";
 import { detectScriptureReferences } from "./scripture";
@@ -142,9 +143,13 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
         {
           role: "user",
           content:
-            `Classify each numbered transcript excerpt below by moment type. Use "reject" for ` +
-            `anything that starts mid-thought, ends mid-sentence, or is otherwise not a usable ` +
-            `standalone clip.\n\n${candidates.map((c, i) => `[${i}] ${c.text}`).join("\n\n")}`,
+            `Classify each numbered transcript excerpt below by its strongest moment type. ` +
+            `Reserve "reject" for excerpts that are genuinely unusable as a standalone clip: no ` +
+            `discernible point, cut off so badly the idea can't be followed, or pure housekeeping ` +
+            `(announcements, greetings, mic checks). An excerpt with slightly rough edges that ` +
+            `still carries a complete, compelling idea should be classified by that idea, not ` +
+            `rejected — a later pass scores and trims the survivors.\n\n` +
+            candidates.map((c, i) => `[${i}] ${c.text}`).join("\n\n"),
         },
       ],
       output_config: { format: zodOutputFormat(StageAResultSchema) },
@@ -173,11 +178,20 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
       );
     }
 
-    const kept = classifications
+    // Stage A survivors are heavily overlapping (candidate windows share start positions), and
+    // Stage B has a fixed number of slots. Thin overlapping survivors before slicing so those
+    // slots spread across distinct moments in the recording — otherwise Stage B scores 25
+    // variations of the same opening and the post-scoring dedup collapses them to a clip or two.
+    const survivors = classifications
       .filter((c) => c.momentType !== "reject")
       .map((c) => c.index)
-      .filter((i) => i >= 0 && i < candidates.length)
-      .slice(0, MAX_STAGE_B_CANDIDATES);
+      .filter((i) => i >= 0 && i < candidates.length);
+    const kept: number[] = [];
+    for (const index of survivors) {
+      if (kept.length >= MAX_STAGE_B_CANDIDATES) break;
+      const overlapsKept = kept.some((k) => computeIoU(candidates[k], candidates[index]) > 0.5);
+      if (!overlapsKept) kept.push(index);
+    }
 
     if (kept.length === 0) {
       this.lastUsage = buildAnalysisUsage(modelCalls);
