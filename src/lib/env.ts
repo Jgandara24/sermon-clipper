@@ -116,6 +116,7 @@ const fieldSchemas = {
   FFMPEG_PATH: optionalString,
   FFPROBE_PATH: optionalString,
   YTDLP_PATH: optionalString,
+  YTDLP_PROXY_URL: optionalString,
   WHISPER_CPP_BINARY: optionalString,
   WHISPER_MODEL_PATH: optionalString,
 
@@ -231,6 +232,16 @@ export function ffprobePath(): string {
 
 export function ytDlpPath(): string {
   return env.YTDLP_PATH || "yt-dlp";
+}
+
+/**
+ * Proxy for every yt-dlp request. YouTube rate-limits and bot-challenges datacenter IPs, so
+ * unproxied fetches from the worker fail with HTTP 429 / "video is not available" regardless of
+ * the video's own availability. Empty means direct, which is only viable from a residential IP.
+ * Format-URL signatures embed the requesting IP, so metadata and download must share one exit IP.
+ */
+export function ytDlpProxyUrl(): string | undefined {
+  return env.YTDLP_PROXY_URL || undefined;
 }
 
 /**
