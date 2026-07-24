@@ -199,6 +199,32 @@ describe("scoreCandidates", () => {
     expect(provider.lastUsage?.calls).toHaveLength(1);
   });
 
+  it("thins heavily overlapping Stage A survivors before sending them to Stage B", async () => {
+    // Three windows over the same moment (IoU > 0.5 with each other) plus one distinct window:
+    // Stage B should see one representative of the cluster and the distinct window, not all four.
+    const overlapping = [
+      { startMs: 0, endMs: 60_000, text: "Same moment, widest window." },
+      { startMs: 0, endMs: 50_000, text: "Same moment, mid window." },
+      { startMs: 5_000, endMs: 60_000, text: "Same moment, shifted window." },
+      { startMs: 200_000, endMs: 260_000, text: "A completely different moment later on." },
+    ];
+    streamMock
+      .mockReturnValueOnce(
+        stageAStreamResult({
+          classifications: overlapping.map((_, index) => ({ index, momentType: "hook" })),
+        }),
+      )
+      .mockReturnValueOnce(stageBStreamResult({ clips: [stageBClip(0), stageBClip(3)] }));
+
+    await new ClaudeAnalysisProvider().scoreCandidates(overlapping, CONTEXT);
+
+    const stageBPrompt = streamMock.mock.calls[1][0].messages[0].content as string;
+    expect(stageBPrompt).toContain("[0]");
+    expect(stageBPrompt).toContain("[3]");
+    expect(stageBPrompt).not.toContain("[1]");
+    expect(stageBPrompt).not.toContain("[2]");
+  });
+
   it("caps Stage B at 25 candidates", async () => {
     const many = candidates(30);
     streamMock

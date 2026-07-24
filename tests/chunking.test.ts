@@ -65,6 +65,49 @@ describe("buildCandidateWindows", () => {
     expect(candidates.length).toBeLessThanOrEqual(10);
   });
 
+  it("spreads a capped candidate pool across the whole recording, not just the opening", () => {
+    // Regression test: the old builder emitted a window at every segment end and truncated at
+    // maxCandidates, so a long recording's pool covered only its first ~40 seconds and every
+    // suggested clip came from the sermon's opening.
+    const durationMs = 50 * 60 * 1000;
+    const segmentMs = 2_000;
+    const manySegments: TranscriptSegmentInput[] = Array.from(
+      { length: durationMs / segmentMs },
+      (_, i) => ({
+        idx: i,
+        startMs: i * segmentMs,
+        endMs: (i + 1) * segmentMs,
+        text: `Sentence number ${i}.`,
+      }),
+    );
+
+    const candidates = buildCandidateWindows(manySegments, {
+      minMs: 20_000,
+      maxMs: 90_000,
+      maxCandidates: 500,
+    });
+
+    expect(candidates.length).toBeLessThanOrEqual(500);
+    const lastStart = Math.max(...candidates.map((c) => c.startMs));
+    expect(lastStart).toBeGreaterThan(durationMs * 0.9);
+  });
+
+  it("emits a bounded number of windows per start position", () => {
+    const manySegments: TranscriptSegmentInput[] = Array.from({ length: 60 }, (_, i) => ({
+      idx: i,
+      startMs: i * 2_000,
+      endMs: (i + 1) * 2_000,
+      text: `Sentence number ${i}.`,
+    }));
+    const candidates = buildCandidateWindows(manySegments, {
+      minMs: 20_000,
+      maxMs: 90_000,
+      maxCandidates: 10_000,
+    });
+    const fromFirstStart = candidates.filter((c) => c.startMs === 0);
+    expect(fromFirstStart.length).toBeLessThanOrEqual(3);
+  });
+
   it("returns no candidates when nothing fits the duration bucket", () => {
     const candidates = buildCandidateWindows(SEGMENTS, { minMs: 500_000, maxMs: 600_000 });
     expect(candidates).toHaveLength(0);
