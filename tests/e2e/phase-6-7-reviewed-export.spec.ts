@@ -371,6 +371,16 @@ John 14 says peace stays with us because Jesus tells the church not to let their
     await page.reload();
 
     await expect(page.getByRole("heading", { name: "Suggested clips" })).toBeVisible();
+
+    // Analysis persisted a sermon outline, so the results page shows two tabs over the same
+    // clips, defaulting to the outline view with section-grouped context lines.
+    await expect(page.getByRole("tab", { name: "Sermon outline" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText(/#1 overall/)).toBeVisible();
+    await expect(page.getByText(/Best in section/)).toBeVisible();
+    await expect(page.getByText("John 14").first()).toBeVisible();
+
+    // Ranked tab shows the same clip with the same global rank — no duplicates, ranks agree.
+    await page.getByRole("tab", { name: "Ranked clips" }).click();
     await expect(page.getByText("Rank 1")).toBeVisible();
     await expect(page.getByText("John 14").first()).toBeVisible();
 
