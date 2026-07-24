@@ -99,6 +99,8 @@ export function resolveSectionAnchors(
     };
   });
 
+  clampSectionsMsMonotonic(sections);
+
   const sermonStart = segments[0].startMs;
   const sermonEnd = segments[segments.length - 1].endMs;
   const sermonSpan = Math.max(1, sermonEnd - sermonStart);
@@ -115,6 +117,21 @@ export function resolveSectionAnchors(
   }
 
   return sections;
+}
+
+/**
+ * Sections are non-overlapping in segment space by construction, but transcript segments
+ * themselves can overlap in TIME (YouTube auto-caption cues do; whisper's don't), which would
+ * leak small millisecond overlaps between adjacent sections. Clamp each section's start to its
+ * predecessor's end so the ordered/non-overlapping invariant holds in both spaces.
+ */
+export function clampSectionsMsMonotonic(sections: OutlineSectionDraft[]): void {
+  for (let i = 1; i < sections.length; i += 1) {
+    const prevEnd = sections[i - 1].endMs;
+    if (sections[i].startMs < prevEnd && prevEnd < sections[i].endMs) {
+      sections[i].startMs = prevEnd;
+    }
+  }
 }
 
 export function overlapsExclusion(

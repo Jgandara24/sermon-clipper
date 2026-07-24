@@ -105,4 +105,24 @@ describe("resolveSectionAnchors", () => {
   it("throws when the model returns no sections", () => {
     expect(() => resolveSectionAnchors([], makeSegments(10), [])).toThrow(OutlineGenerationError);
   });
+
+  it("keeps section timestamps non-overlapping even when transcript cues overlap in time", () => {
+    // YouTube auto-caption cues overlap: each starts before the previous one ends. Sections cut
+    // at segment boundaries must still come out monotonic in milliseconds.
+    const segments = Array.from({ length: 100 }, (_, i) => ({
+      idx: i,
+      startMs: i * 2_000,
+      endMs: i * 2_000 + 5_000,
+      text: `Sentence number ${i}.`,
+    }));
+    const sections = resolveSectionAnchors(
+      [
+        anchor({ type: "introduction", startSegmentIdx: 0, endSegmentIdx: 49 }),
+        anchor({ startSegmentIdx: 50, endSegmentIdx: 99 }),
+      ],
+      segments,
+      [],
+    );
+    expect(sections[1].startMs).toBeGreaterThanOrEqual(sections[0].endMs);
+  });
 });

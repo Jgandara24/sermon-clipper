@@ -1,5 +1,6 @@
 import type { TranscriptSegmentInput } from "../chunking";
 import { isLikelyNonSermonText } from "../sermon-boundary";
+import { clampSectionsMsMonotonic } from "./validate";
 import type {
   ExclusionRange,
   ExclusionReason,
@@ -180,6 +181,7 @@ export function buildHeuristicOutline(
   }
 
   if (sections.length < 2) return null;
+  clampSectionsMsMonotonic(sections);
 
   return {
     mainIdea: buildSectionSummary(segments),
