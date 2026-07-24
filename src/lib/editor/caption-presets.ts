@@ -10,6 +10,10 @@ export type CaptionStyle = {
   strokeColor: string;
   strokePx: number;
   shadow: boolean;
+  /** Bold weight; presets leave it unset (regular), per-clip overrides can turn it on. */
+  bold?: boolean;
+  /** Freeform placement (normalized block center); unset = use `position`. */
+  offset?: { x: number; y: number };
 };
 
 export type CaptionPreset = {
