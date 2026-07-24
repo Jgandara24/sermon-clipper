@@ -1014,3 +1014,121 @@ team accepted that tradeoff explicitly in exchange for de-risking the actual fir
 the manual gate.
 
 Status: Active.
+
+## 2026-07-23 - Open Question: YouTube URL Import Is Blocked By Datacenter IP / Bot Detection In Production
+
+Open Question: Production URL-paste import (and by extension the unmerged `auto-import-loop`
+channel-polling branch, which shares the same fetch path) fails on essentially every real
+attempt from Railway. This is not a code bug in our handling — it's a fetch-infrastructure gap.
+No decision has been made yet on how to close it; this entry records the findings so the research
+isn't lost to chat history.
+
+Findings: Discovered live during the Tier 3 sandbox test walkthrough. Two real bugs were found
+and fixed along the way (PR #19: yt-dlp needs `--js-runtimes` since YouTube's extractor now
+requires executing a JS challenge, and our worker image only has Node, not yt-dlp's default
+`deno` — fixed by pointing yt-dlp at the worker's own Node binary; PR #20: `JobFailureError`'s
+underlying `cause` wasn't surfaced into the Operations event feed, only a generic error code —
+fixed by adding a truncated `detail` field). Fixing both did not fix the underlying import: the
+real error, only visible after PR #20 shipped, is `HTTP Error 429: Too Many Requests` plus
+`Unable to fetch GVS PO Token for web_safari client: Missing required Visitor Data`. Reproducing
+the identical yt-dlp call from a home IP succeeded 3/3 times with full metadata; from Railway's
+IP it fails immediately. This is YouTube's anti-bot system blocking/throttling known
+datacenter/cloud IP ranges harder than residential ones — confirmed as an industry-wide,
+escalating problem via the yt-dlp project's own PO Token Guide and open issues (IP-based blocking,
+PO tokens "no longer bypass the bot check for the majority of cases" as of 2026), not something
+specific to our setup.
+
+A live side-by-side test against Opus Clip (using the exact same failing video, with the
+founder's own logged-in account) confirmed competitors have solved this, not avoided it: the
+identical URL completed successfully end-to-end in Opus Clip in ~8 minutes. Opus metered the
+import hard (49 credits for a 49-minute video, link-paste gated to paid plans only), consistent
+with them carrying a real per-fetch infrastructure cost. A vendor ecosystem exists that sells this
+capability directly (Apify YouTube-downloader actors bundling residential proxy access, Sieve's
+YouTube API), which is corroborating evidence for "buy proxy/vendor capacity" being a normal,
+solved-elsewhere approach rather than something requiring novel engineering.
+
+One assumption from earlier discussion was walked back on reflection: connecting a channel via
+YouTube OAuth ("connect your channel," which Opus Clip also offers) was initially assumed to be
+an arms-race-free alternative fetch mechanism. That's not confirmed — the public YouTube Data API
+has no endpoint that returns downloadable video bytes, even for the channel owner, so OAuth more
+likely functions as a consent/attribution/publish-back layer stacked on the same underlying fetch
+infrastructure, not a replacement for it. Treat OAuth as a separate, complementary decision
+(trust/UX/ToS-comfort, and it is still the only way to auto-poll a *specific* church's own
+channel without them re-pasting links) rather than a fix for the fetch-reliability problem itself.
+
+Options on the table (not yet decided): (1) buy fetch capacity — either a managed vendor API
+(Apify/Sieve-style) behind our own abstraction, or a residential proxy provider (Bright
+Data/IPRoyal/Decodo-tier) wired directly into our existing yt-dlp call; (2) cookies from a
+dedicated Google account as a cheap near-term stopgap, accepting ToS-gray/fragile status; (3) do
+nothing further and treat URL import as effectively non-functional in production until a path is
+chosen.
+
+Status: **Resolved same day** by the entry below ("YouTube Import Goes Through a Residential
+Proxy"). Kept for the findings and the reproduction detail.
+
+## 2026-07-23 - YouTube Import Goes Through a Residential Proxy; PERC Is the Post-90-Day Cost Path
+
+Decision: Route all yt-dlp traffic through a residential proxy, configured by a new
+`YTDLP_PROXY_URL` env var (`src/lib/env.ts`, applied in `src/lib/media/ytdlp.ts` to metadata and
+download alike). Unset means direct, which still works from a residential dev machine. Two things
+were explicitly **rejected**: (a) a fully-managed fetch vendor (Apify/Sieve-style) as the primary
+path, and (b) the two-pass bandwidth optimization described below.
+
+Separately, and not as a substitute: churches retained past ~3 months are intended to migrate to
+**PERC** (Pulpit Engine Recording Cloud — the church's streaming platform pushes a copy to a
+Cloudflare Stream live input, which records it and exposes a downloadable MP4), which removes
+YouTube from the path entirely for those churches and lowers cost further.
+
+Why: URL import is the only intake that scales onboarding — a church can paste a link the day
+they sign up, whereas PERC requires them to add an RTMP destination inside their streaming
+platform before they see any value. That setup burden is exactly why Pulpit Engine removed PERC as
+its default intake (its ADR-0003, 2026-06-15, "too much setup") and put it back only as a
+post-launch path (ADR-0006, "~90 days after the first church launches"). So YouTube must work for
+acquisition even though PERC is cheaper at steady state; they serve different stages of the same
+customer, not competing options.
+
+Proxy over managed vendor: at $49/mo pricing a managed vendor (~$47/church/month for a
+90-min Sunday + 50-min Wednesday church) leaves ~4% margin and goes negative for any church
+uploading higher-bitrate video; a wholesale residential proxy (~$10/church/month unoptimized)
+leaves ~80%. The capability itself is commodity bandwidth, so per the CTO.md build/buy framework
+we buy the bandwidth and own the orchestration (the yt-dlp adapter already exists and is tested).
+
+Rejecting the two-pass optimization: the idea was to fetch a low-res proxy copy up front and only
+fetch full-quality bytes for the seconds actually published. Investigation showed the pipeline does
+split cleanly — TRANSCRIBE reads only the PROBE-produced WAV, ANALYZE only the transcript, and the
+review page has no video at all — but the savings and costs don't justify it now: (i) measured
+savings are ~2.3x, not the ~5x first estimated, worth roughly $6/church/month; (ii) clip boundaries
+extend outward in unbounded 15s steps (`EXTEND_STEP_MS`, `src/components/clip-editor.tsx`) up to
+the whole sermon, and the editor loads the full source into a `<video controls>` element, so no
+fixed pre-fetch window is safe; (iii) `sourceVideo.width/height` written at FINALIZE drives the
+export crop rect (`src/lib/exports/handler.ts`), so probing a low-res proxy would silently
+mis-crop every clip; (iv) `cleanup.ts`/`retention.ts` hard-code four storage key columns, so a new
+proxy key would leak forever; (v) uploaded (non-URL) sources have no URL to re-fetch, forcing a
+permanent second code path; and (vi) it increases the *number* of YouTube round-trips, which is
+what triggers blocking, to save bytes — trading reliability for a small cost win on the exact
+feature that was broken. Deferred with an explicit trigger: revisit when monthly proxy spend
+exceeds ~$200 or church count passes ~25.
+
+Findings that constrain any future work here: format URLs are **IP-locked** — the signed URL
+carries an `ip=` parameter inside `sparams`, verified against the real failing video — so
+"resolve metadata through the proxy, download direct from the CDN" is not possible, and all bytes
+must traverse the proxy. This was an open assumption in the prior entry; it is now settled.
+
+Tradeoff: a recurring per-GB infrastructure cost that scales with usage and must be metered
+against plan limits (metering is duration-based today, `estimateProcessingMinutes`, and is
+idempotent per job, so it does not need to change for this). Ongoing exposure to YouTube's
+escalating countermeasures (PO tokens, SABR) means this path needs periodic maintenance — accepted
+deliberately, with PERC as the structural exit for long-tenured churches. Proxy providers are a
+new vendor dependency, though a commodity and replaceable one: the integration surface is a single
+env var, so switching providers is a config change.
+
+Reversibility: high. `YTDLP_PROXY_URL` unset restores the previous behavior exactly.
+
+Status: Active — code merged and env var documented; **not yet proven against a real proxy
+endpoint**. Two open items: (1) buy a small amount of residential proxy traffic and confirm a real
+import succeeds from Railway before relying on it; (2) PERC's automated MP4 retrieval has never
+worked end to end (Pulpit Engine's `current-build-status.md` records the one real recording
+returning `download_status = null`, resolved by pasting the URL by hand), so that needs its own
+proof before any church is migrated onto it. If Sermon Clipper adopts PERC it should use its own
+Cloudflare Stream account, not Pulpit Engine's — unlike the Meta App there is no review process to
+reuse, so sharing would add a failure point and buy nothing.

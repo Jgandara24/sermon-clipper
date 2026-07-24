@@ -1,6 +1,6 @@
 import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { ytDlpPath as resolveYtDlpPath } from "@/lib/env";
+import { ytDlpPath as resolveYtDlpPath, ytDlpProxyUrl as resolveYtDlpProxyUrl } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 
 export type YtDlpMetadata = {
@@ -64,6 +64,16 @@ export function parseYtDlpMetadataJson(raw: string): YtDlpMetadata {
  */
 const JS_RUNTIME_ARGS = ["--js-runtimes", `node:${process.execPath}`];
 
+/**
+ * Args every yt-dlp invocation shares. The proxy must be identical across metadata and download
+ * calls for the same video: YouTube signs format URLs against the requesting IP, so a download
+ * from a different exit IP than the one that resolved the metadata is rejected.
+ */
+function baseArgs(): string[] {
+  const proxyUrl = resolveYtDlpProxyUrl();
+  return proxyUrl ? [...JS_RUNTIME_ARGS, "--proxy", proxyUrl] : [...JS_RUNTIME_ARGS];
+}
+
 /** Resolves metadata (duration, title) for a URL without downloading it, so limits can be checked first. */
 export async function fetchYtDlpMetadata(
   url: string,
@@ -72,7 +82,7 @@ export async function fetchYtDlpMetadata(
   const ytDlpPath = resolveYtDlpPath();
   const { stdout } = await execFile(
     ytDlpPath,
-    [...JS_RUNTIME_ARGS, "--dump-json", "--skip-download", "--no-playlist", url],
+    [...baseArgs(), "--dump-json", "--skip-download", "--no-playlist", url],
     {
       timeoutMs: envTimeoutMs("YTDLP_METADATA_TIMEOUT_MS", 30_000),
       // --dump-json routinely exceeds Node's 1 MiB default (large formats lists plus
@@ -104,7 +114,7 @@ export async function downloadYtDlpVideo(
   await execFile(
     ytDlpPath,
     [
-      ...JS_RUNTIME_ARGS,
+      ...baseArgs(),
       "-f",
       "bv*[height<=1080]+ba/b[height<=1080]",
       "--merge-output-format",

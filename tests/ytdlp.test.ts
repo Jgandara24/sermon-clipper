@@ -98,6 +98,64 @@ describe("fetchYtDlpMetadata", () => {
   });
 });
 
+describe("YTDLP_PROXY_URL", () => {
+  const capture = () => {
+    const calls: string[][] = [];
+    return {
+      calls,
+      exec: async (_binary: string, args: string[]) => {
+        calls.push(args);
+        return { stdout: fixture(), stderr: "" };
+      },
+    };
+  };
+
+  it("omits --proxy when unset, so a residential dev machine still fetches directly", async () => {
+    delete process.env.YTDLP_PROXY_URL;
+    const { calls, exec } = capture();
+    await fetchYtDlpMetadata("https://youtube.com/watch?v=dQw4w9WgXcQ", exec);
+    expect(calls[0]).not.toContain("--proxy");
+  });
+
+  it("passes --proxy to metadata and download alike", async () => {
+    // Format URLs are signed against the requesting IP, so a download that exits through a
+    // different IP than the metadata call is rejected by YouTube — both must be proxied.
+    process.env.YTDLP_PROXY_URL = "http://user:pass@proxy.example:8080";
+    try {
+      const meta = capture();
+      await fetchYtDlpMetadata("https://youtube.com/watch?v=dQw4w9WgXcQ", meta.exec);
+      expect(meta.calls[0]).toEqual(
+        expect.arrayContaining(["--proxy", "http://user:pass@proxy.example:8080"]),
+      );
+
+      const dir = await mkdtemp(path.join(os.tmpdir(), "ytdlp-proxy-"));
+      try {
+        const download = {
+          calls: [] as string[][],
+          exec: async (_binary: string, args: string[]) => {
+            download.calls.push(args);
+            await writeFile(path.join(dir, "video"), "x");
+            return { stdout: "", stderr: "" };
+          },
+        };
+        await downloadYtDlpVideo(
+          "https://youtube.com/watch?v=dQw4w9WgXcQ",
+          path.join(dir, "video"),
+          { maxBytes: 1024 },
+          download.exec,
+        );
+        expect(download.calls[0]).toEqual(
+          expect.arrayContaining(["--proxy", "http://user:pass@proxy.example:8080"]),
+        );
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    } finally {
+      delete process.env.YTDLP_PROXY_URL;
+    }
+  });
+});
+
 describe("downloadYtDlpVideo", () => {
   let workDir: string;
 
