@@ -50,6 +50,32 @@ const BlockContentSchema = z.object({
         "other",
       ]),
       summary: z.string(),
+      confidence: z.number().min(0).max(1),
+      mixed: z.boolean(),
+    }),
+  ),
+});
+
+// Blocks classified below this confidence are treated as NOT preaching (fail closed): an
+// uncertain block must never produce clip candidates or outline sections.
+const MIN_BLOCK_CONFIDENCE = 0.6;
+
+const RefineExclusionReasonSchema = z.enum([
+  "worship",
+  "announcement",
+  "baptism",
+  "invitation",
+  "altar_call",
+  "prayer",
+  "not_preaching",
+]);
+
+const MixedRefineSchema = z.object({
+  exclusions: z.array(
+    z.object({
+      startSegment: z.number().int(),
+      endSegment: z.number().int(),
+      reason: RefineExclusionReasonSchema,
     }),
   ),
 });
@@ -172,6 +198,9 @@ async function classifyBlocks(
     `- "prayer": extended prayer that is not part of the teaching\n` +
     `- "other_speaker": someone other than the primary preacher speaking (testimony, guest, emcee)\n` +
     `- "other": anything else that is not the pastor preaching\n\n` +
+    `For each block also report a 0-1 confidence in your classification, and set mixed=true ` +
+    `when the block contains BOTH preaching and non-preaching content (e.g. the sermon ends and ` +
+    `an invitation begins mid-block).\n\n` +
     blocks
       .map(
         (b) =>
@@ -183,24 +212,93 @@ async function classifyBlocks(
   return result.blocks;
 }
 
-function blockExclusions(
+type BlockTriage = {
+  exclusions: ExclusionRange[];
+  preachingBlocks: AnalysisBlock[];
+  /** Preaching-dominant blocks flagged as containing some non-preaching content. */
+  mixedPreachingBlocks: AnalysisBlock[];
+};
+
+/**
+ * Turns block classifications into eligibility decisions, failing CLOSED: a block with no
+ * classification or one below MIN_BLOCK_CONFIDENCE is excluded as not_preaching rather than
+ * assumed to be sermon content. Mixed non-preaching-dominant blocks stay wholly excluded (their
+ * preaching fragments are not worth rescuing); mixed preaching-dominant blocks are collected
+ * for segment-level refinement.
+ */
+function triageBlocks(
   blocks: AnalysisBlock[],
   classified: z.infer<typeof BlockContentSchema>["blocks"],
-): ExclusionRange[] {
+): BlockTriage {
   const byIdx = new Map(classified.map((c) => [c.blockIdx, c]));
-  const ranges: ExclusionRange[] = [];
-  for (const block of blocks) {
-    const contentType = byIdx.get(block.blockIdx)?.contentType ?? "preaching";
-    if (contentType === "preaching") continue;
-    const reason = EXCLUDED_CONTENT_REASON[contentType] ?? "not_preaching";
-    const last = ranges[ranges.length - 1];
+  const exclusions: ExclusionRange[] = [];
+  const preachingBlocks: AnalysisBlock[] = [];
+  const mixedPreachingBlocks: AnalysisBlock[] = [];
+
+  const exclude = (block: AnalysisBlock, reason: ExclusionReason) => {
+    const last = exclusions[exclusions.length - 1];
     if (last && last.reason === reason && block.startMs - last.endMs <= 1) {
       last.endMs = block.endMs;
     } else {
-      ranges.push({ startMs: block.startMs, endMs: block.endMs, reason });
+      exclusions.push({ startMs: block.startMs, endMs: block.endMs, reason });
     }
+  };
+
+  for (const block of blocks) {
+    const classification = byIdx.get(block.blockIdx);
+    if (!classification || classification.confidence < MIN_BLOCK_CONFIDENCE) {
+      exclude(block, "not_preaching");
+      continue;
+    }
+    if (classification.contentType !== "preaching") {
+      exclude(block, EXCLUDED_CONTENT_REASON[classification.contentType] ?? "not_preaching");
+      continue;
+    }
+    preachingBlocks.push(block);
+    if (classification.mixed) mixedPreachingBlocks.push(block);
   }
-  return ranges;
+
+  return { exclusions, preachingBlocks, mixedPreachingBlocks };
+}
+
+/**
+ * Segment-level refinement of mixed preaching blocks: one call over the flagged blocks with a
+ * marker on every segment, returning the non-preaching sub-ranges as segment anchors — so a
+ * sermon that drifts into an invitation mid-block is excluded from the drift onward, not at
+ * coarse block granularity. Throws upward on model failure; the caller excludes the whole
+ * flagged blocks in that case (fail closed).
+ */
+async function refineMixedBlocks(
+  client: Anthropic,
+  mixedBlocks: AnalysisBlock[],
+  calls: AnalysisModelCall[],
+): Promise<ExclusionRange[]> {
+  if (mixedBlocks.length === 0) return [];
+  const prompt =
+    `The transcript blocks below are mostly the primary pastor preaching, but each contains ` +
+    `some non-preaching content (worship, announcements, baptism, invitation, altar call, ` +
+    `prayer, or another speaker). Identify every non-preaching span precisely.\n\n` +
+    `Anchor each span with startSegment/endSegment using the [S<number>] markers — every ` +
+    `segment is marked, so boundaries can and must land on the exact segment where the content ` +
+    `changes. Only report spans that are genuinely not the pastor preaching.\n\n` +
+    mixedBlocks
+      .map(
+        (b) =>
+          `[B${b.blockIdx}] (${formatClock(b.startMs)}–${formatClock(b.endMs)}) ` +
+          b.segments.map((s) => `[S${s.idx}] ${s.text}`).join(" "),
+      )
+      .join("\n\n");
+  const result = await runOutlineStage(client, classifyModel(), prompt, MixedRefineSchema, calls);
+
+  const segmentByIdx = new Map(mixedBlocks.flatMap((b) => b.segments).map((s) => [s.idx, s]));
+  return result.exclusions
+    .map((e): ExclusionRange | null => {
+      const start = segmentByIdx.get(e.startSegment);
+      const end = segmentByIdx.get(e.endSegment);
+      if (!start || !end || start.startMs >= end.endMs) return null;
+      return { startMs: start.startMs, endMs: end.endMs, reason: e.reason };
+    })
+    .filter((e): e is ExclusionRange => e !== null);
 }
 
 function composePrompt(
@@ -256,20 +354,31 @@ async function generateOutlineOnce(
   if (blocks.length === 0) throw new OutlineGenerationError("No analysis blocks.");
 
   const classified = await classifyBlocks(client, blocks, calls);
-  const exclusions = blockExclusions(blocks, classified);
+  const triage = triageBlocks(blocks, classified);
+  let preachingBlocks = triage.preachingBlocks;
+  const exclusions = [...triage.exclusions];
 
-  const classifiedByIdx = new Map(classified.map((c) => [c.blockIdx, c]));
-  const preachingBlocks = blocks.filter(
-    (b) => (classifiedByIdx.get(b.blockIdx)?.contentType ?? "preaching") === "preaching",
-  );
+  try {
+    exclusions.push(...(await refineMixedBlocks(client, triage.mixedPreachingBlocks, calls)));
+  } catch {
+    // Refinement failed, so the mixed blocks' boundaries are unknowable — exclude them
+    // wholesale rather than let unrefined non-preaching content become clip-eligible.
+    const mixedIdx = new Set(triage.mixedPreachingBlocks.map((b) => b.blockIdx));
+    preachingBlocks = preachingBlocks.filter((b) => !mixedIdx.has(b.blockIdx));
+    for (const block of triage.mixedPreachingBlocks) {
+      exclusions.push({ startMs: block.startMs, endMs: block.endMs, reason: "not_preaching" });
+    }
+  }
+
   if (preachingBlocks.length === 0) {
     throw new OutlineGenerationError("Block triage found no preaching content.");
   }
 
+  const classifiedByIdx = new Map(classified.map((c) => [c.blockIdx, c]));
   const blockSummaries = blocks
     .map((b) => {
       const c = classifiedByIdx.get(b.blockIdx);
-      return `[B${b.blockIdx}] (${formatClock(b.startMs)}–${formatClock(b.endMs)}) ${c?.contentType ?? "preaching"}: ${c?.summary ?? ""}`;
+      return `[B${b.blockIdx}] (${formatClock(b.startMs)}–${formatClock(b.endMs)}) ${c?.contentType ?? "unclassified"}: ${c?.summary ?? ""}`;
     })
     .join("\n");
   const markedText = renderMarkedText(preachingBlocks.flatMap((b) => b.segments));

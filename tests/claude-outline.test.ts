@@ -52,9 +52,9 @@ describe("generateSermonOutline", () => {
       .mockReturnValueOnce(
         streamResult({
           blocks: [
-            { blockIdx: 0, contentType: "worship", summary: "Songs." },
-            { blockIdx: 1, contentType: "preaching", summary: "Intro and first point." },
-            { blockIdx: 2, contentType: "preaching", summary: "Second point and close." },
+            { blockIdx: 0, contentType: "worship", summary: "Songs.", confidence: 0.95, mixed: false },
+            { blockIdx: 1, contentType: "preaching", summary: "Intro and first point.", confidence: 0.9, mixed: false },
+            { blockIdx: 2, contentType: "preaching", summary: "Second point and close.", confidence: 0.9, mixed: false },
           ],
         }),
       )
@@ -91,8 +91,8 @@ describe("generateSermonOutline", () => {
       .mockReturnValueOnce(
         streamResult({
           blocks: [
-            { blockIdx: 0, contentType: "preaching", summary: "Message." },
-            { blockIdx: 1, contentType: "preaching", summary: "Close and invitation." },
+            { blockIdx: 0, contentType: "preaching", summary: "Message.", confidence: 0.9, mixed: false },
+            { blockIdx: 1, contentType: "preaching", summary: "Close and invitation.", confidence: 0.9, mixed: false },
           ],
         }),
       )
@@ -117,6 +117,110 @@ describe("generateSermonOutline", () => {
       endMs: 240 * 2_000,
       reason: "invitation",
     });
+  });
+
+  it("fails closed on missing or low-confidence block classifications", async () => {
+    // Block 0 is preaching but uncertain (0.3), block 1 has no classification at all, block 2
+    // is confidently preaching. Only block 2 may produce sections; 0 and 1 become exclusions.
+    const segments = makeSegments(360);
+    const streamMock = vi
+      .fn()
+      .mockReturnValueOnce(
+        streamResult({
+          blocks: [
+            { blockIdx: 0, contentType: "preaching", summary: "Unsure.", confidence: 0.3, mixed: false },
+            { blockIdx: 2, contentType: "preaching", summary: "Clear preaching.", confidence: 0.9, mixed: false },
+          ],
+        }),
+      )
+      .mockReturnValueOnce(
+        streamResult({
+          mainIdea: "Idea.",
+          title: "Title",
+          confidence: 0.8,
+          sections: [
+            { type: "introduction", heading: "Open", summary: "s", startSegment: 240, endSegment: 299, confidence: 0.8 },
+            { type: "conclusion", heading: "Close", summary: "s", startSegment: 300, endSegment: 359, confidence: 0.8 },
+          ],
+          refinedExclusions: [],
+        }),
+      );
+
+    const { draft } = await generateSermonOutline(segments, fakeClient(streamMock));
+    expect(draft.status).toBe("generated");
+    // Blocks 0 and 1 merged into one fail-closed exclusion covering the first two blocks.
+    expect(draft.exclusions).toContainEqual({ startMs: 0, endMs: 240 * 2_000, reason: "not_preaching" });
+    expect(draft.sections[0].startMs).toBe(240 * 2_000);
+  });
+
+  it("refines mixed preaching blocks at segment level", async () => {
+    const segments = makeSegments(240);
+    const streamMock = vi
+      .fn()
+      .mockReturnValueOnce(
+        streamResult({
+          blocks: [
+            { blockIdx: 0, contentType: "preaching", summary: "Mostly preaching.", confidence: 0.9, mixed: true },
+            { blockIdx: 1, contentType: "preaching", summary: "Preaching.", confidence: 0.9, mixed: false },
+          ],
+        }),
+      )
+      .mockReturnValueOnce(
+        streamResult({
+          exclusions: [{ startSegment: 100, endSegment: 119, reason: "announcement" }],
+        }),
+      )
+      .mockReturnValueOnce(
+        streamResult({
+          mainIdea: "Idea.",
+          title: "Title",
+          confidence: 0.8,
+          sections: [
+            { type: "introduction", heading: "Open", summary: "s", startSegment: 0, endSegment: 99, confidence: 0.8 },
+            { type: "conclusion", heading: "Close", summary: "s", startSegment: 120, endSegment: 239, confidence: 0.8 },
+          ],
+          refinedExclusions: [],
+        }),
+      );
+
+    const { draft, calls } = await generateSermonOutline(segments, fakeClient(streamMock));
+    expect(calls).toHaveLength(3);
+    expect(draft.exclusions).toContainEqual({
+      startMs: 100 * 2_000,
+      endMs: 120 * 2_000,
+      reason: "announcement",
+    });
+  });
+
+  it("excludes a mixed block wholesale when segment refinement fails", async () => {
+    const segments = makeSegments(240);
+    const streamMock = vi
+      .fn()
+      .mockReturnValueOnce(
+        streamResult({
+          blocks: [
+            { blockIdx: 0, contentType: "preaching", summary: "Mixed.", confidence: 0.9, mixed: true },
+            { blockIdx: 1, contentType: "preaching", summary: "Preaching.", confidence: 0.9, mixed: false },
+          ],
+        }),
+      )
+      .mockReturnValueOnce(streamResult("not-json{"))
+      .mockReturnValueOnce(
+        streamResult({
+          mainIdea: "Idea.",
+          title: "Title",
+          confidence: 0.8,
+          sections: [
+            { type: "introduction", heading: "Open", summary: "s", startSegment: 120, endSegment: 179, confidence: 0.8 },
+            { type: "conclusion", heading: "Close", summary: "s", startSegment: 180, endSegment: 239, confidence: 0.8 },
+          ],
+          refinedExclusions: [],
+        }),
+      );
+
+    const { draft } = await generateSermonOutline(segments, fakeClient(streamMock));
+    expect(draft.exclusions).toContainEqual({ startMs: 0, endMs: 120 * 2_000, reason: "not_preaching" });
+    expect(draft.sections[0].startMs).toBe(120 * 2_000);
   });
 
   it("falls down the reliability ladder to a single Main Message section when the AI fails", async () => {

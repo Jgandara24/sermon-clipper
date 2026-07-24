@@ -9,7 +9,12 @@ import { generateSermonOutline } from "../outline/claude-outline";
 import type { SermonOutlineDraft } from "../outline/types";
 import type { AnalysisModelCall } from "../usage";
 import type { ScoredCandidate } from "../types";
-import { applyVisualGate, type VideoSource, type VisualGateStatus } from "../visual-gate";
+import {
+  applyVisualGate,
+  visualGateEnabled,
+  type VideoSource,
+  type VisualGateStatus,
+} from "../visual-gate";
 import { discoverSectionMoments, type DiscoveredMoment } from "./discovery";
 import { resolveMomentAnchors, type ResolvedCandidate } from "./resolve";
 import { selectWithSectionDiversity } from "./selection";
@@ -43,10 +48,6 @@ export type SemanticPipelineOutput = {
 
 export function semanticPipelineEnabled(): boolean {
   return (env.ANALYSIS_SEMANTIC_OUTLINE || "on").toLowerCase() !== "off";
-}
-
-function visualGateEnabled(): boolean {
-  return (env.ANALYSIS_VISUAL_GATE || "on").toLowerCase() !== "off";
 }
 
 /**

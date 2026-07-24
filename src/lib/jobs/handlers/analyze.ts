@@ -19,9 +19,16 @@ import {
   semanticPipelineEnabled,
 } from "@/lib/analysis/semantic/pipeline";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
+import Anthropic from "@anthropic-ai/sdk";
 import { AnalysisProviderUnavailableError, type ScoredCandidate } from "@/lib/analysis/types";
 import { buildAnalysisUsage, type AnalysisModelCall } from "@/lib/analysis/usage";
-import type { VideoSource } from "@/lib/analysis/visual-gate";
+import {
+  applyVisualGate,
+  visualGateEnabled,
+  visualGateRequired,
+  type VideoSource,
+  type VisualGateStatus,
+} from "@/lib/analysis/visual-gate";
 import { env } from "@/lib/env";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import {
@@ -42,6 +49,20 @@ const MAX_EXCLUSION_OVERLAP_FRACTION = 0.25;
 const NO_CLIPS_MESSAGE =
   "We didn't find strong standalone moments. Try a narrower timeframe or a prompt.";
 const ANALYZE_FAILED_MESSAGE = "Clip analysis failed — your minutes were returned.";
+const VISUAL_GATE_UNAVAILABLE_MESSAGE =
+  "Clip analysis couldn't verify the preacher is on camera, so no clips were generated — your minutes were returned.";
+
+/**
+ * Production never ships clips without visual verification: if the gate could not run
+ * (no video, no API client, disabled), the analysis fails rather than falling back to
+ * unverified clips. Development/test environments tolerate the skip so keyless and
+ * fixture-driven runs keep working.
+ */
+function assertVisualGateRan(status: VisualGateStatus | "not_run") {
+  if (visualGateRequired() && status !== "applied") {
+    throw new JobFailureError("ANALYZE_VISUAL_GATE_UNAVAILABLE", VISUAL_GATE_UNAVAILABLE_MESSAGE);
+  }
+}
 
 const OUTLINE_STATUS_ENUM: Record<OutlineStatus, SermonOutlineStatus> = {
   generated: SermonOutlineStatus.GENERATED,
@@ -163,9 +184,9 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
   let candidateCount = 0;
   let scoredCount = 0;
   const semanticMetadata: Record<string, unknown> = {};
+  const video = isSermon ? await resolveVideoSource(project.sourceVideo?.storageKey) : null;
 
   if (isSermon && semanticPipelineEnabled()) {
-    const video = await resolveVideoSource(project.sourceVideo?.storageKey);
     let semantic;
     try {
       semantic = await runSemanticPipeline({
@@ -190,6 +211,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
     semanticMetadata.semanticDiagnostics = semantic.diagnostics;
 
     if (semantic.clips !== null) {
+      assertVisualGateRan(semantic.visualGateStatus);
       kept = semantic.clips;
       providerName = scoringModel();
       candidateCount = semantic.diagnostics.resolvedCandidates;
@@ -258,10 +280,34 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
     scoredCount = scored.length;
 
     const refined = scored.map((clip) => refineBoundaries(clip, sourceDurationMs));
-    const deduped = dedupByOverlap(
+    let deduped = dedupByOverlap(
       refined.map((clip) => ({ ...clip, score: clip.total })),
       0.5,
     );
+
+    // The visual gate applies to BOTH pipelines: fallback clips must also prove the preacher
+    // stays in frame. In production a gate that couldn't run fails the analysis outright.
+    if (isSermon) {
+      const gate = await applyVisualGate(deduped, video, {
+        client: env.ANTHROPIC_API_KEY ? new Anthropic() : null,
+        minMs: MIN_CANDIDATE_MS,
+        enabled: visualGateEnabled(),
+      });
+      assertVisualGateRan(gate.status);
+      semanticCalls = [...semanticCalls, ...gate.calls];
+      semanticMetadata.visualGateStatus = gate.status;
+      if (outlineDraft && gate.rejected.length > 0) {
+        outlineDraft.exclusions = [
+          ...outlineDraft.exclusions,
+          ...gate.rejected.map((r) => r.exclusion),
+        ].sort((a, b) => a.startMs - b.startMs);
+      }
+      deduped = gate.passed;
+      if (deduped.length === 0) {
+        throw new JobFailureError("NO_CLIPS_FOUND", NO_CLIPS_MESSAGE);
+      }
+    }
+
     kept = deduped
       .sort((a, b) => b.total - a.total)
       .slice(0, CANDIDATE_POOL_SIZE)

@@ -126,8 +126,9 @@ const fieldSchemas = {
   ANALYSIS_MODEL_SCORING: optionalString,
   ANALYSIS_MODEL_OUTLINE: optionalString,
   // Escape hatches for the semantic outline-first pipeline and its visual eligibility gate.
-  // Both default on; set to "off" to force the legacy candidate-window pipeline / skip frame
-  // analysis (e.g. a cost-sensitive environment or an incident rollback).
+  // Both default on. ANALYSIS_SEMANTIC_OUTLINE=off forces the legacy candidate-window pipeline.
+  // ANALYSIS_VISUAL_GATE=off skips frame analysis but is honored ONLY outside production —
+  // in production the gate is mandatory and ANALYZE fails when it cannot run (visual-gate.ts).
   ANALYSIS_SEMANTIC_OUTLINE: optionalString,
   ANALYSIS_VISUAL_GATE: optionalString,
 

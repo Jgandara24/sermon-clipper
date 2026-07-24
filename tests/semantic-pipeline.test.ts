@@ -58,8 +58,8 @@ function stageBClip(index: number) {
 
 const BLOCK_CLASSIFY = streamResult({
   blocks: [
-    { blockIdx: 0, contentType: "preaching", summary: "Intro." },
-    { blockIdx: 1, contentType: "preaching", summary: "Point and close." },
+    { blockIdx: 0, contentType: "preaching", summary: "Intro.", confidence: 0.9, mixed: false },
+    { blockIdx: 1, contentType: "preaching", summary: "Point and close.", confidence: 0.9, mixed: false },
   ],
 });
 

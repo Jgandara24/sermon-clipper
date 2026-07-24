@@ -1157,15 +1157,20 @@ Outline-first inverts this: find the structure, search inside it, and gate eligi
 scoring. The outline is also first-class product surface (the results page's default tab) and a
 reusable asset for later features.
 
-Eligibility stance: the content gate (block triage + refined exclusion ranges + resolver
-trimming) and the visual gate both fail CLOSED per candidate — an unconfirmed clip is a rejected
-clip, and if every candidate is rejected the job reports NO_CLIPS_FOUND rather than falling back
-to ungated windows. One deliberate softening versus the strictest reading of the spec:
-gate-level infrastructure absence (no video key, storage cannot produce a path/URL) skips the
-visual gate with `visualGateStatus: "skipped_unavailable"` recorded in job metadata instead of
-zeroing the run — total rejection on a config hiccup would brick keyless/dev environments where
-no vision capability exists at all. Tighten by treating `skipped_unavailable` as fatal if a real
-deployment ever needs that guarantee.
+Eligibility stance: the content gate and the visual gate both fail CLOSED. Block triage
+requires a per-block confidence — a block with a missing or low-confidence classification is
+excluded as not_preaching, never assumed to be sermon content — and blocks flagged as mixed
+preaching/non-preaching are refined at transcript-segment granularity (one extra classify-model
+call; if refinement fails the whole mixed block is excluded). The visual gate samples a dense
+~4s frame grid PLUS a frame just after every ffmpeg-detected scene change, so a camera cutaway
+cannot hide between interval samples; it runs on BOTH pipelines' finalists (semantic and
+fallback windows). Per clip, an unconfirmed frame set rejects the clip; if every candidate is
+rejected the job reports NO_CLIPS_FOUND rather than falling back to ungated windows.
+Environment policy: in production the gate is mandatory — if it cannot run (no video, no API
+client, or someone sets ANALYSIS_VISUAL_GATE=off, which production ignores) the analysis fails
+with ANALYZE_VISUAL_GATE_UNAVAILABLE and minutes are returned. The permissive skip
+(`visualGateStatus: "skipped_unavailable"/"skipped_disabled"` in job metadata) exists only in
+development/test environments so keyless and fixture-driven runs keep working.
 
 Tradeoff: more model calls per sermon (block triage, compose, one discovery call per section,
 one scoring call, one small vision call per finalist clip) — roughly 2-3x the token spend of the
@@ -1173,11 +1178,12 @@ two-call pipeline, all metered through the existing usage telemetry. Trimmed vis
 keep their scored title/summary even though their bounds shrank; scores describe the untrimmed
 text. Accepted for now: trims are rare and conservative.
 
-Reversibility: high. `ANALYSIS_SEMANTIC_OUTLINE=off` restores the previous pipeline exactly;
-`ANALYSIS_VISUAL_GATE=off` disables only frame analysis. Dropping the two new tables reverts the
-schema.
+Reversibility: high. `ANALYSIS_SEMANTIC_OUTLINE=off` restores the previous candidate-window
+pipeline; `ANALYSIS_VISUAL_GATE=off` disables frame analysis outside production only (in
+production the gate cannot be switched off — a rollback there means reverting the deploy).
+Dropping the two new tables reverts the schema.
 
-Status: Active — merged with unit + integration + e2e coverage (mocked model calls). Not yet
-proven against a real full-length sermon with a live API key; the visual gate's frame sampling
-has not been benchmarked against real Railway worker throughput. Both need a production
-validation pass before the outline tab is shown to a paying church.
+Status: Proposed — implemented on `feat/semantic-outline-pipeline` with unit + integration +
+e2e coverage (mocked model calls); NOT yet merged to main. Open before merge: validate against
+a real full-length sermon with a live API key (outline accuracy, exclusions, clip quality,
+cost, wall-clock) and benchmark the visual gate's frame sampling on the Railway worker.

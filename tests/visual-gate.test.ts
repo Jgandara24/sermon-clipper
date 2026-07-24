@@ -1,5 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { applyVisualGate, frameTimestamps, trimToVisibleRun } from "@/lib/analysis/visual-gate";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  applyVisualGate,
+  frameTimestamps,
+  mergeSampleTimestamps,
+  trimToVisibleRun,
+  visualGateEnabled,
+  visualGateRequired,
+} from "@/lib/analysis/visual-gate";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  delete process.env.ANALYSIS_VISUAL_GATE;
+});
 
 describe("frameTimestamps", () => {
   it("samples just inside the clip edges and through the middle", () => {
@@ -12,8 +24,53 @@ describe("frameTimestamps", () => {
     }
   });
 
+  it("samples densely enough that a ten-second gap cannot exist", () => {
+    const timestamps = frameTimestamps(0, 60_000);
+    for (let i = 1; i < timestamps.length; i += 1) {
+      expect(timestamps[i] - timestamps[i - 1]).toBeLessThan(10_000);
+    }
+  });
+
   it("caps the frame count for long clips", () => {
-    expect(frameTimestamps(0, 90_000).length).toBeLessThanOrEqual(8);
+    expect(frameTimestamps(0, 90_000).length).toBeLessThanOrEqual(24);
+  });
+});
+
+describe("mergeSampleTimestamps", () => {
+  it("adds scene-change points to the grid in time order", () => {
+    const merged = mergeSampleTimestamps([0, 10_000, 20_000], [14_500]);
+    expect(merged).toEqual([0, 10_000, 14_500, 20_000]);
+  });
+
+  it("drops near-duplicate timestamps", () => {
+    const merged = mergeSampleTimestamps([0, 10_000], [10_400]);
+    expect(merged).toEqual([0, 10_000]);
+  });
+
+  it("prioritizes scene-change points and clip edges when over the cap", () => {
+    const grid = Array.from({ length: 24 }, (_, i) => i * 4_000);
+    const scene = [50_500, 70_500];
+    const merged = mergeSampleTimestamps(grid, scene, 24);
+    expect(merged).toContain(50_500);
+    expect(merged).toContain(70_500);
+    expect(merged[0]).toBe(0);
+    expect(merged[merged.length - 1]).toBe(92_000);
+    expect(merged.length).toBeLessThanOrEqual(24);
+  });
+});
+
+describe("visual gate environment policy", () => {
+  it("is required only in production", () => {
+    expect(visualGateRequired()).toBe(false);
+    vi.stubEnv("NODE_ENV", "production");
+    expect(visualGateRequired()).toBe(true);
+  });
+
+  it("honors the off switch outside production but ignores it in production", () => {
+    process.env.ANALYSIS_VISUAL_GATE = "off";
+    expect(visualGateEnabled()).toBe(false);
+    vi.stubEnv("NODE_ENV", "production");
+    expect(visualGateEnabled()).toBe(true);
   });
 });
 
@@ -68,6 +125,16 @@ describe("applyVisualGate", () => {
   it("reports skipped_unavailable when there is no video to sample", async () => {
     const result = await applyVisualGate(clips, null, {
       client: fakeClient,
+      minMs: 20_000,
+      enabled: true,
+    });
+    expect(result.status).toBe("skipped_unavailable");
+    expect(result.passed).toEqual(clips);
+  });
+
+  it("reports skipped_unavailable when there is no API client for vision", async () => {
+    const result = await applyVisualGate(clips, { kind: "path", path: "/tmp/x.mp4" }, {
+      client: null,
       minMs: 20_000,
       enabled: true,
     });
