@@ -1,16 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  AnalysisResponseTruncatedError,
   ClaudeAnalysisProvider,
   classifyModel,
   scoringModel,
 } from "@/lib/analysis/claude-provider";
 import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
 
-const { parseMock } = vi.hoisted(() => ({ parseMock: vi.fn() }));
+const { parseMock, streamMock } = vi.hoisted(() => ({ parseMock: vi.fn(), streamMock: vi.fn() }));
 
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class MockAnthropic {
-    messages = { parse: parseMock };
+    // Stage A uses messages.parse; Stage B streams (messages.stream → finalMessage).
+    messages = { parse: parseMock, stream: streamMock };
   },
 }));
 
@@ -46,8 +48,21 @@ function stageBClip(index: number) {
   };
 }
 
-function stageBResponse(clips: Array<ReturnType<typeof stageBClip>> | undefined) {
-  return { parsed_output: clips ? { scoredClips: clips } : undefined, usage: USAGE };
+/** Fake `messages.stream(...)` return: the provider awaits `.finalMessage()`. */
+function stageBStreamResult(opts: {
+  clips?: Array<ReturnType<typeof stageBClip>>;
+  stopReason?: string;
+  rawText?: string;
+}) {
+  const text =
+    opts.rawText ?? (opts.clips ? JSON.stringify({ scoredClips: opts.clips }) : "not-json{");
+  return {
+    finalMessage: vi.fn().mockResolvedValue({
+      content: [{ type: "text", text }],
+      usage: USAGE,
+      stop_reason: opts.stopReason ?? "end_turn",
+    }),
+  };
 }
 
 function candidates(count: number) {
@@ -62,6 +77,7 @@ const CONTEXT = { fullText: "full transcript", genre: "podcast" };
 
 beforeEach(() => {
   parseMock.mockReset();
+  streamMock.mockReset();
   process.env.ANTHROPIC_API_KEY = "sk-ant-test";
 });
 
@@ -85,15 +101,15 @@ describe("model configuration", () => {
   it("passes the configured models to the API calls", async () => {
     process.env.ANALYSIS_MODEL_CLASSIFY = "claude-haiku-9";
     process.env.ANALYSIS_MODEL_SCORING = "claude-sonnet-9";
-    parseMock
-      .mockResolvedValueOnce(stageAResponse([{ index: 0, momentType: "hook" }]))
-      .mockResolvedValueOnce(stageBResponse([stageBClip(0)]));
+    parseMock.mockResolvedValueOnce(stageAResponse([{ index: 0, momentType: "hook" }]));
+    streamMock.mockReturnValueOnce(stageBStreamResult({ clips: [stageBClip(0)] }));
 
     await new ClaudeAnalysisProvider().scoreCandidates(candidates(1), CONTEXT);
 
-    expect(parseMock).toHaveBeenCalledTimes(2);
+    expect(parseMock).toHaveBeenCalledTimes(1);
+    expect(streamMock).toHaveBeenCalledTimes(1);
     expect(parseMock.mock.calls[0][0].model).toBe("claude-haiku-9");
-    expect(parseMock.mock.calls[1][0].model).toBe("claude-sonnet-9");
+    expect(streamMock.mock.calls[0][0].model).toBe("claude-sonnet-9");
   });
 });
 
@@ -107,14 +123,15 @@ describe("scoreCandidates", () => {
   });
 
   it("scores kept candidates end to end and records usage for both stages", async () => {
-    parseMock
-      .mockResolvedValueOnce(
-        stageAResponse([
-          { index: 0, momentType: "hook" },
-          { index: 1, momentType: "complete_thought" },
-        ]),
-      )
-      .mockResolvedValueOnce(stageBResponse([stageBClip(0), stageBClip(1)]));
+    parseMock.mockResolvedValueOnce(
+      stageAResponse([
+        { index: 0, momentType: "hook" },
+        { index: 1, momentType: "complete_thought" },
+      ]),
+    );
+    streamMock.mockReturnValueOnce(
+      stageBStreamResult({ clips: [stageBClip(0), stageBClip(1)] }),
+    );
 
     const provider = new ClaudeAnalysisProvider();
     const scored = await provider.scoreCandidates(candidates(2), CONTEXT);
@@ -136,19 +153,18 @@ describe("scoreCandidates", () => {
   });
 
   it("drops candidates Stage A rejects and never sends them to Stage B", async () => {
-    parseMock
-      .mockResolvedValueOnce(
-        stageAResponse([
-          { index: 0, momentType: "reject" },
-          { index: 1, momentType: "story" },
-        ]),
-      )
-      .mockResolvedValueOnce(stageBResponse([stageBClip(1)]));
+    parseMock.mockResolvedValueOnce(
+      stageAResponse([
+        { index: 0, momentType: "reject" },
+        { index: 1, momentType: "story" },
+      ]),
+    );
+    streamMock.mockReturnValueOnce(stageBStreamResult({ clips: [stageBClip(1)] }));
 
     const scored = await new ClaudeAnalysisProvider().scoreCandidates(candidates(2), CONTEXT);
 
     expect(scored).toHaveLength(1);
-    const stageBPrompt = parseMock.mock.calls[1][0].messages[0].content as string;
+    const stageBPrompt = streamMock.mock.calls[0][0].messages[0].content as string;
     expect(stageBPrompt).toContain("[1]");
     expect(stageBPrompt).not.toContain("[0]");
   });
@@ -161,46 +177,56 @@ describe("scoreCandidates", () => {
 
     expect(scored).toEqual([]);
     expect(parseMock).toHaveBeenCalledTimes(1);
+    expect(streamMock).not.toHaveBeenCalled();
     // Stage A spend is still recorded even when nothing survives.
     expect(provider.lastUsage?.calls).toHaveLength(1);
   });
 
   it("caps Stage B at 25 candidates", async () => {
     const many = candidates(30);
-    parseMock
-      .mockResolvedValueOnce(
-        stageAResponse(many.map((_, index) => ({ index, momentType: "hook" }))),
-      )
-      .mockResolvedValueOnce(stageBResponse([stageBClip(0)]));
+    parseMock.mockResolvedValueOnce(
+      stageAResponse(many.map((_, index) => ({ index, momentType: "hook" }))),
+    );
+    streamMock.mockReturnValueOnce(stageBStreamResult({ clips: [stageBClip(0)] }));
 
     await new ClaudeAnalysisProvider().scoreCandidates(many, CONTEXT);
 
-    const stageBPrompt = parseMock.mock.calls[1][0].messages[0].content as string;
+    const stageBPrompt = streamMock.mock.calls[0][0].messages[0].content as string;
     expect(stageBPrompt).toContain("[24]");
     expect(stageBPrompt).not.toContain("[25]");
   });
 
-  it("survives malformed model output on either stage", async () => {
-    // Stage A unparseable → treated as no classifications, Stage B never called.
+  it("treats Stage A unparseable output as no classifications and skips Stage B", async () => {
     parseMock.mockResolvedValueOnce(stageAResponse(undefined));
     await expect(
       new ClaudeAnalysisProvider().scoreCandidates(candidates(1), CONTEXT),
     ).resolves.toEqual([]);
+    expect(streamMock).not.toHaveBeenCalled();
+  });
 
-    // Stage B unparseable → empty result, not a crash.
-    parseMock.mockReset();
-    parseMock
-      .mockResolvedValueOnce(stageAResponse([{ index: 0, momentType: "hook" }]))
-      .mockResolvedValueOnce(stageBResponse(undefined));
+  it("throws when Stage B output is truncated at the token cap", async () => {
+    parseMock.mockResolvedValueOnce(stageAResponse([{ index: 0, momentType: "hook" }]));
+    streamMock.mockReturnValueOnce(
+      stageBStreamResult({ clips: [stageBClip(0)], stopReason: "max_tokens" }),
+    );
     await expect(
       new ClaudeAnalysisProvider().scoreCandidates(candidates(1), CONTEXT),
-    ).resolves.toEqual([]);
+    ).rejects.toBeInstanceOf(AnalysisResponseTruncatedError);
+  });
+
+  it("throws when Stage B output is unparseable rather than silently returning zero clips", async () => {
+    parseMock.mockResolvedValueOnce(stageAResponse([{ index: 0, momentType: "hook" }]));
+    streamMock.mockReturnValueOnce(stageBStreamResult({ rawText: '{"scoredClips": [{"index":' }));
+    await expect(
+      new ClaudeAnalysisProvider().scoreCandidates(candidates(1), CONTEXT),
+    ).rejects.toBeInstanceOf(AnalysisResponseTruncatedError);
   });
 
   it("ignores scored clips whose index is out of range", async () => {
-    parseMock
-      .mockResolvedValueOnce(stageAResponse([{ index: 0, momentType: "hook" }]))
-      .mockResolvedValueOnce(stageBResponse([stageBClip(0), stageBClip(7)]));
+    parseMock.mockResolvedValueOnce(stageAResponse([{ index: 0, momentType: "hook" }]));
+    streamMock.mockReturnValueOnce(
+      stageBStreamResult({ clips: [stageBClip(0), stageBClip(7)] }),
+    );
 
     const scored = await new ClaudeAnalysisProvider().scoreCandidates(candidates(1), CONTEXT);
     expect(scored).toHaveLength(1);
@@ -214,9 +240,8 @@ describe("scoreCandidates", () => {
   });
 
   it("applies church subscores and scripture detection for sermons", async () => {
-    parseMock
-      .mockResolvedValueOnce(stageAResponse([{ index: 0, momentType: "teachable" }]))
-      .mockResolvedValueOnce(stageBResponse([stageBClip(0)]));
+    parseMock.mockResolvedValueOnce(stageAResponse([{ index: 0, momentType: "teachable" }]));
+    streamMock.mockReturnValueOnce(stageBStreamResult({ clips: [stageBClip(0)] }));
 
     const sermonCandidates = [
       {
