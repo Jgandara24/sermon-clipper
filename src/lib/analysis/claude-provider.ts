@@ -33,6 +33,14 @@ export function scoringModel(): string {
 
 const MAX_STAGE_B_CANDIDATES = 25;
 
+// Output ceiling for the Stage B scoring call. Sized to comfortably hold MAX_STAGE_B_CANDIDATES
+// fully-scored clips (title/hook/summary/excerpt + six subscore notes each) under Sonnet 5's
+// heavier tokenizer, with headroom so constrained JSON never truncates mid-string.
+const STAGE_B_MAX_TOKENS = 32000;
+
+/** Stage B produced no parseable scoring — almost always output truncated at the token cap. */
+export class AnalysisResponseTruncatedError extends Error {}
+
 const MomentTypeSchema = z.enum([
   "hook",
   "complete_thought",
@@ -146,9 +154,16 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
       return [];
     }
 
-    const stageB = await client.messages.parse({
+    // Scoring up to MAX_STAGE_B_CANDIDATES clips — each with six subscore notes plus a
+    // title/hook/summary/excerpt — is a large structured payload, and Sonnet 5's tokenizer
+    // runs ~30% heavier than older models. With `output_config.format`, generation is
+    // constrained to schema-valid JSON, so the only way the result can fail to parse is
+    // truncation at the token cap. We stream (the SDK's guidance once max_tokens exceeds
+    // ~16k) with generous headroom, and treat a `max_tokens` stop as an explicit retryable
+    // failure rather than letting it surface as an "unterminated JSON" parse crash.
+    const stageBStream = client.messages.stream({
       model: stageBModel,
-      max_tokens: 8192,
+      max_tokens: STAGE_B_MAX_TOKENS,
       thinking: { type: "disabled" },
       output_config: {
         effort: "medium",
@@ -169,11 +184,32 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
         },
       ],
     });
+    const stageB = await stageBStream.finalMessage();
 
     modelCalls.push(toModelCall(stageBModel, stageB.usage));
     this.lastUsage = buildAnalysisUsage(modelCalls);
 
-    const scoredClips = stageB.parsed_output?.scoredClips ?? [];
+    if (stageB.stop_reason === "max_tokens") {
+      throw new AnalysisResponseTruncatedError(
+        `Stage B scoring output was truncated at the ${STAGE_B_MAX_TOKENS.toLocaleString()}-token ` +
+          `cap while scoring ${kept.length} candidates.`,
+      );
+    }
+
+    let stageBText = "";
+    for (const block of stageB.content) {
+      if (block.type === "text") stageBText += block.text;
+    }
+
+    let scoredClips: z.infer<typeof StageBResultSchema>["scoredClips"];
+    try {
+      scoredClips = StageBResultSchema.parse(JSON.parse(stageBText)).scoredClips;
+    } catch (error) {
+      throw new AnalysisResponseTruncatedError(
+        "Stage B scoring returned output that did not match the expected schema.",
+        { cause: error },
+      );
+    }
 
     return scoredClips
       .filter((clip) => clip.index >= 0 && clip.index < candidates.length)
