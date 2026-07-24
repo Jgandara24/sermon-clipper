@@ -33,12 +33,16 @@ export function scoringModel(): string {
 
 const MAX_STAGE_B_CANDIDATES = 25;
 
-// Output ceiling for the Stage B scoring call. Sized to comfortably hold MAX_STAGE_B_CANDIDATES
-// fully-scored clips (title/hook/summary/excerpt + six subscore notes each) under Sonnet 5's
-// heavier tokenizer, with headroom so constrained JSON never truncates mid-string.
+// Output ceilings for the two Claude passes. Both must hold the FULL response — constrained
+// JSON (output_config.format) can only fail to parse if the token cap cuts it off mid-string.
+// Stage A emits one classification per candidate window, and a full-length sermon produces
+// hundreds of windows, so its output scales with the transcript, not a fixed clip count.
+// Stage B holds up to MAX_STAGE_B_CANDIDATES fully-scored clips (title/hook/summary/excerpt +
+// six subscore notes each) under Sonnet 5's heavier tokenizer. Both exceed ~16k, so both stream.
+const STAGE_A_MAX_TOKENS = 32000;
 const STAGE_B_MAX_TOKENS = 32000;
 
-/** Stage B produced no parseable scoring — almost always output truncated at the token cap. */
+/** A stage produced no parseable output — almost always truncated at the token cap. */
 export class AnalysisResponseTruncatedError extends Error {}
 
 const MomentTypeSchema = z.enum([
@@ -127,9 +131,13 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
     const modelCalls: AnalysisModelCall[] = [];
     const client = new Anthropic();
 
-    const stageA = await client.messages.parse({
+    // Stage A classifies every candidate window; a full-length sermon produces hundreds, so the
+    // classification array scales with the transcript and easily overruns a small token cap.
+    // Same reasoning as Stage B below: stream with generous headroom, and treat a truncated or
+    // unparseable result as an explicit retryable failure instead of a silent empty classification.
+    const stageAStream = client.messages.stream({
       model: stageAModel,
-      max_tokens: 4096,
+      max_tokens: STAGE_A_MAX_TOKENS,
       messages: [
         {
           role: "user",
@@ -141,9 +149,31 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
       ],
       output_config: { format: zodOutputFormat(StageAResultSchema) },
     });
+    const stageA = await stageAStream.finalMessage();
     modelCalls.push(toModelCall(stageAModel, stageA.usage));
 
-    const kept = (stageA.parsed_output?.classifications ?? [])
+    if (stageA.stop_reason === "max_tokens") {
+      throw new AnalysisResponseTruncatedError(
+        `Stage A classification output was truncated at the ${STAGE_A_MAX_TOKENS.toLocaleString()}-token ` +
+          `cap while classifying ${candidates.length} candidates.`,
+      );
+    }
+
+    let stageAText = "";
+    for (const block of stageA.content) {
+      if (block.type === "text") stageAText += block.text;
+    }
+    let classifications: z.infer<typeof StageAResultSchema>["classifications"];
+    try {
+      classifications = StageAResultSchema.parse(JSON.parse(stageAText)).classifications;
+    } catch (error) {
+      throw new AnalysisResponseTruncatedError(
+        "Stage A classification returned output that did not match the expected schema.",
+        { cause: error },
+      );
+    }
+
+    const kept = classifications
       .filter((c) => c.momentType !== "reject")
       .map((c) => c.index)
       .filter((i) => i >= 0 && i < candidates.length)
