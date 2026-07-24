@@ -27,6 +27,7 @@ export default async function ProjectPage({
     include: {
       sourceVideo: true,
       processingJobs: { orderBy: { createdAt: "asc" } },
+      sermonOutline: { include: { sections: { orderBy: { position: "asc" } } } },
       generatedClips: {
         orderBy: { rank: "asc" },
         include: {
@@ -147,9 +148,28 @@ export default async function ProjectPage({
         </div>
         <div className="mt-4">
           <ClipList
+            outline={
+              project.sermonOutline
+                ? {
+                    mainIdea: project.sermonOutline.mainIdea,
+                    generatedTitle: project.sermonOutline.generatedTitle,
+                    status: project.sermonOutline.status,
+                    sections: project.sermonOutline.sections.map((section) => ({
+                      id: section.id,
+                      position: section.position,
+                      type: section.type.toLowerCase(),
+                      heading: section.heading,
+                      summary: section.summary,
+                      startMs: section.startMs,
+                      endMs: section.endMs,
+                    })),
+                  }
+                : null
+            }
             initialClips={project.generatedClips.map((clip) => ({
               id: clip.id,
               rank: clip.rank,
+              sectionId: clip.sectionId,
               startMs: clip.startMs,
               endMs: clip.endMs,
               title: clip.title,

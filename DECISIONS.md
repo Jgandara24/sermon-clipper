@@ -1132,3 +1132,58 @@ returning `download_status = null`, resolved by pasting the URL by hand), so tha
 proof before any church is migrated onto it. If Sermon Clipper adopts PERC it should use its own
 Cloudflare Stream account, not Pulpit Engine's — unlike the Meta App there is no review process to
 reuse, so sharing would add a failure point and buy nothing.
+
+## 2026-07-24 - Analysis Is Outline-First; Candidate Windows Become The Fallback
+
+Decision: ANALYZE's primary path for sermons is now a semantic, outline-first pipeline: a
+two-call sermon outliner (block triage on the classify model, outline composition on the scoring
+model, anchored to `[S<idx>]` transcript markers) produces a persisted `SermonOutline` +
+`SermonSection` structure; each section is then searched independently for its strongest moments
+(segment anchors, never model-invented timestamps); deterministic code resolves anchors, snaps
+boundaries, clamps duration, and enforces the content gate; one context-aware scoring call ranks
+everything against the sermon's main idea and section purpose; a visual gate samples frames with
+ffmpeg and a vision model to confirm the preacher stays in frame (trim to the longest confirmed
+run or reject); and a diversity-aware selector fills the pool without letting one section
+dominate. The PR #24 evenly-distributed candidate-window pipeline is unchanged and remains the
+fallback whenever outlining or discovery fails (`fallbackReason` in job metadata says why), and
+the only path for non-sermon genres and keyless environments. Outline generation has a
+reliability ladder (full AI -> simpler AI retry -> transition/pause heuristics -> single "Main
+Message" section) and can never fail analysis by itself.
+
+Why: the window pipeline generates hundreds of arbitrary windows and hopes some align with real
+moments; clips ignored sermon structure, non-preaching content (worship, announcements,
+invitations) was only lexically filtered, and nothing ever verified the preacher was on camera.
+Outline-first inverts this: find the structure, search inside it, and gate eligibility before
+scoring. The outline is also first-class product surface (the results page's default tab) and a
+reusable asset for later features.
+
+Eligibility stance: the content gate and the visual gate both fail CLOSED. Block triage
+requires a per-block confidence — a block with a missing or low-confidence classification is
+excluded as not_preaching, never assumed to be sermon content — and blocks flagged as mixed
+preaching/non-preaching are refined at transcript-segment granularity (one extra classify-model
+call; if refinement fails the whole mixed block is excluded). The visual gate samples a dense
+~4s frame grid PLUS a frame just after every ffmpeg-detected scene change, so a camera cutaway
+cannot hide between interval samples; it runs on BOTH pipelines' finalists (semantic and
+fallback windows). Per clip, an unconfirmed frame set rejects the clip; if every candidate is
+rejected the job reports NO_CLIPS_FOUND rather than falling back to ungated windows.
+Environment policy: in production the gate is mandatory — if it cannot run (no video, no API
+client, or someone sets ANALYSIS_VISUAL_GATE=off, which production ignores) the analysis fails
+with ANALYZE_VISUAL_GATE_UNAVAILABLE and minutes are returned. The permissive skip
+(`visualGateStatus: "skipped_unavailable"/"skipped_disabled"` in job metadata) exists only in
+development/test environments so keyless and fixture-driven runs keep working.
+
+Tradeoff: more model calls per sermon (block triage, compose, one discovery call per section,
+one scoring call, one small vision call per finalist clip) — roughly 2-3x the token spend of the
+two-call pipeline, all metered through the existing usage telemetry. Trimmed visual-gate clips
+keep their scored title/summary even though their bounds shrank; scores describe the untrimmed
+text. Accepted for now: trims are rare and conservative.
+
+Reversibility: high. `ANALYSIS_SEMANTIC_OUTLINE=off` restores the previous candidate-window
+pipeline; `ANALYSIS_VISUAL_GATE=off` disables frame analysis outside production only (in
+production the gate cannot be switched off — a rollback there means reverting the deploy).
+Dropping the two new tables reverts the schema.
+
+Status: Proposed — implemented on `feat/semantic-outline-pipeline` with unit + integration +
+e2e coverage (mocked model calls); NOT yet merged to main. Open before merge: validate against
+a real full-length sermon with a live API key (outline accuracy, exclusions, clip quality,
+cost, wall-clock) and benchmark the visual gate's frame sampling on the Railway worker.

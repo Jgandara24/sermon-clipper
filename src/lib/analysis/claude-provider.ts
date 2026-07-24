@@ -95,6 +95,60 @@ function toSubscore(llm: { score: number; note: string }): Subscore {
   return { score: llm.score, letter: scoreToLetter(llm.score), note: llm.note };
 }
 
+/**
+ * Shared Stage B post-processing: merges the LLM subscores with the computed and (for sermons)
+ * church subscores, detects scripture references, and totals with the genre's weights. Used by
+ * both the candidate-window path and the outline-first section scoring path so a clip's score
+ * means the same thing regardless of which pipeline produced it.
+ */
+function toScoredCandidate(
+  clip: z.infer<typeof StageBResultSchema>["scoredClips"][number],
+  candidate: AnalysisCandidate,
+  context: AnalysisContext,
+  stageBModel: string,
+): ScoredCandidate {
+  const durationS = (candidate.endMs - candidate.startMs) / 1000;
+  const wordCount = candidate.text.split(/\s+/).filter(Boolean).length;
+
+  const baseSubscores = {
+    hook_strength: toSubscore(clip.subscores.hookStrength),
+    clarity: toSubscore(clip.subscores.clarity),
+    emotional_impact: toSubscore(clip.subscores.emotionalImpact),
+    completeness: toSubscore(clip.subscores.completeness),
+    shareability: toSubscore(clip.subscores.shareability),
+    topic_relevance: toSubscore(clip.subscores.topicRelevance),
+    speaker_energy: computeSpeakerEnergy(wordCount, durationS),
+    platform_fit: computePlatformFit(durationS),
+  };
+  const isSermon = context.genre.toLowerCase() === "sermon";
+  const scriptureReferences = isSermon ? detectScriptureReferences(candidate.text) : [];
+  const subscores = isSermon
+    ? {
+        clarity: baseSubscores.clarity,
+        emotional_impact: baseSubscores.emotional_impact,
+        completeness: baseSubscores.completeness,
+        shareability: baseSubscores.shareability,
+        speaker_energy: baseSubscores.speaker_energy,
+        platform_fit: baseSubscores.platform_fit,
+        ...buildChurchSubscores(candidate.text),
+      }
+    : baseSubscores;
+
+  return {
+    startMs: candidate.startMs,
+    endMs: candidate.endMs,
+    text: candidate.text,
+    title: clip.title,
+    hookText: clip.hookText,
+    summary: clip.summary,
+    excerpt: clip.excerpt,
+    total: computeTotal(subscores, isSermon ? SERMON_WEIGHTS : undefined),
+    subscores,
+    modelVersion: stageBModel,
+    scriptureReferences,
+  };
+}
+
 function toModelCall(model: string, usage: Anthropic.Usage): AnalysisModelCall {
   return {
     model,
@@ -257,48 +311,99 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
 
     return scoredClips
       .filter((clip) => clip.index >= 0 && clip.index < candidates.length)
-      .map((clip) => {
-        const candidate = candidates[clip.index];
-        const durationS = (candidate.endMs - candidate.startMs) / 1000;
-        const wordCount = candidate.text.split(/\s+/).filter(Boolean).length;
-
-        const baseSubscores = {
-          hook_strength: toSubscore(clip.subscores.hookStrength),
-          clarity: toSubscore(clip.subscores.clarity),
-          emotional_impact: toSubscore(clip.subscores.emotionalImpact),
-          completeness: toSubscore(clip.subscores.completeness),
-          shareability: toSubscore(clip.subscores.shareability),
-          topic_relevance: toSubscore(clip.subscores.topicRelevance),
-          speaker_energy: computeSpeakerEnergy(wordCount, durationS),
-          platform_fit: computePlatformFit(durationS),
-        };
-        const isSermon = context.genre.toLowerCase() === "sermon";
-        const scriptureReferences = isSermon ? detectScriptureReferences(candidate.text) : [];
-        const subscores = isSermon
-          ? {
-              clarity: baseSubscores.clarity,
-              emotional_impact: baseSubscores.emotional_impact,
-              completeness: baseSubscores.completeness,
-              shareability: baseSubscores.shareability,
-              speaker_energy: baseSubscores.speaker_energy,
-              platform_fit: baseSubscores.platform_fit,
-              ...buildChurchSubscores(candidate.text),
-            }
-          : baseSubscores;
-
-        return {
-          startMs: candidate.startMs,
-          endMs: candidate.endMs,
-          text: candidate.text,
-          title: clip.title,
-          hookText: clip.hookText,
-          summary: clip.summary,
-          excerpt: clip.excerpt,
-          total: computeTotal(subscores, isSermon ? SERMON_WEIGHTS : undefined),
-          subscores,
-          modelVersion: stageBModel,
-          scriptureReferences,
-        };
-      });
+      .map((clip) => toScoredCandidate(clip, candidates[clip.index], context, stageBModel));
   }
+}
+
+export type SectionScoringCandidate = AnalysisCandidate & {
+  sectionHeading: string;
+  sectionType: string;
+  sectionSummary: string;
+  momentType: string;
+};
+
+export type OutlineScoringContext = AnalysisContext & {
+  mainIdea: string;
+  sermonTitle?: string | null;
+};
+
+/**
+ * Context-aware scoring for the outline-first pipeline. The candidates arrive already
+ * discovered and eligibility-gated (no Stage A here), each tagged with its outline section, so
+ * the prompt scores every candidate against the sermon's main idea and its section's purpose.
+ * Same output schema and post-processing as Stage B — scores stay comparable across pipelines.
+ * Appends its token usage to `calls`; the orchestrator owns usage aggregation.
+ */
+export async function scoreSectionCandidates(
+  client: Anthropic,
+  candidates: SectionScoringCandidate[],
+  context: OutlineScoringContext,
+  calls: AnalysisModelCall[],
+): Promise<Array<ScoredCandidate & { candidateIndex: number }>> {
+  if (candidates.length === 0) return [];
+  const stageBModel = scoringModel();
+
+  const stream = client.messages.stream({
+    model: stageBModel,
+    max_tokens: STAGE_B_MAX_TOKENS,
+    thinking: { type: "disabled" },
+    output_config: {
+      effort: "medium",
+      format: zodOutputFormat(StageBResultSchema),
+    },
+    messages: [
+      {
+        role: "user",
+        content:
+          `You are scoring short-form video clip candidates cut from a sermon.\n` +
+          `Sermon main idea: ${context.mainIdea}\n` +
+          (context.sermonTitle ? `Sermon title: ${context.sermonTitle}\n` : "") +
+          `\nEach numbered candidate below lists the outline section it comes from and the kind ` +
+          `of moment it was selected as. Score each candidate 0-100 on: hook strength (does the ` +
+          `opening grab attention), clarity (understandable standing completely alone, without ` +
+          `the rest of the sermon), emotional impact, completeness (the thought resolves), ` +
+          `shareability (would someone send this to a friend), and topic relevance (how well it ` +
+          `serves the sermon's main idea and its section's purpose). Write a short title (max 60 ` +
+          `characters, no clickbait), a hook line (max 8 words), a one-sentence rationale, and ` +
+          `an excerpt quote supporting your scoring.\n\n` +
+          candidates
+            .map(
+              (c, i) =>
+                `[${i}] Section: ${c.sectionHeading} (${c.sectionType}) — ${c.sectionSummary}\n` +
+                `Moment type: ${c.momentType}\n${c.text}`,
+            )
+            .join("\n\n"),
+      },
+    ],
+  });
+  const message = await stream.finalMessage();
+  calls.push(toModelCall(stageBModel, message.usage));
+
+  if (message.stop_reason === "max_tokens") {
+    throw new AnalysisResponseTruncatedError(
+      `Section scoring output was truncated at the ${STAGE_B_MAX_TOKENS.toLocaleString()}-token ` +
+        `cap while scoring ${candidates.length} candidates.`,
+    );
+  }
+
+  let text = "";
+  for (const block of message.content) {
+    if (block.type === "text") text += block.text;
+  }
+  let scoredClips: z.infer<typeof StageBResultSchema>["scoredClips"];
+  try {
+    scoredClips = StageBResultSchema.parse(JSON.parse(text)).scoredClips;
+  } catch (error) {
+    throw new AnalysisResponseTruncatedError(
+      "Section scoring returned output that did not match the expected schema.",
+      { cause: error },
+    );
+  }
+
+  return scoredClips
+    .filter((clip) => clip.index >= 0 && clip.index < candidates.length)
+    .map((clip) => ({
+      ...toScoredCandidate(clip, candidates[clip.index], context, stageBModel),
+      candidateIndex: clip.index,
+    }));
 }

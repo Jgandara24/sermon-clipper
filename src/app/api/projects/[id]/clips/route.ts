@@ -41,6 +41,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     clips: clips.map((clip) => ({
       id: clip.id,
       rank: clip.rank,
+      sectionId: clip.sectionId,
       startMs: clip.startMs,
       endMs: clip.endMs,
       title: clip.title,

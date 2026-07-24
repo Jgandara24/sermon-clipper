@@ -9,6 +9,7 @@ type Subscore = { score: number; letter: string; note: string };
 export type Clip = {
   id: string;
   rank: number;
+  sectionId: string | null;
   startMs: number;
   endMs: number;
   title: string;
@@ -35,6 +36,23 @@ export type Clip = {
   } | null;
 };
 
+export type OutlineSection = {
+  id: string;
+  position: number;
+  type: string;
+  heading: string;
+  summary: string;
+  startMs: number;
+  endMs: number;
+};
+
+export type Outline = {
+  mainIdea: string;
+  generatedTitle: string | null;
+  status: string;
+  sections: OutlineSection[];
+};
+
 function formatTimestamp(ms: number) {
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -52,9 +70,12 @@ function scoreTone(total: number) {
 function ClipCard({
   clip,
   onLike,
+  headerLine,
 }: {
   clip: Clip;
   onLike: (id: string, liked: boolean | null) => void;
+  /** Overrides the default "Rank N · start–end" kicker (the outline view shows section context). */
+  headerLine?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -109,7 +130,8 @@ function ClipCard({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
-            Rank {clip.rank} · {formatTimestamp(clip.startMs)}–{formatTimestamp(clip.endMs)}
+            {headerLine ??
+              `Rank ${clip.rank} · ${formatTimestamp(clip.startMs)}–${formatTimestamp(clip.endMs)}`}
           </p>
           <h3 className="mt-1 text-base font-semibold">{clip.title}</h3>
           {clip.hookText ? (
@@ -248,8 +270,121 @@ function ClipCard({
   );
 }
 
-export function ClipList({ initialClips }: { initialClips: Clip[] }) {
+function sectionTypeLabel(type: string) {
+  return type
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function sectionRankLabel(index: number) {
+  if (index === 0) return "Best in section";
+  if (index === 1) return "Second in section";
+  if (index === 2) return "Third in section";
+  return `#${index + 1} in section`;
+}
+
+/** Score-descending order within a section; identical scores fall back to global rank. */
+function bySectionScore(a: Clip, b: Clip) {
+  return (b.score?.total ?? 0) - (a.score?.total ?? 0) || a.rank - b.rank;
+}
+
+function outlineHeaderLine(clip: Clip, sectionIndex: number) {
+  const overall = `#${clip.rank} overall`;
+  const score = clip.score ? ` · ${clip.score.total}/100` : "";
+  return `${overall}${score} · ${sectionRankLabel(sectionIndex)} · ${formatTimestamp(clip.startMs)}–${formatTimestamp(clip.endMs)}`;
+}
+
+function OutlineView({
+  outline,
+  clips,
+  onLike,
+}: {
+  outline: Outline;
+  clips: Clip[];
+  onLike: (id: string, liked: boolean | null) => void;
+}) {
+  const unsectioned = clips
+    .filter((clip) => !outline.sections.some((s) => s.id === clip.sectionId))
+    .sort(bySectionScore);
+
+  return (
+    <div className="grid gap-5">
+      {outline.generatedTitle || outline.mainIdea ? (
+        <div className="rounded-md border border-stone-200 bg-stone-50 p-3 text-sm">
+          {outline.generatedTitle ? (
+            <p className="font-semibold text-stone-800">{outline.generatedTitle}</p>
+          ) : null}
+          <p className="mt-1 text-stone-600">{outline.mainIdea}</p>
+        </div>
+      ) : null}
+      {outline.sections.map((section) => {
+        const sectionClips = clips.filter((clip) => clip.sectionId === section.id).sort(bySectionScore);
+        return (
+          <section key={section.id}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-sm font-semibold text-stone-800">
+                <span className="text-teal-800">{sectionTypeLabel(section.type)}</span>
+                {section.heading.toLowerCase() !== section.type.replace(/_/g, " ") ? (
+                  <span> — {section.heading}</span>
+                ) : null}
+              </h3>
+              <p className="text-xs text-stone-500">
+                {sectionClips.length} {sectionClips.length === 1 ? "clip" : "clips"}
+              </p>
+            </div>
+            {section.summary ? (
+              <p className="mt-1 text-xs text-stone-500">{section.summary}</p>
+            ) : null}
+            <div className="mt-3 grid gap-3">
+              {sectionClips.length === 0 ? (
+                <p className="rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-500">
+                  No strong standalone clip was found in this section.
+                </p>
+              ) : (
+                sectionClips.map((clip, index) => (
+                  <ClipCard
+                    key={clip.id}
+                    clip={clip}
+                    onLike={onLike}
+                    headerLine={outlineHeaderLine(clip, index)}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+        );
+      })}
+      {unsectioned.length > 0 ? (
+        <section>
+          <h3 className="text-sm font-semibold text-stone-800">Other moments</h3>
+          <div className="mt-3 grid gap-3">
+            {unsectioned.map((clip, index) => (
+              <ClipCard
+                key={clip.id}
+                clip={clip}
+                onLike={onLike}
+                headerLine={outlineHeaderLine(clip, index)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+export function ClipList({
+  initialClips,
+  outline = null,
+}: {
+  initialClips: Clip[];
+  outline?: Outline | null;
+}) {
   const [clips, setClips] = useState(initialClips);
+  // Two views over the SAME clip records (no duplicates): the outline organizes the message,
+  // the ranked list surfaces the strongest content fastest. Outline is the default.
+  const [view, setView] = useState<"outline" | "ranked">(outline ? "outline" : "ranked");
 
   function handleLike(id: string, liked: boolean | null) {
     setClips((prev) => prev.map((clip) => (clip.id === id ? { ...clip, liked } : clip)));
@@ -263,11 +398,56 @@ export function ClipList({ initialClips }: { initialClips: Clip[] }) {
     );
   }
 
+  const ranked = [...clips].sort((a, b) => a.rank - b.rank);
+
+  if (!outline) {
+    return (
+      <div className="grid gap-3">
+        {ranked.map((clip) => (
+          <ClipCard key={clip.id} clip={clip} onLike={handleLike} />
+        ))}
+      </div>
+    );
+  }
+
+  const tabClass = (active: boolean) =>
+    `rounded-md px-3 py-1.5 text-sm font-medium ${
+      active ? "bg-teal-800 text-white" : "text-stone-600 hover:bg-stone-100"
+    }`;
+
   return (
-    <div className="grid gap-3">
-      {clips.map((clip) => (
-        <ClipCard key={clip.id} clip={clip} onLike={handleLike} />
-      ))}
+    <div>
+      <div role="tablist" aria-label="Clip views" className="flex gap-1 border-b border-stone-200 pb-3">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "outline"}
+          onClick={() => setView("outline")}
+          className={tabClass(view === "outline")}
+        >
+          Sermon outline
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "ranked"}
+          onClick={() => setView("ranked")}
+          className={tabClass(view === "ranked")}
+        >
+          Ranked clips
+        </button>
+      </div>
+      <div className="mt-4">
+        {view === "outline" ? (
+          <OutlineView outline={outline} clips={clips} onLike={handleLike} />
+        ) : (
+          <div className="grid gap-3">
+            {ranked.map((clip) => (
+              <ClipCard key={clip.id} clip={clip} onLike={handleLike} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

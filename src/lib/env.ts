@@ -124,6 +124,13 @@ const fieldSchemas = {
   ANTHROPIC_API_KEY: optionalString,
   ANALYSIS_MODEL_CLASSIFY: optionalString,
   ANALYSIS_MODEL_SCORING: optionalString,
+  ANALYSIS_MODEL_OUTLINE: optionalString,
+  // Escape hatches for the semantic outline-first pipeline and its visual eligibility gate.
+  // Both default on. ANALYSIS_SEMANTIC_OUTLINE=off forces the legacy candidate-window pipeline.
+  // ANALYSIS_VISUAL_GATE=off skips frame analysis but is honored ONLY outside production —
+  // in production the gate is mandatory and ANALYZE fails when it cannot run (visual-gate.ts).
+  ANALYSIS_SEMANTIC_OUTLINE: optionalString,
+  ANALYSIS_VISUAL_GATE: optionalString,
 
   // YouTube Data API v3 (channel auto-import). App-level key, like ANTHROPIC_API_KEY.
   YOUTUBE_API_KEY: optionalString,

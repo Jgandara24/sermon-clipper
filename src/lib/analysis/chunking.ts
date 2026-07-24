@@ -29,7 +29,7 @@ const CONTINUATION_START_WORDS = new Set([
   "then",
 ]);
 
-function looksLikeSentenceStart(text: string): boolean {
+export function looksLikeSentenceStart(text: string): boolean {
   const firstWord = text.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z']/g, "");
   return !firstWord || !CONTINUATION_START_WORDS.has(firstWord);
 }

@@ -1,19 +1,83 @@
-import { GeneratedClipStatus, ProjectStatus } from "@prisma/client";
+import {
+  GeneratedClipStatus,
+  Prisma,
+  ProjectStatus,
+  SermonOutlineStatus,
+  SermonSectionType,
+} from "@prisma/client";
 import { getAnalysisProvider } from "@/lib/analysis";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
+import { scoringModel } from "@/lib/analysis/claude-provider";
+import type {
+  ExclusionRange,
+  OutlineSectionType,
+  OutlineStatus,
+  SermonOutlineDraft,
+} from "@/lib/analysis/outline/types";
+import {
+  runSemanticPipeline,
+  semanticPipelineEnabled,
+} from "@/lib/analysis/semantic/pipeline";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
-import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
+import Anthropic from "@anthropic-ai/sdk";
+import { AnalysisProviderUnavailableError, type ScoredCandidate } from "@/lib/analysis/types";
+import { buildAnalysisUsage, type AnalysisModelCall } from "@/lib/analysis/usage";
+import {
+  applyVisualGate,
+  visualGateEnabled,
+  visualGateRequired,
+  type VideoSource,
+  type VisualGateStatus,
+} from "@/lib/analysis/visual-gate";
+import { env } from "@/lib/env";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import {
   clearReschedulableScheduledPosts,
   scheduledDateForRank,
   slotAlreadyPublished,
 } from "@/lib/scheduling";
+import { getStorageProvider } from "@/lib/storage";
 
 const MIN_CANDIDATE_MS = 20_000;
 const MAX_CANDIDATE_MS = 90_000;
 const CANDIDATE_POOL_SIZE = 18;
 const DEFAULT_TARGET_CLIP_COUNT = 6;
+// A fallback-pipeline window mostly inside an excluded range (worship, announcements, …) is
+// not eligible content; smaller brushes against a block-granularity exclusion are tolerated.
+const MAX_EXCLUSION_OVERLAP_FRACTION = 0.25;
+
+const NO_CLIPS_MESSAGE =
+  "We didn't find strong standalone moments. Try a narrower timeframe or a prompt.";
+const ANALYZE_FAILED_MESSAGE = "Clip analysis failed — your minutes were returned.";
+const VISUAL_GATE_UNAVAILABLE_MESSAGE =
+  "Clip analysis couldn't verify the preacher is on camera, so no clips were generated — your minutes were returned.";
+
+/**
+ * Production never ships clips without visual verification: if the gate could not run
+ * (no video, no API client, disabled), the analysis fails rather than falling back to
+ * unverified clips. Development/test environments tolerate the skip so keyless and
+ * fixture-driven runs keep working.
+ */
+function assertVisualGateRan(status: VisualGateStatus | "not_run") {
+  if (visualGateRequired() && status !== "applied") {
+    throw new JobFailureError("ANALYZE_VISUAL_GATE_UNAVAILABLE", VISUAL_GATE_UNAVAILABLE_MESSAGE);
+  }
+}
+
+const OUTLINE_STATUS_ENUM: Record<OutlineStatus, SermonOutlineStatus> = {
+  generated: SermonOutlineStatus.GENERATED,
+  heuristic: SermonOutlineStatus.HEURISTIC,
+  fallback_single: SermonOutlineStatus.FALLBACK_SINGLE,
+};
+
+const SECTION_TYPE_ENUM: Record<OutlineSectionType, SermonSectionType> = {
+  introduction: SermonSectionType.INTRODUCTION,
+  point: SermonSectionType.POINT,
+  conclusion: SermonSectionType.CONCLUSION,
+  main_message: SermonSectionType.MAIN_MESSAGE,
+};
+
+type KeptClip = ScoredCandidate & { sectionPosition: number | null };
 
 function readGenre(processingConfig: unknown): string {
   if (processingConfig && typeof processingConfig === "object" && "genre" in processingConfig) {
@@ -36,10 +100,53 @@ function readTargetClipCount(processingConfig: unknown): number {
   return DEFAULT_TARGET_CLIP_COUNT;
 }
 
+/** Video for the visual gate: a local path or signed URL, or null when neither is possible. */
+async function resolveVideoSource(storageKey: string | null | undefined): Promise<VideoSource | null> {
+  if (!storageKey) return null;
+  try {
+    const storage = getStorageProvider();
+    if (env.STORAGE_PROVIDER === "local") {
+      return { kind: "path", path: storage.absolutePath(storageKey) };
+    }
+    if (storage.createSignedReadUrl) {
+      // Long enough to outlive frame sampling across a full clip set, nothing more.
+      const url = await storage.createSignedReadUrl(storageKey, { expiresInSeconds: 3600, disposition: "inline" });
+      return { kind: "url", url };
+    }
+  } catch {
+    // Unresolvable video isn't fatal to analysis — the gate reports skipped_unavailable.
+  }
+  return null;
+}
+
+function exclusionOverlapFraction(
+  candidate: { startMs: number; endMs: number },
+  exclusions: ExclusionRange[],
+): number {
+  const duration = Math.max(1, candidate.endMs - candidate.startMs);
+  const overlap = exclusions.reduce(
+    (sum, e) => sum + Math.max(0, Math.min(candidate.endMs, e.endMs) - Math.max(candidate.startMs, e.startMs)),
+    0,
+  );
+  return overlap / duration;
+}
+
+/** Primary section for a fallback-pipeline clip: the outline section containing its midpoint. */
+function sectionPositionForClip(
+  clip: { startMs: number; endMs: number },
+  outline: SermonOutlineDraft | null,
+): number | null {
+  if (!outline) return null;
+  const mid = (clip.startMs + clip.endMs) / 2;
+  return outline.sections.find((s) => s.startMs <= mid && mid <= s.endMs)?.position ?? null;
+}
+
 /**
- * Chunks the transcript into candidate windows, scores them (real Claude API if configured,
- * otherwise the deterministic heuristic fallback), refines boundaries, dedups overlapping
- * candidates by score, and persists the top-ranked clips. Guide §10.
+ * Analysis entrypoint. Primary path is the semantic outline-first pipeline (sermon outline →
+ * per-section discovery → context-aware scoring → visual gate → diversity selection); the
+ * evenly distributed candidate-window pipeline (guide §10) remains the fallback whenever
+ * outlining or moment discovery fails, and the only path for non-sermon genres. Both paths
+ * persist through the same transaction, which also replaces the project's sermon outline.
  */
 export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
   const project = await prisma.project.findUniqueOrThrow({
@@ -53,7 +160,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
 
   const transcript = project.sourceVideo?.transcript;
   if (!transcript || transcript.segments.length === 0) {
-    throw new JobFailureError("ANALYZE_FAILED", "Clip analysis failed — your minutes were returned.");
+    throw new JobFailureError("ANALYZE_FAILED", ANALYZE_FAILED_MESSAGE);
   }
 
   const segments = transcript.segments.map((segment) => ({
@@ -65,61 +172,152 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
 
   const genre = readGenre(project.processingConfig);
   const targetClipCount = readTargetClipCount(project.processingConfig);
-  const candidates = buildCandidateWindows(segments, {
-    minMs: MIN_CANDIDATE_MS,
-    maxMs: MAX_CANDIDATE_MS,
-  });
-
-  if (candidates.length === 0) {
-    throw new JobFailureError(
-      "NO_CLIPS_FOUND",
-      "We didn't find strong standalone moments. Try a narrower timeframe or a prompt.",
-    );
-  }
-
+  const isSermon = genre.toLowerCase() === "sermon";
   const sourceDurationMs = project.sourceVideo?.durationS
     ? project.sourceVideo.durationS.toNumber() * 1000
-    : Math.max(...candidates.map((c) => c.endMs));
+    : segments[segments.length - 1].endMs;
 
-  const provider = await getAnalysisProvider();
+  let outlineDraft: SermonOutlineDraft | null = null;
+  let kept: KeptClip[] | null = null;
+  let semanticCalls: AnalysisModelCall[] = [];
+  let providerName: string | null = null;
+  let candidateCount = 0;
+  let scoredCount = 0;
+  const semanticMetadata: Record<string, unknown> = {};
+  const video = isSermon ? await resolveVideoSource(project.sourceVideo?.storageKey) : null;
 
-  let scored;
-  try {
-    const scoreableCandidates =
-      genre.toLowerCase() === "sermon"
-        ? filterSermonCandidates(candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text })))
-        : candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text }));
-
-    scored = await provider.scoreCandidates(
-      scoreableCandidates,
-      { fullText: transcript.fullText, genre },
-    );
-  } catch (error) {
-    if (error instanceof AnalysisProviderUnavailableError) {
-      throw new JobFailureError(
-        "ANALYZE_PROVIDER_UNAVAILABLE",
-        "AI clip analysis isn't configured on this environment yet.",
-        { cause: error },
-      );
+  if (isSermon && semanticPipelineEnabled()) {
+    let semantic;
+    try {
+      semantic = await runSemanticPipeline({
+        segments,
+        fullText: transcript.fullText,
+        genre,
+        sourceDurationMs,
+        maxClips: CANDIDATE_POOL_SIZE,
+        minMs: MIN_CANDIDATE_MS,
+        maxMs: MAX_CANDIDATE_MS,
+        video,
+      });
+    } catch (error) {
+      // Truncated/unparseable model output is retryable at the job layer, same as Stage A/B.
+      throw new JobFailureError("ANALYZE_FAILED", ANALYZE_FAILED_MESSAGE, { cause: error });
     }
-    throw new JobFailureError("ANALYZE_FAILED", "Clip analysis failed — your minutes were returned.", {
-      cause: error,
+
+    outlineDraft = semantic.outline;
+    semanticCalls = semantic.calls;
+    semanticMetadata.outlineStatus = semantic.outline.status;
+    semanticMetadata.visualGateStatus = semantic.visualGateStatus;
+    semanticMetadata.semanticDiagnostics = semantic.diagnostics;
+
+    if (semantic.clips !== null) {
+      assertVisualGateRan(semantic.visualGateStatus);
+      kept = semantic.clips;
+      providerName = scoringModel();
+      candidateCount = semantic.diagnostics.resolvedCandidates;
+      scoredCount = semantic.diagnostics.scoredCandidates;
+      semanticMetadata.pipeline = "semantic";
+      if (kept.length === 0) {
+        // Eligibility gates rejected every candidate. Fail closed — do NOT fall back to the
+        // window pipeline, which would ship exactly the content the gates refused.
+        throw new JobFailureError("NO_CLIPS_FOUND", NO_CLIPS_MESSAGE);
+      }
+    } else {
+      semanticMetadata.pipeline = "window";
+      semanticMetadata.fallbackReason = semantic.fallbackReason;
+    }
+  }
+
+  if (kept === null) {
+    const candidates = buildCandidateWindows(segments, {
+      minMs: MIN_CANDIDATE_MS,
+      maxMs: MAX_CANDIDATE_MS,
     });
-  }
 
-  if (scored.length === 0) {
-    throw new JobFailureError(
-      "NO_CLIPS_FOUND",
-      "We didn't find strong standalone moments. Try a narrower timeframe or a prompt.",
+    if (candidates.length === 0) {
+      throw new JobFailureError("NO_CLIPS_FOUND", NO_CLIPS_MESSAGE);
+    }
+    candidateCount = candidates.length;
+
+    const provider = await getAnalysisProvider();
+    providerName = provider.name;
+
+    let scored;
+    try {
+      const plain = candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text }));
+      let scoreableCandidates = isSermon ? filterSermonCandidates(plain) : plain;
+      // Even the fallback pipeline honors the outline's exclusion ranges: excluded portions
+      // must produce no candidates and never reach scoring.
+      const exclusions = outlineDraft?.exclusions ?? [];
+      if (exclusions.length > 0) {
+        scoreableCandidates = scoreableCandidates.filter(
+          (c) => exclusionOverlapFraction(c, exclusions) <= MAX_EXCLUSION_OVERLAP_FRACTION,
+        );
+      }
+      if (scoreableCandidates.length === 0) {
+        throw new JobFailureError("NO_CLIPS_FOUND", NO_CLIPS_MESSAGE);
+      }
+
+      scored = await provider.scoreCandidates(
+        scoreableCandidates,
+        { fullText: transcript.fullText, genre },
+      );
+    } catch (error) {
+      if (error instanceof JobFailureError) throw error;
+      if (error instanceof AnalysisProviderUnavailableError) {
+        throw new JobFailureError(
+          "ANALYZE_PROVIDER_UNAVAILABLE",
+          "AI clip analysis isn't configured on this environment yet.",
+          { cause: error },
+        );
+      }
+      throw new JobFailureError("ANALYZE_FAILED", ANALYZE_FAILED_MESSAGE, { cause: error });
+    }
+
+    if (scored.length === 0) {
+      throw new JobFailureError("NO_CLIPS_FOUND", NO_CLIPS_MESSAGE);
+    }
+    scoredCount = scored.length;
+
+    const refined = scored.map((clip) => refineBoundaries(clip, sourceDurationMs));
+    let deduped = dedupByOverlap(
+      refined.map((clip) => ({ ...clip, score: clip.total })),
+      0.5,
     );
+
+    // The visual gate applies to BOTH pipelines: fallback clips must also prove the preacher
+    // stays in frame. In production a gate that couldn't run fails the analysis outright.
+    if (isSermon) {
+      const gate = await applyVisualGate(deduped, video, {
+        client: env.ANTHROPIC_API_KEY ? new Anthropic() : null,
+        minMs: MIN_CANDIDATE_MS,
+        enabled: visualGateEnabled(),
+      });
+      assertVisualGateRan(gate.status);
+      semanticCalls = [...semanticCalls, ...gate.calls];
+      semanticMetadata.visualGateStatus = gate.status;
+      if (outlineDraft && gate.rejected.length > 0) {
+        outlineDraft.exclusions = [
+          ...outlineDraft.exclusions,
+          ...gate.rejected.map((r) => r.exclusion),
+        ].sort((a, b) => a.startMs - b.startMs);
+      }
+      deduped = gate.passed;
+      if (deduped.length === 0) {
+        throw new JobFailureError("NO_CLIPS_FOUND", NO_CLIPS_MESSAGE);
+      }
+    }
+
+    kept = deduped
+      .sort((a, b) => b.total - a.total)
+      .slice(0, CANDIDATE_POOL_SIZE)
+      .map((clip) => ({ ...clip, sectionPosition: sectionPositionForClip(clip, outlineDraft) }));
+
+    const providerUsage = provider.lastUsage;
+    if (providerUsage) semanticCalls = [...semanticCalls, ...providerUsage.calls];
   }
 
-  const refined = scored.map((clip) => refineBoundaries(clip, sourceDurationMs));
-  const deduped = dedupByOverlap(
-    refined.map((clip) => ({ ...clip, score: clip.total })),
-    0.5,
-  );
-  const kept = deduped.sort((a, b) => b.total - a.total).slice(0, CANDIDATE_POOL_SIZE);
+  const keptClips = kept;
 
   await prisma.$transaction(async (tx) => {
     await tx.scriptureReference.deleteMany({ where: { projectId: project.id } });
@@ -130,12 +328,51 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
       projectId: project.id,
     });
     await tx.generatedClip.deleteMany({ where: { projectId: project.id } });
+    // Reanalysis replaces the generated outline; sections cascade with it.
+    await tx.sermonOutline.deleteMany({ where: { projectId: project.id } });
 
-    for (const [idx, clip] of kept.entries()) {
+    const sectionIdByPosition = new Map<number, string>();
+    if (outlineDraft) {
+      const createdOutline = await tx.sermonOutline.create({
+        data: {
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+          mainIdea: outlineDraft.mainIdea,
+          generatedTitle: outlineDraft.generatedTitle,
+          modelVersion: outlineDraft.modelVersion,
+          confidence: outlineDraft.confidence,
+          status: OUTLINE_STATUS_ENUM[outlineDraft.status],
+          exclusions: outlineDraft.exclusions as Prisma.InputJsonValue,
+        },
+      });
+      for (const section of outlineDraft.sections) {
+        const createdSection = await tx.sermonSection.create({
+          data: {
+            outlineId: createdOutline.id,
+            position: section.position,
+            type: SECTION_TYPE_ENUM[section.type],
+            heading: section.heading,
+            summary: section.summary,
+            startSegmentIdx: section.startSegmentIdx,
+            endSegmentIdx: section.endSegmentIdx,
+            startMs: section.startMs,
+            endMs: section.endMs,
+            confidence: section.confidence,
+          },
+        });
+        sectionIdByPosition.set(section.position, createdSection.id);
+      }
+    }
+
+    for (const [idx, clip] of keptClips.entries()) {
       const created = await tx.generatedClip.create({
         data: {
           workspaceId: project.workspaceId,
           projectId: project.id,
+          sectionId:
+            clip.sectionPosition !== null
+              ? (sectionIdByPosition.get(clip.sectionPosition) ?? null)
+              : null,
           rank: idx + 1,
           startMs: clip.startMs,
           endMs: clip.endMs,
@@ -204,17 +441,19 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
 
   // Provider token usage (Claude only; heuristic spends nothing) flows into the analysis
   // success event's metadata, where /app/settings/operations rolls it up as estimated spend.
-  const usage = provider.lastUsage ?? null;
+  // Semantic-path calls (outline, discovery, scoring, visual gate) all land here too.
+  const usage = semanticCalls.length > 0 ? buildAnalysisUsage(semanticCalls) : null;
 
   return {
     metadata: {
-      provider: provider.name,
-      modelVersions: [...new Set(kept.map((clip) => clip.modelVersion))],
-      candidateCount: candidates.length,
-      scoredCount: scored.length,
-      keptCount: kept.length,
+      provider: providerName ?? "unknown",
+      modelVersions: [...new Set(keptClips.map((clip) => clip.modelVersion))],
+      candidateCount,
+      scoredCount,
+      keptCount: keptClips.length,
       targetClipCount,
       genre,
+      ...semanticMetadata,
       ...(usage ? { usage } : {}),
     },
   };

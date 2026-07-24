@@ -104,6 +104,23 @@ enum GeneratedClipStatus {
   @@map("generated_clip_status")
 }
 
+enum SermonOutlineStatus {
+  GENERATED       @map("generated")
+  HEURISTIC       @map("heuristic")
+  FALLBACK_SINGLE @map("fallback_single")
+
+  @@map("sermon_outline_status")
+}
+
+enum SermonSectionType {
+  INTRODUCTION @map("introduction")
+  POINT        @map("point")
+  CONCLUSION   @map("conclusion")
+  MAIN_MESSAGE @map("main_message")
+
+  @@map("sermon_section_type")
+}
+
 enum ExportPreset {
   MP4_1080 @map("mp4_1080")
 
@@ -259,6 +276,7 @@ model Workspace {
   billingPeriodCredits    BillingPeriodCredit[]
   channelImportSources    ChannelImportSource[]
   scheduledPosts          ScheduledPost[]
+  sermonOutlines          SermonOutline[]
 
   @@index([ownerId])
   @@map("workspaces")
@@ -423,6 +441,7 @@ model Project {
   generatedClips        GeneratedClip[]
   scriptureReferences   ScriptureReference[]
   channelImportedVideos ChannelImportedVideo[]
+  sermonOutline         SermonOutline?
 
   @@index([workspaceId])
   @@index([sourceVideoId])
@@ -486,6 +505,10 @@ model GeneratedClip {
   id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId String              @map("workspace_id") @db.Uuid
   projectId   String              @map("project_id") @db.Uuid
+  // Primary outline section this clip was cut from. Nullable: legacy clips and clips from the
+  // fallback window pipeline may have no section. Section rank is derived (order by score within
+  // sectionId), not stored — the global `rank` stays the single source of truth for ordering.
+  sectionId   String?             @map("section_id") @db.Uuid
   rank        Int
   startMs     Int                 @map("start_ms")
   endMs       Int                 @map("end_ms")
@@ -499,6 +522,7 @@ model GeneratedClip {
 
   workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project             Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  section             SermonSection?       @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   score               ClipScore?
   edits               ClipEdit[]
   exportJobs          ExportJob[]
@@ -509,7 +533,66 @@ model GeneratedClip {
   @@unique([projectId, rank])
   @@index([workspaceId])
   @@index([projectId])
+  @@index([sectionId])
   @@map("generated_clips")
+}
+
+/**
+ * The automatically detected structure of one sermon (one per project, replaced on reanalysis).
+ * `status` records which tier produced it: full AI generation, the transition/pause heuristic
+ * fallback, or the final single-"Main Message"-section fallback. `exclusions` holds internal
+ * diagnostic ranges that were ruled ineligible for clips (worship, announcements, baptism,
+ * invitation, altar_call, prayer, not_preaching, preacher_not_visible) — never user-facing,
+ * never rendered as outline sections.
+ */
+model SermonOutline {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId    String              @map("workspace_id") @db.Uuid
+  projectId      String              @unique @map("project_id") @db.Uuid
+  mainIdea       String              @map("main_idea")
+  generatedTitle String?             @map("generated_title")
+  modelVersion   String              @map("model_version")
+  confidence     Float
+  status         SermonOutlineStatus
+  exclusions     Json                @default("[]")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sections  SermonSection[]
+
+  @@index([workspaceId])
+  @@map("sermon_outlines")
+}
+
+/**
+ * One ordered section of a sermon outline (introduction / point / conclusion, or the fallback
+ * main_message). Anchored to transcript segment indexes plus absolute timestamps so the outline
+ * can be re-aligned even if segment rows are regenerated. Only eligible preaching content
+ * becomes a section — excluded ranges live on SermonOutline.exclusions instead.
+ */
+model SermonSection {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  outlineId       String            @map("outline_id") @db.Uuid
+  position        Int
+  type            SermonSectionType
+  heading         String
+  summary         String
+  startSegmentIdx Int               @map("start_segment_idx")
+  endSegmentIdx   Int               @map("end_segment_idx")
+  startMs         Int               @map("start_ms")
+  endMs           Int               @map("end_ms")
+  confidence      Float
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  outline SermonOutline   @relation(fields: [outlineId], references: [id], onDelete: Cascade)
+  clips   GeneratedClip[]
+
+  @@unique([outlineId, position])
+  @@index([outlineId])
+  @@map("sermon_sections")
 }
 
 /**
