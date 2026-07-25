@@ -68,7 +68,14 @@ export function generateAssSubtitles(
   const backColor = style.background === "pill" ? "&H80000000" : "&H00000000";
   const outline = style.background === "pill" ? Math.max(style.strokePx, 6) : style.strokePx;
   const shadow = style.shadow ? 2 : 0;
+  const bold = style.bold ? -1 : 0;
   const fontName = style.fontFamily.split(",")[0].trim().replace(/^['"]|['"]$/g, "");
+
+  // Drag-and-drop caption placement: \pos pins the block's center at the chosen frame point
+  // (\an5 makes the coordinate the block center), overriding the style's alignment/margins.
+  const positionOverride = style.offset
+    ? `{\\an5\\pos(${Math.round(style.offset.x * videoWidth)},${Math.round(style.offset.y * videoHeight)})}`
+    : "";
 
   const header = [
     "[Script Info]",
@@ -79,7 +86,7 @@ export function generateAssSubtitles(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},0,0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
+    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${bold},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
     `Style: LowerThird,${fontName},38,${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},1,0,0,0,100,100,0,0,3,8,1,1,70,70,400,1`,
     "",
     "[Events]",
@@ -89,7 +96,7 @@ export function generateAssSubtitles(
   const events = lines
     .map((line) => {
       const text = style.uppercase ? line.text.toUpperCase() : line.text;
-      return `Dialogue: 0,${msToAssTime(line.startMs)},${msToAssTime(line.endMs)},Default,,0,0,0,,${escapeAssText(text)}`;
+      return `Dialogue: 0,${msToAssTime(line.startMs)},${msToAssTime(line.endMs)},Default,,0,0,0,,${positionOverride}${escapeAssText(text)}`;
     })
     .join("\n");
   const lowerThirdEvent = lowerThird

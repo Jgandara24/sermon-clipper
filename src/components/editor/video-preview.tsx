@@ -13,15 +13,19 @@ export function VideoPreview({
   words,
   showSafeZones,
   brandTemplate,
+  onCaptionOffsetChange,
 }: {
   sourceVideoUrl: string;
   state: EditorState;
   words: EditorWordWithDeletion[];
   showSafeZones: boolean;
   brandTemplate: EditorBrandTemplate | null;
+  onCaptionOffsetChange?: (offset: { x: number; y: number }) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const [currentMs, setCurrentMs] = useState(state.source.startMs);
+  const [draggingCaption, setDraggingCaption] = useState(false);
   const seekedRef = useRef(false);
 
   const activeWords = words.filter((word) => !word.effectiveDeleted);
@@ -84,6 +88,28 @@ export function VideoPreview({
     setCurrentMs(ms);
   }
 
+  function captionOffsetFromPointer(event: React.PointerEvent): { x: number; y: number } | null {
+    const rect = frameRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return null;
+    return {
+      x: Math.min(0.95, Math.max(0.05, (event.clientX - rect.left) / rect.width)),
+      y: Math.min(0.95, Math.max(0.05, (event.clientY - rect.top) / rect.height)),
+    };
+  }
+
+  function handleCaptionPointerDown(event: React.PointerEvent<HTMLSpanElement>) {
+    if (!onCaptionOffsetChange) return;
+    event.preventDefault();
+    setDraggingCaption(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handleCaptionPointerMove(event: React.PointerEvent<HTMLSpanElement>) {
+    if (!draggingCaption || !onCaptionOffsetChange) return;
+    const offset = captionOffsetFromPointer(event);
+    if (offset) onCaptionOffsetChange(offset);
+  }
+
   const cropCenterX = (state.layout.crop.x + state.layout.crop.w / 2) * 100;
   const cropCenterY = (state.layout.crop.y + state.layout.crop.h / 2) * 100;
   const zoom =
@@ -91,7 +117,7 @@ export function VideoPreview({
 
   return (
     <div className="overflow-hidden rounded-lg border border-stone-200 bg-black shadow-sm">
-      <div className="relative aspect-[9/16] w-full overflow-hidden bg-black">
+      <div ref={frameRef} className="relative aspect-[9/16] w-full overflow-hidden bg-black">
         <video
           ref={videoRef}
           src={sourceVideoUrl}
@@ -111,17 +137,35 @@ export function VideoPreview({
 
         {currentLine ? (
           <div
-            className="pointer-events-none absolute inset-x-0 flex justify-center px-4"
-            style={{
-              top: style.position === "top" ? "8%" : style.position === "middle" ? "45%" : undefined,
-              bottom: style.position === "bottom" ? "12%" : undefined,
-            }}
+            className={
+              style.offset
+                ? "pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                : "pointer-events-none absolute inset-x-0 flex justify-center px-4"
+            }
+            style={
+              style.offset
+                ? { left: `${style.offset.x * 100}%`, top: `${style.offset.y * 100}%` }
+                : {
+                    top:
+                      style.position === "top" ? "8%" : style.position === "middle" ? "45%" : undefined,
+                    bottom: style.position === "bottom" ? "12%" : undefined,
+                  }
+            }
           >
             <span
-              className="rounded px-2 py-1 text-center"
+              onPointerDown={handleCaptionPointerDown}
+              onPointerMove={handleCaptionPointerMove}
+              onPointerUp={() => setDraggingCaption(false)}
+              className={`rounded px-2 py-1 text-center ${
+                onCaptionOffsetChange
+                  ? "pointer-events-auto cursor-move touch-none ring-1 ring-white/20 hover:ring-white/60"
+                  : ""
+              }`}
+              title={onCaptionOffsetChange ? "Drag to reposition captions" : undefined}
               style={{
                 fontFamily: style.fontFamily,
                 fontSize: `${style.sizePx * 0.4}px`,
+                fontWeight: style.bold ? 700 : undefined,
                 color: style.textColor,
                 textTransform: style.uppercase ? "uppercase" : "none",
                 backgroundColor: style.background === "pill" ? "rgba(0,0,0,0.55)" : "transparent",

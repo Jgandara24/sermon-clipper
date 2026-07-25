@@ -16,5 +16,9 @@ export function resolveCaptionStyle(
   if (overrides.position !== undefined) style.position = overrides.position;
   if (overrides.uppercase !== undefined) style.uppercase = overrides.uppercase;
   if (overrides.highlightColor !== undefined) style.highlightColor = overrides.highlightColor;
+  if (overrides.fontFamily !== undefined) style.fontFamily = overrides.fontFamily;
+  if (overrides.bold !== undefined) style.bold = overrides.bold;
+  if (overrides.textColor !== undefined) style.textColor = overrides.textColor;
+  if (overrides.offset !== undefined) style.offset = overrides.offset;
   return style;
 }

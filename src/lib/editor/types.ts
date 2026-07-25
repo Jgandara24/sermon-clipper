@@ -28,6 +28,14 @@ export const editorStateSchema = z.object({
       position: z.enum(["top", "middle", "bottom"]).optional(),
       uppercase: z.boolean().optional(),
       highlightColor: z.string().optional(),
+      fontFamily: z.string().max(64).optional(),
+      bold: z.boolean().optional(),
+      textColor: z.string().optional(),
+      // Freeform caption placement from drag-and-drop: normalized center of the caption block
+      // (0..1 of frame width/height). When set, it wins over the top/middle/bottom position.
+      offset: z
+        .object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })
+        .optional(),
     }),
     textOverrides: z.array(z.object({ segmentId: z.string(), text: z.string() })),
   }),

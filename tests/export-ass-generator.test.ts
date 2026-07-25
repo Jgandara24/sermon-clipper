@@ -61,6 +61,37 @@ describe("generateAssSubtitles", () => {
     expect(ass).toContain("(this)");
   });
 
+  it("sets the ASS bold flag when the style requests bold", () => {
+    const ass = generateAssSubtitles(
+      LINES,
+      { ...getCaptionPreset("clean").style, bold: true },
+      1080,
+      1920,
+    );
+    const styleLine = ass.split("\n").find((line) => line.startsWith("Style: Default"));
+    const fields = styleLine!.split(",");
+    // Bold is field index 7 in the Format list (0-indexed after "Style: Default").
+    expect(fields[7]).toBe("-1");
+  });
+
+  it("pins captions at the dragged offset via \\an5\\pos when the style has one", () => {
+    const ass = generateAssSubtitles(
+      LINES,
+      { ...getCaptionPreset("clean").style, offset: { x: 0.5, y: 0.25 } },
+      1080,
+      1920,
+    );
+    const dialogueLines = ass.split("\n").filter((line) => line.startsWith("Dialogue: 0"));
+    for (const line of dialogueLines) {
+      expect(line).toContain("{\\an5\\pos(540,480)}");
+    }
+  });
+
+  it("emits no position override when the style has no offset", () => {
+    const ass = generateAssSubtitles(LINES, getCaptionPreset("clean").style, 1080, 1920);
+    expect(ass).not.toContain("\\pos(");
+  });
+
   it("emits a lower-third dialogue event when brand data is provided", () => {
     const ass = generateAssSubtitles(LINES, getCaptionPreset("clean").style, 1080, 1920, {
       headline: "First Baptist",

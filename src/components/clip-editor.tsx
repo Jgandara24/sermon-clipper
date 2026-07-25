@@ -12,6 +12,7 @@ import {
 import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
+import { TrimTimeline } from "@/components/editor/trim-timeline";
 import { VideoPreview } from "@/components/editor/video-preview";
 import type { EditorState } from "@/lib/editor/types";
 import {
@@ -226,6 +227,26 @@ export function ClipEditor({
             words={wordsInClip}
             showSafeZones={showSafeZones}
             brandTemplate={selectedBrandTemplate}
+            onCaptionOffsetChange={(offset) =>
+              updateState((prev) => ({
+                ...prev,
+                captions: {
+                  ...prev.captions,
+                  overrides: { ...prev.captions.overrides, offset },
+                },
+              }))
+            }
+          />
+          <TrimTimeline
+            startMs={state.source.startMs}
+            endMs={state.source.endMs}
+            sourceDurationMs={sourceDurationMs}
+            onChange={(next) =>
+              updateState((prev) => ({
+                ...prev,
+                source: { ...prev.source, startMs: next.startMs, endMs: next.endMs },
+              }))
+            }
           />
           <label className="flex items-center gap-2 text-sm text-stone-600">
             <input
