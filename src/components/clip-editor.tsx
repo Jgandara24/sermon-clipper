@@ -9,10 +9,12 @@ import {
   BrandTemplatePanel,
   type EditorBrandTemplate,
 } from "@/components/editor/brand-template-panel";
+import { ClipTimeline } from "@/components/editor/clip-timeline";
 import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { VideoPreview } from "@/components/editor/video-preview";
+import { MIN_CLIP_MS } from "@/lib/editor/trim";
 import type { EditorState } from "@/lib/editor/types";
 import {
   applyEditorDeletions,
@@ -56,12 +58,24 @@ export function ClipEditor({
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [exportAllowed, setExportAllowed] = useState(canExport);
   const [exportReason, setExportReason] = useState(exportBlockedReason);
+  // Playback position (from the preview) and outgoing seek requests (from the trim timeline).
+  const [currentMs, setCurrentMs] = useState(initialState.source.startMs);
+  const [seek, setSeek] = useState<{ ms: number; token: number } | null>(null);
   const stateRef = useRef(initialState);
   const clientRevisionRef = useRef(0);
   const versionRef = useRef(initialVersion);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const allWords = useMemo(() => flattenWords(segments), [segments]);
+  // Snap targets for the trim handles: every word's start and end, de-duplicated and sorted.
+  const wordBoundaries = useMemo(() => {
+    const boundaries = new Set<number>();
+    for (const word of allWords) {
+      boundaries.add(word.startMs);
+      boundaries.add(word.endMs);
+    }
+    return [...boundaries].sort((a, b) => a - b);
+  }, [allWords]);
   const selectedBrandTemplate =
     brandTemplates.find((template) => template.id === state.brandTemplateId) ?? null;
 
@@ -157,6 +171,20 @@ export function ClipEditor({
     });
   }
 
+  // Drag-to-trim writes the clip window directly; the timeline has already snapped and clamped,
+  // so this just guards the minimum length and rejects no-op updates.
+  function handleTrim(nextStartMs: number, nextEndMs: number) {
+    if (nextEndMs - nextStartMs < MIN_CLIP_MS) return;
+    updateState((prev) => {
+      if (prev.source.startMs === nextStartMs && prev.source.endMs === nextEndMs) return prev;
+      return { ...prev, source: { ...prev.source, startMs: nextStartMs, endMs: nextEndMs } };
+    });
+  }
+
+  function requestSeek(ms: number) {
+    setSeek((prev) => ({ ms, token: (prev?.token ?? 0) + 1 }));
+  }
+
   function handleExtend(direction: "before" | "after") {
     updateState((prev) => {
       const nextSource =
@@ -226,6 +254,8 @@ export function ClipEditor({
             words={wordsInClip}
             showSafeZones={showSafeZones}
             brandTemplate={selectedBrandTemplate}
+            onCurrentMsChange={setCurrentMs}
+            seek={seek}
           />
           <label className="flex items-center gap-2 text-sm text-stone-600">
             <input
@@ -242,6 +272,15 @@ export function ClipEditor({
         </div>
 
         <div className="grid gap-4">
+          <ClipTimeline
+            sourceDurationMs={sourceDurationMs}
+            startMs={state.source.startMs}
+            endMs={state.source.endMs}
+            currentMs={currentMs}
+            wordBoundaries={wordBoundaries}
+            onTrim={handleTrim}
+            onScrub={requestSeek}
+          />
           <ScriptEditorPanel
             words={wordsInClip}
             onToggleWord={toggleWord}
