@@ -502,11 +502,10 @@ merge green. Human actions (GitHub settings, once):
    same night) — all four green as of run `29557146876`.
 2. Enable branch protection requiring `verify`, `integration`, `e2e`, `worker-image`. **Done** —
    private-repo free-tier accounts can't use branch protection (classic *and* rulesets both
-   403'd), so the repo was made **public** 2026-07-16 night rather than pay for GitHub Pro right
-   now; protection then applied successfully with all four required checks. Revisit if/when
-   proprietary-source exposure becomes a real concern — flipping back to private requires a paid
-   plan to keep protection. Command used (kept here for re-applying after any future repo
-   recreation):
+   403'd), so the repo was made **public** 2026-07-16 night rather than pay for GitHub Pro. The
+   protection then applied successfully with all four required checks. The repository-visibility
+   policy below supersedes the earlier open-ended instruction to revisit this choice later.
+   Command used (kept here for re-applying after a visibility change or repository recreation):
 
    ```sh
    gh api repos/<owner>/<repo>/branches/main/protection --method PUT --input - <<'EOF'
@@ -524,6 +523,55 @@ merge green. Human actions (GitHub settings, once):
 
    Verify: `gh api repos/<owner>/<repo>/branches/main/protection --jq
    '.required_status_checks.contexts'` should list all four.
+
+### Repository visibility policy
+
+This policy was verified and recorded on 2026-08-11. It does not change a GitHub setting at P0.
+
+- Keep `Jgandara24/sermon-clipper` public through P0–P4.
+- Make the repository private before the first P5 commit lands. P5 is the named trigger because
+  it is the first phase that implements the proprietary Selector and Review Agent policies.
+- Public history cannot be retracted. A later visibility change does not remove indexed copies,
+  archives, or existing public forks. Therefore, do not commit protected material while the
+  repository is public.
+- Protected material includes the external private `CTO.md`; margin, revenue, scale, acquisition,
+  and price-positioning material; and the private implementation plan's full P5 Selector policy
+  and P6 Review Agent design. The P0.2 public plan copy replaces those sections with pointers to
+  the private planning copy.
+- The existing `$49` proxy comparison in `DECISIONS.md` is already public history. Do not amplify
+  it with the private margin, scale, acquisition, or editorial-policy material.
+- P0–P4 code, technical architecture, editorial invariants, provider unit costs, technical stage
+  costs, cost gates, migrations, tests, and sandbox evidence can be committed normally.
+
+State verified on 2026-08-11:
+
+- Visibility: `PUBLIC` (`isPrivate=false`).
+- Required checks: `verify`, `integration`, `e2e`, `worker-image`.
+- Strict status checks: enabled.
+- Administrator enforcement: enabled.
+- Force pushes: blocked.
+- Branch deletion: blocked.
+
+Before P5:
+
+1. Activate a paid GitHub plan that supports rules on private repositories.
+2. Save the current protection response, then run
+   `gh repo edit Jgandara24/sermon-clipper --visibility private`.
+3. Reapply the protection payload above.
+4. Verify visibility, all four required contexts, strict mode, administrator enforcement, blocked
+   force pushes, and blocked deletion.
+5. Open one pull request and prove that all four checks run and remain required before any P5
+   policy commit lands.
+
+GitHub Actions standard runners are free and unlimited for public repositories. The current paid
+plan assumption for P5 is GitHub Pro at about $4 per month with 3,000 included Actions minutes.
+Recheck GitHub features and pricing when the trigger fires. If private Actions minutes become a
+constraint, reduce unnecessary draft-pull-request runs. Do not restore public visibility after
+proprietary policy enters history.
+
+References: [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions),
+[repository rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets),
+and [GitHub pricing](https://github.com/pricing).
 
 ## Monitoring & Alerting
 

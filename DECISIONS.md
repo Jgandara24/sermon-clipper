@@ -1132,3 +1132,49 @@ returning `download_status = null`, resolved by pasting the URL by hand), so tha
 proof before any church is migrated onto it. If Sermon Clipper adopts PERC it should use its own
 Cloudflare Stream account, not Pulpit Engine's — unlike the Meta App there is no review process to
 reuse, so sharing would add a failure point and buy nothing.
+
+## 2026-08-11 - Repository Stays Public Until P5; Strategy, Margin, and Editorial-Policy Documents Stay Private
+
+Decision: Keep `Jgandara24/sermon-clipper` public through P0–P4. Make it private before the first
+P5 commit lands. No GitHub visibility or protection setting changes at P0. P5 is the named trigger
+because it is the first phase that implements the proprietary Selector and Review Agent policies.
+P0–P4 consists of correctness, provenance, scheduling, cost, review-data, and media-index plumbing
+that can remain public.
+
+While the repository is public, never commit the external private `CTO.md`; margin, revenue, scale,
+acquisition, or price-positioning plans; or the private implementation plan's full P5 Selector
+policy and P6 Review Agent design. The P0.2 public plan copy must replace all protected sections
+with pointers to the private planning copy. Technical architecture, editorial invariants, provider
+unit costs, technical stage costs, cost gates, code, migrations, tests, `DECISIONS.md`, and sandbox
+evidence can be committed normally.
+
+Why: Public repositories support the required branch rules and free, unlimited standard GitHub
+Actions minutes. A private repository requires a paid plan to keep the same protection and changes
+the included Actions allowance. The heavy P0–P4 implementation sequence benefits from the current
+public CI capacity. The repository must become private before proprietary editorial logic enters
+history.
+
+Permanence rule: Public git history cannot be retracted. Changing the repository to private later
+does not remove indexed copies, archives, or existing public forks. Deferring the visibility change
+is safe only because protected documents and policy sections do not enter public history before
+the trigger. The `$49` proxy comparison already recorded above is a bounded public fact and cannot
+be withdrawn; this decision prevents the private margin, scale, acquisition, and editorial-policy
+material from being added or amplified.
+
+Verified state on 2026-08-11: visibility `PUBLIC` with `isPrivate=false`; required checks `verify`,
+`integration`, `e2e`, and `worker-image`; strict status checks and administrator enforcement enabled;
+force pushes and branch deletion blocked. This supersedes the open-ended revisit instruction in
+`docs/DEPLOYMENT.md` that accompanied the 2026-07-16 public visibility change.
+
+P5 entry procedure: activate a paid GitHub plan, change the repository to private, reapply and
+verify the saved branch-protection payload, and prove all four checks remain required on one pull
+request before any P5 policy commit lands. The current assumption is GitHub Pro at about $4 per
+month with 3,000 included Actions minutes. Recheck GitHub features and pricing when the trigger
+fires. Do not restore public visibility after proprietary policy enters history.
+
+Tradeoff: P0–P4 source remains publicly visible. This preserves free protected-branch CI during the
+largest implementation phase but accepts public exposure of non-proprietary correctness plumbing.
+The cost of reversing early is the paid plan and lower included Actions allowance. Going private
+earlier is always allowed. Going public again after P5 is not an acceptable rollback.
+
+Status: Active. The trigger is the start of P5.
