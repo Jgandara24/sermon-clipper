@@ -12,6 +12,17 @@
 
 ---
 
+## 0.0 Build status (updated 2026-08-12)
+
+P0.0 `6ddbba6`, P0.1 `737a01c`, P0.2 `30dbfc7`, P0.3 `855567e` are committed. P0.4 is next; P0.5 is
+the first commit that changes `src/` behavior. Branch `feat/reel-builder-trim`, five commits ahead
+of `origin/main`, nothing pushed. Suite at 56 files / 426 tests.
+
+**The record of actual progress and deviations is `docs/AGENTIC_EDITOR_PROGRESS.md`.** Read it
+before continuing; it lists five deliberate departures from this plan's text.
+
+---
+
 ## 0. What changed from the draft plan and final review
 
 The draft's architecture, phase structure, and economics survive intact. This revision includes Claude's verification pass plus the final corrections that Jake accepted after Codex reviewed the plan. Summary:

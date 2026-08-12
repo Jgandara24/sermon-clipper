@@ -1,0 +1,27 @@
+{
+  "note": "Recorded production ANALYZE run. Counts and timestamps only — no media, no transcript text. This is the pre-P5 baseline that Selector work must beat. See docs/AGENTIC_EDITOR_PROGRESS.md.",
+  "recordedOn": "2026-08-12",
+  "provider": "claude",
+  "models": ["claude-haiku-4-5", "claude-sonnet-5"],
+  "sourceArtifactId": "clip-count-retest-8-11",
+  "sourceDurationMs": 2981760,
+  "candidateCount": 500,
+  "scoredCount": 6,
+  "keptCount": 6,
+  "targetClipCount": 6,
+  "analysisCostUsd": 0.156798,
+  "clips": [
+    { "rank": 1, "startMs": 175000, "endMs": 232000 },
+    { "rank": 2, "startMs": 206000, "endMs": 262000 },
+    { "rank": 3, "startMs": 113000, "endMs": 169000 },
+    { "rank": 4, "startMs": 597000, "endMs": 653000 },
+    { "rank": 5, "startMs": 658000, "endMs": 714000 },
+    { "rank": 6, "startMs": 85000, "endMs": 142000 }
+  ],
+  "priorRun": {
+    "recordedOn": "2026-07-24",
+    "note": "Same source, before the c1603cd window-coverage change. Both clips were announcements, not sermon content.",
+    "keptCount": 2,
+    "analysisCostUsd": 0.19
+  }
+}
