@@ -1289,3 +1289,44 @@ validation.
 
 Status: Active. Supersedes only the proof-status sentence of the 2026-07-23 entry; that entry's
 decision, rationale, and revisit trigger stand.
+
+## 2026-08-11 - Agentic Editor Architecture, Editorial Standard, and Plan Are Frozen in the Repository
+
+Decision: The accepted agentic-editor architecture is now recorded in the repository as three
+documents. `docs/PULPIT_ENGINE_EDITORIAL_STANDARD.md` states what a clip is allowed to be and
+governs both the automatic system and human editing. `docs/AGENTIC_EDITOR_REV2_FROZEN.md` is the
+architecture of record. `docs/AGENTIC_EDITOR_IMPLEMENTATION_PLAN.md` is the commit-by-commit plan.
+Authority order is: product-owner decisions, then the frozen architecture, then the plan, with the
+editorial standard binding on all three.
+
+Three product-owner overrides are recorded as part of the freeze. First, master candidate default
+and maximum are built now, together with a hidden per-church override that only platform staff can
+change and that no church-facing screen or API response exposes. Second, the human-only reference
+period is a fixed full 30 days; it may be extended by an outage but never shortened, superseding the
+earlier permission to compress it after two or three services. Third, every delivered clip uses one
+continuous source range — this binds the operator's own revisions as well as automatic clips, and
+internal word, filler, pause, and repeated-phrase deletion are forbidden at the render boundary
+rather than only in the editor.
+
+The plan copy in this repository is sanitized. Revenue and gross-margin projections, the scale
+model, price positioning, and the P5 Selector policy and P6 Review Agent design are withheld and
+marked in place, per the 2026-08-11 repository-visibility decision. The withheld material lives with
+the private planning copy and is added here after the repository becomes private at the start of P5.
+Everything the build needs is public: usage profiles, per-stage technical costs, the intake
+comparison, the code-enforced cost gates, the measured production anchors, provider price sources,
+and the full P0-P4 commit sequence.
+
+Why: An agent cannot learn from review decisions if the system cannot prove which edit version
+produced the reviewed file. Freezing the editorial invariants and the phase order before any code
+changes means later commits are auditable against a fixed standard instead of a moving one, and it
+prevents the correctness work from being quietly relitigated commit by commit. Recording the
+overrides in the repository — rather than leaving them in planning conversation — is what makes them
+enforceable in review.
+
+Tradeoff: The repository now carries a large planning document that will drift from reality as
+P0-P4 lands, and the sanitized copy is deliberately incomplete, so a reader may find pointers to
+material they cannot access. Both are accepted. Drift is handled by treating the decision log, not
+the plan, as the record of what actually happened; incompleteness is the price of deferring the
+go-private trigger to the phase that first produces proprietary editorial logic.
+
+Status: Active.
