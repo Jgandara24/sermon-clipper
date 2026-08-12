@@ -1124,8 +1124,10 @@ env var, so switching providers is a config change.
 
 Reversibility: high. `YTDLP_PROXY_URL` unset restores the previous behavior exactly.
 
-Status: Active — code merged and env var documented; **not yet proven against a real proxy
-endpoint**. Two open items: (1) buy a small amount of residential proxy traffic and confirm a real
+Status: Active — code merged and env var documented. **Proof status amended by the 2026-08-11
+entry "Residential Proxy Import Is Functionally Proven; Its Economics Remain Unproven": item (1)
+below is now satisfied for function but not for economics; item (2) is unchanged.** Two open items:
+(1) buy a small amount of residential proxy traffic and confirm a real
 import succeeds from Railway before relying on it; (2) PERC's automated MP4 retrieval has never
 worked end to end (Pulpit Engine's `current-build-status.md` records the one real recording
 returning `download_status = null`, resolved by pasting the URL by hand), so that needs its own
@@ -1178,3 +1180,112 @@ The cost of reversing early is the paid plan and lower included Actions allowanc
 earlier is always allowed. Going public again after P5 is not an acceptable rollback.
 
 Status: Active. The trigger is the start of P5.
+
+## 2026-08-11 - Catch-Up Record: ANALYZE Stage A Streams With a 32,000-Token Ceiling
+
+Decision: Recorded after the fact for commit `a4b0ab6` (2026-07-24, PR #23), which changed
+recorded ANALYZE behavior without a decision entry. Stage A classification now streams via
+`messages.stream` + `finalMessage()` with a 32,000-token ceiling, matching the fix PR #22 applied
+to Stage B, and throws a retryable `AnalysisResponseTruncatedError` on a `max_tokens` stop or
+unparseable output.
+
+Why: The production retest failed in Stage A with the same signature PR #22 had fixed for Stage B —
+`Failed to parse structured output as JSON` at position 14722, which is the ~4,096-token cap of the
+`messages.parse` call (4,096 tokens x ~3.6 chars/token is about 14,700 chars). Stage A emits one
+classification per candidate window and a full sermon produces up to 500 of them, so the cap was
+reached on any real service. The 32,000-token ceiling is provably sufficient: 500 candidates at
+about 15 tokens each is roughly 7.5K in the worst case.
+
+Tradeoff: Both analysis stages now use streaming rather than the simpler `messages.parse` helper,
+because 32,000 exceeds the SDK's non-streaming guidance. The added `AnalysisResponseTruncatedError`
+turns a previously silent failure — classifying nothing and continuing — into a retryable job
+failure, which is louder but correct.
+
+Status: Active.
+
+## 2026-08-11 - Catch-Up Record: Candidate Windows Cover the Whole Sermon; Verified 2026-08-11
+
+Decision: Recorded after the fact for commit `c1603cd` (2026-07-24, PR #24), which changed
+recorded ANALYZE behavior without a decision entry. Candidate generation changed in three ways.
+Each start position now emits at most `DURATION_TARGETS_PER_START = 3` windows at durations evenly
+spaced from 20s to 90s, replacing a window at every segment end. When the candidate pool exceeds
+the 500 cap it is now **evenly sampled across the whole transcript** rather than truncated at the
+front. Stage A survivors are thinned by IoU greater than 0.5 before the fixed
+`MAX_STAGE_B_CANDIDATES = 25` slice.
+
+Why: The 2026-07-24 production run exposed the funnel as 500 candidates to 6 scored to 2 kept, with
+both kept clips drawn from the opening 90 seconds of a 50-minute service. Front-truncating the
+candidate pool meant the analyzer never saw most of the sermon.
+
+Verification (2026-08-11): This change had never been tested against a real service — it was
+written in response to the failing run and deployed about 16 hours after it. It has now been
+verified by re-importing the same source video (`z4FCS3JcZPs`, 49:41) through the same production
+path, as project `Clip Count Retest 8-11` in workspace `Jake's Church`:
+
+- Clips generated: **6**, against 2 before. The configured `targetClipCount` of 6 was met exactly.
+  Part of the increase is configuration — the earlier run was in a two-service workspace with a
+  target of 3 — so the count is not a clean like-for-like comparison.
+- Content: all six are sermon material (Philippians paradoxes, Paul rejoicing in chains, the
+  creator-creature distinction, a critique of Mormon theology). The 2026-07-24 run produced two
+  announcement clips and never reached the sermon. This change is not explainable by configuration.
+- Cost: $0.157 for the analysis stage, against $0.19 before, at 74,662 input and 9,348 output
+  tokens across Haiku Stage A and Sonnet Stage B.
+- Pipeline: FINALIZE through ANALYZE completed in about 6 minutes for a 50-minute source.
+- Transcript coverage was confirmed complete — 978 segments ending at 49:41 against a 49:41 source
+  — ruling out silent transcription truncation as a cause of any clustering.
+
+Open issue: coverage is improved but not whole-sermon. All six clips fall between 1:25 and 10:58 of
+a 50-minute service; minutes 11 through 50 produced nothing. Analysis metadata shows 500 candidate
+windows in and `scoredCount` of 6, so Stage A classification — not window generation and not Stage B
+ranking — is the binding constraint, and the candidates it approves cluster early. Whether that is a
+defect is not yet established: a sermon's opening states its thesis and may honestly be the most
+clippable material. This is recorded as the measured baseline that the P5 Selector work must beat,
+and P0.4's charter tests capture it as a named scenario.
+
+Status: Active. The commit's "covering the whole sermon" claim is accurate for candidate generation
+and not yet accurate for candidate selection.
+
+## 2026-08-11 - Catch-Up Record: Clip Boundaries Are Edited on a Drag Timeline
+
+Decision: Recorded after the fact for commit `4d51e5d` (2026-07-27, originally `004db2f` before the
+authorship rewrite recorded below), which changed the editor without a decision entry. The clip
+editor gained a drag-to-trim timeline: new `src/components/editor/clip-timeline.tsx` and pure
+boundary math in `src/lib/editor/trim.ts` (`MIN_CLIP_MS` 3,000; viewport padding 15s to 60s;
+snap-to-word-boundary; start/end/region clamping). `VideoPreview` gained `onCurrentMsChange` and a
+token-keyed external seek.
+
+Why: Boundary adjustment was previously only possible through numeric fields. The timeline was
+built self-contained so planned canvas text and banner overlay controls can mount alongside it the
+same way.
+
+Tradeoff: The timeline writes only `state.source.startMs` and `state.source.endMs`. It adds no new
+edit-state fields, no schema change, and no change to kept-range or word-deletion behavior. This
+turns out to align exactly with the continuous-source rule adopted on 2026-08-10: start and end are
+permitted edits, and the timeline is the surface that will remain after the word-deletion controls
+are removed in P1.4.
+
+Status: Active.
+
+## 2026-08-11 - Residential Proxy Import Is Functionally Proven; Its Economics Remain Unproven
+
+Decision: Amends the proof status recorded in the 2026-07-23 entry "YouTube Import Goes Through a
+Residential Proxy; PERC Is the Post-90-Day Cost Path", which stated that the path was "not yet
+proven against a real proxy endpoint". Proxy import is now functionally proven: a real 49:41 YouTube
+service was imported end to end through `YTDLP_PROXY_URL` in production on 2026-07-24, and again on
+2026-08-11. Both runs completed FINALIZE, PROBE, TRANSCRIBE, and ANALYZE.
+
+What remains unproven, and is unchanged: transferred bytes and the contracted price per GB are not
+measured anywhere — the yt-dlp path records no byte or cost telemetry, so the roughly $10 per church
+per month estimate is still an assumption, not a measurement. PERC's automated MP4 retrieval has
+still never worked end to end and has no implementation. The ADR's revisit trigger — monthly proxy
+spend above about $200 or church count above about 25 — remains unfired and is now additionally
+gated by the P0 cost-truth work, which makes byte measurement a launch gate rather than a
+background concern.
+
+Why: The original entry's status conflated "the code path works" with "the economics are
+acceptable". Those are separate claims with separate evidence, and only the first is now satisfied.
+Recording them separately prevents a future reader from treating one real import as economic
+validation.
+
+Status: Active. Supersedes only the proof-status sentence of the 2026-07-23 entry; that entry's
+decision, rationale, and revisit trigger stand.
