@@ -7,7 +7,7 @@ type Layout = EditorState["layout"];
 
 const MODES: Array<{ value: Layout["mode"]; label: string; description: string }> = [
   { value: "center", label: "Center", description: "Static center crop" },
-  { value: "face", label: "Face", description: "Tracks the speaker at render time" },
+  { value: "face", label: "Face", description: "Static center crop; tracking is not implemented" },
   { value: "manual", label: "Manual", description: "Choose your own crop box" },
 ];
 
@@ -101,8 +101,8 @@ export function LayoutPanel({
       ) : null}
       {layout.mode === "face" ? (
         <p className="mt-3 text-xs text-stone-500">
-          Face tracking runs when the clip is exported — this preview shows a center crop as a
-          stand-in.
+          Face mode currently uses the same static center crop as Center. Automatic face tracking
+          is not implemented.
         </p>
       ) : null}
     </div>
