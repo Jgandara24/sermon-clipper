@@ -10,11 +10,14 @@ import { finishRuntimeMeasurement, startRuntimeMeasurement, type RuntimeMeasurem
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
-import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
+import {
+  recordOperationalEvent,
+  recordOperationalEventSafely,
+} from "@/lib/observability/operational-events";
 import {
   clearReschedulableScheduledPosts,
+  findScheduledPostCollision,
   scheduledDateForRank,
-  slotAlreadyPublished,
 } from "@/lib/scheduling";
 
 const MIN_CANDIDATE_MS = 20_000;
@@ -317,13 +320,32 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       const rank = idx + 1;
       if (rank <= targetClipCount && project.sermonDate) {
         const scheduledDate = scheduledDateForRank(project.sermonDate, rank);
-        // Never re-arm a slot whose post already went out (or is going out) — a re-analysis
-        // after publishing would otherwise duplicate content on the Page.
-        const published = await slotAlreadyPublished(tx, {
+        // Until Wave 1 adds active-date uniqueness, the earliest armed row owns the date in every
+        // state. A later project keeps its analyzed candidates but cannot silently double-book.
+        const collision = await findScheduledPostCollision(tx, {
           workspaceId: project.workspaceId,
           scheduledDate,
         });
-        if (!published) {
+        if (collision) {
+          await recordOperationalEvent(tx, {
+            workspaceId: project.workspaceId,
+            category: "scheduling",
+            eventType: "scheduled_post_collision",
+            severity: "warning",
+            message: "A later project could not arm an already-reserved posting date.",
+            projectId: project.id,
+            jobId: job.id,
+            metadata: {
+              scheduledDate: scheduledDate.toISOString().slice(0, 10),
+              existingScheduledPostId: collision.id,
+              existingProjectId: collision.projectId,
+              existingPublishStatus: collision.publishStatus,
+              laterProjectId: project.id,
+              laterClipId: created.id,
+              rank,
+            },
+          });
+        } else {
           await tx.scheduledPost.create({
             data: {
               workspaceId: project.workspaceId,

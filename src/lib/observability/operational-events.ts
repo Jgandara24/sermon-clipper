@@ -9,6 +9,7 @@ export type OperationalEventCategory =
   | "processing"
   | "transcription"
   | "analysis"
+  | "scheduling"
   | "export"
   | "approval"
   | "billing"

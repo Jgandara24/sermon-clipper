@@ -514,11 +514,8 @@ describe("ANALYZE charter — re-analysis is destructive", () => {
   });
 });
 
-describe("ANALYZE charter — cross-project date collision", () => {
-  // DEFECT UNDER CHARTER — no unique constraint exists on (workspaceId, scheduledDate), so two
-  // projects in one workspace can arm the same date. P0.17 adds the constraint and P1.9 the
-  // collision handling; today the second project silently double-books.
-  it("currently allows two projects to arm the same workspace date", async () => {
+describe("ANALYZE preflight — cross-project date collision", () => {
+  it("keeps earlier rows and records every later-project collision without hiding analysis", async () => {
     const workspaceId = await seedWorkspace();
     const sermonDate = new Date("2026-03-04T00:00:00.000Z");
 
@@ -526,7 +523,11 @@ describe("ANALYZE charter — cross-project date collision", () => {
     const b = await analyzeProject({ workspaceId, segmentCount: 300, sermonDate, targetClipCount: 3 });
 
     expect(a.posts.length).toBeGreaterThan(0);
-    expect(b.posts.length).toBeGreaterThan(0);
+    expect(b.posts).toHaveLength(0);
+    expect(b.clips.length).toBeGreaterThan(0);
+
+    const laterProject = await prisma.project.findUniqueOrThrow({ where: { id: b.projectId } });
+    expect(laterProject.status).toBe("READY");
 
     const all = await prisma.scheduledPost.findMany({
       where: { workspaceId, platform: SocialPlatform.FACEBOOK },
@@ -536,6 +537,30 @@ describe("ANALYZE charter — cross-project date collision", () => {
       const key = post.scheduledDate.toISOString().slice(0, 10);
       byDate.set(key, (byDate.get(key) ?? 0) + 1);
     }
-    expect([...byDate.values()].some((count) => count > 1)).toBe(true);
+    expect([...byDate.values()].every((count) => count === 1)).toBe(true);
+
+    const earlierProjectIds = new Set(
+      await Promise.all(
+        all.map(async (post) => {
+          const clip = await prisma.generatedClip.findUnique({ where: { id: post.clipId ?? "" } });
+          return clip?.projectId;
+        }),
+      ),
+    );
+    expect(earlierProjectIds).toEqual(new Set([a.projectId]));
+
+    const events = await prisma.operationalEvent.findMany({
+      where: { projectId: b.projectId, eventType: "scheduled_post_collision" },
+    });
+    expect(events).toHaveLength(3);
+    expect(events.every((event) => event.severity === "warning")).toBe(true);
+    expect(events.map((event) => event.metadata)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          existingProjectId: a.projectId,
+          laterProjectId: b.projectId,
+        }),
+      ]),
+    );
   });
 });
