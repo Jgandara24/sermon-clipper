@@ -4,7 +4,7 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-08-13, after P0.19.
+**Last updated:** 2026-08-13, after P0.20.
 
 ---
 
@@ -31,16 +31,16 @@ say. `DECISIONS.md` remains the authoritative record of decisions; this is a wor
 | P0.16 global publisher kill switch | `7c6572a` | done | Exact positive-enable guard at the publisher boundary |
 | P0.17 correctness-substrate migration | `e747196` | done | Expand-first schema wave; publishing stays disabled |
 | P0.18 daily cost rollups and worker isolation | `354ea5d` | done | Durable totals and independent periodic blocks |
-| P0.19 real-service cost-truth gate | _(backfilled below)_ | done | Direct upload passed at $1.81 per typical month; YouTube remains disapproved |
-| P0.20 plan-grid conflict report | — | **next** | Commit the completed report-only entitlement audit |
+| P0.19 real-service cost-truth gate | `cef55a5` | done | Direct upload passed at $1.81 per typical month; YouTube remains disapproved |
+| P0.20 plan-grid conflict report | _(see `git log`)_ | done | Conflicts exposed; no entitlement changed |
 
 A commit cannot contain its own hash, so the newest row's SHA is backfilled by the following
-commit. P0.19 is the most recent; `git log --oneline` is authoritative.
+commit. P0.20 is the most recent; `git log --oneline` is authoritative.
 
-Branch: `feat/reel-builder-trim`, twenty-one commits ahead of `origin/main`. **Nothing pushed yet.**
+Branch: `feat/reel-builder-trim`, twenty-two commits ahead of `origin/main`. **Nothing pushed yet.**
 The P0 pull request must include `4d51e5d` (drag-to-trim), which predates the program.
 
-Suite as of P0.19: **67 unit test files, 516 tests**; **21 integration test files, 189 tests**.
+Suite as of P0.20: **67 unit test files, 516 tests**; **21 integration test files, 189 tests**.
 `npm run verify` and `npm run test:integration` green.
 
 ---
@@ -132,8 +132,7 @@ produced 2 clips, both announcements, both at minute 0.
 
 ## Open items not owned by any commit yet
 
-- **Finish P0.20, then push and open the P0 pull request.** Nothing is pushed. All four CI jobs
-  must pass before merge.
+- **Push and open the P0 pull request.** Nothing is pushed. All four CI jobs must pass before merge.
 - **Stage A recall** is now the known product bottleneck. It is P5's target, not a P0 fix.
 - **PERC** has no implementation and its retrieval has never worked end to end.
 - **YouTube proxy economics failed.** The current contract exceeds its monthly gate. Direct upload

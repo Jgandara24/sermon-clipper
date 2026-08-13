@@ -1499,6 +1499,36 @@ forward migration.
 
 Status: Active.
 
+## 2026-08-13 - Plan-Grid Conflicts Are Reported Without Changing Entitlements
+
+Decision: Keep the current Free, Starter, and Pro entitlement values unchanged during P0. Add a
+deterministic plan-grid report and source validator. The report measures the current limits against
+one weekly 70-minute service, one weekly 90-minute service, and the published light, typical, and
+heavy church profiles. A later small decision commit will select any price, included-minute,
+maximum-duration, overage, or upload-gate change.
+
+The measured conflicts are: Free grants 60 minutes but permits one 90-minute video; Starter grants
+300 minutes but one weekly 70-minute service needs 303.1 minutes per average month; and Starter does
+not cover the 358-, 618-, or 878-minute profile midpoints. Pro's 1,200 minutes cover all three
+published profile midpoints. The reservation remains a hard block. It does not use the declared
+`overageAllowed` field.
+
+Paid-period grants accumulate. `grantMinutesForBillingPeriod` adds a new invoice grant to the
+existing balance and does not reset it. Carryover can delay a recurring shortfall, but it does not
+remove a steady-state deficit. Prices remain Stripe Price IDs resolved through
+`STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO`; no dollar amount was added to the plan-limit table.
+
+The upload presign gate checks only `minuteBalance > 0`. It does not know the video duration.
+`FINALIZE` calculates the real reservation later, so a low-balance church can transfer a full file
+before receiving `INSUFFICIENT_MINUTES`. This is recorded as a small later UX fix, not changed in
+this report-only commit.
+
+Why: The current plan grid cannot support its stated limits and church usage in every case. A
+measured report makes the conflicts visible without silently changing customer promises or mixing
+an engineering audit with a pricing decision.
+
+Status: Active. The conflicts are proven. The entitlement response is intentionally undecided.
+
 ## 2026-08-13 - The Current IPRoyal Contract Fails the YouTube Cost Gate
 
 Decision: Apply the P0.19 hard stop. Do not approve the current YouTube proxy path and do not spend

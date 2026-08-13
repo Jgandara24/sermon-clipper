@@ -27,6 +27,7 @@
     "test:e2e": "playwright test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit",
+    "validate:plan-grid": "tsx scripts/validate-plan-grid.ts",
     "verify": "npm run prisma:validate && npm run prisma:generate && npm run lint && npm run typecheck && npm run test && npm run build",
     "verify:benchmark": "tsx scripts/verify-editorial-benchmark.ts",
     "verify:launch-evidence": "tsx scripts/verify-launch-evidence.ts",
