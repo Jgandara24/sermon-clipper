@@ -74,6 +74,7 @@ export function analysisCallCostFact(
     details: {
       inputTokens: call.inputTokens,
       outputTokens: call.outputTokens,
+      imageCount: 0,
       cacheCreationInputTokens: call.cacheCreationInputTokens,
       cacheReadInputTokens: call.cacheReadInputTokens,
     },

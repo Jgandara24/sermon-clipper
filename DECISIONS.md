@@ -1498,3 +1498,60 @@ The additive schema remains in place during an application rollback. Index remov
 forward migration.
 
 Status: Active.
+
+## 2026-08-13 - The Current IPRoyal Contract Fails the YouTube Cost Gate
+
+Decision: Apply the P0.19 hard stop. Do not approve the current YouTube proxy path and do not spend
+on a redundant second service until the proxy contract or intake path changes. The actual IPRoyal
+residential order was 2 GB for $12.50, or $6.25 per decimal GB. No account, order, payment, or
+credential identifier is stored in the repository.
+
+The existing real 49:41 production service has a 392,808,104-byte source object in production
+Cloudflare R2. At the contracted proxy rate, stored source bytes alone cost $2.4551 per service,
+or $2.9641 per source hour. At 8.66 services per typical month, proxy cost alone is $21.26. Adding
+only the measured $0.156798 analysis anchor creates a conservative $22.62 monthly lower bound. The
+YouTube-path gate is $12. Protocol overhead and all omitted core stages can only increase this
+result.
+
+Production storage is Cloudflare R2 at
+`04bed3f430e69de89a54a5ec15ac997a.r2.cloudflarestorage.com`, with contracted direct egress at
+$0/GB. This settles the P0 storage-provider and egress question. The complete all-stage Gate A
+report remains open because P0.11 and P0.12 telemetry landed after the reference run, and the new
+price variables are not deployed in production.
+
+Why: A new paid run cannot turn a lower bound that already exceeds the cap into a pass. Recording
+the measured failure prevents an estimate or successful import from being misreported as economic
+approval. The next decision must change intake economics before the full real-service run is
+useful.
+
+Status: Active. YouTube economics failed. Gate A has not passed.
+
+## 2026-08-13 - Direct Upload Passes the P0 Cost-Truth Gate
+
+Decision: Approve direct upload as the P0 Gate A intake path. One paid production run used the
+existing 47:00 service file. It completed direct upload, probe, local transcription, paid Claude
+analysis, approval, and one final export. Automatic publishing stayed disabled. The public-safe
+report is `evaluation/p0-cost-truth-2026-08-13.json`.
+
+The measured source was 158,665,289 bytes. Proxy bytes and proxy cost per source hour were zero.
+Railway egress for the browser-to-R2 transfer cost $0.007933. Core processing cost $0.201123 per
+service. Total measured cost was $0.209056 per service and $1.810427 per typical church month at
+8.66 services. The direct-upload monthly gate is $8.00. Production storage is Cloudflare R2 with
+contracted direct egress at $0/GB. All required stages had priced or contract-confirmed zero-cost
+facts. Gate A passed.
+
+The paid run used `claude-haiku-4-5` for classification and `claude-sonnet-5` for scoring. It used
+92,189 input tokens and 11,130 output tokens. Both totals are within 25 percent of the committed
+Run 2 usage anchor. Analysis cost was $0.201123, which is 28.3 percent above the old $0.156798 cost
+anchor. This difference is valid because the current model and token mix changed. Gate A uses
+token volume for the cross-run plausibility check. It records actual paid cost separately and
+enforces the $1.50 core cost cap.
+
+The successful direct-upload report does not approve the YouTube proxy path. The current IPRoyal
+contract still fails its separate $12 monthly gate.
+
+Why: Token volume is comparable across model price changes. Paid cost is not. Using token volume
+for the sandbox reconciliation keeps the plausibility check stable. The separate cost caps still
+block an uneconomic run.
+
+Status: Active. Direct upload passed Gate A. YouTube proxy intake remains disapproved.

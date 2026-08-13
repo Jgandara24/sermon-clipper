@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-08-13T20:49:20Z",
+  "environment": "production",
+  "scheduleCollisionAudit": {
+    "scannedRowCount": 8,
+    "duplicateDateCount": 0,
+    "duplicateRowCount": 0,
+    "extraRowCount": 0,
+    "collisions": []
+  },
+  "legacyExportAudit": {
+    "succeededExportsWithoutProvableEditVersion": 2,
+    "legacyExportJobIds": [
+      "82b63d96-eda4-48d8-b9ce-2e17f3d7f800",
+      "6815e578-eefe-4234-bb89-018d98bd2967"
+    ],
+    "armedScheduledPostsBackedOnlyByLegacyExports": 0,
+    "armedScheduledPostIds": [],
+    "clipsWithDemotedApprovalsAndPublishableExports": 0,
+    "demotedApprovalClipIds": []
+  },
+  "drainCheck": {
+    "runningProcessingJobCount": 0,
+    "queuedProcessingJobCount": 0,
+    "inProgressScheduledPostCount": 0
+  }
+}

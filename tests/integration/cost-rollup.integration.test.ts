@@ -68,9 +68,15 @@ describe("daily cost rollups", () => {
     const to = new Date(Date.now() + 60_000);
 
     const first = await rollupProcessingCosts(prisma, { from, to, workspaceId: workspaceA });
-    const firstRows = await prisma.dailyCostRollup.findMany({ where: { workspaceId: workspaceA } });
+    const firstRows = await prisma.dailyCostRollup.findMany({
+      where: { workspaceId: workspaceA },
+      orderBy: { dimensionKey: "asc" },
+    });
     const second = await rollupProcessingCosts(prisma, { from, to, workspaceId: workspaceA });
-    const secondRows = await prisma.dailyCostRollup.findMany({ where: { workspaceId: workspaceA } });
+    const secondRows = await prisma.dailyCostRollup.findMany({
+      where: { workspaceId: workspaceA },
+      orderBy: { dimensionKey: "asc" },
+    });
 
     expect(first).toEqual(second);
     expect(secondRows.map((row) => ({ ...row, id: null, createdAt: null, updatedAt: null }))).toEqual(

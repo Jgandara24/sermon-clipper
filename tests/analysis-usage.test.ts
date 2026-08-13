@@ -67,6 +67,7 @@ describe("analysisCallCostFact", () => {
       details: {
         inputTokens: 1_000,
         outputTokens: 0,
+        imageCount: 0,
         cacheReadInputTokens: 500,
       },
     });

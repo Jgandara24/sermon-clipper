@@ -8,6 +8,7 @@
     "build": "npm run prisma:generate && next build",
     "collect:launch-evidence": "tsx scripts/collect-launch-evidence.ts",
     "create:launch-evidence": "tsx scripts/create-launch-evidence.ts",
+    "create:project-cost-report": "tsx scripts/create-project-cost-report.ts",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
@@ -29,6 +30,7 @@
     "verify": "npm run prisma:validate && npm run prisma:generate && npm run lint && npm run typecheck && npm run test && npm run build",
     "verify:benchmark": "tsx scripts/verify-editorial-benchmark.ts",
     "verify:launch-evidence": "tsx scripts/verify-launch-evidence.ts",
+    "verify:project-cost": "tsx scripts/verify-project-cost-report.ts",
     "worker": "tsx watch src/worker/run-jobs.ts",
     "worker:build": "tsc --noEmit -p tsconfig.worker.json && esbuild src/worker/run-jobs.ts --bundle --platform=node --packages=external --sourcemap --outfile=dist/worker/run-jobs.cjs",
     "worker:prod": "node --enable-source-maps dist/worker/run-jobs.cjs"

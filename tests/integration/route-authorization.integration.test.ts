@@ -37,6 +37,7 @@ vi.mock("next/headers", () => ({
 import { AUTH_SESSION_COOKIE, createSessionToken, hashSecret } from "@/lib/auth/email-otp";
 import { hasWorkspacePermission, type WorkspacePermission } from "@/lib/authorization";
 import { createSignedMediaUrl, createSignedUploadUrl } from "@/lib/media/signed-url";
+import { getStorageProvider } from "@/lib/storage";
 
 import * as billingCheckoutRoute from "@/app/api/billing/checkout/route";
 import * as billingPortalRoute from "@/app/api/billing/portal/route";
@@ -684,6 +685,85 @@ describe("route authorization matrix", () => {
         { params: Promise.resolve({ uploadId }) },
       );
       expect(response.status).toBe(403);
+    });
+
+    it("PUT api/uploads/[uploadId] meters a valid direct upload and its retry", async () => {
+      const uploadId = `authz-upload-metered-${Date.now()}`;
+      const signedPath = createSignedUploadUrl({
+        uploadId,
+        workspaceId: fixtures.workspaceAId,
+        maxBytes: 1024,
+      });
+      const priorRailwayPrice = process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD;
+      process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD = "0.05";
+
+      try {
+        const response = await uploadPutRoute.PUT(
+          new Request(`http://test.local${signedPath}`, {
+            method: "PUT",
+            body: "direct upload bytes",
+            duplex: "half",
+          } as RequestInit),
+          { params: Promise.resolve({ uploadId }) },
+        );
+        expect(response.status).toBe(200);
+        const retryResponse = await uploadPutRoute.PUT(
+          new Request(`http://test.local${signedPath}`, {
+            method: "PUT",
+            body: "direct upload bytes",
+            duplex: "half",
+          } as RequestInit),
+          { params: Promise.resolve({ uploadId }) },
+        );
+        expect(retryResponse.status).toBe(200);
+
+        const costEvents = await prisma.operationalEvent.findMany({
+          where: {
+            workspaceId: fixtures.workspaceAId,
+            eventType: "processing_cost_fact",
+            metadata: { path: ["details", "uploadId"], equals: uploadId },
+          },
+          orderBy: { createdAt: "asc" },
+        });
+        expect(costEvents).toHaveLength(6);
+        const costMetadata = costEvents.map(
+          (event) => event.metadata as { attempt: number; provider: string },
+        );
+        expect(costMetadata.map((metadata) => metadata.provider).sort()).toEqual([
+          "browser_direct",
+          "browser_direct",
+          "local_storage",
+          "local_storage",
+          "railway_egress",
+          "railway_egress",
+        ]);
+        expect(costEvents.map((event) => event.metadata)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+          bytes: 19,
+          details: { uploadId, proxyUsed: false },
+            }),
+          ]),
+        );
+        expect(costMetadata.filter((metadata) => metadata.attempt === 1)).toHaveLength(3);
+        expect(costEvents.filter((event) => (event.metadata as { retry: boolean }).retry)).toHaveLength(
+          3,
+        );
+        expect(costMetadata.filter((metadata) => metadata.attempt === 2)).toHaveLength(3);
+      } finally {
+        if (priorRailwayPrice === undefined) {
+          delete process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD;
+        } else {
+          process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD = priorRailwayPrice;
+        }
+        await getStorageProvider().remove(`tmp/${fixtures.workspaceAId}/${uploadId}`).catch(() => {});
+        await prisma.operationalEvent.deleteMany({
+          where: {
+            workspaceId: fixtures.workspaceAId,
+            metadata: { path: ["details", "uploadId"], equals: uploadId },
+          },
+        });
+      }
     });
   });
 });

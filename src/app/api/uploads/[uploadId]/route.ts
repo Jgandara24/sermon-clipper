@@ -1,8 +1,14 @@
 import { apiData, apiError } from "@/lib/api/response";
+import { recordDirectUploadCostFactsSafely } from "@/lib/cost/direct-upload";
+import { env } from "@/lib/env";
 import { verifySignedUploadUrl } from "@/lib/media/signed-url";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
-import { getStorageProvider, StorageLimitExceededError } from "@/lib/storage";
+import {
+  getStorageProvider,
+  storageProviderKind,
+  StorageLimitExceededError,
+} from "@/lib/storage";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ uploadId: string }> }) {
   const { uploadId } = await params;
@@ -30,15 +36,43 @@ export async function PUT(request: Request, { params }: { params: Promise<{ uplo
 
   const storage = getStorageProvider();
   const tempKey = `tmp/${verified.workspaceId}/${uploadId}`;
+  const uploadStartedAt = Date.now();
 
   try {
     const bytesWritten = await storage.writeFromWebStream(tempKey, request.body, verified.maxBytes);
+    const wallTimeMs = Date.now() - uploadStartedAt;
+    let attempt = 1;
+    try {
+      attempt += await prisma.operationalEvent.count({
+        where: {
+          workspaceId: verified.workspaceId,
+          eventType: "upload_bytes_written",
+          metadata: { path: ["uploadId"], equals: uploadId },
+        },
+      });
+    } catch (error) {
+      console.error("[cost] failed to count prior direct-upload attempts", error);
+    }
+    await recordDirectUploadCostFactsSafely(
+      prisma,
+      { workspaceId: verified.workspaceId },
+      {
+        uploadId,
+        bytes: bytesWritten,
+        wallTimeMs,
+        attempt,
+        railwayEgressPricePerGbUsd: env.RAILWAY_EGRESS_PRICE_PER_GB_USD ?? null,
+        storageProvider: storageProviderKind(),
+        storageUploadPricePerGbUsd: env.STORAGE_UPLOAD_PRICE_PER_GB_USD ?? null,
+        outcome: "succeeded",
+      },
+    );
     await recordOperationalEventSafely(prisma, {
       workspaceId: verified.workspaceId,
       category: "upload",
       eventType: "upload_bytes_written",
       message: "Uploaded bytes written to temporary storage.",
-      metadata: { uploadId, bytesWritten, maxBytes: verified.maxBytes },
+      metadata: { uploadId, bytesWritten, maxBytes: verified.maxBytes, wallTimeMs, attempt },
     });
     return apiData({ uploadId, bytesWritten });
   } catch (error) {
