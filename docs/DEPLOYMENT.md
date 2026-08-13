@@ -714,6 +714,26 @@ inspect `IN_PROGRESS` scheduled posts. To disable safely, set the switch to `fal
 Do not roll back code that removes this guard unless the Meta token is removed first or every
 workspace auto-post flag is disabled.
 
+### Wave 1 database deployment
+
+Wave 1 is expand-first. Use this order:
+
+1. Set `AUTOMATIC_PUBLISHING_ENABLED=false` on web and worker services.
+2. Run `npm run audit:schedule-collisions` and `npm run audit:legacy-exports` against production.
+   Stop if the collision audit exits nonzero. Save both outputs as deployment evidence.
+3. Drain workers. Inspect all `IN_PROGRESS` scheduled posts.
+4. Deploy migrations `20260812122900_agentic_editor_wave_1_enums` and
+   `20260812123000_agentic_editor_wave_1` in order. The split is required because PostgreSQL must
+   commit the new `missed` enum value before the next migration uses it in an index predicate.
+5. Deploy the compatible web and worker builds. Resume workers.
+6. Keep `AUTOMATIC_PUBLISHING_ENABLED=false` through all of P1. A successful migration or smoke
+   test does not authorize publication.
+
+Do not hand-edit the generated transcript search vector. The Wave 1 migration deliberately omits
+Prisma's invalid `transcripts_search_vector_idx` drop and generated-column default rewrite. Roll
+application code back if necessary, but leave the additive schema in place. Remove an index only
+through a new forward migration.
+
 ## Rollback
 
 - Stop new workers first so they do not claim jobs during rollback.

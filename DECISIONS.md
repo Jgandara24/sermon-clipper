@@ -1469,3 +1469,32 @@ inspect `IN_PROGRESS` rows. Keep the switch false through P1 and P2 sandbox prep
 true only for the controlled sandbox publication defined by the implementation plan.
 
 Status: Active.
+
+## 2026-08-12 - Wave 1 Is Expand-First and Historical Exports Stay Unproven
+
+Decision: Agentic Editor Wave 1 adds only forward-compatible nullable fields, new enum values,
+new tables, foreign keys, and indexes. Historical `ExportJob.editVersion` values stay null because
+the rendered edit identity cannot be proved after the fact. A null edit version is permanently
+ineligible for automatic delivery. It is not backfilled from the latest current edit.
+
+Each non-`MISSED` scheduled post reserves its `(workspaceId, scheduledDate)`. `NOT_STARTED`,
+`IN_PROGRESS`, `SUCCEEDED`, `FAILED`, `BLOCKED`, and `UNFILLED` all reserve the date. Only `MISSED`
+releases it. A slot binds to at most one exact export. The foreign key cannot prove workspace,
+project, and clip agreement, so every delivery consumer must also use the shared fail-closed
+identity contract.
+
+The schedule enum expansion is a small migration immediately before the main Wave 1 migration.
+PostgreSQL requires the new `missed` value to commit before an index predicate can use it. The main
+migration omits Prisma's two known invalid transcript-search-vector statements. The local P0.15
+census found zero legacy exports and zero date collisions. The production audits are still a hard
+deployment precondition and their output is the authoritative production blast radius.
+
+Why: Expand-first schema lets the existing web and worker binaries continue to run while P1 adds
+consumers. Guessing legacy identity would recreate the unsafe latest-export behavior. One active
+date owner makes a cross-project collision a visible failure instead of a duplicate publication.
+
+Tradeoff: Existing exports cannot become automatically deliverable without a new pinned render.
+The additive schema remains in place during an application rollback. Index removal requires a new
+forward migration.
+
+Status: Active.

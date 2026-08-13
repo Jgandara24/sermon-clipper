@@ -1,3 +1,5 @@
+import type { SchedulePublishStatus } from "@prisma/client";
+
 /**
  * Maps a clip's rank (1-indexed, best first) to its calendar posting date, per Pulpit
  * Engine's scheduling rule (docs/BUSINESS_OVERVIEW.md): the Nth-best clip posts N days
@@ -45,7 +47,7 @@ type ScheduledPostCollisionClient = {
     }): Promise<{
       id: string;
       createdAt: Date;
-      publishStatus: "NOT_STARTED" | "IN_PROGRESS" | "SUCCEEDED" | "FAILED";
+      publishStatus: SchedulePublishStatus;
       clip: { projectId: string } | null;
     } | null>;
   };
@@ -54,7 +56,7 @@ type ScheduledPostCollisionClient = {
 export type ScheduledPostCollision = {
   id: string;
   createdAt: Date;
-  publishStatus: "NOT_STARTED" | "IN_PROGRESS" | "SUCCEEDED" | "FAILED";
+  publishStatus: SchedulePublishStatus;
   projectId: string | null;
 };
 

@@ -110,7 +110,7 @@ beforeAll(async () => {
     data: {
       workspaceId,
       clipId: clips[1].id,
-      scheduledDate: collisionDate,
+      scheduledDate: new Date("2026-09-03T00:00:00.000Z"),
       createdAt: new Date("2026-08-02T00:00:00.000Z"),
     },
   });
@@ -133,19 +133,14 @@ afterAll(async () => {
 });
 
 describe("P0.15 preflight audits", () => {
-  it("reports duplicate dates with the earlier row as the retained owner", async () => {
+  it("reports no duplicate active dates after the Wave 1 constraint", async () => {
     const result = await auditScheduledPostCollisions(prisma, { workspaceId });
     expect(result).toMatchObject({
-      duplicateDateCount: 1,
-      duplicateRowCount: 2,
-      extraRowCount: 1,
+      duplicateDateCount: 0,
+      duplicateRowCount: 0,
+      extraRowCount: 0,
+      collisions: [],
     });
-    expect(result.collisions[0]).toMatchObject({
-      scheduledDate: "2026-09-01",
-      rowCount: 2,
-    });
-    expect(result.collisions[0].rows[0].disposition).toBe("earlier_row_keeps_date");
-    expect(result.collisions[0].rows[1].disposition).toBe("later_row_collision");
   });
 
   it("counts legacy exports and the rows they can still publish", async () => {

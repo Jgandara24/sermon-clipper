@@ -97,9 +97,10 @@ enum LedgerKind {
 }
 
 enum GeneratedClipStatus {
-  SUGGESTED @map("suggested")
-  KEPT      @map("kept")
-  HIDDEN    @map("hidden")
+  SUGGESTED  @map("suggested")
+  KEPT       @map("kept")
+  HIDDEN     @map("hidden")
+  SUPERSEDED @map("superseded")
 
   @@map("generated_clip_status")
 }
@@ -122,6 +123,7 @@ enum ClipApprovalState {
 enum ServiceSlot {
   PRIMARY   @map("primary")
   SECONDARY @map("secondary")
+  UNMATCHED @map("unmatched")
 
   @@map("service_slot")
 }
@@ -143,8 +145,34 @@ enum SchedulePublishStatus {
   IN_PROGRESS @map("in_progress")
   SUCCEEDED   @map("succeeded")
   FAILED      @map("failed")
+  BLOCKED     @map("blocked")
+  UNFILLED    @map("unfilled")
+  MISSED      @map("missed")
 
   @@map("schedule_publish_status")
+}
+
+enum RenderQcStatus {
+  PASSED @map("passed")
+  FAILED @map("failed")
+
+  @@map("render_qc_status")
+}
+
+enum PublishAttemptState {
+  INTENT        @map("intent")
+  SUCCEEDED     @map("succeeded")
+  FAILED        @map("failed")
+  INDETERMINATE @map("indeterminate")
+
+  @@map("publish_attempt_state")
+}
+
+enum EditorialExceptionState {
+  OPEN     @map("open")
+  RESOLVED @map("resolved")
+
+  @@map("editorial_exception_state")
 }
 
 enum NotificationChannel {
@@ -178,12 +206,13 @@ model User {
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
-  ownedWorkspaces      Workspace[]           @relation("WorkspaceOwner")
-  memberships          WorkspaceMember[]
-  sentWorkspaceInvites WorkspaceInvitation[] @relation("WorkspaceInvitationInviter")
-  clipEdits            ClipEdit[]
-  clipApprovalRequests ClipApproval[]
-  authSessions         AuthSession[]
+  ownedWorkspaces             Workspace[]           @relation("WorkspaceOwner")
+  memberships                 WorkspaceMember[]
+  sentWorkspaceInvites        WorkspaceInvitation[] @relation("WorkspaceInvitationInviter")
+  clipEdits                   ClipEdit[]
+  clipApprovalRequests        ClipApproval[]
+  authSessions                AuthSession[]
+  resolvedEditorialExceptions EditorialException[]  @relation("EditorialExceptionResolver")
 
   @@map("users")
 }
@@ -259,6 +288,8 @@ model Workspace {
   billingPeriodCredits    BillingPeriodCredit[]
   channelImportSources    ChannelImportSource[]
   scheduledPosts          ScheduledPost[]
+  dailyCostRollups        DailyCostRollup[]
+  editorialExceptions     EditorialException[]
 
   @@index([ownerId])
   @@map("workspaces")
@@ -423,6 +454,8 @@ model Project {
   generatedClips        GeneratedClip[]
   scriptureReferences   ScriptureReference[]
   channelImportedVideos ChannelImportedVideo[]
+  scheduledPosts        ScheduledPost[]
+  editorialExceptions   EditorialException[]
 
   @@index([workspaceId])
   @@index([sourceVideoId])
@@ -483,19 +516,20 @@ model UsageLedger {
 }
 
 model GeneratedClip {
-  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId String              @map("workspace_id") @db.Uuid
-  projectId   String              @map("project_id") @db.Uuid
-  rank        Int
-  startMs     Int                 @map("start_ms")
-  endMs       Int                 @map("end_ms")
-  title       String
-  hookText    String?             @map("hook_text")
-  summary     String
-  status      GeneratedClipStatus @default(SUGGESTED)
-  liked       Boolean?
-  createdAt   DateTime            @default(now()) @map("created_at")
-  updatedAt   DateTime            @updatedAt @map("updated_at")
+  id           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId  String              @map("workspace_id") @db.Uuid
+  projectId    String              @map("project_id") @db.Uuid
+  rank         Int
+  startMs      Int                 @map("start_ms")
+  endMs        Int                 @map("end_ms")
+  title        String
+  hookText     String?             @map("hook_text")
+  summary      String
+  status       GeneratedClipStatus @default(SUGGESTED)
+  liked        Boolean?
+  supersededAt DateTime?           @map("superseded_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
 
   workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project             Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -520,9 +554,11 @@ model GeneratedClip {
 model ScheduledPost {
   id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId      String                @map("workspace_id") @db.Uuid
+  projectId        String?               @map("project_id") @db.Uuid
   // Nullable + SET NULL: a SUCCEEDED row is the only record a real Facebook post exists,
   // so it must survive clip regeneration (re-analysis deletes and recreates clips).
   clipId           String?               @unique @map("clip_id") @db.Uuid
+  exportJobId      String?               @unique @map("export_job_id") @db.Uuid
   scheduledDate    DateTime              @map("scheduled_date") @db.Date
   platform         SocialPlatform        @default(FACEBOOK)
   publishStatus    SchedulePublishStatus @default(NOT_STARTED) @map("publish_status")
@@ -536,10 +572,15 @@ model ScheduledPost {
   createdAt        DateTime              @default(now()) @map("created_at")
   updatedAt        DateTime              @updatedAt @map("updated_at")
 
-  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  clip      GeneratedClip? @relation(fields: [clipId], references: [id], onDelete: SetNull)
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project             Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  clip                GeneratedClip?       @relation(fields: [clipId], references: [id], onDelete: SetNull)
+  exportJob           ExportJob?           @relation("ScheduledPostExport", fields: [exportJobId], references: [id], onDelete: SetNull)
+  publishAttempts     PublishAttempt[]
+  editorialExceptions EditorialException[]
 
   @@index([workspaceId, scheduledDate])
+  @@index([projectId])
   @@index([publishStatus, scheduledDate])
   @@map("scheduled_posts")
 }
@@ -594,12 +635,18 @@ model ExportJob {
   state            ProcessingJobState @default(QUEUED)
   progress         Int                @default(0)
   attempt          Int                @default(0)
+  editVersion      Int?               @map("edit_version")
+  priority         Int                @default(0)
   idempotencyKey   String             @unique @map("idempotency_key")
   filename         String
   errorCode        String?            @map("error_code")
   errorMessageUser String?            @map("error_message_user")
   minutesCharged   Decimal?           @map("minutes_charged") @db.Decimal(10, 2)
   outputFileId     String?            @unique @map("output_file_id") @db.Uuid
+  qcStatus         RenderQcStatus?    @map("qc_status")
+  qcCheckedAt      DateTime?          @map("qc_checked_at")
+  qcChecksum       String?            @map("qc_checksum")
+  qcDetails        Json?              @map("qc_details")
   runAfter         DateTime           @default(now()) @map("run_after")
   workerId         String?            @map("worker_id")
   heartbeatAt      DateTime?          @map("heartbeat_at")
@@ -611,9 +658,10 @@ model ExportJob {
   createdAt        DateTime           @default(now()) @map("created_at")
   updatedAt        DateTime           @updatedAt @map("updated_at")
 
-  clip       GeneratedClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
-  workspace  Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  outputFile ExportedFile? @relation(fields: [outputFileId], references: [id], onDelete: SetNull)
+  clip                 GeneratedClip  @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  workspace            Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  outputFile           ExportedFile?  @relation(fields: [outputFileId], references: [id], onDelete: SetNull)
+  scheduledPostBinding ScheduledPost? @relation("ScheduledPostExport")
 
   @@index([workspaceId, createdAt])
   @@index([state, runAfter])
@@ -639,15 +687,15 @@ model ExportedFile {
 }
 
 model WorkerHeartbeat {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workerId    String   @unique @map("worker_id")
-  hostname    String?
-  pid         Int?
-  startedAt   DateTime @map("started_at")
-  lastSeenAt  DateTime @map("last_seen_at")
-  metadata    Json     @default("{}")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workerId   String   @unique @map("worker_id")
+  hostname   String?
+  pid        Int?
+  startedAt  DateTime @map("started_at")
+  lastSeenAt DateTime @map("last_seen_at")
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@index([lastSeenAt])
   @@map("worker_heartbeats")
@@ -776,6 +824,7 @@ model OperationalEvent {
   severity    String   @default("info")
   message     String
   projectId   String?  @map("project_id") @db.Uuid
+  clipId      String?  @map("clip_id") @db.Uuid
   jobId       String?  @map("job_id") @db.Uuid
   exportJobId String?  @map("export_job_id") @db.Uuid
   metadata    Json     @default("{}")
@@ -787,9 +836,97 @@ model OperationalEvent {
   @@index([category, createdAt])
   @@index([severity, createdAt])
   @@index([projectId])
+  @@index([clipId])
   @@index([jobId])
   @@index([exportJobId])
   @@map("operational_events")
+}
+
+// Rebuilt from immutable raw processing-cost events. `dimensionKey` is a stable hash of the
+// project/stage/provider/model/unit dimensions and avoids PostgreSQL's nullable-unique behavior.
+model DailyCostRollup {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId        String    @map("workspace_id") @db.Uuid
+  projectId          String?   @map("project_id") @db.Uuid
+  day                DateTime  @db.Date
+  dimensionKey       String    @map("dimension_key")
+  stage              String
+  provider           String
+  model              String?
+  unit               String
+  quantity           Decimal   @default(0) @db.Decimal(24, 9)
+  totalCostUsd       Decimal   @default(0) @map("total_cost_usd") @db.Decimal(24, 9)
+  bytes              BigInt    @default(0)
+  cpuTimeMs          BigInt    @default(0) @map("cpu_time_ms")
+  wallTimeMs         BigInt    @default(0) @map("wall_time_ms")
+  eventCount         Int       @default(0) @map("event_count")
+  retryCount         Int       @default(0) @map("retry_count")
+  failureCount       Int       @default(0) @map("failure_count")
+  unpricedEventCount Int       @default(0) @map("unpriced_event_count")
+  sourceLastEventAt  DateTime? @map("source_last_event_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, day, dimensionKey])
+  @@index([workspaceId, day])
+  @@index([projectId, day])
+  @@map("daily_cost_rollups")
+}
+
+// One row records one external publish intent and its final observed outcome. Expected clip and
+// export IDs are immutable snapshots rather than live foreign keys, so evidence survives changes.
+model PublishAttempt {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scheduledPostId     String              @map("scheduled_post_id") @db.Uuid
+  expectedClipId      String?             @map("expected_clip_id") @db.Uuid
+  expectedExportJobId String?             @map("expected_export_job_id") @db.Uuid
+  state               PublishAttemptState @default(INTENT)
+  providerPostId      String?             @map("provider_post_id")
+  errorCode           String?             @map("error_code")
+  errorMessage        String?             @map("error_message")
+  attemptedAt         DateTime?           @map("attempted_at")
+  finishedAt          DateTime?           @map("finished_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  scheduledPost ScheduledPost @relation(fields: [scheduledPostId], references: [id], onDelete: Restrict)
+
+  @@index([scheduledPostId, createdAt])
+  @@index([state, createdAt])
+  @@map("publish_attempts")
+}
+
+// Exceptions retain immutable context after their nullable live links disappear. Resolution
+// closes the row in place; it never deletes the evidence or replaces the snapshots.
+model EditorialException {
+  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String                  @map("workspace_id") @db.Uuid
+  projectId        String?                 @map("project_id") @db.Uuid
+  scheduledPostId  String?                 @map("scheduled_post_id") @db.Uuid
+  exceptionType    String                  @map("exception_type")
+  state            EditorialExceptionState @default(OPEN)
+  message          String
+  projectSnapshot  Json                    @default("{}") @map("project_snapshot")
+  slotSnapshot     Json                    @default("{}") @map("slot_snapshot")
+  metadata         Json                    @default("{}")
+  resolvedAt       DateTime?               @map("resolved_at")
+  resolvedByUserId String?                 @map("resolved_by_user_id") @db.Uuid
+  resolutionReason String?                 @map("resolution_reason")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  scheduledPost ScheduledPost? @relation(fields: [scheduledPostId], references: [id], onDelete: SetNull)
+  resolvedBy    User?          @relation("EditorialExceptionResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, state, createdAt])
+  @@index([projectId])
+  @@index([scheduledPostId])
+  @@index([resolvedByUserId])
+  @@map("editorial_exceptions")
 }
 
 model ChannelImportSource {

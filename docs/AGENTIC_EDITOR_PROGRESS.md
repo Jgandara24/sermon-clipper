@@ -4,7 +4,7 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-08-12, after P0.16.
+**Last updated:** 2026-08-12, after P0.17.
 
 ---
 
@@ -28,16 +28,17 @@ say. `DECISIONS.md` remains the authoritative record of decisions; this is a wor
 | P0.13 preserve spoken words | `c941974` | done | Filler tags are metadata; never-edited export preserves every word |
 | P0.14 accurate crop claims | `3fac93e` | done | UI states that Face mode is a static center crop |
 | P0.15 collision and legacy-export preflight | `1e98f25` | done | Earlier date wins visibly; two read-only production audits |
-| P0.16 global publisher kill switch | _(backfilled below)_ | done | Exact positive-enable guard at the publisher boundary |
-| P0.17 correctness-substrate migration | — | **next** | Expand-first schema wave; publishing stays disabled |
+| P0.16 global publisher kill switch | `7c6572a` | done | Exact positive-enable guard at the publisher boundary |
+| P0.17 correctness-substrate migration | _(backfilled below)_ | done | Expand-first schema wave; publishing stays disabled |
+| P0.18 daily cost rollups and worker isolation | — | **next** | Durable totals and independent periodic blocks |
 
 A commit cannot contain its own hash, so the newest row's SHA is backfilled by the following
-commit. P0.16 is the most recent; `git log --oneline` is authoritative.
+commit. P0.17 is the most recent; `git log --oneline` is authoritative.
 
-Branch: `feat/reel-builder-trim`, eighteen commits ahead of `origin/main`. **Nothing pushed yet.**
+Branch: `feat/reel-builder-trim`, nineteen commits ahead of `origin/main`. **Nothing pushed yet.**
 The P0 pull request must include `4d51e5d` (drag-to-trim), which predates the program.
 
-Suite as of P0.16: **61 unit test files, 475 tests**; **19 integration test files, 178 tests**.
+Suite as of P0.17: **63 unit test files, 490 tests**; **20 integration test files, 185 tests**.
 `npm run verify` and `npm run test:integration` green.
 
 ---
@@ -66,6 +67,11 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
 
 5. **Two P0.4 charter scenarios were added after the plan was written**, from the 2026-08-11
    production measurement. See "P0.4 preconditions" below.
+
+6. **Wave 1 uses two consecutive migration directories.** PostgreSQL will not let the partial
+   date index use the new `MISSED` enum value in the same transaction that adds it. The first
+   migration commits all enum expansion. The second adds the Wave 1 substrate and the exact index.
+   Clean-database and production-shaped upgrade tests both passed this order.
 
 ---
 
