@@ -1,11 +1,12 @@
 import { GeneratedClipStatus, ProjectStatus } from "@prisma/client";
-import { getAnalysisProvider } from "@/lib/analysis";
+import { getAnalysisProvider, type AnalysisProviderSelection } from "@/lib/analysis";
 import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidate-limit";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
 import { env } from "@/lib/env";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import {
   clearReschedulableScheduledPosts,
   scheduledDateForRank,
@@ -23,12 +24,14 @@ function readGenre(processingConfig: unknown): string {
   return "sermon";
 }
 
-/**
- * Chunks the transcript into candidate windows, scores them (real Claude API if configured,
- * otherwise the deterministic heuristic fallback), refines boundaries, dedups overlapping
- * candidates by score, and persists the top-ranked clips. Guide §10.
- */
-export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
+type AnalyzeJobDependencies = {
+  selectProvider?: () => Promise<AnalysisProviderSelection>;
+};
+
+/** Builds the ANALYZE handler with an injectable provider boundary for policy tests. */
+export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {}): JobHandler {
+  const selectProvider = dependencies.selectProvider ?? getAnalysisProvider;
+  return async ({ job, prisma }) => {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: job.projectId },
     include: {
@@ -72,7 +75,46 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
     ? project.sourceVideo.durationS.toNumber() * 1000
     : Math.max(...candidates.map((c) => c.endMs));
 
-  const provider = await getAnalysisProvider();
+  let selection;
+  try {
+    selection = await selectProvider();
+  } catch (error) {
+    if (error instanceof AnalysisProviderUnavailableError) {
+      await recordOperationalEventSafely(prisma, {
+        workspaceId: project.workspaceId,
+        category: "analysis",
+        eventType: "analysis_provider_unavailable",
+        severity: "error",
+        message: "ANALYZE failed closed because the Claude provider was unavailable.",
+        projectId: project.id,
+        jobId: job.id,
+        metadata: { selectionReason: "production_no_api_key", emergencyOverride: false },
+      });
+      throw new JobFailureError(
+        "ANALYZE_PROVIDER_UNAVAILABLE",
+        "AI clip analysis isn't configured on this environment yet.",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+  const { provider } = selection;
+  if (selection.emergencyOverride) {
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: project.workspaceId,
+      category: "analysis",
+      eventType: "analysis_heuristic_emergency_override",
+      severity: "warning",
+      message: "ANALYZE used the production heuristic emergency override.",
+      projectId: project.id,
+      jobId: job.id,
+      metadata: {
+        provider: selection.providerKind,
+        selectionReason: selection.selectionReason,
+        emergencyOverride: true,
+      },
+    });
+  }
 
   let scored;
   try {
@@ -87,11 +129,41 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
     );
   } catch (error) {
     if (error instanceof AnalysisProviderUnavailableError) {
+      await recordOperationalEventSafely(prisma, {
+        workspaceId: project.workspaceId,
+        category: "analysis",
+        eventType: "analysis_provider_failed",
+        severity: "error",
+        message: "ANALYZE failed closed after the Claude provider became unavailable.",
+        projectId: project.id,
+        jobId: job.id,
+        metadata: {
+          provider: selection.providerKind,
+          selectionReason: selection.selectionReason,
+          emergencyOverride: selection.emergencyOverride,
+        },
+      });
       throw new JobFailureError(
         "ANALYZE_PROVIDER_UNAVAILABLE",
         "AI clip analysis isn't configured on this environment yet.",
         { cause: error },
       );
+    }
+    if (selection.providerKind === "claude" && process.env.NODE_ENV === "production") {
+      await recordOperationalEventSafely(prisma, {
+        workspaceId: project.workspaceId,
+        category: "analysis",
+        eventType: "analysis_provider_failed",
+        severity: "error",
+        message: "ANALYZE failed closed after the Claude provider call failed.",
+        projectId: project.id,
+        jobId: job.id,
+        metadata: {
+          provider: selection.providerKind,
+          selectionReason: selection.selectionReason,
+          emergencyOverride: false,
+        },
+      });
     }
     throw new JobFailureError("ANALYZE_FAILED", "Clip analysis failed — your minutes were returned.", {
       cause: error,
@@ -200,6 +272,9 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
   return {
     metadata: {
       provider: provider.name,
+      providerKind: selection.providerKind,
+      selectionReason: selection.selectionReason,
+      emergencyOverride: selection.emergencyOverride,
       modelVersions: [...new Set(kept.map((clip) => clip.modelVersion))],
       candidateCount: candidates.length,
       scoredCount: scored.length,
@@ -210,4 +285,11 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
       ...(usage ? { usage } : {}),
     },
   };
-};
+  };
+}
+
+/**
+ * Chunks the transcript into candidate windows, scores them, refines boundaries, dedups
+ * overlapping candidates, and persists the top-ranked clips. Guide §10.
+ */
+export const runAnalyzeJob = createAnalyzeJobHandler();

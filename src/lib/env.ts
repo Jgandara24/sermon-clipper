@@ -122,6 +122,10 @@ const fieldSchemas = {
 
   // AI analysis
   ANTHROPIC_API_KEY: optionalString,
+  ANALYSIS_ALLOW_HEURISTIC: z
+    .string()
+    .optional()
+    .transform((raw) => raw === "true"),
   ANALYSIS_MODEL_CLASSIFY: optionalString,
   ANALYSIS_MODEL_SCORING: optionalString,
   CANDIDATE_LIMIT_DEFAULT: positiveInt(18),

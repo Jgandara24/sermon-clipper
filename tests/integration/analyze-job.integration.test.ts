@@ -9,7 +9,8 @@ import {
   WorkspaceRole,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { runAnalyzeJob } from "@/lib/jobs/handlers/analyze";
+import { createAnalyzeJobHandler, runAnalyzeJob } from "@/lib/jobs/handlers/analyze";
+import { JobFailureError } from "@/lib/jobs/types";
 
 /**
  * CHARTER TESTS — these record what ANALYZE does *today*, defects included. P0.8 changed the
@@ -22,7 +23,7 @@ import { runAnalyzeJob } from "@/lib/jobs/handlers/analyze";
  *
  * Provider note: with no ANTHROPIC_API_KEY (the CI condition) `getAnalysisProvider()` returns the
  * deterministic heuristic scorer, which is what makes these tests stable. P0.9 keeps that path
- * legal outside production.
+ * legal outside production and requires an explicit emergency override in production.
  */
 
 const prisma = new PrismaClient();
@@ -220,6 +221,149 @@ describe("ANALYZE charter — candidate pool", () => {
       keptCount: clips.length,
     });
     expect(typeof metadata.candidateCount).toBe("number");
+  });
+});
+
+describe("ANALYZE provider policy", () => {
+  it("fails closed and records an event in production without a Claude key", async () => {
+    const originalEnv = { ...process.env };
+    process.env = { ...process.env, NODE_ENV: "production" };
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANALYSIS_ALLOW_HEURISTIC;
+    try {
+      const workspaceId = await seedWorkspace();
+      const sourceVideo = await prisma.sourceVideo.create({
+        data: {
+          workspaceId,
+          origin: SourceOrigin.UPLOAD,
+          filename: `${unique("provider-policy")}.mp4`,
+          storageKey: unique("provider-policy-key"),
+          durationS: 120,
+          transcript: {
+            create: {
+              language: "en",
+              provider: "charter-fixture",
+              fullText: "provider policy fixture transcript",
+              segments: { create: segmentsFor(20) },
+            },
+          },
+        },
+      });
+      const project = await prisma.project.create({
+        data: { workspaceId, name: unique("provider-policy"), sourceVideoId: sourceVideo.id },
+      });
+      const job = await prisma.processingJob.create({
+        data: {
+          projectId: project.id,
+          type: ProcessingJobType.ANALYZE,
+          state: ProcessingJobState.RUNNING,
+          idempotencyKey: unique("provider-policy-job"),
+        },
+      });
+
+      await expect(
+        runAnalyzeJob({ job, prisma } as Parameters<typeof runAnalyzeJob>[0]),
+      ).rejects.toMatchObject({ code: "ANALYZE_PROVIDER_UNAVAILABLE" } satisfies Partial<JobFailureError>);
+      const event = await prisma.operationalEvent.findFirstOrThrow({
+        where: { workspaceId, projectId: project.id, eventType: "analysis_provider_unavailable" },
+      });
+      expect(event.severity).toBe("error");
+      expect(event.metadata).toMatchObject({ emergencyOverride: false });
+    } finally {
+      process.env = originalEnv;
+    }
+  });
+
+  it("labels and warns for the production heuristic emergency override", async () => {
+    const originalEnv = { ...process.env };
+    process.env = {
+      ...process.env,
+      NODE_ENV: "production",
+      ANALYSIS_ALLOW_HEURISTIC: "true",
+    };
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      const workspaceId = await seedWorkspace();
+      const { metadata } = await analyzeProject({
+        workspaceId,
+        segmentCount: 20,
+        sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+      });
+
+      expect(metadata).toMatchObject({
+        provider: "heuristic",
+        providerKind: "heuristic",
+        selectionReason: "production_emergency_override",
+        emergencyOverride: true,
+        modelVersions: ["heuristic-v1"],
+      });
+      const event = await prisma.operationalEvent.findFirstOrThrow({
+        where: { workspaceId, eventType: "analysis_heuristic_emergency_override" },
+      });
+      expect(event.severity).toBe("warning");
+      expect(event.metadata).toMatchObject({ emergencyOverride: true });
+    } finally {
+      process.env = originalEnv;
+    }
+  });
+
+  it("fails closed and records an event when the production Claude call fails", async () => {
+    const originalEnv = { ...process.env };
+    process.env = { ...process.env, NODE_ENV: "production" };
+    try {
+      const workspaceId = await seedWorkspace();
+      const sourceVideo = await prisma.sourceVideo.create({
+        data: {
+          workspaceId,
+          origin: SourceOrigin.UPLOAD,
+          filename: `${unique("provider-failure")}.mp4`,
+          storageKey: unique("provider-failure-key"),
+          durationS: 120,
+          transcript: {
+            create: {
+              language: "en",
+              provider: "charter-fixture",
+              fullText: "provider failure fixture transcript",
+              segments: { create: segmentsFor(20) },
+            },
+          },
+        },
+      });
+      const project = await prisma.project.create({
+        data: { workspaceId, name: unique("provider-failure"), sourceVideoId: sourceVideo.id },
+      });
+      const job = await prisma.processingJob.create({
+        data: {
+          projectId: project.id,
+          type: ProcessingJobType.ANALYZE,
+          state: ProcessingJobState.RUNNING,
+          idempotencyKey: unique("provider-failure-job"),
+        },
+      });
+      const handler = createAnalyzeJobHandler({
+        selectProvider: async () => ({
+          provider: {
+            name: "claude-sonnet-5",
+            isAvailable: async () => true,
+            scoreCandidates: async () => {
+              throw new Error("401 invalid x-api-key");
+            },
+          },
+          providerKind: "claude",
+          selectionReason: "claude_available",
+          emergencyOverride: false,
+        }),
+      });
+
+      await expect(handler({ job, prisma })).rejects.toMatchObject({ code: "ANALYZE_FAILED" });
+      const event = await prisma.operationalEvent.findFirstOrThrow({
+        where: { workspaceId, projectId: project.id, eventType: "analysis_provider_failed" },
+      });
+      expect(event.severity).toBe("error");
+      expect(event.metadata).toMatchObject({ provider: "claude", emergencyOverride: false });
+    } finally {
+      process.env = originalEnv;
+    }
   });
 });
 

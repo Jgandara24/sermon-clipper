@@ -1366,3 +1366,21 @@ for missing fields. Until P1.8, an unmatched service date is still snapshotted a
 existing occurrence derivation.
 
 Status: Active.
+
+## 2026-08-12 - Production Analysis Fails Closed Without Claude
+
+Decision: Development and tests can automatically use deterministic, labeled `heuristic-v1`
+analysis when no Claude key exists. Production ANALYZE jobs fail closed when the key is missing,
+rejected, the provider is unavailable, or the Claude call fails. The only production fallback is
+the exact-string `ANALYSIS_ALLOW_HEURISTIC=true` incident override. Every override use records a
+warning operational event and explicit provider, model, selection-reason, and override provenance.
+
+Why: Silent heuristic fallback creates output that appears production-ready without the required
+AI analysis and hides a paid-provider outage from operators. Job-time enforcement is necessary
+because the web and worker services can have different environments.
+
+Tradeoff: A Claude incident stops normal analysis. An operator can use the visible, time-bounded
+override to restore degraded service, but the web readiness check remains failed and affected jobs
+remain labeled. The override must be removed after recovery.
+
+Status: Active.

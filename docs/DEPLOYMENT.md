@@ -115,7 +115,8 @@ Which service consumes which variables:
 | Variables | Web | Worker |
 | --- | --- | --- |
 | `NODE_ENV`, `DATABASE_URL`, `STORAGE_PROVIDER` + `STORAGE_S3_*` | ✅ | ✅ |
-| `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (readiness reporting) | ✅ (does the work) |
+| `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (web readiness reporting only) | ✅ (worker job-time enforcement) |
+| `ANALYSIS_ALLOW_HEURISTIC` (emergency only) | — | ✅ |
 | `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | ✅ | — |
 | `RESEND_API_KEY`, `AUTH_EMAIL_*`, `NOTIFICATIONS_*`, `TWILIO_*` | ✅ | — |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` | ✅ | — |
@@ -364,8 +365,21 @@ collecting launch evidence.
 - Install `whisper-cli` and mount the same model file path referenced by `WHISPER_MODEL_PATH` on
   every worker. The readiness gate proves the path is configured; the launch workflow must still
   prove a real sermon was transcribed by the deployed worker.
-- Configure `ANTHROPIC_API_KEY` for production clip scoring. The heuristic scorer remains useful
-  for local development, but Phase 8 launch readiness requires Claude-backed analysis evidence.
+- Configure `ANTHROPIC_API_KEY` on the production worker for clip scoring. The web readiness check
+  reports its own environment only; it cannot prove that the worker has a valid credential.
+- Production ANALYZE jobs fail closed when the key is missing, rejected, or Claude fails. Local
+  development and tests can use labeled `heuristic-v1` output automatically.
+- `ANALYSIS_ALLOW_HEURISTIC` is the worker-owned incident override. Its safe default is unset or
+  `false`. Set the exact string `true` only during a time-bounded Claude incident. Confirm a warning
+  `analysis_heuristic_emergency_override` event and provenance `provider=heuristic`,
+  `modelVersions=[heuristic-v1]`, `selectionReason=production_emergency_override`. Disable it by
+  unsetting it or setting `false`, restart the worker, and verify the next ANALYZE job uses Claude.
+  The web readiness check continues to fail without a valid `ANTHROPIC_API_KEY`; the override does
+  not make a deployment launch-ready.
+- Verify the policy before enablement and after rollback with
+  `npm test -- --run tests/analysis-provider-selection.test.ts` and confirm the worker event in
+  `/app/settings/operations`. Rollback is to unset `ANALYSIS_ALLOW_HEURISTIC`, restart the worker,
+  and run one Claude-backed ANALYZE job.
 - Monitor `/app/settings/operations` for `worker`, `processing`, `transcription`, `analysis`,
   `export`, and `channel_import` events.
 - If a worker dies mid-job, another worker will recover stale `RUNNING` jobs after

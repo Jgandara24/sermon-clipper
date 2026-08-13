@@ -18,6 +18,7 @@ beforeEach(() => {
   delete process.env.EXPORT_MAX_CONCURRENT_JOBS;
   delete process.env.CANDIDATE_LIMIT_DEFAULT;
   delete process.env.CANDIDATE_LIMIT_MAXIMUM;
+  delete process.env.ANALYSIS_ALLOW_HEURISTIC;
   delete process.env.EXPORT_FILE_RETENTION_GRACE_MS;
   delete process.env.WORKER_POLL_INTERVAL_MS;
   delete process.env.ALERTS_THROTTLE_MS;
@@ -41,6 +42,7 @@ describe("env accessor", () => {
     expect(env.EXPORT_MAX_CONCURRENT_JOBS).toBe(4);
     expect(env.CANDIDATE_LIMIT_DEFAULT).toBe(18);
     expect(env.CANDIDATE_LIMIT_MAXIMUM).toBe(18);
+    expect(env.ANALYSIS_ALLOW_HEURISTIC).toBe(false);
     expect(env.WORKER_POLL_INTERVAL_MS).toBe(2000);
     expect(env.ALERTS_THROTTLE_MS).toBe(30 * 60 * 1000);
   });
@@ -49,6 +51,14 @@ describe("env accessor", () => {
     expect(env.RESEND_API_KEY).toBeUndefined();
     expect(env.NOTIFICATIONS_FROM_EMAIL).toBeUndefined();
     expect(env.WHISPER_MODEL_PATH).toBeUndefined();
+  });
+
+  it("enables heuristic analysis only for the exact value true", () => {
+    process.env.ANALYSIS_ALLOW_HEURISTIC = "true";
+    expect(env.ANALYSIS_ALLOW_HEURISTIC).toBe(true);
+
+    process.env.ANALYSIS_ALLOW_HEURISTIC = "TRUE";
+    expect(env.ANALYSIS_ALLOW_HEURISTIC).toBe(false);
   });
 
   it("re-reads process.env on every access (no memoization)", () => {
