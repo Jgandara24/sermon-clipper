@@ -24,20 +24,28 @@ describe("wordId", () => {
 describe("isWordDeleted", () => {
   const base = buildDefaultEditorState({ sourceVideoId: "sv-1", startMs: 0, endMs: 10_000 });
 
-  it("treats filler words as deleted by default", () => {
-    expect(isWordDeleted(base, "seg-1:0", true)).toBe(true);
+  it("keeps filler-tagged words by default", () => {
+    expect(isWordDeleted(base, "seg-1:0")).toBe(false);
   });
 
-  it("treats a restored filler word as not deleted", () => {
+  it("keeps legacy restored-filler documents readable", () => {
     const state = {
       ...base,
       wordEdits: { ...base.wordEdits, restoredFillerIds: ["seg-1:0"] },
     };
-    expect(isWordDeleted(state, "seg-1:0", true)).toBe(false);
+    expect(isWordDeleted(state, "seg-1:0")).toBe(false);
+  });
+
+  it("deletes a filler-tagged word only when it is explicit", () => {
+    const state = {
+      ...base,
+      wordEdits: { ...base.wordEdits, deletedWordIds: ["seg-1:0"] },
+    };
+    expect(isWordDeleted(state, "seg-1:0")).toBe(true);
   });
 
   it("treats non-filler words as not deleted by default", () => {
-    expect(isWordDeleted(base, "seg-1:1", false)).toBe(false);
+    expect(isWordDeleted(base, "seg-1:1")).toBe(false);
   });
 
   it("treats an explicitly deleted non-filler word as deleted", () => {
@@ -45,6 +53,6 @@ describe("isWordDeleted", () => {
       ...base,
       wordEdits: { ...base.wordEdits, deletedWordIds: ["seg-1:1"] },
     };
-    expect(isWordDeleted(state, "seg-1:1", false)).toBe(true);
+    expect(isWordDeleted(state, "seg-1:1")).toBe(true);
   });
 });

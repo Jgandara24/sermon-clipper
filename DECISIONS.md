@@ -1424,3 +1424,25 @@ provider can bill more protocol traffic than the final file size. Operators must
 facts with provider invoices before launch and must keep the configured per-GB prices current.
 
 Status: Active.
+
+## 2026-08-12 - Filler Tags Never Delete Spoken Words by Default
+
+Decision: A filler tag is transcript and editor display metadata only. It does not delete a word.
+Low transcription confidence does not create a filler tag and does not create a deletion. A new
+editor state keeps every spoken word. Only an explicit word id in `deletedWordIds` changes the
+rendered range. The legacy `restoredFillerIds` field remains readable so existing editor documents
+still parse.
+
+This decision supersedes only the automatic-filler-removal behavior described in the 2026-07-06
+entry "Export Rendering Is A Real Multi-Pass FFmpeg Pipeline". The multi-pass render decision and
+explicit legacy edit behavior remain active until P1 removes internal word deletion from delivery.
+
+Why: A confidence score describes the transcription system's certainty. It is not an instruction
+to remove what the speaker said. Automatic filler deletion can also change meaning, cadence, and
+pastoral tone. Faithful delivery requires the default export to preserve the continuous source.
+
+Tradeoff: Filler tags remain visible as chips, but they no longer shorten a clip automatically.
+Existing explicit deletion documents still render for compatibility. P1 must block those edits
+from delivery before the continuous-source invariant is fully enforced.
+
+Status: Active.

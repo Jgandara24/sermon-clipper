@@ -45,8 +45,8 @@ export function ScriptEditorPanel({
         </div>
       </div>
       <p className="mt-2 text-xs text-stone-500">
-        Click a word to delete it. Filler words (shown as chips) are removed automatically —
-        click one to keep it in the clip.
+        Click a word to delete it. Filler words are shown as chips, but every spoken word stays in
+        the clip unless you delete it.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-1 leading-relaxed">
         {words.map((word) =>
@@ -55,9 +55,7 @@ export function ScriptEditorPanel({
               key={word.id}
               type="button"
               onClick={() => onToggleWord(word)}
-              title={
-                word.effectiveDeleted ? "Removed automatically — click to keep" : "Click to remove"
-              }
+              title={word.effectiveDeleted ? "Click to keep" : "Filler tag — click to delete"}
               className={`rounded-full border px-2 py-0.5 text-xs ${
                 word.effectiveDeleted
                   ? "border-stone-300 bg-stone-100 text-stone-400 line-through"

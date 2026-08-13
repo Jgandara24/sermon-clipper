@@ -22,9 +22,9 @@ describe("detectFillers", () => {
     expect(result.map((w) => w.isFiller)).toEqual([false, true, true, false]);
   });
 
-  it("flags low-confidence words even without a lexicon match", () => {
+  it("does not treat low confidence as filler metadata", () => {
     const result = detectFillers([word("truth", 0.2)], { confidenceThreshold: 0.5 });
-    expect(result[0].isFiller).toBe(true);
+    expect(result[0].isFiller).toBe(false);
   });
 
   it("does not mutate the input words", () => {

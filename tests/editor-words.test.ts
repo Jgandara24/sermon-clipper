@@ -45,22 +45,23 @@ describe("wordsInRange", () => {
 });
 
 describe("applyEditorDeletions", () => {
-  it("marks filler words deleted by default and respects explicit deletes/restores", () => {
+  it("keeps filler metadata by default and applies only explicit deletions", () => {
     const words = flattenWords(SEGMENTS);
     const state = buildDefaultEditorState({ sourceVideoId: "sv", startMs: 0, endMs: 4000 });
     const annotated = applyEditorDeletions(words, state);
 
     const um = annotated.find((w) => w.word === "um")!;
-    expect(um.effectiveDeleted).toBe(true);
+    expect(um.effectiveDeleted).toBe(false);
 
     const peace = annotated.find((w) => w.word === "Peace")!;
     expect(peace.effectiveDeleted).toBe(false);
 
     const stateWithDeletion = {
       ...state,
-      wordEdits: { ...state.wordEdits, deletedWordIds: ["seg-1:0"] },
+      wordEdits: { ...state.wordEdits, deletedWordIds: ["seg-1:0", "seg-1:1"] },
     };
     const withManualDelete = applyEditorDeletions(words, stateWithDeletion);
     expect(withManualDelete.find((w) => w.word === "Peace")!.effectiveDeleted).toBe(true);
+    expect(withManualDelete.find((w) => w.word === "um")!.effectiveDeleted).toBe(true);
   });
 });

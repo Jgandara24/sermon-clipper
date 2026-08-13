@@ -7,15 +7,14 @@ function normalize(word: string): string {
 }
 
 /**
- * Flags filler words by lexicon match and low confidence (guide §9 step 4). Multi-word phrases
- * in the lexicon (e.g. "you know") are matched against consecutive word windows.
+ * Tags filler words by lexicon match only. Confidence describes transcription certainty; it is
+ * not evidence that the speaker said a filler. Multi-word phrases are matched across windows.
  */
 export function detectFillers(
   words: TranscriptWord[],
   options: { lexicon?: string[]; confidenceThreshold?: number } = {},
 ): TranscriptWord[] {
   const lexicon = options.lexicon ?? DEFAULT_FILLER_LEXICON;
-  const confidenceThreshold = options.confidenceThreshold ?? 0.5;
   const singleWordLexicon = new Set(lexicon.filter((entry) => !entry.includes(" ")));
   const phraseLexicon = lexicon.filter((entry) => entry.includes(" "));
 
@@ -23,7 +22,7 @@ export function detectFillers(
 
   for (const word of flagged) {
     const normalized = normalize(word.word);
-    if (singleWordLexicon.has(normalized) || word.confidence < confidenceThreshold) {
+    if (singleWordLexicon.has(normalized)) {
       word.isFiller = true;
     }
   }

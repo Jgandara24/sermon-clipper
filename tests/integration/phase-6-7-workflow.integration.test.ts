@@ -346,6 +346,75 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
     expect(approvalStateAfterEditorSave(ClipApprovalState.APPROVED)).toBe(ClipApprovalState.DRAFT);
   });
 
+  it("exports a never-edited clip without deleting filler-tagged words", async () => {
+    const sourceVideo = await prisma.sourceVideo.create({
+      data: {
+        workspaceId,
+        origin: SourceOrigin.UPLOAD,
+        filename: "filler-preservation.mp4",
+        durationS: new Prisma.Decimal("5.00"),
+        sizeBytes: BigInt(await getStorageProvider().size(storageKey)),
+        width: 1280,
+        height: 720,
+        fps: new Prisma.Decimal("30.000"),
+        storageKey,
+        transcript: {
+          create: {
+            language: "en",
+            provider: "integration-fixture",
+            fullText: "um",
+            segments: {
+              create: {
+                idx: 0,
+                startMs: 0,
+                endMs: 4000,
+                text: "um",
+                words: [
+                  {
+                    word: "um",
+                    startMs: 200,
+                    endMs: 3000,
+                    confidence: 0.99,
+                    isFiller: true,
+                    deleted: false,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    const project = await prisma.project.create({
+      data: { workspaceId, sourceVideoId: sourceVideo.id, name: "Filler Preservation" },
+    });
+    const clip = await prisma.generatedClip.create({
+      data: {
+        workspaceId,
+        projectId: project.id,
+        rank: 1,
+        startMs: 0,
+        endMs: 4000,
+        title: "Filler Preservation",
+        hookText: "um",
+        summary: "Faithful export fixture.",
+      },
+    });
+    const job = await prisma.exportJob.create({
+      data: {
+        clipId: clip.id,
+        workspaceId,
+        preset: ExportPreset.MP4_1080,
+        state: ProcessingJobState.RUNNING,
+        filename: "filler-preservation.mp4",
+        idempotencyKey: uniqueKey("filler-preservation"),
+        attempt: 1,
+      },
+    });
+
+    await expect(runExportJob(prisma, job)).resolves.toEqual(expect.any(String));
+  }, 120_000);
+
   it("meters source download, local extraction, thumbnail render, and derived uploads", async () => {
     const job = await prisma.processingJob.create({
       data: {

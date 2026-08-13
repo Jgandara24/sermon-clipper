@@ -146,18 +146,6 @@ export function ClipEditor({
 
   function toggleWord(word: { id: string; isFiller: boolean }) {
     updateState((prev) => {
-      if (word.isFiller) {
-        const restored = prev.wordEdits.restoredFillerIds.includes(word.id);
-        return {
-          ...prev,
-          wordEdits: {
-            ...prev.wordEdits,
-            restoredFillerIds: restored
-              ? prev.wordEdits.restoredFillerIds.filter((id) => id !== word.id)
-              : [...prev.wordEdits.restoredFillerIds, word.id],
-          },
-        };
-      }
       const deleted = prev.wordEdits.deletedWordIds.includes(word.id);
       return {
         ...prev,

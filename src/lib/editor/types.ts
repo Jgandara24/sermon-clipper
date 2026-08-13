@@ -74,12 +74,9 @@ export function wordId(segmentId: string, wordIndex: number): string {
 }
 
 /**
- * A word is effectively deleted if it's flagged filler and not explicitly restored, or if it's
- * been explicitly deleted — fillers are excluded from the cut by default (guide §12/§13).
+ * A word is deleted only through an explicit word-id edit. `isFiller` and restored filler ids stay
+ * readable as legacy metadata, but neither changes delivery behavior.
  */
-export function isWordDeleted(state: EditorState, id: string, isFiller: boolean): boolean {
-  if (isFiller) {
-    return !state.wordEdits.restoredFillerIds.includes(id);
-  }
+export function isWordDeleted(state: EditorState, id: string): boolean {
   return state.wordEdits.deletedWordIds.includes(id);
 }
