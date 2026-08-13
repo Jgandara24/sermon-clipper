@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  analysisCallCostFact,
   buildAnalysisUsage,
   estimateCallCostUsd,
   type AnalysisModelCall,
@@ -44,6 +45,26 @@ describe("estimateCallCostUsd", () => {
 
   it("returns null for models missing from the pricing table", () => {
     expect(estimateCallCostUsd(call({ model: "claude-future-9" }))).toBeNull();
+  });
+});
+
+describe("analysisCallCostFact", () => {
+  it("preserves model and provider provenance in the shared cost contract", () => {
+    expect(
+      analysisCallCostFact(
+        call({ inputTokens: 1_000, cacheReadInputTokens: 500 }),
+        "analysis_scoring",
+        "claude_available",
+      ),
+    ).toMatchObject({
+      stage: "analysis_scoring",
+      quantity: 1,
+      unit: "call",
+      provider: "anthropic",
+      model: "claude-sonnet-5",
+      providerProvenance: "claude_available",
+      cacheState: "hit",
+    });
   });
 });
 

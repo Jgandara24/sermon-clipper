@@ -1384,3 +1384,20 @@ override to restore degraded service, but the web readiness check remains failed
 remain labeled. The override must be removed after recovery.
 
 Status: Active.
+
+## 2026-08-12 - Processing COGS Facts Are Separate From Customer Minute Entitlements
+
+Decision: All paid-provider and local-compute cost telemetry uses one versioned processing-cost
+fact stored in `OperationalEvent.metadata`. A cost fact records stage, quantity, unit price or
+unpriced status, provider and model provenance, bytes, CPU and wall time, cache state, attempt, and
+workspace/project/clip/job attribution. Cost recording does not read or write `UsageLedger`.
+
+Why: COGS answers what Pulpit Engine spent to process work. The usage ledger answers how many
+customer plan minutes were reserved, charged, or refunded. Combining them would corrupt billing
+entitlements and make retries or zero-cost local work hard to measure accurately.
+
+Tradeoff: Raw cost facts live in operational-event JSON until Migration Wave 1 adds durable rollup
+models and direct clip attribution. A null unit price stays explicitly unpriced and blocks a cost
+gate; it is never treated as zero.
+
+Status: Active.

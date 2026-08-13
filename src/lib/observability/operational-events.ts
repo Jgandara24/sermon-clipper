@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-type OperationalEventClient = PrismaClient | Prisma.TransactionClient;
+export type OperationalEventClient = PrismaClient | Prisma.TransactionClient;
 
 export type OperationalEventSeverity = "info" | "warning" | "error";
 export type OperationalEventCategory =
@@ -14,7 +14,8 @@ export type OperationalEventCategory =
   | "billing"
   | "worker"
   | "channel_import"
-  | "facebook_publish";
+  | "facebook_publish"
+  | "cost";
 
 export type OperationalEventInput = {
   workspaceId?: string | null;

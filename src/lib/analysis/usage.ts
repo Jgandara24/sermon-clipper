@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import type { ProcessingCostFactInput, ProcessingCostStage } from "@/lib/cost/types";
 
 /**
  * Provider spend telemetry for AI analysis. Token usage is captured per model call in the
@@ -45,6 +46,30 @@ export function estimateCallCostUsd(call: AnalysisModelCall): number | null {
       call.outputTokens * pricing.output) /
     MTOK
   );
+}
+
+/** Converts one model call to the shared P0 cost-fact contract without recording it. */
+export function analysisCallCostFact(
+  call: AnalysisModelCall,
+  stage: Extract<ProcessingCostStage, "analysis_classification" | "analysis_scoring">,
+  providerProvenance: string,
+): ProcessingCostFactInput {
+  const cacheState =
+    call.cacheReadInputTokens > 0
+      ? "hit"
+      : call.cacheCreationInputTokens > 0
+        ? "partial"
+        : "miss";
+  return {
+    stage,
+    quantity: 1,
+    unit: "call",
+    unitCostUsd: estimateCallCostUsd(call),
+    provider: "anthropic",
+    model: call.model,
+    providerProvenance,
+    cacheState,
+  };
 }
 
 export function buildAnalysisUsage(calls: AnalysisModelCall[]): AnalysisUsage {
