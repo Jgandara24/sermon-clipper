@@ -1330,3 +1330,21 @@ the plan, as the record of what actually happened; incompleteness is the price o
 go-private trigger to the phase that first produces proprietary editorial logic.
 
 Status: Active.
+
+## 2026-08-12 - Candidate Limits Are Internal Capacity Controls
+
+Decision: The retained candidate-pool limit is an internal Pulpit Engine capacity control. The
+application has a master default and hard maximum. Trusted staff can set or clear a hidden
+per-workspace override with the operations CLI. The value is stored under the protected
+`Workspace.settings.internalOperations` subtree. Church users cannot read or change it through
+church settings, routes, or screens. Each staff change creates a workspace-scoped operational
+event.
+
+Why: Candidate capacity affects processing cost and the size of the editorial reserve. It is not a
+church editing preference or a customer-facing quantity promise. A protected override lets staff
+control cost or test a larger pool without adding an unsafe tenant setting.
+
+Tradeoff: This P0.6 control changes the live workspace setting. P0.7 snapshots the effective value
+when a project is created, so later master or workspace changes affect only new projects.
+
+Status: Active.

@@ -4,7 +4,7 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-08-12, after P0.5.
+**Last updated:** 2026-08-12, after P0.6.
 
 ---
 
@@ -17,16 +17,17 @@ say. `DECISIONS.md` remains the authoritative record of decisions; this is a wor
 | P0.2 freeze the accepted product rules | `30dbfc7` | done | Sanitized plan copy committed |
 | P0.3 labeled benchmark manifest | `855567e` | done | 22 tests added |
 | P0.4 charter the current analyzer and scheduler | `7f382dc` | done | 10 integration + 11 unit tests; adds funnel-metrics instrument |
-| P0.5 candidate-limit resolution | _(backfilled below)_ | done | 7 unit tests; extracts the shared scheduled-count reader |
-| P0.6 hidden staff-only church override | — | **next** | Adds the protected operations write path |
+| P0.5 candidate-limit resolution | `3873b28` | done | 7 unit tests; extracts the shared scheduled-count reader |
+| P0.6 hidden staff-only church override | _(backfilled below)_ | done | Protected operations CLI and 9 integration tests |
+| P0.7 project configuration snapshot | — | **next** | Freezes candidate and service settings at creation |
 
 A commit cannot contain its own hash, so the newest row's SHA is backfilled by the following
-commit. P0.5 is the most recent; `git log --oneline` is authoritative.
+commit. P0.6 is the most recent; `git log --oneline` is authoritative.
 
-Branch: `feat/reel-builder-trim`, seven commits ahead of `origin/main`. **Nothing pushed yet.**
+Branch: `feat/reel-builder-trim`, eight commits ahead of `origin/main`. **Nothing pushed yet.**
 The P0 pull request must include `4d51e5d` (drag-to-trim), which predates the program.
 
-Suite as of P0.5: **58 unit test files, 444 tests**; **16 integration test files, 156 tests**.
+Suite as of P0.6: **58 unit test files, 444 tests**; **17 integration test files, 165 tests**.
 `npm run verify` and `npm run test:integration` green.
 
 ---

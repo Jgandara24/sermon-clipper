@@ -16,6 +16,7 @@
     "prisma:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://sermon_clipper:sermon_clipper@localhost:5432/sermon_clipper?schema=public} prisma generate",
     "prisma:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://sermon_clipper:sermon_clipper@localhost:5432/sermon_clipper?schema=public} prisma validate",
     "record:launch-evidence": "tsx scripts/record-launch-evidence.ts",
+    "set:candidate-limit-override": "tsx scripts/set-candidate-limit-override.ts",
     "smoke:production": "tsx scripts/production-smoke.ts",
     "start": "next start",
     "test": "vitest run",
