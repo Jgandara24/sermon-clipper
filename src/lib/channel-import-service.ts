@@ -156,3 +156,22 @@ export async function setChannelImportSourceEnabled(
     data: { enabled },
   });
 }
+
+/** Returns automatic-channel attribution for a project, if the URL import came from polling. */
+export async function findChannelImportCostAttribution(client: PrismaClient, projectId: string) {
+  const importedVideo = await client.channelImportedVideo.findFirst({
+    where: { projectId },
+    select: {
+      channelImportSourceId: true,
+      platformVideoId: true,
+      channelImportSource: { select: { channelId: true, channelTitle: true } },
+    },
+  });
+  if (!importedVideo) return null;
+  return {
+    channelImportSourceId: importedVideo.channelImportSourceId,
+    platformVideoId: importedVideo.platformVideoId,
+    channelId: importedVideo.channelImportSource.channelId,
+    channelTitle: importedVideo.channelImportSource.channelTitle,
+  };
+}

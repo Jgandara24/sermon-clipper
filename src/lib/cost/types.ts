@@ -24,6 +24,7 @@ export type ProcessingCostUnit =
 
 export type ProcessingCacheState = "hit" | "miss" | "partial" | "not_applicable" | "unknown";
 export type ProcessingCostOutcome = "succeeded" | "failed";
+export type ProcessingCostDetails = Record<string, string | number | boolean | null>;
 
 export type ProcessingCostFactInput = {
   stage: ProcessingCostStage;
@@ -39,6 +40,7 @@ export type ProcessingCostFactInput = {
   cacheState?: ProcessingCacheState;
   attempt?: number;
   outcome?: ProcessingCostOutcome;
+  details?: ProcessingCostDetails;
 };
 
 export type ProcessingCostFact = ProcessingCostFactInput & {

@@ -28,6 +28,8 @@ beforeEach(() => {
   delete process.env.AUTH_EMAIL_FROM;
   delete process.env.AUTH_EMAIL_FROM_NAME;
   delete process.env.FFMPEG_PATH;
+  delete process.env.YTDLP_PROXY_PRICE_PER_GB_USD;
+  delete process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD;
   delete process.env.ENV_TEST_TIMEOUT_MS;
 });
 
@@ -51,6 +53,8 @@ describe("env accessor", () => {
     expect(env.RESEND_API_KEY).toBeUndefined();
     expect(env.NOTIFICATIONS_FROM_EMAIL).toBeUndefined();
     expect(env.WHISPER_MODEL_PATH).toBeUndefined();
+    expect(env.YTDLP_PROXY_PRICE_PER_GB_USD).toBeUndefined();
+    expect(env.RAILWAY_EGRESS_PRICE_PER_GB_USD).toBeUndefined();
   });
 
   it("enables heuristic analysis only for the exact value true", () => {
@@ -100,6 +104,18 @@ describe("env accessor", () => {
 
     process.env.ALERTS_THROTTLE_MS = "garbage";
     expect(env.ALERTS_THROTTLE_MS).toBe(30 * 60 * 1000);
+  });
+
+  it("parses optional transfer prices without treating bad data as zero", () => {
+    process.env.YTDLP_PROXY_PRICE_PER_GB_USD = "2.5";
+    process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD = "0";
+    expect(env.YTDLP_PROXY_PRICE_PER_GB_USD).toBe(2.5);
+    expect(env.RAILWAY_EGRESS_PRICE_PER_GB_USD).toBe(0);
+
+    process.env.YTDLP_PROXY_PRICE_PER_GB_USD = "garbage";
+    process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD = "-1";
+    expect(env.YTDLP_PROXY_PRICE_PER_GB_USD).toBeUndefined();
+    expect(env.RAILWAY_EGRESS_PRICE_PER_GB_USD).toBeUndefined();
   });
 });
 

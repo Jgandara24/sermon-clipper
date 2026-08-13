@@ -47,6 +47,16 @@ const nonNegativeNumber = (fallback: number) =>
       return Number.isFinite(value) && value >= 0 ? value : fallback;
     });
 
+/** Finite and >= 0; unset or invalid values stay undefined so cost facts remain unpriced. */
+const optionalNonNegativeNumber = z
+  .string()
+  .optional()
+  .transform((raw) => {
+    if (raw === undefined || raw.trim() === "") return undefined;
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 ? value : undefined;
+  });
+
 /** Finite and > 0; anything else falls back. No flooring. */
 const positiveNumber = (fallback: number) =>
   z
@@ -117,6 +127,8 @@ const fieldSchemas = {
   FFPROBE_PATH: optionalString,
   YTDLP_PATH: optionalString,
   YTDLP_PROXY_URL: optionalString,
+  YTDLP_PROXY_PRICE_PER_GB_USD: optionalNonNegativeNumber,
+  RAILWAY_EGRESS_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   WHISPER_CPP_BINARY: optionalString,
   WHISPER_MODEL_PATH: optionalString,
 

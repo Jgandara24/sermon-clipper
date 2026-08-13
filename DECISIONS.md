@@ -1401,3 +1401,26 @@ models and direct clip attribution. A null unit price stays explicitly unpriced 
 gate; it is never treated as zero.
 
 Status: Active.
+
+## 2026-08-12 - Proxy Economics Are a Measured Launch Gate
+
+Decision: Each URL-source download records two processing-cost facts. The first records direct or
+residential-proxy acquisition bytes. The second records Railway-to-storage egress bytes. Both facts
+include source duration, calculated bitrate, elapsed time, attempt, outcome, and automatic-channel
+attribution when available. A direct acquisition has a known zero network price. A configured proxy
+or Railway egress price uses USD per decimal GB. A missing price stays explicitly unpriced. Stored
+proxy data contains only the host name and never contains the proxy URL or credentials.
+
+The residential-proxy ADR's revisit trigger remains monthly proxy spend above about $200 or church
+count above about 25. This trigger is now a measured launch gate. Launch evidence must use recorded
+bytes and configured prices. An estimate without cost facts does not satisfy the gate.
+
+Why: Functional production imports prove that the proxy path works. They do not prove that its
+economics are acceptable. Attributable facts make successful transfers, partial failures, and
+retries visible without mixing infrastructure cost with customer minute entitlements.
+
+Tradeoff: The current fact records downloaded file bytes and any partial bytes left by yt-dlp. A
+provider can bill more protocol traffic than the final file size. Operators must compare recorded
+facts with provider invoices before launch and must keep the configured per-GB prices current.
+
+Status: Active.
