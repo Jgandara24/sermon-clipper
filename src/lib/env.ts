@@ -124,6 +124,8 @@ const fieldSchemas = {
   ANTHROPIC_API_KEY: optionalString,
   ANALYSIS_MODEL_CLASSIFY: optionalString,
   ANALYSIS_MODEL_SCORING: optionalString,
+  CANDIDATE_LIMIT_DEFAULT: positiveInt(18),
+  CANDIDATE_LIMIT_MAXIMUM: positiveInt(18),
 
   // YouTube Data API v3 (channel auto-import). App-level key, like ANTHROPIC_API_KEY.
   YOUTUBE_API_KEY: optionalString,

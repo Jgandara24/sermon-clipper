@@ -4,7 +4,7 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-08-12, after P0.4.
+**Last updated:** 2026-08-12, after P0.5.
 
 ---
 
@@ -16,16 +16,18 @@ say. `DECISIONS.md` remains the authoritative record of decisions; this is a wor
 | P0.1 sandbox evidence + decision-log catch-up | `737a01c` | done | `CTO.md` deliberately excluded |
 | P0.2 freeze the accepted product rules | `30dbfc7` | done | Sanitized plan copy committed |
 | P0.3 labeled benchmark manifest | `855567e` | done | 22 tests added |
-| P0.4 charter the current analyzer and scheduler | _(backfilled below)_ | done | 10 integration + 11 unit tests; adds funnel-metrics instrument |
-| P0.5 candidate-limit resolution | — | **next** | **First commit that changes `src/` behavior** |
+| P0.4 charter the current analyzer and scheduler | `7f382dc` | done | 10 integration + 11 unit tests; adds funnel-metrics instrument |
+| P0.5 candidate-limit resolution | _(backfilled below)_ | done | 7 unit tests; extracts the shared scheduled-count reader |
+| P0.6 hidden staff-only church override | — | **next** | Adds the protected operations write path |
 
 A commit cannot contain its own hash, so the newest row's SHA is backfilled by the following
-commit. P0.4 is the most recent; `git log --oneline` is authoritative.
+commit. P0.5 is the most recent; `git log --oneline` is authoritative.
 
-Branch: `feat/reel-builder-trim`, six commits ahead of `origin/main`. **Nothing pushed yet.**
+Branch: `feat/reel-builder-trim`, seven commits ahead of `origin/main`. **Nothing pushed yet.**
 The P0 pull request must include `4d51e5d` (drag-to-trim), which predates the program.
 
-Suite as of P0.4: **57 unit test files, 437 tests** plus 10 integration tests. `npm run verify` green.
+Suite as of P0.5: **58 unit test files, 444 tests**; **16 integration test files, 156 tests**.
+`npm run verify` and `npm run test:integration` green.
 
 ---
 

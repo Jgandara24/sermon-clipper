@@ -16,6 +16,8 @@ beforeEach(() => {
   delete process.env.STORAGE_PROVIDER;
   delete process.env.STORAGE_S3_REGION;
   delete process.env.EXPORT_MAX_CONCURRENT_JOBS;
+  delete process.env.CANDIDATE_LIMIT_DEFAULT;
+  delete process.env.CANDIDATE_LIMIT_MAXIMUM;
   delete process.env.EXPORT_FILE_RETENTION_GRACE_MS;
   delete process.env.WORKER_POLL_INTERVAL_MS;
   delete process.env.ALERTS_THROTTLE_MS;
@@ -37,6 +39,8 @@ describe("env accessor", () => {
     expect(env.STORAGE_PROVIDER).toBe("local");
     expect(env.STORAGE_S3_REGION).toBe("auto");
     expect(env.EXPORT_MAX_CONCURRENT_JOBS).toBe(4);
+    expect(env.CANDIDATE_LIMIT_DEFAULT).toBe(18);
+    expect(env.CANDIDATE_LIMIT_MAXIMUM).toBe(18);
     expect(env.WORKER_POLL_INTERVAL_MS).toBe(2000);
     expect(env.ALERTS_THROTTLE_MS).toBe(30 * 60 * 1000);
   });
@@ -56,13 +60,22 @@ describe("env accessor", () => {
   });
 
   it("parses valid numeric overrides", () => {
+    process.env.CANDIDATE_LIMIT_DEFAULT = "14";
+    process.env.CANDIDATE_LIMIT_MAXIMUM = "16";
     process.env.EXPORT_MAX_CONCURRENT_JOBS = "2.9";
     process.env.WORKER_POLL_INTERVAL_MS = "500";
+    expect(env.CANDIDATE_LIMIT_DEFAULT).toBe(14);
+    expect(env.CANDIDATE_LIMIT_MAXIMUM).toBe(16);
     expect(env.EXPORT_MAX_CONCURRENT_JOBS).toBe(2); // floored positive int
     expect(env.WORKER_POLL_INTERVAL_MS).toBe(500);
   });
 
   it("falls back to the default on garbage or out-of-range numeric input", () => {
+    process.env.CANDIDATE_LIMIT_DEFAULT = "not-a-number";
+    process.env.CANDIDATE_LIMIT_MAXIMUM = "0";
+    expect(env.CANDIDATE_LIMIT_DEFAULT).toBe(18);
+    expect(env.CANDIDATE_LIMIT_MAXIMUM).toBe(18);
+
     process.env.EXPORT_MAX_CONCURRENT_JOBS = "not-a-number";
     expect(env.EXPORT_MAX_CONCURRENT_JOBS).toBe(4);
 
