@@ -24,6 +24,8 @@ beforeEach(() => {
   delete process.env.AUTOMATIC_PUBLISHING_ENABLED;
   delete process.env.EXPORT_FILE_RETENTION_GRACE_MS;
   delete process.env.WORKER_POLL_INTERVAL_MS;
+  delete process.env.COST_ROLLUP_INTERVAL_MS;
+  delete process.env.COST_ROLLUP_LOOKBACK_DAYS;
   delete process.env.ALERTS_THROTTLE_MS;
   delete process.env.RESEND_API_KEY;
   delete process.env.NOTIFICATIONS_FROM_EMAIL;
@@ -50,6 +52,8 @@ describe("env accessor", () => {
     expect(env.ANALYSIS_ALLOW_HEURISTIC).toBe(false);
     expect(env.AUTOMATIC_PUBLISHING_ENABLED).toBe(false);
     expect(env.WORKER_POLL_INTERVAL_MS).toBe(2000);
+    expect(env.COST_ROLLUP_INTERVAL_MS).toBe(60 * 60_000);
+    expect(env.COST_ROLLUP_LOOKBACK_DAYS).toBe(7);
     expect(env.ALERTS_THROTTLE_MS).toBe(30 * 60 * 1000);
   });
 

@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { PrismaClient } from "@prisma/client";
 import {
   analysisCallCostFact,
   buildAnalysisUsage,
   estimateCallCostUsd,
-  summarizeAnalysisSpend,
   type AnalysisModelCall,
 } from "@/lib/analysis/usage";
 
@@ -109,79 +107,6 @@ describe("buildAnalysisUsage", () => {
       totalOutputTokens: 0,
       estimatedCostUsd: 0,
       unpricedModels: [],
-    });
-  });
-});
-
-describe("summarizeAnalysisSpend", () => {
-  it("rolls up shared cost facts once per analyzed job", async () => {
-    const client = {
-      operationalEvent: {
-        findMany: async () => [
-          {
-            jobId: "job-1",
-            metadata: {
-              provider: "anthropic",
-              stage: "analysis_classification",
-              totalCostUsd: 0.01,
-              pricingStatus: "priced",
-              details: {
-                inputTokens: 1_000,
-                outputTokens: 100,
-                cacheCreationInputTokens: 50,
-                cacheReadInputTokens: 25,
-              },
-            },
-          },
-          {
-            jobId: "job-1",
-            metadata: {
-              provider: "anthropic",
-              stage: "analysis_scoring",
-              totalCostUsd: 0.02,
-              pricingStatus: "priced",
-              details: {
-                inputTokens: 2_000,
-                outputTokens: 200,
-                cacheCreationInputTokens: 0,
-                cacheReadInputTokens: 0,
-              },
-            },
-          },
-          {
-            jobId: "job-1",
-            metadata: {
-              usage: {
-                totalInputTokens: 99_999,
-                totalOutputTokens: 99_999,
-                estimatedCostUsd: 99,
-                unpricedModels: [],
-                calls: [],
-              },
-            },
-          },
-          {
-            jobId: "legacy-job",
-            metadata: {
-              usage: {
-                totalInputTokens: 400,
-                totalOutputTokens: 40,
-                estimatedCostUsd: 0.04,
-                unpricedModels: [],
-                calls: [],
-              },
-            },
-          },
-        ],
-      },
-    } as unknown as PrismaClient;
-
-    await expect(summarizeAnalysisSpend(client, "workspace-1")).resolves.toMatchObject({
-      jobCount: 2,
-      totalInputTokens: 3_475,
-      totalOutputTokens: 340,
-      estimatedCostUsd: 0.07,
-      incomplete: false,
     });
   });
 });

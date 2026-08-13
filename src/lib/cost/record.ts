@@ -29,8 +29,10 @@ export async function recordProcessingCostFact(
     severity: fact.outcome === "failed" ? "warning" : "info",
     message: `${fact.stage} processing cost fact recorded.`,
     projectId,
+    clipId,
     jobId,
     exportJobId,
+    // Keep the metadata copy for pre-Wave readers. OperationalEvent.clipId is the indexed source.
     metadata: { ...fact, clipId: clipId ?? null },
   });
 }

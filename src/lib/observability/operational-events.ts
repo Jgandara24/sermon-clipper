@@ -27,6 +27,7 @@ export type OperationalEventInput = {
   projectId?: string | null;
   jobId?: string | null;
   exportJobId?: string | null;
+  clipId?: string | null;
   metadata?: Prisma.InputJsonValue;
 };
 
@@ -44,6 +45,7 @@ export async function recordOperationalEvent(
       projectId: input.projectId ?? undefined,
       jobId: input.jobId ?? undefined,
       exportJobId: input.exportJobId ?? undefined,
+      clipId: input.clipId ?? undefined,
       metadata: input.metadata ?? {},
     },
   });

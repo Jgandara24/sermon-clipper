@@ -6,10 +6,41 @@ import {
   recordWorkerProcessHeartbeat,
   retryDelayMsForAttempt,
   retryRunAfter,
+  runIsolatedPeriodicBlocks,
   staleCutoff,
 } from "@/lib/worker/reliability";
 
 describe("worker reliability helpers", () => {
+  it("continues to the next periodic block after one block fails", async () => {
+    const calls: string[] = [];
+    const failures: string[] = [];
+    await runIsolatedPeriodicBlocks(
+      [
+        {
+          name: "cost_rollup",
+          due: true,
+          run: async () => {
+            calls.push("cost_rollup");
+            throw new Error("rollup failed");
+          },
+        },
+        {
+          name: "facebook_publish",
+          due: true,
+          run: async () => {
+            calls.push("facebook_publish");
+          },
+        },
+      ],
+      async (name) => {
+        failures.push(name);
+      },
+    );
+
+    expect(calls).toEqual(["cost_rollup", "facebook_publish"]);
+    expect(failures).toEqual(["cost_rollup"]);
+  });
+
   it("lets the worker enter the publish block only for exact true", () => {
     expect(automaticPublishingEnabled({})).toBe(false);
     expect(automaticPublishingEnabled({ AUTOMATIC_PUBLISHING_ENABLED: "false" })).toBe(false);

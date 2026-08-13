@@ -87,6 +87,7 @@ describe("recordProcessingCostFact", () => {
         category: "cost",
         eventType: "processing_cost_fact",
         projectId: "00000000-0000-4000-8000-000000000002",
+        clipId: "00000000-0000-4000-8000-000000000003",
         jobId: "00000000-0000-4000-8000-000000000004",
         metadata: {
           pricingStatus: "zero_cost",
