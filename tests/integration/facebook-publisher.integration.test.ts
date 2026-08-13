@@ -23,11 +23,13 @@ import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher"
 const prisma = new PrismaClient();
 const originalToken = process.env.META_SYSTEM_USER_TOKEN;
 const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+const originalPublishingEnabled = process.env.AUTOMATIC_PUBLISHING_ENABLED;
 
 beforeAll(() => {
   // Deliberately fake test-only token; never a real credential. Only its presence matters —
   // the publisher fails closed entirely when this is unset.
   process.env.META_SYSTEM_USER_TOKEN = "test-system-user-token-not-real";
+  process.env.AUTOMATIC_PUBLISHING_ENABLED = "true";
   // The publisher also fails closed on unset/localhost app URLs (finding #9).
   process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 });
@@ -37,6 +39,8 @@ afterAll(async () => {
   else process.env.META_SYSTEM_USER_TOKEN = originalToken;
   if (originalAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
   else process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+  if (originalPublishingEnabled === undefined) delete process.env.AUTOMATIC_PUBLISHING_ENABLED;
+  else process.env.AUTOMATIC_PUBLISHING_ENABLED = originalPublishingEnabled;
 });
 
 const createdWorkspaceIds: string[] = [];
@@ -282,5 +286,41 @@ describe("publishDueScheduledPosts", () => {
 
     expect(summary.postsScanned).toBe(0);
     process.env.META_SYSTEM_USER_TOKEN = saved;
+  });
+
+  it("does not inspect or claim due rows while automatic publishing is disabled", async () => {
+    const workspaceId = await createWorkspace("Publish Globally Disabled", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "globally-disabled");
+    const eventCountBefore = await prisma.operationalEvent.count({
+      where: { eventType: "automatic_publishing_disabled" },
+    });
+    let metaCalls = 0;
+    process.env.AUTOMATIC_PUBLISHING_ENABLED = "false";
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const summary = await publishDueScheduledPosts(prisma, {
+          now: () => new Date("2026-07-20T12:00:00Z"),
+          resolvePageAccessToken: async () => {
+            metaCalls++;
+            return "unused";
+          },
+          publishScheduledVideo: async () => {
+            metaCalls++;
+            return { facebookPostId: "unused" };
+          },
+        });
+        expect(summary.postsScanned).toBe(0);
+      }
+    } finally {
+      process.env.AUTOMATIC_PUBLISHING_ENABLED = "true";
+    }
+
+    expect(metaCalls).toBe(0);
+    const untouched = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    expect(untouched.publishStatus).toBe("NOT_STARTED");
+    expect(untouched.attemptCount).toBe(0);
+    await expect(
+      prisma.operationalEvent.count({ where: { eventType: "automatic_publishing_disabled" } }),
+    ).resolves.toBe(eventCountBefore + 1);
   });
 });

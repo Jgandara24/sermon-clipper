@@ -2,7 +2,7 @@ import os from "node:os";
 import { accessSync, constants } from "node:fs";
 import { spawnSync } from "node:child_process";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { env } from "@/lib/env";
+import { env, isExactTrue } from "@/lib/env";
 
 export const PROCESSING_MAX_ATTEMPTS = 3;
 export const EXPORT_MAX_ATTEMPTS = 3;
@@ -17,6 +17,11 @@ export type WorkerReadinessCheck = {
 type EnvLike = Record<string, string | undefined>;
 type CommandAvailable = (command: string, versionFlag?: string) => boolean;
 type FileReadable = (filePath: string) => boolean;
+
+/** Worker-side optimization only. The publisher repeats this gate as the authority. */
+export function automaticPublishingEnabled(env: EnvLike = process.env): boolean {
+  return isExactTrue(env.AUTOMATIC_PUBLISHING_ENABLED);
+}
 
 // ffmpeg-family binaries answer `-version`; yt-dlp only accepts `--version`, so each check
 // passes the flag its binary understands.

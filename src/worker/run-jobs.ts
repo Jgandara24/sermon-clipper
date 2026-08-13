@@ -20,6 +20,7 @@ import { enqueueDueCleanupJobs, sweepOrphanedExportedFiles } from "@/lib/retenti
 import { releaseReservationForJob } from "@/lib/usage-ledger";
 import {
   assertWorkerRuntimeReady,
+  automaticPublishingEnabled,
   recordWorkerProcessHeartbeat,
   workerProcessHeartbeatIntervalMs,
 } from "@/lib/worker/reliability";
@@ -131,12 +132,18 @@ async function loop() {
       }
       if (now - lastFacebookPublishPollAt >= FACEBOOK_PUBLISH_POLL_INTERVAL_MS) {
         // Tier 3 Facebook auto-posting: publishes due ScheduledPost rows for workspaces that
-        // have explicitly gone live (facebookConnection.autoPostEnabled). No-ops entirely if
-        // META_SYSTEM_USER_TOKEN isn't configured. Per-post errors are isolated inside the
-        // poller, so one failing post never aborts the run.
-        const facebookPublishPoll = await publishDueScheduledPosts(prisma);
-        if (facebookPublishPoll.postsScanned) {
-          console.log("[worker] facebook publish poll", { facebookPublishPoll });
+        // have explicitly gone live (facebookConnection.autoPostEnabled). The worker enters the
+        // publication path only when the exact global positive-enable switch is true. The publisher
+        // repeats the gate so direct calls cannot bypass it. Per-post errors are isolated inside it.
+        if (automaticPublishingEnabled()) {
+          const facebookPublishPoll = await publishDueScheduledPosts(prisma);
+          if (facebookPublishPoll.postsScanned) {
+            console.log("[worker] facebook publish poll", { facebookPublishPoll });
+          }
+        } else {
+          // Let the authoritative guard record one process-scoped disabled-state event. Repeated
+          // ticks do no database query beyond that latched event and can never claim a post.
+          await publishDueScheduledPosts(prisma);
         }
         lastFacebookPublishPollAt = now;
       }

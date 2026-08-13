@@ -21,6 +21,7 @@ beforeEach(() => {
   delete process.env.CANDIDATE_LIMIT_DEFAULT;
   delete process.env.CANDIDATE_LIMIT_MAXIMUM;
   delete process.env.ANALYSIS_ALLOW_HEURISTIC;
+  delete process.env.AUTOMATIC_PUBLISHING_ENABLED;
   delete process.env.EXPORT_FILE_RETENTION_GRACE_MS;
   delete process.env.WORKER_POLL_INTERVAL_MS;
   delete process.env.ALERTS_THROTTLE_MS;
@@ -47,6 +48,7 @@ describe("env accessor", () => {
     expect(env.CANDIDATE_LIMIT_DEFAULT).toBe(18);
     expect(env.CANDIDATE_LIMIT_MAXIMUM).toBe(18);
     expect(env.ANALYSIS_ALLOW_HEURISTIC).toBe(false);
+    expect(env.AUTOMATIC_PUBLISHING_ENABLED).toBe(false);
     expect(env.WORKER_POLL_INTERVAL_MS).toBe(2000);
     expect(env.ALERTS_THROTTLE_MS).toBe(30 * 60 * 1000);
   });
@@ -67,6 +69,16 @@ describe("env accessor", () => {
 
     process.env.ANALYSIS_ALLOW_HEURISTIC = "TRUE";
     expect(env.ANALYSIS_ALLOW_HEURISTIC).toBe(false);
+  });
+
+  it("enables automatic publishing only for the exact value true", () => {
+    for (const value of ["false", "TRUE", "1", " true ", "malformed"]) {
+      process.env.AUTOMATIC_PUBLISHING_ENABLED = value;
+      expect(env.AUTOMATIC_PUBLISHING_ENABLED).toBe(false);
+    }
+
+    process.env.AUTOMATIC_PUBLISHING_ENABLED = "true";
+    expect(env.AUTOMATIC_PUBLISHING_ENABLED).toBe(true);
   });
 
   it("re-reads process.env on every access (no memoization)", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertWorkerRuntimeReady,
+  automaticPublishingEnabled,
   checkWorkerRuntimeEnvironment,
   recordWorkerProcessHeartbeat,
   retryDelayMsForAttempt,
@@ -9,6 +10,13 @@ import {
 } from "@/lib/worker/reliability";
 
 describe("worker reliability helpers", () => {
+  it("lets the worker enter the publish block only for exact true", () => {
+    expect(automaticPublishingEnabled({})).toBe(false);
+    expect(automaticPublishingEnabled({ AUTOMATIC_PUBLISHING_ENABLED: "false" })).toBe(false);
+    expect(automaticPublishingEnabled({ AUTOMATIC_PUBLISHING_ENABLED: "TRUE" })).toBe(false);
+    expect(automaticPublishingEnabled({ AUTOMATIC_PUBLISHING_ENABLED: "true" })).toBe(true);
+  });
+
   it("uses bounded retry delays by attempt", () => {
     expect(retryDelayMsForAttempt(0)).toBe(15_000);
     expect(retryDelayMsForAttempt(1)).toBe(15_000);

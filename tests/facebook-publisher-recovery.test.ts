@@ -80,4 +80,20 @@ describe("recoverStaleScheduledPosts", () => {
     expect(row.publishStatus).toBe("FAILED");
     expect(row.attemptCount).toBe(5);
   });
+
+  it("continues stale-claim reconciliation while automatic publishing is disabled", async () => {
+    const saved = process.env.AUTOMATIC_PUBLISHING_ENABLED;
+    process.env.AUTOMATIC_PUBLISHING_ENABLED = "false";
+    try {
+      const row = makeRow({ updatedAt: new Date("2026-07-20T14:30:00Z") });
+      await expect(recoverStaleScheduledPosts(makeFakeClient([row]), now)).resolves.toEqual({
+        recovered: 1,
+        failed: 0,
+      });
+      expect(row.publishStatus).toBe("NOT_STARTED");
+    } finally {
+      if (saved === undefined) delete process.env.AUTOMATIC_PUBLISHING_ENABLED;
+      else process.env.AUTOMATIC_PUBLISHING_ENABLED = saved;
+    }
+  });
 });

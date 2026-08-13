@@ -20,6 +20,16 @@ import { z } from "zod";
 
 const optionalString = z.string().optional();
 
+/** Positive-enable feature flags accept only the exact lower-case string `true`. */
+export function isExactTrue(raw: string | undefined): boolean {
+  return raw === "true";
+}
+
+const exactTrue = z
+  .string()
+  .optional()
+  .transform(isExactTrue);
+
 /** `Number(raw ?? fallback)` with no garbage guard — garbage yields NaN, exactly as before. */
 const rawNumber = (fallback: number) =>
   z
@@ -136,10 +146,7 @@ const fieldSchemas = {
 
   // AI analysis
   ANTHROPIC_API_KEY: optionalString,
-  ANALYSIS_ALLOW_HEURISTIC: z
-    .string()
-    .optional()
-    .transform((raw) => raw === "true"),
+  ANALYSIS_ALLOW_HEURISTIC: exactTrue,
   ANALYSIS_MODEL_CLASSIFY: optionalString,
   ANALYSIS_MODEL_SCORING: optionalString,
   CANDIDATE_LIMIT_DEFAULT: positiveInt(18),
@@ -153,6 +160,7 @@ const fieldSchemas = {
   // Facebook Auto-Posting Will Reuse Pulpit Engine's Meta App/Business Manager") — a System
   // User token, not a per-church OAuth token. Absence of META_SYSTEM_USER_TOKEN must fail
   // closed (see src/lib/integrations/facebook.ts), never silently no-op.
+  AUTOMATIC_PUBLISHING_ENABLED: exactTrue,
   META_SYSTEM_USER_TOKEN: optionalString,
   META_GRAPH_API_VERSION: z.string().default("v23.0"),
 

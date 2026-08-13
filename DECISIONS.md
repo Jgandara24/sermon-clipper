@@ -1446,3 +1446,26 @@ Existing explicit deletion documents still render for compatibility. P1 must blo
 from delivery before the continuous-source invariant is fully enforced.
 
 Status: Active.
+
+## 2026-08-12 - Automatic Publishing Requires an Exact Global Positive Enable
+
+Decision: Automatic publication requires the exact environment value
+`AUTOMATIC_PUBLISHING_ENABLED=true`. Missing, false, malformed, uppercase, padded, or any other
+value disables publication before the publisher reads or claims a due row. This global kill switch
+takes precedence over the Meta token, the workspace Page ID, the workspace auto-post flag, and all
+later delivery gates. The publisher enforces the switch itself so direct callers cannot bypass it.
+
+The worker records one disabled-state operational event per process-level disabled period. It
+continues to inspect and reconcile stale `IN_PROGRESS` claims because reconciliation makes no Meta
+request and cannot create a new publish claim. Readiness reports the switch state, but disabled is
+a valid ready state.
+
+Why: A repository-visible positive enable gives operators one fail-closed control before schema and
+delivery-eligibility changes. It also prevents a configured Meta token or church flag from enabling
+publication by itself.
+
+Tradeoff: The switch cannot cancel a Meta request already in flight. Deployment and rollback must
+inspect `IN_PROGRESS` rows. Keep the switch false through P1 and P2 sandbox preparation. Use exact
+true only for the controlled sandbox publication defined by the implementation plan.
+
+Status: Active.

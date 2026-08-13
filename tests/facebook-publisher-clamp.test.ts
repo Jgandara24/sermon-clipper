@@ -5,9 +5,11 @@ import type { PublishScheduledVideoInput } from "@/lib/integrations/facebook";
 // Deliberately fake test-only token; never a real credential.
 const originalToken = process.env.META_SYSTEM_USER_TOKEN;
 const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+const originalPublishingEnabled = process.env.AUTOMATIC_PUBLISHING_ENABLED;
 
 beforeAll(() => {
   process.env.META_SYSTEM_USER_TOKEN = "test-system-user-token-not-real";
+  process.env.AUTOMATIC_PUBLISHING_ENABLED = "true";
   // The publisher fails closed on unset/localhost app URLs (finding #9).
   process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 });
@@ -17,6 +19,8 @@ afterAll(() => {
   else process.env.META_SYSTEM_USER_TOKEN = originalToken;
   if (originalAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
   else process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+  if (originalPublishingEnabled === undefined) delete process.env.AUTOMATIC_PUBLISHING_ENABLED;
+  else process.env.AUTOMATIC_PUBLISHING_ENABLED = originalPublishingEnabled;
 });
 
 const eligibleSettings = {
@@ -87,6 +91,38 @@ async function runPoller(
 
 // scheduledDate 2026-07-20 in America/Chicago (CDT): 9am local = 2026-07-20T14:00:00Z.
 const scheduledDate = new Date("2026-07-20T00:00:00Z");
+
+describe("publishDueScheduledPosts global kill switch", () => {
+  it("makes no query, claim, or Meta call for missing, false, and malformed values", async () => {
+    // An enabled call starts a new switch period. This makes the one-event assertion independent
+    // from any earlier disabled call in the same test process.
+    await runPoller(scheduledDate, "2026-07-20T15:00:00Z");
+
+    const { client, updates, findManyWheres, events } = makeFakeClient(scheduledDate);
+    let metaCalls = 0;
+    for (const value of [undefined, "false", "TRUE", "malformed"]) {
+      if (value === undefined) delete process.env.AUTOMATIC_PUBLISHING_ENABLED;
+      else process.env.AUTOMATIC_PUBLISHING_ENABLED = value;
+      const summary = await publishDueScheduledPosts(client as never, {
+        resolvePageAccessToken: async () => {
+          metaCalls++;
+          return "unused";
+        },
+        publishScheduledVideo: async () => {
+          metaCalls++;
+          return { facebookPostId: "unused" };
+        },
+      });
+      expect(summary.postsScanned).toBe(0);
+    }
+
+    expect(findManyWheres).toHaveLength(0);
+    expect(updates).toHaveLength(0);
+    expect(metaCalls).toBe(0);
+    expect(events.filter((event) => event.eventType === "automatic_publishing_disabled")).toHaveLength(1);
+    process.env.AUTOMATIC_PUBLISHING_ENABLED = "true";
+  });
+});
 
 describe("publishDueScheduledPosts publish-time clamp", () => {
   it("publishes immediately when the 9am-local target is already past", async () => {

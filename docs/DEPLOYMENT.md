@@ -692,6 +692,28 @@ notes.
 3. OTP requests are rate-limited (3 per 15 minutes per email) — "no email" may just be the limit;
    the login surface says so explicitly.
 
+## Automatic Publishing Kill Switch
+
+`AUTOMATIC_PUBLISHING_ENABLED` is the global publication authority. Only the exact string `true`
+permits automatic publication. Missing, `false`, malformed, uppercase, or padded values disable
+publication before the publisher reads or claims a due row. The global switch takes precedence
+over the Meta token, the workspace Page ID, and the workspace auto-post flag.
+
+Keep the switch false through P1 and P2 sandbox preparation. Before one controlled sandbox
+publication, pin one manual render, pass render QC, record the exact human `ACCEPT`, and verify all
+other eligibility inputs. Set the switch to `true` only for that controlled publication. Set it to
+`false` immediately after a failure or any identity mismatch.
+
+The deployment readiness response reports whether the switch is enabled or disabled. Disabled is
+a safe ready state. The worker records `automatic_publishing_disabled` once for each process-level
+disabled period. Stale `IN_PROGRESS` post reconciliation continues while new publication is
+disabled.
+
+The switch cannot cancel a Meta request that is already in flight. Before a deploy or rollback,
+inspect `IN_PROGRESS` scheduled posts. To disable safely, set the switch to `false` or remove it.
+Do not roll back code that removes this guard unless the Meta token is removed first or every
+workspace auto-post flag is disabled.
+
 ## Rollback
 
 - Stop new workers first so they do not claim jobs during rollback.
