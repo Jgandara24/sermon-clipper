@@ -8,6 +8,8 @@ export interface CandidateLimitInput {
   masterMaximum?: number;
 }
 
+export type CandidateLimitControls = Pick<CandidateLimitInput, "masterDefault" | "masterMaximum">;
+
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
@@ -22,6 +24,19 @@ export function readTargetClipCount(processingConfig: unknown): number {
     if (isPositiveInteger(value)) return value;
   }
   return DEFAULT_TARGET_CLIP_COUNT;
+}
+
+/** Reads a frozen project candidate limit, or resolves current controls for a legacy project. */
+export function readCandidateLimit(
+  processingConfig: unknown,
+  controls: CandidateLimitControls = {},
+): number {
+  const targetClipCount = readTargetClipCount(processingConfig);
+  if (processingConfig && typeof processingConfig === "object" && "candidateLimit" in processingConfig) {
+    const value = (processingConfig as { candidateLimit?: unknown }).candidateLimit;
+    if (isPositiveInteger(value)) return Math.max(targetClipCount, value);
+  }
+  return resolveCandidateLimit({ targetClipCount, ...controls });
 }
 
 /**

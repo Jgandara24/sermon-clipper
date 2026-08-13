@@ -15,7 +15,11 @@ import {
   type ChurchProfile,
   type ServiceSlot,
 } from "@/lib/church-profile";
-import { readTargetClipCount, resolveCandidateLimit } from "@/lib/analysis/candidate-limit";
+import {
+  readCandidateLimit,
+  readTargetClipCount,
+  resolveCandidateLimit,
+} from "@/lib/analysis/candidate-limit";
 import { env } from "@/lib/env";
 import { readCandidateLimitOverride } from "@/lib/operations/candidate-limit-override";
 
@@ -96,15 +100,10 @@ export function readProjectProcessingConfig(processingConfig: unknown) {
   const raw = readObject(processingConfig);
   const defaults = buildDefaultProcessingConfig();
   const targetClipCount = readTargetClipCount(raw);
-  const rawCandidateLimit = raw.candidateLimit;
-  const candidateLimit =
-    typeof rawCandidateLimit === "number" && Number.isInteger(rawCandidateLimit) && rawCandidateLimit > 0
-      ? Math.max(targetClipCount, rawCandidateLimit)
-      : resolveCandidateLimit({
-          targetClipCount,
-          masterDefault: env.CANDIDATE_LIMIT_DEFAULT,
-          masterMaximum: env.CANDIDATE_LIMIT_MAXIMUM,
-        });
+  const candidateLimit = readCandidateLimit(raw, {
+    masterDefault: env.CANDIDATE_LIMIT_DEFAULT,
+    masterMaximum: env.CANDIDATE_LIMIT_MAXIMUM,
+  });
   const timezone =
     typeof raw.timezone === "string" && isValidIanaTimezone(raw.timezone)
       ? raw.timezone

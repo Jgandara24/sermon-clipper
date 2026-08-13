@@ -12,7 +12,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runAnalyzeJob } from "@/lib/jobs/handlers/analyze";
 
 /**
- * CHARTER TESTS — these record what ANALYZE does *today*, defects included.
+ * CHARTER TESTS — these record what ANALYZE does *today*, defects included. P0.8 changed the
+ * candidate-pool assertions from the old hard-coded ceiling to the accepted project snapshot.
  *
  * Nothing here asserts desired behavior. Several cases pin down bugs the plan intends to fix
  * (Sunday spill in P1.8/P1.9, destructive reanalysis in P1.7, the unguarded cross-project date
@@ -74,6 +75,7 @@ async function analyzeProject(options: {
   segmentCount: number;
   sermonDate: Date | null;
   targetClipCount?: number;
+  candidateLimit?: number;
 }) {
   const { workspaceId, segmentCount, sermonDate } = options;
   const durationS = (segmentCount * SEGMENT_MS) / 1000;
@@ -104,8 +106,10 @@ async function analyzeProject(options: {
       name: unique("charter-project"),
       sourceVideoId: sourceVideo.id,
       sermonDate,
-      processingConfig:
-        options.targetClipCount === undefined ? {} : { targetClipCount: options.targetClipCount },
+      processingConfig: {
+        ...(options.targetClipCount === undefined ? {} : { targetClipCount: options.targetClipCount }),
+        ...(options.candidateLimit === undefined ? {} : { candidateLimit: options.candidateLimit }),
+      },
     },
   });
 
@@ -149,7 +153,7 @@ afterAll(async () => {
 });
 
 describe("ANALYZE charter — candidate pool", () => {
-  it("keeps at most CANDIDATE_POOL_SIZE clips from a long service", async () => {
+  it("uses 18 as the legacy candidate limit", async () => {
     const workspaceId = await seedWorkspace();
     const { clips, metadata } = await analyzeProject({
       workspaceId,
@@ -158,7 +162,36 @@ describe("ANALYZE charter — candidate pool", () => {
     });
 
     expect(clips.length).toBeLessThanOrEqual(18);
+    expect(metadata.candidateLimit).toBe(18);
     expect(metadata.keptCount).toBe(clips.length);
+  });
+
+  it("honors a lower snapshotted candidate limit", async () => {
+    const workspaceId = await seedWorkspace();
+    const { clips, metadata } = await analyzeProject({
+      workspaceId,
+      segmentCount: 400,
+      sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+      targetClipCount: 3,
+      candidateLimit: 4,
+    });
+
+    expect(clips).toHaveLength(4);
+    expect(metadata).toMatchObject({ candidateLimit: 4, keptCount: 4 });
+  });
+
+  it("raises a below-required snapshot to the scheduled count", async () => {
+    const workspaceId = await seedWorkspace();
+    const { clips, metadata } = await analyzeProject({
+      workspaceId,
+      segmentCount: 400,
+      sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+      targetClipCount: 6,
+      candidateLimit: 3,
+    });
+
+    expect(clips).toHaveLength(6);
+    expect(metadata).toMatchObject({ candidateLimit: 6, targetClipCount: 6, keptCount: 6 });
   });
 
   it("returns a thin pool rather than padding when the source is short", async () => {
@@ -181,7 +214,11 @@ describe("ANALYZE charter — candidate pool", () => {
       targetClipCount: 3,
     });
 
-    expect(metadata).toMatchObject({ targetClipCount: 3, keptCount: clips.length });
+    expect(metadata).toMatchObject({
+      candidateLimit: 18,
+      targetClipCount: 3,
+      keptCount: clips.length,
+    });
     expect(typeof metadata.candidateCount).toBe("number");
   });
 });

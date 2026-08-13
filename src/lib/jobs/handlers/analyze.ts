@@ -1,9 +1,10 @@
 import { GeneratedClipStatus, ProjectStatus } from "@prisma/client";
 import { getAnalysisProvider } from "@/lib/analysis";
-import { readTargetClipCount } from "@/lib/analysis/candidate-limit";
+import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidate-limit";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
+import { env } from "@/lib/env";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import {
   clearReschedulableScheduledPosts,
@@ -13,7 +14,6 @@ import {
 
 const MIN_CANDIDATE_MS = 20_000;
 const MAX_CANDIDATE_MS = 90_000;
-const CANDIDATE_POOL_SIZE = 18;
 
 function readGenre(processingConfig: unknown): string {
   if (processingConfig && typeof processingConfig === "object" && "genre" in processingConfig) {
@@ -52,6 +52,10 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
 
   const genre = readGenre(project.processingConfig);
   const targetClipCount = readTargetClipCount(project.processingConfig);
+  const candidateLimit = readCandidateLimit(project.processingConfig, {
+    masterDefault: env.CANDIDATE_LIMIT_DEFAULT,
+    masterMaximum: env.CANDIDATE_LIMIT_MAXIMUM,
+  });
   const candidates = buildCandidateWindows(segments, {
     minMs: MIN_CANDIDATE_MS,
     maxMs: MAX_CANDIDATE_MS,
@@ -106,7 +110,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
     refined.map((clip) => ({ ...clip, score: clip.total })),
     0.5,
   );
-  const kept = deduped.sort((a, b) => b.total - a.total).slice(0, CANDIDATE_POOL_SIZE);
+  const kept = deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
 
   await prisma.$transaction(async (tx) => {
     await tx.scriptureReference.deleteMany({ where: { projectId: project.id } });
@@ -163,7 +167,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
       }
 
       // Only the primary daily-posting set (rank <= targetClipCount) gets a calendar slot;
-      // the rest of the CANDIDATE_POOL_SIZE stays available as unscheduled extras. Skips
+      // the rest of the candidate pool stays available as unscheduled extras. Skips
       // legacy projects created before Project.sermonDate existed (schema default is nullable).
       const rank = idx + 1;
       if (rank <= targetClipCount && project.sermonDate) {
@@ -200,6 +204,7 @@ export const runAnalyzeJob: JobHandler = async ({ job, prisma }) => {
       candidateCount: candidates.length,
       scoredCount: scored.length,
       keptCount: kept.length,
+      candidateLimit,
       targetClipCount,
       genre,
       ...(usage ? { usage } : {}),
