@@ -302,6 +302,16 @@ describe("ANALYZE provider policy", () => {
       });
       expect(event.severity).toBe("warning");
       expect(event.metadata).toMatchObject({ emergencyOverride: true });
+      const costEvent = await prisma.operationalEvent.findFirstOrThrow({
+        where: { workspaceId, eventType: "processing_cost_fact", category: "cost" },
+        orderBy: { createdAt: "desc" },
+      });
+      expect(costEvent.metadata).toMatchObject({
+        stage: "analysis_scoring",
+        provider: "heuristic",
+        pricingStatus: "zero_cost",
+        outcome: "succeeded",
+      });
     } finally {
       process.env = originalEnv;
     }
@@ -361,6 +371,15 @@ describe("ANALYZE provider policy", () => {
       });
       expect(event.severity).toBe("error");
       expect(event.metadata).toMatchObject({ provider: "claude", emergencyOverride: false });
+      const costEvent = await prisma.operationalEvent.findFirstOrThrow({
+        where: { workspaceId, projectId: project.id, eventType: "processing_cost_fact" },
+      });
+      expect(costEvent.metadata).toMatchObject({
+        stage: "analysis_classification",
+        provider: "anthropic",
+        pricingStatus: "unpriced",
+        outcome: "failed",
+      });
     } finally {
       process.env = originalEnv;
     }

@@ -14,6 +14,8 @@ const originalEnv = { ...process.env };
 beforeEach(() => {
   process.env = { ...originalEnv };
   delete process.env.STORAGE_PROVIDER;
+  delete process.env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD;
+  delete process.env.STORAGE_UPLOAD_PRICE_PER_GB_USD;
   delete process.env.STORAGE_S3_REGION;
   delete process.env.EXPORT_MAX_CONCURRENT_JOBS;
   delete process.env.CANDIDATE_LIMIT_DEFAULT;
@@ -55,6 +57,8 @@ describe("env accessor", () => {
     expect(env.WHISPER_MODEL_PATH).toBeUndefined();
     expect(env.YTDLP_PROXY_PRICE_PER_GB_USD).toBeUndefined();
     expect(env.RAILWAY_EGRESS_PRICE_PER_GB_USD).toBeUndefined();
+    expect(env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD).toBeUndefined();
+    expect(env.STORAGE_UPLOAD_PRICE_PER_GB_USD).toBeUndefined();
   });
 
   it("enables heuristic analysis only for the exact value true", () => {
@@ -109,8 +113,12 @@ describe("env accessor", () => {
   it("parses optional transfer prices without treating bad data as zero", () => {
     process.env.YTDLP_PROXY_PRICE_PER_GB_USD = "2.5";
     process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD = "0";
+    process.env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD = "0.09";
+    process.env.STORAGE_UPLOAD_PRICE_PER_GB_USD = "0";
     expect(env.YTDLP_PROXY_PRICE_PER_GB_USD).toBe(2.5);
     expect(env.RAILWAY_EGRESS_PRICE_PER_GB_USD).toBe(0);
+    expect(env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD).toBe(0.09);
+    expect(env.STORAGE_UPLOAD_PRICE_PER_GB_USD).toBe(0);
 
     process.env.YTDLP_PROXY_PRICE_PER_GB_USD = "garbage";
     process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD = "-1";

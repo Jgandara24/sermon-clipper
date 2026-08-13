@@ -1,5 +1,11 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseWhisperCppOutput } from "@/lib/transcription/whisper-cpp-provider";
+import {
+  parseWhisperCppOutput,
+  WhisperCppTranscriptionProvider,
+} from "@/lib/transcription/whisper-cpp-provider";
 
 // Trimmed down real output captured from `whisper-cli -ojf` against a TTS-generated fixture.
 const REAL_FIXTURE = JSON.stringify({
@@ -22,6 +28,29 @@ const REAL_FIXTURE = JSON.stringify({
       ],
     },
   ],
+});
+
+describe("WhisperCppTranscriptionProvider telemetry", () => {
+  it("measures successful local compute without a paid API price", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "whisper-telemetry-"));
+    const modelPath = path.join(dir, "model.bin");
+    await writeFile(modelPath, "model");
+    const fakeExec = async (_binary: string, args: string[]) => {
+      const outputBase = args[args.indexOf("-of") + 1];
+      await writeFile(`${outputBase}.json`, REAL_FIXTURE);
+      return { stdout: "", stderr: "" };
+    };
+
+    try {
+      const provider = new WhisperCppTranscriptionProvider("whisper-cli", modelPath, fakeExec);
+      await provider.transcribe({ audioPath: path.join(dir, "audio.wav"), language: "en" });
+      expect(provider.lastTelemetry).toMatchObject({ outcome: "succeeded" });
+      expect(provider.lastTelemetry?.wallTimeMs).toBeGreaterThanOrEqual(0);
+      expect(provider.lastTelemetry?.cpuTimeMs).toBeGreaterThanOrEqual(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("parseWhisperCppOutput", () => {

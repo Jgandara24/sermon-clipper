@@ -467,19 +467,23 @@ deployment.
 
 ## Provider Spend & COGS
 
-- Every Claude-scored ANALYZE job records its token usage and a list-price USD estimate in the
-  job's `analysis` success event metadata. `/app/settings/operations` shows the per-workspace
-  30-day rollup ("AI analysis spend"). The Anthropic invoice is the source of truth; the in-app
-  figure exists to make cost drift visible early.
+- Every Claude call records token usage and a list-price USD estimate as a
+  `processing_cost_fact`. `/app/settings/operations` shows the per-workspace 30-day rollup ("AI
+  analysis spend") and reads older success-event usage only when a job has no cost facts. The
+  Anthropic invoice is the source of truth; the in-app figure exists to make cost drift visible
+  early.
 - Deployment-wide (all workspaces) estimate, from psql:
 
   ```sql
-  SELECT count(*) AS jobs,
-         sum((metadata->'usage'->>'estimatedCostUsd')::numeric) AS est_usd,
-         sum((metadata->'usage'->>'totalInputTokens')::bigint) AS input_tokens
+  SELECT count(DISTINCT job_id) AS jobs,
+         sum((metadata->>'totalCostUsd')::numeric) AS est_usd,
+         sum((metadata->'details'->>'inputTokens')::bigint
+           + (metadata->'details'->>'cacheCreationInputTokens')::bigint
+           + (metadata->'details'->>'cacheReadInputTokens')::bigint) AS input_tokens
   FROM operational_events
-  WHERE category = 'analysis' AND event_type = 'processing_job_succeeded'
-    AND metadata->'usage' IS NOT NULL
+  WHERE category = 'cost' AND event_type = 'processing_cost_fact'
+    AND metadata->>'provider' = 'anthropic'
+    AND metadata->>'stage' IN ('analysis_classification', 'analysis_scoring')
     AND created_at > now() - interval '30 days';
   ```
 

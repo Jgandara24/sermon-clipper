@@ -100,6 +100,8 @@ const fieldSchemas = {
     .string()
     .optional()
     .transform((raw) => raw === "true"),
+  STORAGE_DOWNLOAD_PRICE_PER_GB_USD: optionalNonNegativeNumber,
+  STORAGE_UPLOAD_PRICE_PER_GB_USD: optionalNonNegativeNumber,
 
   // Email / notifications
   RESEND_API_KEY: optionalString,

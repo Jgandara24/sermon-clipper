@@ -3,9 +3,9 @@ import type { ProcessingCostFactInput, ProcessingCostStage } from "@/lib/cost/ty
 
 /**
  * Provider spend telemetry for AI analysis. Token usage is captured per model call in the
- * ClaudeAnalysisProvider, estimated in USD here, attached to ANALYZE job metadata, and rolled up
- * per workspace on /app/settings/operations. Estimates use list prices — the invoice from
- * Anthropic is the source of truth; this exists so cost drift is visible in-app, not exact.
+ * ClaudeAnalysisProvider and estimated in USD here. ANALYZE records each call through the shared
+ * processing-cost contract; /app/settings/operations rolls up those facts. Estimates use list
+ * prices — the invoice from Anthropic is the source of truth.
  */
 
 export type AnalysisModelCall = {
@@ -14,6 +14,8 @@ export type AnalysisModelCall = {
   outputTokens: number;
   cacheCreationInputTokens: number;
   cacheReadInputTokens: number;
+  wallTimeMs?: number;
+  outcome?: "succeeded" | "failed";
 };
 
 export type AnalysisUsage = {
@@ -69,6 +71,13 @@ export function analysisCallCostFact(
     model: call.model,
     providerProvenance,
     cacheState,
+    wallTimeMs: call.wallTimeMs ?? null,
+    details: {
+      inputTokens: call.inputTokens,
+      outputTokens: call.outputTokens,
+      cacheCreationInputTokens: call.cacheCreationInputTokens,
+      cacheReadInputTokens: call.cacheReadInputTokens,
+    },
   };
 }
 
@@ -107,14 +116,42 @@ export type AnalysisSpendSummary = {
 
 const SPEND_EVENT_SCAN_LIMIT = 1000;
 
-function readUsageFromMetadata(metadata: Prisma.JsonValue): AnalysisUsage | null {
+type AnalysisCostMetadata = {
+  provider: "anthropic";
+  stage: "analysis_classification" | "analysis_scoring";
+  totalCostUsd: number | null;
+  pricingStatus: "priced" | "zero_cost" | "unpriced";
+  details: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationInputTokens: number;
+    cacheReadInputTokens: number;
+  };
+};
+
+function readAnalysisCostFromMetadata(metadata: Prisma.JsonValue): AnalysisCostMetadata | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return null;
   }
-  const usage = (metadata as { usage?: unknown }).usage;
-  if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
+  const candidate = metadata as Partial<AnalysisCostMetadata>;
+  if (
+    candidate.provider !== "anthropic" ||
+    (candidate.stage !== "analysis_classification" && candidate.stage !== "analysis_scoring") ||
+    !candidate.details ||
+    typeof candidate.details.inputTokens !== "number" ||
+    typeof candidate.details.outputTokens !== "number" ||
+    typeof candidate.details.cacheCreationInputTokens !== "number" ||
+    typeof candidate.details.cacheReadInputTokens !== "number"
+  ) {
     return null;
   }
+  return candidate as AnalysisCostMetadata;
+}
+
+function readLegacyUsageFromMetadata(metadata: Prisma.JsonValue): AnalysisUsage | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const usage = (metadata as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return null;
   const candidate = usage as Partial<AnalysisUsage>;
   if (
     typeof candidate.totalInputTokens !== "number" ||
@@ -127,7 +164,7 @@ function readUsageFromMetadata(metadata: Prisma.JsonValue): AnalysisUsage | null
 }
 
 /**
- * Rolls up estimated Claude spend from analysis success events for one workspace. For a
+ * Rolls up estimated Claude spend from processing-cost facts for one workspace. For a
  * deployment-wide (all workspaces) figure, run the SQL documented in docs/DEPLOYMENT.md.
  */
 export async function summarizeAnalysisSpend(
@@ -142,11 +179,13 @@ export async function summarizeAnalysisSpend(
   const events = await client.operationalEvent.findMany({
     where: {
       workspaceId,
-      category: "analysis",
-      eventType: "processing_job_succeeded",
       createdAt: { gte: since },
+      OR: [
+        { category: "cost", eventType: "processing_cost_fact" },
+        { category: "analysis", eventType: "processing_job_succeeded" },
+      ],
     },
-    select: { metadata: true },
+    select: { metadata: true, jobId: true },
     orderBy: { createdAt: "desc" },
     take: SPEND_EVENT_SCAN_LIMIT,
   });
@@ -160,19 +199,40 @@ export async function summarizeAnalysisSpend(
     incomplete: events.length >= SPEND_EVENT_SCAN_LIMIT,
   };
 
+  const jobs = new Set<string>();
+  const jobsWithCostFacts = new Set<string>();
   for (const event of events) {
-    const usage = readUsageFromMetadata(event.metadata);
-    if (!usage) {
-      continue; // heuristic-provider jobs carry no usage — they cost nothing
+    const fact = readAnalysisCostFromMetadata(event.metadata);
+    if (!fact) continue;
+    if (event.jobId) {
+      jobs.add(event.jobId);
+      jobsWithCostFacts.add(event.jobId);
     }
-    summary.jobCount += 1;
+    summary.totalInputTokens +=
+      fact.details.inputTokens +
+      fact.details.cacheCreationInputTokens +
+      fact.details.cacheReadInputTokens;
+    summary.totalOutputTokens += fact.details.outputTokens;
+    if (fact.totalCostUsd === null || fact.pricingStatus === "unpriced") {
+      summary.incomplete = true;
+    } else {
+      summary.estimatedCostUsd += fact.totalCostUsd;
+    }
+  }
+
+  // P0.12 stops writing usage into success metadata. Keep a dual-read for older events, but skip
+  // any job that has shared cost facts so the same Claude calls are never counted twice.
+  for (const event of events) {
+    if (event.jobId && jobsWithCostFacts.has(event.jobId)) continue;
+    const usage = readLegacyUsageFromMetadata(event.metadata);
+    if (!usage) continue;
+    if (event.jobId) jobs.add(event.jobId);
     summary.totalInputTokens += usage.totalInputTokens;
     summary.totalOutputTokens += usage.totalOutputTokens;
     summary.estimatedCostUsd += usage.estimatedCostUsd;
-    if (usage.unpricedModels && usage.unpricedModels.length > 0) {
-      summary.incomplete = true;
-    }
+    if (usage.unpricedModels?.length > 0) summary.incomplete = true;
   }
+  summary.jobCount = jobs.size;
 
   return summary;
 }

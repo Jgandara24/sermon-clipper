@@ -1,13 +1,17 @@
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import { env } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import {
   TranscriptionProviderUnavailableError,
   type TranscriptionProvider,
   type TranscriptionResult,
+  type TranscriptionTelemetry,
 } from "./types";
+
+type ExecFile = typeof execFileWithTimeout;
 
 type WhisperCppToken = {
   text: string;
@@ -63,10 +67,13 @@ export class WhisperCppTranscriptionProvider implements TranscriptionProvider {
 
   private readonly binaryPath: string;
   private readonly modelPath: string | undefined;
+  private readonly execFile: ExecFile;
+  lastTelemetry: TranscriptionTelemetry | null = null;
 
-  constructor(binaryPath?: string, modelPath?: string) {
+  constructor(binaryPath?: string, modelPath?: string, execFile: ExecFile = execFileWithTimeout) {
     this.binaryPath = binaryPath ?? env.WHISPER_CPP_BINARY ?? "whisper-cli";
     this.modelPath = modelPath ?? env.WHISPER_MODEL_PATH;
+    this.execFile = execFile;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -94,9 +101,11 @@ export class WhisperCppTranscriptionProvider implements TranscriptionProvider {
 
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), "sermon-clipper-whisper-"));
     const outputBase = path.join(tmpDir, "output");
+    const runtime = startRuntimeMeasurement();
+    this.lastTelemetry = null;
 
     try {
-      await execFileWithTimeout(
+      await this.execFile(
         this.binaryPath,
         ["-m", this.modelPath as string, "-f", audioPath, "-l", language ?? "auto", "-ojf", "-of", outputBase, "-np"],
         // CPU ASR of a 3 h sermon can legitimately take over an hour on a small worker.
@@ -104,7 +113,12 @@ export class WhisperCppTranscriptionProvider implements TranscriptionProvider {
       );
 
       const raw = await readFile(`${outputBase}.json`, "utf-8");
-      return parseWhisperCppOutput(raw);
+      const result = parseWhisperCppOutput(raw);
+      this.lastTelemetry = { ...finishRuntimeMeasurement(runtime), outcome: "succeeded" };
+      return result;
+    } catch (error) {
+      this.lastTelemetry = { ...finishRuntimeMeasurement(runtime), outcome: "failed" };
+      throw error;
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }

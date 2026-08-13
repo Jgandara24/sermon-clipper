@@ -23,6 +23,7 @@ import { probeVideoFile } from "@/lib/media/probe";
 import { markExportJobSucceeded } from "@/lib/exports/queue";
 import { runExportJob } from "@/lib/exports/handler";
 import { runOnePendingJob } from "@/lib/jobs/runner";
+import { runProbeJob } from "@/lib/jobs/handlers/probe";
 import { createProjectFromUploadedSourceVideo } from "@/lib/project-service";
 import { getStorageProvider } from "@/lib/storage";
 
@@ -329,11 +330,49 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
     expect(probe.width).toBe(1080);
     expect(probe.height).toBe(1920);
     expect(probe.durationS).toBeGreaterThan(0);
+
+    const costEvents = await prisma.operationalEvent.findMany({
+      where: { exportJobId: job.id, eventType: "processing_cost_fact" },
+    });
+    expect(costEvents.map((event) => (event.metadata as { stage: string }).stage)).toEqual(
+      expect.arrayContaining(["download", "render", "upload"]),
+    );
+    expect(costEvents.every((event) => (event.metadata as { attempt: number }).attempt === 1)).toBe(
+      true,
+    );
   }, 120_000);
 
   it("invalidates approval after a subsequent editor save policy decision", () => {
     expect(approvalStateAfterEditorSave(ClipApprovalState.APPROVED)).toBe(ClipApprovalState.DRAFT);
   });
+
+  it("meters source download, local extraction, thumbnail render, and derived uploads", async () => {
+    const job = await prisma.processingJob.create({
+      data: {
+        projectId,
+        type: ProcessingJobType.PROBE,
+        state: ProcessingJobState.RUNNING,
+        idempotencyKey: uniqueKey("metered-probe"),
+        attempt: 2,
+      },
+    });
+
+    await runProbeJob({ job, prisma });
+    const costEvents = await prisma.operationalEvent.findMany({
+      where: { jobId: job.id, eventType: "processing_cost_fact" },
+    });
+    expect(costEvents.map((event) => (event.metadata as { stage: string }).stage)).toEqual(
+      expect.arrayContaining([
+        "download",
+        "render",
+        "local_audio_extraction",
+        "upload",
+      ]),
+    );
+    expect(costEvents.every((event) => (event.metadata as { retry: boolean }).retry)).toBe(true);
+
+    await prisma.processingJob.delete({ where: { idempotencyKey: `transcribe:${projectId}` } });
+  }, 60_000);
 
   it("records transcription provider metadata in operational events", async () => {
     const storage = getStorageProvider();
@@ -387,6 +426,12 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
       segmentCount: 1,
       wordCount: 7,
     });
+    const costEvents = await prisma.operationalEvent.findMany({
+      where: { jobId: job.id, eventType: "processing_cost_fact" },
+    });
+    expect(costEvents.map((costEvent) => (costEvent.metadata as { stage: string }).stage)).toEqual(
+      expect.arrayContaining(["download", "transcription"]),
+    );
   });
 
   it.skipIf(!existsSync(LOCAL_TINY_WHISPER_MODEL))(

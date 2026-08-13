@@ -4,7 +4,7 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-08-12, after P0.11.
+**Last updated:** 2026-08-12, after P0.12.
 
 ---
 
@@ -23,16 +23,17 @@ say. `DECISIONS.md` remains the authoritative record of decisions; this is a wor
 | P0.8 dynamic ANALYZE candidate limit | `0df9c3a` | done | Honors the frozen ceiling; 2 integration tests |
 | P0.9 production analysis fail-closed policy | `6715321` | done | Explicit provenance, emergency override, and job-time events |
 | P0.10 typed COGS event contract | `e145719` | done | Versioned paid/local cost facts, separate from entitlements |
-| P0.11 source acquisition metering | _(backfilled below)_ | done | Direct/proxy bytes, partial failures, retries, and Railway egress |
-| P0.12 all-stage processing metering | — | **next** | Extends the cost contract across the remaining stages |
+| P0.11 source acquisition metering | `fd613d1` | done | Direct/proxy bytes, partial failures, retries, and Railway egress |
+| P0.12 all-stage processing metering | _(backfilled below)_ | done | Claude, Whisper, FFmpeg, and storage facts with legacy rollup support |
+| P0.13 preserve spoken words | — | **next** | Stops automatic filler and low-confidence deletion |
 
 A commit cannot contain its own hash, so the newest row's SHA is backfilled by the following
-commit. P0.11 is the most recent; `git log --oneline` is authoritative.
+commit. P0.12 is the most recent; `git log --oneline` is authoritative.
 
-Branch: `feat/reel-builder-trim`, thirteen commits ahead of `origin/main`. **Nothing pushed yet.**
+Branch: `feat/reel-builder-trim`, fourteen commits ahead of `origin/main`. **Nothing pushed yet.**
 The P0 pull request must include `4d51e5d` (drag-to-trim), which predates the program.
 
-Suite as of P0.11: **61 unit test files, 463 tests**; **18 integration test files, 173 tests**.
+Suite as of P0.12: **61 unit test files, 467 tests**; **18 integration test files, 174 tests**.
 `npm run verify` and `npm run test:integration` green.
 
 ---

@@ -3,7 +3,11 @@ import { getAnalysisProvider, type AnalysisProviderSelection } from "@/lib/analy
 import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidate-limit";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
+import { analysisCallCostFact } from "@/lib/analysis/usage";
 import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
+import { recordProcessingCostFact } from "@/lib/cost/record";
+import { finishRuntimeMeasurement, startRuntimeMeasurement, type RuntimeMeasurement } from "@/lib/cost/runtime";
+import type { ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
@@ -27,6 +31,55 @@ function readGenre(processingConfig: unknown): string {
 type AnalyzeJobDependencies = {
   selectProvider?: () => Promise<AnalysisProviderSelection>;
 };
+
+async function recordAnalysisCostFacts(params: {
+  prisma: Parameters<JobHandler>[0]["prisma"];
+  workspaceId: string;
+  projectId: string;
+  jobId: string;
+  attempt: number;
+  selection: AnalysisProviderSelection;
+  runtime: RuntimeMeasurement;
+  outcome: ProcessingCostOutcome;
+}) {
+  const { selection } = params;
+  const calls = selection.provider.lastUsage?.calls ?? [];
+  if (calls.length > 0) {
+    for (const [index, call] of calls.entries()) {
+      await recordProcessingCostFact(params.prisma, {
+        ...analysisCallCostFact(
+          call,
+          index === 0 ? "analysis_classification" : "analysis_scoring",
+          selection.selectionReason,
+        ),
+        attempt: Math.max(1, params.attempt),
+        outcome: call.outcome ?? params.outcome,
+        workspaceId: params.workspaceId,
+        projectId: params.projectId,
+        jobId: params.jobId,
+      });
+    }
+    return;
+  }
+
+  await recordProcessingCostFact(params.prisma, {
+    stage: selection.providerKind === "claude" ? "analysis_classification" : "analysis_scoring",
+    quantity: 1,
+    unit: selection.providerKind === "claude" ? "call" : "operation",
+    unitCostUsd: selection.providerKind === "claude" ? null : 0,
+    provider: selection.providerKind === "claude" ? "anthropic" : "heuristic",
+    model: selection.providerKind === "claude" ? null : selection.provider.name,
+    providerProvenance: selection.selectionReason,
+    cpuTimeMs: selection.providerKind === "claude" ? null : params.runtime.cpuTimeMs,
+    wallTimeMs: params.runtime.wallTimeMs,
+    cacheState: "not_applicable",
+    attempt: Math.max(1, params.attempt),
+    outcome: params.outcome,
+    workspaceId: params.workspaceId,
+    projectId: params.projectId,
+    jobId: params.jobId,
+  });
+}
 
 /** Builds the ANALYZE handler with an injectable provider boundary for policy tests. */
 export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {}): JobHandler {
@@ -116,18 +169,38 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     });
   }
 
+  const scoreableCandidates =
+    genre.toLowerCase() === "sermon"
+      ? filterSermonCandidates(candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text })))
+      : candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text }));
+  const analysisRuntime = startRuntimeMeasurement();
   let scored;
   try {
-    const scoreableCandidates =
-      genre.toLowerCase() === "sermon"
-        ? filterSermonCandidates(candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text })))
-        : candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text }));
-
     scored = await provider.scoreCandidates(
       scoreableCandidates,
       { fullText: transcript.fullText, genre },
     );
+    await recordAnalysisCostFacts({
+      prisma,
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      jobId: job.id,
+      attempt: job.attempt,
+      selection,
+      runtime: finishRuntimeMeasurement(analysisRuntime),
+      outcome: "succeeded",
+    });
   } catch (error) {
+    await recordAnalysisCostFacts({
+      prisma,
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      jobId: job.id,
+      attempt: job.attempt,
+      selection,
+      runtime: finishRuntimeMeasurement(analysisRuntime),
+      outcome: "failed",
+    });
     if (error instanceof AnalysisProviderUnavailableError) {
       await recordOperationalEventSafely(prisma, {
         workspaceId: project.workspaceId,
@@ -265,10 +338,6 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     await tx.project.update({ where: { id: project.id }, data: { status: ProjectStatus.READY } });
   });
 
-  // Provider token usage (Claude only; heuristic spends nothing) flows into the analysis
-  // success event's metadata, where /app/settings/operations rolls it up as estimated spend.
-  const usage = provider.lastUsage ?? null;
-
   return {
     metadata: {
       provider: provider.name,
@@ -282,7 +351,6 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       candidateLimit,
       targetClipCount,
       genre,
-      ...(usage ? { usage } : {}),
     },
   };
   };
