@@ -1348,3 +1348,21 @@ Tradeoff: This P0.6 control changes the live workspace setting. P0.7 snapshots t
 when a project is created, so later master or workspace changes affect only new projects.
 
 Status: Active.
+
+## 2026-08-12 - Project Candidate and Schedule Settings Freeze at Creation
+
+Decision: Each project copies its effective candidate limit, scheduled count, timezone, configured
+service weekdays, service frequency, service occurrence, and configuration version into
+`Project.processingConfig` when the project is created. Upload, pasted-URL, and automatic channel
+imports all use the same snapshot builder. Later master-control or workspace-setting changes affect
+only new projects.
+
+Why: Analysis, scheduling, review, and audit code must operate against the configuration that
+created a project. Reading live workspace settings would change old project behavior without a
+project edit and would make an analysis run impossible to reproduce.
+
+Tradeoff: Existing projects have incomplete snapshots. Defensive readers supply current defaults
+for missing fields. Until P1.8, an unmatched service date is still snapshotted as `PRIMARY` by the
+existing occurrence derivation.
+
+Status: Active.
