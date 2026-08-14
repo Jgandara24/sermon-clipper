@@ -142,8 +142,6 @@ produced 2 clips, both announcements, both at minute 0.
 
 ## Open items not owned by any commit yet
 
-- **Finish and publish the pre-P1 branch.** Run one paid Gemini shadow evaluation before a draft
-  routing policy can be promoted.
 - **OpenAI adapter.** The policy schema reserves `openai`, but the activation command refuses it
   until an adapter and benchmark exist.
 - **Stage A recall** is now the known product bottleneck. It is P5's target, not a P0 fix.
