@@ -233,7 +233,7 @@ npm run set:analysis-routing -- \
   --create-draft \
   --name "Gemini A and Claude B" \
   --stage-a-provider google \
-  --stage-a-model gemini-2.5-flash-lite \
+  --stage-a-model gemini-3.1-flash-lite \
   --stage-b-provider anthropic \
   --stage-b-model claude-sonnet-5
 ```

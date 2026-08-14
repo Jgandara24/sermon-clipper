@@ -4,7 +4,7 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-08-13, after the pre-P1 product decisions.
+**Last updated:** 2026-08-14, after the first paid model-routing shadow test.
 
 ---
 
@@ -42,6 +42,15 @@ The pre-P1 change adds versioned per-stage analysis routing, an effective-dated 
 catalog, a Google Gemini adapter, a no-mutation shadow evaluation command, and Trial/Paid access.
 The old minute balance remains as history. It is not an access gate. The P0.19 Gate A report was
 corrected to use the Sonnet 5 price that was active on the run date.
+
+Commit `7b9fdf4` is deployed to the production web and worker services. The routing and Trial/Paid
+migrations are applied. Claude policy version 1 remains active. Google policy version 2 failed its
+shadow test because Google no longer offers `gemini-2.5-flash-lite` to new users. Draft version 3
+uses the current stable `gemini-3.1-flash-lite` model and completed one paid, no-mutation shadow run
+against the existing 47-minute Gate A service. It sent 25 of 491 candidates to Stage B and reduced
+estimated analysis cost by 30.6 percent, but all candidate starts remained inside the first quarter
+of the service. Do not activate version 3 without the required human review. The public-safe facts
+are in `evaluation/routing-shadow-2026-08-14.json`.
 
 ---
 
