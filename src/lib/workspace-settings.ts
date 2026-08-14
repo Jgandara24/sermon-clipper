@@ -1,6 +1,11 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 const MAX_ATTEMPTS = 3;
+export const PROTECTED_WORKSPACE_SETTINGS_KEY = "internalOperations";
+
+type WorkspaceSettingsUpdateOptions = {
+  allowProtectedSettingsWrite?: boolean;
+};
 
 export class WorkspaceSettingsConflictError extends Error {
   constructor(workspaceId: string) {
@@ -18,6 +23,7 @@ export async function updateWorkspaceSettings(
   client: PrismaClient,
   workspaceId: string,
   mutate: (current: Record<string, unknown>) => Record<string, unknown>,
+  options: WorkspaceSettingsUpdateOptions = {},
 ): Promise<Record<string, unknown>> {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const workspace = await client.workspace.findUniqueOrThrow({
@@ -29,7 +35,15 @@ export async function updateWorkspaceSettings(
         ? (workspace.settings as Record<string, unknown>)
         : {};
 
-    const next = mutate({ ...current });
+    let next = mutate({ ...current });
+    if (!options.allowProtectedSettingsWrite) {
+      next = { ...next };
+      if (PROTECTED_WORKSPACE_SETTINGS_KEY in current) {
+        next[PROTECTED_WORKSPACE_SETTINGS_KEY] = current[PROTECTED_WORKSPACE_SETTINGS_KEY];
+      } else {
+        delete next[PROTECTED_WORKSPACE_SETTINGS_KEY];
+      }
+    }
 
     const result = await client.workspace.updateMany({
       where: { id: workspaceId, updatedAt: workspace.updatedAt },

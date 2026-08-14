@@ -19,8 +19,15 @@ export type TranscriptionResult = {
   segments: TranscriptSegmentResult[];
 };
 
+export type TranscriptionTelemetry = {
+  wallTimeMs: number;
+  cpuTimeMs: number;
+  outcome: "succeeded" | "failed";
+};
+
 export interface TranscriptionProvider {
   readonly name: string;
+  readonly lastTelemetry?: TranscriptionTelemetry | null;
   isAvailable(): Promise<boolean>;
   transcribe(params: { audioPath: string; language?: string }): Promise<TranscriptionResult>;
 }

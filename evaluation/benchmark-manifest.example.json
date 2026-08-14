@@ -1,0 +1,62 @@
+{
+  "manifestVersion": "1.0",
+  "labeledOn": "2026-08-11",
+  "labeler": "operator-1",
+  "source": {
+    "artifactId": "example-wednesday-service-001",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "durationMs": 2981760,
+    "width": 1280,
+    "height": 720,
+    "serviceOccurrence": "SECONDARY"
+  },
+  "regions": [
+    { "kind": "WORSHIP", "startMs": 0, "endMs": 60000, "note": "opening song" },
+    { "kind": "ANNOUNCEMENT", "startMs": 60000, "endMs": 110000, "note": "series announcement and upcoming events" },
+    { "kind": "SERMON", "startMs": 110000, "endMs": 2820000 },
+    { "kind": "PASTOR_VISIBLE", "startMs": 110000, "endMs": 2820000 },
+    { "kind": "FULLSCREEN_SLIDE", "startMs": 300000, "endMs": 312000, "note": "scripture slide, speaker off camera" },
+    { "kind": "PRAYER", "startMs": 2820000, "endMs": 2981760, "note": "closing prayer" }
+  ],
+  "candidates": [
+    {
+      "id": "cand-001",
+      "range": { "startMs": 175000, "endMs": 232000 },
+      "decision": "ACCEPT",
+      "feedback": []
+    },
+    {
+      "id": "cand-002",
+      "range": { "startMs": 288000, "endMs": 345000 },
+      "decision": "REPLACE",
+      "feedback": [
+        {
+          "category": "FORBIDDEN_CONTENT",
+          "severity": "CRITICAL",
+          "note": "scripture slide covers the speaker mid-clip; cannot be trimmed away without an internal cut"
+        }
+      ]
+    },
+    {
+      "id": "cand-003",
+      "range": { "startMs": 640000, "endMs": 700000 },
+      "decision": "REVISE",
+      "feedback": [
+        { "category": "BOUNDARY", "severity": "MINOR", "note": "starts mid-sentence; move start back about 2s" },
+        { "category": "CAPTION", "severity": "MINOR", "note": "last caption line runs into the safe area" }
+      ]
+    },
+    {
+      "id": "cand-004",
+      "range": { "startMs": 70000, "endMs": 105000 },
+      "decision": "REPLACE",
+      "feedback": [
+        {
+          "category": "CONTENT",
+          "severity": "MAJOR",
+          "note": "this is the announcement block, not sermon content"
+        }
+      ]
+    }
+  ]
+}

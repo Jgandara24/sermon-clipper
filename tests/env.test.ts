@@ -14,10 +14,18 @@ const originalEnv = { ...process.env };
 beforeEach(() => {
   process.env = { ...originalEnv };
   delete process.env.STORAGE_PROVIDER;
+  delete process.env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD;
+  delete process.env.STORAGE_UPLOAD_PRICE_PER_GB_USD;
   delete process.env.STORAGE_S3_REGION;
   delete process.env.EXPORT_MAX_CONCURRENT_JOBS;
+  delete process.env.CANDIDATE_LIMIT_DEFAULT;
+  delete process.env.CANDIDATE_LIMIT_MAXIMUM;
+  delete process.env.ANALYSIS_ALLOW_HEURISTIC;
+  delete process.env.AUTOMATIC_PUBLISHING_ENABLED;
   delete process.env.EXPORT_FILE_RETENTION_GRACE_MS;
   delete process.env.WORKER_POLL_INTERVAL_MS;
+  delete process.env.COST_ROLLUP_INTERVAL_MS;
+  delete process.env.COST_ROLLUP_LOOKBACK_DAYS;
   delete process.env.ALERTS_THROTTLE_MS;
   delete process.env.RESEND_API_KEY;
   delete process.env.NOTIFICATIONS_FROM_EMAIL;
@@ -25,6 +33,8 @@ beforeEach(() => {
   delete process.env.AUTH_EMAIL_FROM;
   delete process.env.AUTH_EMAIL_FROM_NAME;
   delete process.env.FFMPEG_PATH;
+  delete process.env.YTDLP_PROXY_PRICE_PER_GB_USD;
+  delete process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD;
   delete process.env.ENV_TEST_TIMEOUT_MS;
 });
 
@@ -37,7 +47,13 @@ describe("env accessor", () => {
     expect(env.STORAGE_PROVIDER).toBe("local");
     expect(env.STORAGE_S3_REGION).toBe("auto");
     expect(env.EXPORT_MAX_CONCURRENT_JOBS).toBe(4);
+    expect(env.CANDIDATE_LIMIT_DEFAULT).toBe(18);
+    expect(env.CANDIDATE_LIMIT_MAXIMUM).toBe(18);
+    expect(env.ANALYSIS_ALLOW_HEURISTIC).toBe(false);
+    expect(env.AUTOMATIC_PUBLISHING_ENABLED).toBe(false);
     expect(env.WORKER_POLL_INTERVAL_MS).toBe(2000);
+    expect(env.COST_ROLLUP_INTERVAL_MS).toBe(60 * 60_000);
+    expect(env.COST_ROLLUP_LOOKBACK_DAYS).toBe(7);
     expect(env.ALERTS_THROTTLE_MS).toBe(30 * 60 * 1000);
   });
 
@@ -45,6 +61,28 @@ describe("env accessor", () => {
     expect(env.RESEND_API_KEY).toBeUndefined();
     expect(env.NOTIFICATIONS_FROM_EMAIL).toBeUndefined();
     expect(env.WHISPER_MODEL_PATH).toBeUndefined();
+    expect(env.YTDLP_PROXY_PRICE_PER_GB_USD).toBeUndefined();
+    expect(env.RAILWAY_EGRESS_PRICE_PER_GB_USD).toBeUndefined();
+    expect(env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD).toBeUndefined();
+    expect(env.STORAGE_UPLOAD_PRICE_PER_GB_USD).toBeUndefined();
+  });
+
+  it("enables heuristic analysis only for the exact value true", () => {
+    process.env.ANALYSIS_ALLOW_HEURISTIC = "true";
+    expect(env.ANALYSIS_ALLOW_HEURISTIC).toBe(true);
+
+    process.env.ANALYSIS_ALLOW_HEURISTIC = "TRUE";
+    expect(env.ANALYSIS_ALLOW_HEURISTIC).toBe(false);
+  });
+
+  it("enables automatic publishing only for the exact value true", () => {
+    for (const value of ["false", "TRUE", "1", " true ", "malformed"]) {
+      process.env.AUTOMATIC_PUBLISHING_ENABLED = value;
+      expect(env.AUTOMATIC_PUBLISHING_ENABLED).toBe(false);
+    }
+
+    process.env.AUTOMATIC_PUBLISHING_ENABLED = "true";
+    expect(env.AUTOMATIC_PUBLISHING_ENABLED).toBe(true);
   });
 
   it("re-reads process.env on every access (no memoization)", () => {
@@ -56,13 +94,22 @@ describe("env accessor", () => {
   });
 
   it("parses valid numeric overrides", () => {
+    process.env.CANDIDATE_LIMIT_DEFAULT = "14";
+    process.env.CANDIDATE_LIMIT_MAXIMUM = "16";
     process.env.EXPORT_MAX_CONCURRENT_JOBS = "2.9";
     process.env.WORKER_POLL_INTERVAL_MS = "500";
+    expect(env.CANDIDATE_LIMIT_DEFAULT).toBe(14);
+    expect(env.CANDIDATE_LIMIT_MAXIMUM).toBe(16);
     expect(env.EXPORT_MAX_CONCURRENT_JOBS).toBe(2); // floored positive int
     expect(env.WORKER_POLL_INTERVAL_MS).toBe(500);
   });
 
   it("falls back to the default on garbage or out-of-range numeric input", () => {
+    process.env.CANDIDATE_LIMIT_DEFAULT = "not-a-number";
+    process.env.CANDIDATE_LIMIT_MAXIMUM = "0";
+    expect(env.CANDIDATE_LIMIT_DEFAULT).toBe(18);
+    expect(env.CANDIDATE_LIMIT_MAXIMUM).toBe(18);
+
     process.env.EXPORT_MAX_CONCURRENT_JOBS = "not-a-number";
     expect(env.EXPORT_MAX_CONCURRENT_JOBS).toBe(4);
 
@@ -77,6 +124,22 @@ describe("env accessor", () => {
 
     process.env.ALERTS_THROTTLE_MS = "garbage";
     expect(env.ALERTS_THROTTLE_MS).toBe(30 * 60 * 1000);
+  });
+
+  it("parses optional transfer prices without treating bad data as zero", () => {
+    process.env.YTDLP_PROXY_PRICE_PER_GB_USD = "2.5";
+    process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD = "0";
+    process.env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD = "0.09";
+    process.env.STORAGE_UPLOAD_PRICE_PER_GB_USD = "0";
+    expect(env.YTDLP_PROXY_PRICE_PER_GB_USD).toBe(2.5);
+    expect(env.RAILWAY_EGRESS_PRICE_PER_GB_USD).toBe(0);
+    expect(env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD).toBe(0.09);
+    expect(env.STORAGE_UPLOAD_PRICE_PER_GB_USD).toBe(0);
+
+    process.env.YTDLP_PROXY_PRICE_PER_GB_USD = "garbage";
+    process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD = "-1";
+    expect(env.YTDLP_PROXY_PRICE_PER_GB_USD).toBeUndefined();
+    expect(env.RAILWAY_EGRESS_PRICE_PER_GB_USD).toBeUndefined();
   });
 });
 

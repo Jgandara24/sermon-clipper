@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-type OperationalEventClient = PrismaClient | Prisma.TransactionClient;
+export type OperationalEventClient = PrismaClient | Prisma.TransactionClient;
 
 export type OperationalEventSeverity = "info" | "warning" | "error";
 export type OperationalEventCategory =
@@ -9,12 +9,14 @@ export type OperationalEventCategory =
   | "processing"
   | "transcription"
   | "analysis"
+  | "scheduling"
   | "export"
   | "approval"
   | "billing"
   | "worker"
   | "channel_import"
-  | "facebook_publish";
+  | "facebook_publish"
+  | "cost";
 
 export type OperationalEventInput = {
   workspaceId?: string | null;
@@ -25,6 +27,7 @@ export type OperationalEventInput = {
   projectId?: string | null;
   jobId?: string | null;
   exportJobId?: string | null;
+  clipId?: string | null;
   metadata?: Prisma.InputJsonValue;
 };
 
@@ -42,6 +45,7 @@ export async function recordOperationalEvent(
       projectId: input.projectId ?? undefined,
       jobId: input.jobId ?? undefined,
       exportJobId: input.exportJobId ?? undefined,
+      clipId: input.clipId ?? undefined,
       metadata: input.metadata ?? {},
     },
   });

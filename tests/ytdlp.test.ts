@@ -138,7 +138,7 @@ describe("YTDLP_PROXY_URL", () => {
             return { stdout: "", stderr: "" };
           },
         };
-        await downloadYtDlpVideo(
+        const telemetry = await downloadYtDlpVideo(
           "https://youtube.com/watch?v=dQw4w9WgXcQ",
           path.join(dir, "video"),
           { maxBytes: 1024 },
@@ -147,6 +147,8 @@ describe("YTDLP_PROXY_URL", () => {
         expect(download.calls[0]).toEqual(
           expect.arrayContaining(["--proxy", "http://user:pass@proxy.example:8080"]),
         );
+        expect(telemetry.proxyHost).toBe("proxy.example");
+        expect(JSON.stringify(telemetry)).not.toContain("user:pass");
       } finally {
         await rm(dir, { recursive: true, force: true });
       }
@@ -176,10 +178,10 @@ describe("downloadYtDlpVideo", () => {
       return { stdout: "", stderr: "" };
     };
 
-    await downloadYtDlpVideo(
+    const telemetry = await downloadYtDlpVideo(
       "https://youtube.com/watch?v=dQw4w9WgXcQ",
       destPath,
-      { maxBytes: 5 * 1024 * 1024 * 1024 },
+      { maxBytes: 5 * 1024 * 1024 * 1024, durationS: 2 },
       fakeExec,
     );
 
@@ -197,6 +199,13 @@ describe("downloadYtDlpVideo", () => {
         "https://youtube.com/watch?v=dQw4w9WgXcQ",
       ]),
     );
+    expect(telemetry).toMatchObject({
+      bytes: 11,
+      sourceDurationS: 2,
+      bitrateBitsPerSecond: 44,
+      proxyUsed: false,
+      proxyHost: null,
+    });
     await expect(stat(destPath)).resolves.toBeTruthy();
   });
 
@@ -254,8 +263,20 @@ describe("downloadYtDlpVideo", () => {
       return { stdout: "", stderr: "" };
     };
 
-    await expect(
-      downloadYtDlpVideo("https://youtube.com/watch?v=abc", destPath, { maxBytes: 1024 }, fakeExec),
-    ).rejects.toThrow(YtDlpDownloadError);
+    const error = await downloadYtDlpVideo(
+      "https://youtube.com/watch?v=abc",
+      destPath,
+      { maxBytes: 1024, durationS: 4 },
+      fakeExec,
+    ).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(YtDlpDownloadError);
+    expect((error as YtDlpDownloadError).telemetry).toMatchObject({
+      bytes: 10,
+      sourceDurationS: 4,
+      bitrateBitsPerSecond: 20,
+    });
   });
 });

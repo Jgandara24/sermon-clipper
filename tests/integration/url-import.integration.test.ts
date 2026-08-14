@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import {
   AuthProvider,
+  ChannelImportPlatform,
   Prisma,
   PrismaClient,
   ProcessingJobState,
@@ -17,7 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createFinalizeJobHandler } from "@/lib/jobs/handlers/finalize";
 import { JobFailureError } from "@/lib/jobs/types";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
-import type { YtDlpMetadata } from "@/lib/media/ytdlp";
+import { YtDlpDownloadError, type YtDlpMetadata } from "@/lib/media/ytdlp";
 import { createDraftProjectForWorkspace } from "@/lib/project-service";
 import { getStorageProvider } from "@/lib/storage";
 
@@ -137,6 +138,24 @@ describe("URL import pipeline", () => {
     const job = await prisma.processingJob.findUniqueOrThrow({
       where: { idempotencyKey: `finalize:${project.id}` },
     });
+    const channelSource = await prisma.channelImportSource.create({
+      data: {
+        workspaceId,
+        platform: ChannelImportPlatform.YOUTUBE,
+        channelId: uniqueKey("UCchannel"),
+        channelTitle: "Cost Attribution Channel",
+        uploadsPlaylistId: uniqueKey("UUplaylist"),
+      },
+    });
+    await prisma.channelImportedVideo.create({
+      data: {
+        channelImportSourceId: channelSource.id,
+        platformVideoId: "dQw4w9WgXcQ",
+        projectId: project.id,
+        publishedAt: new Date(),
+        status: "imported",
+      },
+    });
 
     const downloadCalls: Array<{ url: string; maxBytes: number }> = [];
     const handler = createFinalizeJobHandler({
@@ -144,6 +163,14 @@ describe("URL import pipeline", () => {
       downloadVideo: async (url, destPath, opts) => {
         downloadCalls.push({ url, maxBytes: opts.maxBytes });
         await copyFile(tinyVideoPath, destPath);
+        return {
+          bytes: 74_000,
+          sourceDurationS: 5,
+          bitrateBitsPerSecond: 118_400,
+          proxyUsed: false,
+          proxyHost: null,
+          wallTimeMs: 50,
+        };
       },
     });
 
@@ -175,6 +202,26 @@ describe("URL import pipeline", () => {
 
     const finalizeJob = await prisma.processingJob.findUniqueOrThrow({ where: { id: job.id } });
     expect(Number(finalizeJob.minutesReserved)).toBeGreaterThan(0);
+
+    const costEvents = await prisma.operationalEvent.findMany({
+      where: { jobId: job.id, eventType: "processing_cost_fact" },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(costEvents).toHaveLength(2);
+    expect(costEvents.map((event) => event.category)).toEqual(["cost", "cost"]);
+    expect(costEvents.map((event) => (event.metadata as { provider: string }).provider)).toEqual(
+      expect.arrayContaining(["yt_dlp_direct", "railway_egress"]),
+    );
+    for (const event of costEvents) {
+      expect(event.metadata).toMatchObject({
+        details: {
+          channelImportSourceId: channelSource.id,
+          platformVideoId: "dQw4w9WgXcQ",
+          channelTitle: "Cost Attribution Channel",
+        },
+      });
+    }
+    expect(JSON.stringify(costEvents)).not.toContain("YTDLP_PROXY_URL");
   });
 
   it("fails VIDEO_TOO_LONG from pre-download metadata without ever downloading", async () => {
@@ -193,6 +240,7 @@ describe("URL import pipeline", () => {
       fetchMetadata: async () => metadataFixture({ durationS: 4 * 60 * 60 }),
       downloadVideo: async () => {
         downloadCalled = true;
+        throw new Error("download must not run");
       },
     });
 
@@ -239,5 +287,51 @@ describe("URL import pipeline", () => {
 
     expect(failure).toBeInstanceOf(JobFailureError);
     expect((failure as JobFailureError).code).toBe("URL_IMPORT_FAILED");
+  });
+
+  it("records known failed-transfer bytes and retry attribution", async () => {
+    const project = await createDraftProjectForWorkspace(
+      prisma,
+      workspaceId,
+      { name: "URL Import Failed Transfer", sourceUrl: "https://youtube.com/watch?v=partial" },
+      userId,
+    );
+    const queuedJob = await prisma.processingJob.findUniqueOrThrow({
+      where: { idempotencyKey: `finalize:${project.id}` },
+    });
+    const job = await prisma.processingJob.update({
+      where: { id: queuedJob.id },
+      data: { attempt: 2 },
+    });
+    const telemetry = {
+      bytes: 12_345,
+      sourceDurationS: 5,
+      bitrateBitsPerSecond: 19_752,
+      proxyUsed: true,
+      proxyHost: "proxy.example",
+      wallTimeMs: 500,
+    };
+    const handler = createFinalizeJobHandler({
+      fetchMetadata: async () => metadataFixture(),
+      downloadVideo: async () => {
+        throw new YtDlpDownloadError("partial transfer", { telemetry });
+      },
+    });
+
+    await expect(handler({ job, prisma })).rejects.toMatchObject({ code: "URL_IMPORT_FAILED" });
+    const costEvents = await prisma.operationalEvent.findMany({
+      where: { jobId: job.id, eventType: "processing_cost_fact" },
+    });
+    expect(costEvents).toHaveLength(2);
+    for (const event of costEvents) {
+      expect(event.metadata).toMatchObject({
+        bytes: 12_345,
+        attempt: 2,
+        retry: true,
+        outcome: "failed",
+        details: { proxyUsed: true, proxyHost: "proxy.example" },
+      });
+      expect(JSON.stringify(event.metadata)).not.toContain("user:pass");
+    }
   });
 });

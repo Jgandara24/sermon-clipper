@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ExportJob, PrismaClient } from "@prisma/client";
+import { recordProcessingCostFact } from "@/lib/cost/record";
+import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
+import type { ProcessingCostOutcome } from "@/lib/cost/types";
+import { env } from "@/lib/env";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
@@ -14,7 +18,11 @@ import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
 import { computeKeptRanges, mapToKeptTimeline } from "@/lib/export/kept-ranges";
 import { renderClipExport } from "@/lib/export/render";
 import { probeVideoFile } from "@/lib/media/probe";
-import { getStorageProvider } from "@/lib/storage";
+import {
+  getStorageProvider,
+  storageProviderKind,
+  storageTransferCostFact,
+} from "@/lib/storage";
 
 export class ExportFailureError extends Error {
   code: string;
@@ -33,6 +41,65 @@ export class ExportFailureError extends Error {
 const OUTPUT_WIDTH = 1080;
 const OUTPUT_HEIGHT = 1920;
 const DOWNLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function recordExportStorageFact(params: {
+  prisma: PrismaClient;
+  job: ExportJob;
+  projectId: string;
+  direction: "download" | "upload";
+  bytes: number;
+  wallTimeMs: number;
+  outcome: ProcessingCostOutcome;
+}) {
+  const price =
+    params.direction === "download"
+      ? env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD
+      : env.STORAGE_UPLOAD_PRICE_PER_GB_USD;
+  await recordProcessingCostFact(params.prisma, {
+    ...storageTransferCostFact({
+      direction: params.direction,
+      bytes: params.bytes,
+      provider: storageProviderKind(),
+      configuredPricePerGbUsd: price ?? null,
+      wallTimeMs: params.wallTimeMs,
+      attempt: Math.max(1, params.job.attempt),
+      outcome: params.outcome,
+    }),
+    workspaceId: params.job.workspaceId,
+    projectId: params.projectId,
+    clipId: params.job.clipId,
+    exportJobId: params.job.id,
+  });
+}
+
+async function recordRenderFact(params: {
+  prisma: PrismaClient;
+  job: ExportJob;
+  projectId: string;
+  durationS: number;
+  cpuTimeMs: number;
+  wallTimeMs: number;
+  outcome: ProcessingCostOutcome;
+}) {
+  await recordProcessingCostFact(params.prisma, {
+    stage: "render",
+    quantity: params.durationS,
+    unit: "second",
+    unitCostUsd: 0,
+    provider: "ffmpeg",
+    model: null,
+    providerProvenance: "local_worker_runtime",
+    cpuTimeMs: params.cpuTimeMs,
+    wallTimeMs: params.wallTimeMs,
+    cacheState: "miss",
+    attempt: Math.max(1, params.job.attempt),
+    outcome: params.outcome,
+    workspaceId: params.job.workspaceId,
+    projectId: params.projectId,
+    clipId: params.job.clipId,
+    exportJobId: params.job.id,
+  });
+}
 
 function hashFile(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -154,19 +221,95 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   let probeResult: Awaited<ReturnType<typeof probeVideoFile>> | null;
   let bytes: number;
   let checksum: string;
+  let sourceBytes = Number(sourceVideo.sizeBytes ?? BigInt(0));
+  const outputDurationS = keptRanges.reduce(
+    (total, range) => total + (range.endMs - range.startMs) / 1_000,
+    0,
+  );
 
   try {
-    await storage.downloadToFile(sourceVideo.storageKey, sourceFilePath);
-    await renderClipExport({
-      sourceFilePath,
-      keptRanges,
-      cropPixels,
-      assFileContent: assContent,
-      outputPath,
-      outputWidth: OUTPUT_WIDTH,
-      outputHeight: OUTPUT_HEIGHT,
+    const downloadStartedAt = Date.now();
+    try {
+      await storage.downloadToFile(sourceVideo.storageKey, sourceFilePath);
+      if (sourceBytes === 0) sourceBytes = (await stat(sourceFilePath)).size;
+    } catch (error) {
+      await recordExportStorageFact({
+        prisma,
+        job,
+        projectId: clip.projectId,
+        direction: "download",
+        bytes: sourceBytes,
+        wallTimeMs: Date.now() - downloadStartedAt,
+        outcome: "failed",
+      });
+      throw error;
+    }
+    await recordExportStorageFact({
+      prisma,
+      job,
+      projectId: clip.projectId,
+      direction: "download",
+      bytes: sourceBytes,
+      wallTimeMs: Date.now() - downloadStartedAt,
+      outcome: "succeeded",
     });
-    await storage.uploadFile(exportsKey, outputPath, "video/mp4");
+
+    const renderStartedAt = startRuntimeMeasurement();
+    try {
+      await renderClipExport({
+        sourceFilePath,
+        keptRanges,
+        cropPixels,
+        assFileContent: assContent,
+        outputPath,
+        outputWidth: OUTPUT_WIDTH,
+        outputHeight: OUTPUT_HEIGHT,
+      });
+    } catch (error) {
+      await recordRenderFact({
+        prisma,
+        job,
+        projectId: clip.projectId,
+        durationS: outputDurationS,
+        ...finishRuntimeMeasurement(renderStartedAt),
+        outcome: "failed",
+      });
+      throw error;
+    }
+    await recordRenderFact({
+      prisma,
+      job,
+      projectId: clip.projectId,
+      durationS: outputDurationS,
+      ...finishRuntimeMeasurement(renderStartedAt),
+      outcome: "succeeded",
+    });
+
+    const outputBytes = (await stat(outputPath)).size;
+    const uploadStartedAt = Date.now();
+    try {
+      await storage.uploadFile(exportsKey, outputPath, "video/mp4");
+    } catch (error) {
+      await recordExportStorageFact({
+        prisma,
+        job,
+        projectId: clip.projectId,
+        direction: "upload",
+        bytes: outputBytes,
+        wallTimeMs: Date.now() - uploadStartedAt,
+        outcome: "failed",
+      });
+      throw error;
+    }
+    await recordExportStorageFact({
+      prisma,
+      job,
+      projectId: clip.projectId,
+      direction: "upload",
+      bytes: outputBytes,
+      wallTimeMs: Date.now() - uploadStartedAt,
+      outcome: "succeeded",
+    });
     [probeResult, bytes, checksum] = await Promise.all([
       probeVideoFile(outputPath).catch(() => null),
       storage.size(exportsKey),

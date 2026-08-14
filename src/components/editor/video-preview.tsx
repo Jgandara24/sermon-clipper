@@ -13,16 +13,27 @@ export function VideoPreview({
   words,
   showSafeZones,
   brandTemplate,
+  onCurrentMsChange,
+  seek,
 }: {
   sourceVideoUrl: string;
   state: EditorState;
   words: EditorWordWithDeletion[];
   showSafeZones: boolean;
   brandTemplate: EditorBrandTemplate | null;
+  /** Reports playback position so the trim timeline can draw a synced playhead. */
+  onCurrentMsChange?: (ms: number) => void;
+  /** External seek request (from clicking/dragging the timeline). Bump `token` to re-seek. */
+  seek?: { ms: number; token: number } | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [currentMs, setCurrentMs] = useState(state.source.startMs);
+  const [currentMs, setCurrentMsState] = useState(state.source.startMs);
   const seekedRef = useRef(false);
+
+  const setCurrentMs = (ms: number) => {
+    setCurrentMsState(ms);
+    onCurrentMsChange?.(ms);
+  };
 
   const activeWords = words.filter((word) => !word.effectiveDeleted);
   const captionLines = applyCaptionTextOverrides(
@@ -61,6 +72,16 @@ export function VideoPreview({
     if (video.readyState >= 1) seekToStart();
     return () => video.removeEventListener("loadedmetadata", seekToStart);
   }, [state.source.startMs]);
+
+  // External seek: clicking/dragging the trim timeline drives the preview frame. Keyed on the
+  // token so repeated seeks to the same ms still fire.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !seek) return;
+    video.currentTime = seek.ms / 1000;
+    setCurrentMs(seek.ms);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seek?.token]);
 
   function handleTimeUpdate() {
     const video = videoRef.current;

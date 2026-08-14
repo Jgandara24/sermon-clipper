@@ -44,9 +44,9 @@ function buildTitle(text: string): string {
 }
 
 /**
- * Real, deterministic, non-LLM scoring — the default fallback so a fresh clone (no
- * ANTHROPIC_API_KEY) still produces genuinely computed rankings rather than a stub. Labeled
- * "heuristic-v1" throughout, never presented as AI-scored. See DECISIONS.md.
+ * Real, deterministic, non-LLM scoring for development, tests, and the visible production
+ * emergency override. A fresh clone still produces computed rankings rather than a stub. Labeled
+ * "heuristic-v1" throughout and never presented as AI-scored. See DECISIONS.md.
  */
 export class HeuristicAnalysisProvider implements AnalysisProvider {
   readonly name = "heuristic";

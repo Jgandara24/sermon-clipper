@@ -1,5 +1,9 @@
 import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import type {
+  ProcessingCostFactInput,
+  ProcessingCostOutcome,
+} from "@/lib/cost/types";
 import { ytDlpPath as resolveYtDlpPath, ytDlpProxyUrl as resolveYtDlpProxyUrl } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 
@@ -25,10 +29,80 @@ type ExecFile = (
 
 export class YtDlpParseError extends Error {}
 
-export class YtDlpDownloadError extends Error {}
+export type YtDlpTransferTelemetry = {
+  bytes: number;
+  sourceDurationS: number | null;
+  bitrateBitsPerSecond: number | null;
+  proxyUsed: boolean;
+  proxyHost: string | null;
+  wallTimeMs: number;
+};
+
+export class YtDlpDownloadError extends Error {
+  telemetry: YtDlpTransferTelemetry | null;
+
+  constructor(message: string, options: { cause?: unknown; telemetry?: YtDlpTransferTelemetry } = {}) {
+    super(message, { cause: options.cause });
+    this.name = "YtDlpDownloadError";
+    this.telemetry = options.telemetry ?? null;
+  }
+}
 
 /** The merged download landed over the byte cap — the file has already been deleted. */
-export class YtDlpFileTooLargeError extends Error {}
+export class YtDlpFileTooLargeError extends YtDlpDownloadError {
+  constructor(message: string, options: { telemetry?: YtDlpTransferTelemetry } = {}) {
+    super(message, options);
+    this.name = "YtDlpFileTooLargeError";
+  }
+}
+
+type TransferPrices = {
+  proxyPricePerGbUsd: number | null;
+  railwayEgressPricePerGbUsd: number | null;
+  attempt: number;
+  outcome: ProcessingCostOutcome;
+};
+
+/** Builds attributable transfer facts. Decimal GB matches provider network-price units. */
+export function buildYtDlpCostFacts(
+  telemetry: YtDlpTransferTelemetry,
+  prices: TransferPrices,
+): [ProcessingCostFactInput, ProcessingCostFactInput] {
+  const quantityGb = telemetry.bytes / 1_000_000_000;
+  const details = {
+    sourceDurationS: telemetry.sourceDurationS,
+    bitrateBitsPerSecond: telemetry.bitrateBitsPerSecond,
+    proxyUsed: telemetry.proxyUsed,
+    proxyHost: telemetry.proxyHost,
+  };
+  const common = {
+    quantity: quantityGb,
+    unit: "gigabyte" as const,
+    model: null,
+    providerProvenance: "yt_dlp_runtime",
+    bytes: telemetry.bytes,
+    wallTimeMs: telemetry.wallTimeMs,
+    cacheState: "not_applicable" as const,
+    attempt: prices.attempt,
+    outcome: prices.outcome,
+    details,
+  };
+
+  return [
+    {
+      ...common,
+      stage: "source_acquisition",
+      unitCostUsd: telemetry.proxyUsed ? prices.proxyPricePerGbUsd : 0,
+      provider: telemetry.proxyUsed ? "residential_proxy" : "yt_dlp_direct",
+    },
+    {
+      ...common,
+      stage: "upload",
+      unitCostUsd: prices.railwayEgressPricePerGbUsd,
+      provider: "railway_egress",
+    },
+  ];
+}
 
 /** Pure parser for `yt-dlp --dump-json --skip-download` output. */
 export function parseYtDlpMetadataJson(raw: string): YtDlpMetadata {
@@ -106,29 +180,84 @@ export async function fetchYtDlpMetadata(
 export async function downloadYtDlpVideo(
   url: string,
   destPath: string,
-  opts: { maxBytes: number },
+  opts: { maxBytes: number; durationS?: number },
   execFile: ExecFile = execFileWithTimeout,
-): Promise<void> {
+): Promise<YtDlpTransferTelemetry> {
+  const startedAt = Date.now();
+  const proxy = proxyDescriptor();
   await mkdir(path.dirname(destPath), { recursive: true });
   const ytDlpPath = resolveYtDlpPath();
-  await execFile(
-    ytDlpPath,
-    [
-      ...baseArgs(),
-      "-f",
-      "bv*[height<=1080]+ba/b[height<=1080]",
-      "--merge-output-format",
-      "mp4",
-      "--max-filesize",
-      String(opts.maxBytes),
-      "--no-playlist",
-      "-o",
-      destPath,
-      url,
-    ],
-    { timeoutMs: envTimeoutMs("YTDLP_DOWNLOAD_TIMEOUT_MS", 20 * 60_000) },
-  );
-  await resolveDownloadedFile(destPath, opts.maxBytes);
+  try {
+    await execFile(
+      ytDlpPath,
+      [
+        ...baseArgs(),
+        "-f",
+        "bv*[height<=1080]+ba/b[height<=1080]",
+        "--merge-output-format",
+        "mp4",
+        "--max-filesize",
+        String(opts.maxBytes),
+        "--no-playlist",
+        "-o",
+        destPath,
+        url,
+      ],
+      { timeoutMs: envTimeoutMs("YTDLP_DOWNLOAD_TIMEOUT_MS", 20 * 60_000) },
+    );
+    const bytes = await resolveDownloadedFile(destPath, opts.maxBytes);
+    return transferTelemetry(bytes, opts.durationS, proxy, Date.now() - startedAt);
+  } catch (error) {
+    const bytes = await attributableDownloadBytes(destPath);
+    const telemetry = transferTelemetry(bytes, opts.durationS, proxy, Date.now() - startedAt);
+    if (error instanceof YtDlpDownloadError) {
+      error.telemetry = telemetry;
+      if (error instanceof YtDlpFileTooLargeError) {
+        await rm(destPath, { force: true });
+      }
+      throw error;
+    }
+    throw new YtDlpDownloadError("yt-dlp could not download the video.", { cause: error, telemetry });
+  }
+}
+
+function proxyDescriptor(): { proxyUsed: boolean; proxyHost: string | null } {
+  const proxyUrl = resolveYtDlpProxyUrl();
+  if (!proxyUrl) return { proxyUsed: false, proxyHost: null };
+  try {
+    return { proxyUsed: true, proxyHost: new URL(proxyUrl).hostname || "configured" };
+  } catch {
+    return { proxyUsed: true, proxyHost: "configured" };
+  }
+}
+
+function transferTelemetry(
+  bytes: number,
+  durationS: number | undefined,
+  proxy: { proxyUsed: boolean; proxyHost: string | null },
+  wallTimeMs: number,
+): YtDlpTransferTelemetry {
+  const usableDuration = durationS !== undefined && durationS > 0 ? durationS : null;
+  return {
+    bytes,
+    sourceDurationS: usableDuration,
+    bitrateBitsPerSecond: usableDuration === null ? null : (bytes * 8) / usableDuration,
+    ...proxy,
+    wallTimeMs,
+  };
+}
+
+async function attributableDownloadBytes(destPath: string): Promise<number> {
+  const dir = path.dirname(destPath);
+  const basename = path.basename(destPath);
+  const entries = await readdir(dir).catch(() => [] as string[]);
+  let bytes = 0;
+  for (const entry of entries) {
+    if (entry === basename || entry.startsWith(`${basename}.`)) {
+      bytes += (await stat(path.join(dir, entry)).catch(() => null))?.size ?? 0;
+    }
+  }
+  return bytes;
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -139,7 +268,7 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-async function resolveDownloadedFile(destPath: string, maxBytes: number): Promise<void> {
+async function resolveDownloadedFile(destPath: string, maxBytes: number): Promise<number> {
   if (!(await fileExists(destPath))) {
     const dir = path.dirname(destPath);
     const prefix = `${path.basename(destPath)}.`;
@@ -158,9 +287,9 @@ async function resolveDownloadedFile(destPath: string, maxBytes: number): Promis
   // here is the authoritative enforcement.
   const { size } = await stat(destPath);
   if (size > maxBytes) {
-    await rm(destPath, { force: true });
     throw new YtDlpFileTooLargeError(
       `Downloaded video is ${size} bytes, over the ${maxBytes}-byte limit.`,
     );
   }
+  return size;
 }

@@ -23,6 +23,7 @@ import { probeVideoFile } from "@/lib/media/probe";
 import { markExportJobSucceeded } from "@/lib/exports/queue";
 import { runExportJob } from "@/lib/exports/handler";
 import { runOnePendingJob } from "@/lib/jobs/runner";
+import { runProbeJob } from "@/lib/jobs/handlers/probe";
 import { createProjectFromUploadedSourceVideo } from "@/lib/project-service";
 import { getStorageProvider } from "@/lib/storage";
 
@@ -329,11 +330,118 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
     expect(probe.width).toBe(1080);
     expect(probe.height).toBe(1920);
     expect(probe.durationS).toBeGreaterThan(0);
+
+    const costEvents = await prisma.operationalEvent.findMany({
+      where: { exportJobId: job.id, eventType: "processing_cost_fact" },
+    });
+    expect(costEvents.map((event) => (event.metadata as { stage: string }).stage)).toEqual(
+      expect.arrayContaining(["download", "render", "upload"]),
+    );
+    expect(costEvents.every((event) => (event.metadata as { attempt: number }).attempt === 1)).toBe(
+      true,
+    );
   }, 120_000);
 
   it("invalidates approval after a subsequent editor save policy decision", () => {
     expect(approvalStateAfterEditorSave(ClipApprovalState.APPROVED)).toBe(ClipApprovalState.DRAFT);
   });
+
+  it("exports a never-edited clip without deleting filler-tagged words", async () => {
+    const sourceVideo = await prisma.sourceVideo.create({
+      data: {
+        workspaceId,
+        origin: SourceOrigin.UPLOAD,
+        filename: "filler-preservation.mp4",
+        durationS: new Prisma.Decimal("5.00"),
+        sizeBytes: BigInt(await getStorageProvider().size(storageKey)),
+        width: 1280,
+        height: 720,
+        fps: new Prisma.Decimal("30.000"),
+        storageKey,
+        transcript: {
+          create: {
+            language: "en",
+            provider: "integration-fixture",
+            fullText: "um",
+            segments: {
+              create: {
+                idx: 0,
+                startMs: 0,
+                endMs: 4000,
+                text: "um",
+                words: [
+                  {
+                    word: "um",
+                    startMs: 200,
+                    endMs: 3000,
+                    confidence: 0.99,
+                    isFiller: true,
+                    deleted: false,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    const project = await prisma.project.create({
+      data: { workspaceId, sourceVideoId: sourceVideo.id, name: "Filler Preservation" },
+    });
+    const clip = await prisma.generatedClip.create({
+      data: {
+        workspaceId,
+        projectId: project.id,
+        rank: 1,
+        startMs: 0,
+        endMs: 4000,
+        title: "Filler Preservation",
+        hookText: "um",
+        summary: "Faithful export fixture.",
+      },
+    });
+    const job = await prisma.exportJob.create({
+      data: {
+        clipId: clip.id,
+        workspaceId,
+        preset: ExportPreset.MP4_1080,
+        state: ProcessingJobState.RUNNING,
+        filename: "filler-preservation.mp4",
+        idempotencyKey: uniqueKey("filler-preservation"),
+        attempt: 1,
+      },
+    });
+
+    await expect(runExportJob(prisma, job)).resolves.toEqual(expect.any(String));
+  }, 120_000);
+
+  it("meters source download, local extraction, thumbnail render, and derived uploads", async () => {
+    const job = await prisma.processingJob.create({
+      data: {
+        projectId,
+        type: ProcessingJobType.PROBE,
+        state: ProcessingJobState.RUNNING,
+        idempotencyKey: uniqueKey("metered-probe"),
+        attempt: 2,
+      },
+    });
+
+    await runProbeJob({ job, prisma });
+    const costEvents = await prisma.operationalEvent.findMany({
+      where: { jobId: job.id, eventType: "processing_cost_fact" },
+    });
+    expect(costEvents.map((event) => (event.metadata as { stage: string }).stage)).toEqual(
+      expect.arrayContaining([
+        "download",
+        "render",
+        "local_audio_extraction",
+        "upload",
+      ]),
+    );
+    expect(costEvents.every((event) => (event.metadata as { retry: boolean }).retry)).toBe(true);
+
+    await prisma.processingJob.delete({ where: { idempotencyKey: `transcribe:${projectId}` } });
+  }, 60_000);
 
   it("records transcription provider metadata in operational events", async () => {
     const storage = getStorageProvider();
@@ -387,6 +495,12 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
       segmentCount: 1,
       wordCount: 7,
     });
+    const costEvents = await prisma.operationalEvent.findMany({
+      where: { jobId: job.id, eventType: "processing_cost_fact" },
+    });
+    expect(costEvents.map((costEvent) => (costEvent.metadata as { stage: string }).stage)).toEqual(
+      expect.arrayContaining(["download", "transcription"]),
+    );
   });
 
   it.skipIf(!existsSync(LOCAL_TINY_WHISPER_MODEL))(

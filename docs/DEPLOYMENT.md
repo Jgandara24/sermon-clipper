@@ -115,7 +115,8 @@ Which service consumes which variables:
 | Variables | Web | Worker |
 | --- | --- | --- |
 | `NODE_ENV`, `DATABASE_URL`, `STORAGE_PROVIDER` + `STORAGE_S3_*` | ✅ | ✅ |
-| `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (readiness reporting) | ✅ (does the work) |
+| `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (web readiness reporting only) | ✅ (worker job-time enforcement) |
+| `ANALYSIS_ALLOW_HEURISTIC` (emergency only) | — | ✅ |
 | `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | ✅ | — |
 | `RESEND_API_KEY`, `AUTH_EMAIL_*`, `NOTIFICATIONS_*`, `TWILIO_*` | ✅ | — |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` | ✅ | — |
@@ -364,8 +365,21 @@ collecting launch evidence.
 - Install `whisper-cli` and mount the same model file path referenced by `WHISPER_MODEL_PATH` on
   every worker. The readiness gate proves the path is configured; the launch workflow must still
   prove a real sermon was transcribed by the deployed worker.
-- Configure `ANTHROPIC_API_KEY` for production clip scoring. The heuristic scorer remains useful
-  for local development, but Phase 8 launch readiness requires Claude-backed analysis evidence.
+- Configure `ANTHROPIC_API_KEY` on the production worker for clip scoring. The web readiness check
+  reports its own environment only; it cannot prove that the worker has a valid credential.
+- Production ANALYZE jobs fail closed when the key is missing, rejected, or Claude fails. Local
+  development and tests can use labeled `heuristic-v1` output automatically.
+- `ANALYSIS_ALLOW_HEURISTIC` is the worker-owned incident override. Its safe default is unset or
+  `false`. Set the exact string `true` only during a time-bounded Claude incident. Confirm a warning
+  `analysis_heuristic_emergency_override` event and provenance `provider=heuristic`,
+  `modelVersions=[heuristic-v1]`, `selectionReason=production_emergency_override`. Disable it by
+  unsetting it or setting `false`, restart the worker, and verify the next ANALYZE job uses Claude.
+  The web readiness check continues to fail without a valid `ANTHROPIC_API_KEY`; the override does
+  not make a deployment launch-ready.
+- Verify the policy before enablement and after rollback with
+  `npm test -- --run tests/analysis-provider-selection.test.ts` and confirm the worker event in
+  `/app/settings/operations`. Rollback is to unset `ANALYSIS_ALLOW_HEURISTIC`, restart the worker,
+  and run one Claude-backed ANALYZE job.
 - Monitor `/app/settings/operations` for `worker`, `processing`, `transcription`, `analysis`,
   `export`, and `channel_import` events.
 - If a worker dies mid-job, another worker will recover stale `RUNNING` jobs after
@@ -453,20 +467,31 @@ deployment.
 
 ## Provider Spend & COGS
 
-- Every Claude-scored ANALYZE job records its token usage and a list-price USD estimate in the
-  job's `analysis` success event metadata. `/app/settings/operations` shows the per-workspace
-  30-day rollup ("AI analysis spend"). The Anthropic invoice is the source of truth; the in-app
-  figure exists to make cost drift visible early.
-- Deployment-wide (all workspaces) estimate, from psql:
+- Every paid-provider and local-compute stage records a `processing_cost_fact`. The worker rebuilds
+  recent UTC days in `daily_cost_rollups` each hour. `COST_ROLLUP_LOOKBACK_DAYS` defaults to 7, so
+  late events and retries are reconciled. Each periodic worker block has its own failure boundary;
+  a rollup failure records `worker_periodic_block_failed` and does not stop publication, cleanup,
+  channel import, or queue work.
+- `/app/settings/operations` reads the durable 30-day totals. It shows known cost, retries,
+  failures, and unpriced facts by stage/provider/model. Unpriced facts are never treated as known
+  zero. Provider invoices remain the source of truth.
+- To rebuild and print one project report, run:
+
+  ```sh
+  npm run report:project-cost -- --project-id <uuid>
+  ```
+
+- Deployment-wide known totals, from psql:
 
   ```sql
-  SELECT count(*) AS jobs,
-         sum((metadata->'usage'->>'estimatedCostUsd')::numeric) AS est_usd,
-         sum((metadata->'usage'->>'totalInputTokens')::bigint) AS input_tokens
-  FROM operational_events
-  WHERE category = 'analysis' AND event_type = 'processing_job_succeeded'
-    AND metadata->'usage' IS NOT NULL
-    AND created_at > now() - interval '30 days';
+  SELECT stage, provider, model,
+         sum(total_cost_usd) AS known_usd,
+         sum(event_count) AS facts,
+         sum(unpriced_event_count) AS unpriced_facts
+  FROM daily_cost_rollups
+  WHERE day >= current_date - 29
+  GROUP BY stage, provider, model
+  ORDER BY stage, provider, model;
   ```
 
 - **COGS model:** per source-minute of sermon, the paid components are Claude analysis (Haiku
@@ -502,11 +527,10 @@ merge green. Human actions (GitHub settings, once):
    same night) — all four green as of run `29557146876`.
 2. Enable branch protection requiring `verify`, `integration`, `e2e`, `worker-image`. **Done** —
    private-repo free-tier accounts can't use branch protection (classic *and* rulesets both
-   403'd), so the repo was made **public** 2026-07-16 night rather than pay for GitHub Pro right
-   now; protection then applied successfully with all four required checks. Revisit if/when
-   proprietary-source exposure becomes a real concern — flipping back to private requires a paid
-   plan to keep protection. Command used (kept here for re-applying after any future repo
-   recreation):
+   403'd), so the repo was made **public** 2026-07-16 night rather than pay for GitHub Pro. The
+   protection then applied successfully with all four required checks. The repository-visibility
+   policy below supersedes the earlier open-ended instruction to revisit this choice later.
+   Command used (kept here for re-applying after a visibility change or repository recreation):
 
    ```sh
    gh api repos/<owner>/<repo>/branches/main/protection --method PUT --input - <<'EOF'
@@ -524,6 +548,55 @@ merge green. Human actions (GitHub settings, once):
 
    Verify: `gh api repos/<owner>/<repo>/branches/main/protection --jq
    '.required_status_checks.contexts'` should list all four.
+
+### Repository visibility policy
+
+This policy was verified and recorded on 2026-08-11. It does not change a GitHub setting at P0.
+
+- Keep `Jgandara24/sermon-clipper` public through P0–P4.
+- Make the repository private before the first P5 commit lands. P5 is the named trigger because
+  it is the first phase that implements the proprietary Selector and Review Agent policies.
+- Public history cannot be retracted. A later visibility change does not remove indexed copies,
+  archives, or existing public forks. Therefore, do not commit protected material while the
+  repository is public.
+- Protected material includes the external private `CTO.md`; margin, revenue, scale, acquisition,
+  and price-positioning material; and the private implementation plan's full P5 Selector policy
+  and P6 Review Agent design. The P0.2 public plan copy replaces those sections with pointers to
+  the private planning copy.
+- The existing `$49` proxy comparison in `DECISIONS.md` is already public history. Do not amplify
+  it with the private margin, scale, acquisition, or editorial-policy material.
+- P0–P4 code, technical architecture, editorial invariants, provider unit costs, technical stage
+  costs, cost gates, migrations, tests, and sandbox evidence can be committed normally.
+
+State verified on 2026-08-11:
+
+- Visibility: `PUBLIC` (`isPrivate=false`).
+- Required checks: `verify`, `integration`, `e2e`, `worker-image`.
+- Strict status checks: enabled.
+- Administrator enforcement: enabled.
+- Force pushes: blocked.
+- Branch deletion: blocked.
+
+Before P5:
+
+1. Activate a paid GitHub plan that supports rules on private repositories.
+2. Save the current protection response, then run
+   `gh repo edit Jgandara24/sermon-clipper --visibility private`.
+3. Reapply the protection payload above.
+4. Verify visibility, all four required contexts, strict mode, administrator enforcement, blocked
+   force pushes, and blocked deletion.
+5. Open one pull request and prove that all four checks run and remain required before any P5
+   policy commit lands.
+
+GitHub Actions standard runners are free and unlimited for public repositories. The current paid
+plan assumption for P5 is GitHub Pro at about $4 per month with 3,000 included Actions minutes.
+Recheck GitHub features and pricing when the trigger fires. If private Actions minutes become a
+constraint, reduce unnecessary draft-pull-request runs. Do not restore public visibility after
+proprietary policy enters history.
+
+References: [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions),
+[repository rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets),
+and [GitHub pricing](https://github.com/pricing).
 
 ## Monitoring & Alerting
 
@@ -625,6 +698,48 @@ notes.
    recorded error.
 3. OTP requests are rate-limited (3 per 15 minutes per email) — "no email" may just be the limit;
    the login surface says so explicitly.
+
+## Automatic Publishing Kill Switch
+
+`AUTOMATIC_PUBLISHING_ENABLED` is the global publication authority. Only the exact string `true`
+permits automatic publication. Missing, `false`, malformed, uppercase, or padded values disable
+publication before the publisher reads or claims a due row. The global switch takes precedence
+over the Meta token, the workspace Page ID, and the workspace auto-post flag.
+
+Keep the switch false through P1 and P2 sandbox preparation. Before one controlled sandbox
+publication, pin one manual render, pass render QC, record the exact human `ACCEPT`, and verify all
+other eligibility inputs. Set the switch to `true` only for that controlled publication. Set it to
+`false` immediately after a failure or any identity mismatch.
+
+The deployment readiness response reports whether the switch is enabled or disabled. Disabled is
+a safe ready state. The worker records `automatic_publishing_disabled` once for each process-level
+disabled period. Stale `IN_PROGRESS` post reconciliation continues while new publication is
+disabled.
+
+The switch cannot cancel a Meta request that is already in flight. Before a deploy or rollback,
+inspect `IN_PROGRESS` scheduled posts. To disable safely, set the switch to `false` or remove it.
+Do not roll back code that removes this guard unless the Meta token is removed first or every
+workspace auto-post flag is disabled.
+
+### Wave 1 database deployment
+
+Wave 1 is expand-first. Use this order:
+
+1. Set `AUTOMATIC_PUBLISHING_ENABLED=false` on web and worker services.
+2. Run `npm run audit:schedule-collisions` and `npm run audit:legacy-exports` against production.
+   Stop if the collision audit exits nonzero. Save both outputs as deployment evidence.
+3. Drain workers. Inspect all `IN_PROGRESS` scheduled posts.
+4. Deploy migrations `20260812122900_agentic_editor_wave_1_enums` and
+   `20260812123000_agentic_editor_wave_1` in order. The split is required because PostgreSQL must
+   commit the new `missed` enum value before the next migration uses it in an index predicate.
+5. Deploy the compatible web and worker builds. Resume workers.
+6. Keep `AUTOMATIC_PUBLISHING_ENABLED=false` through all of P1. A successful migration or smoke
+   test does not authorize publication.
+
+Do not hand-edit the generated transcript search vector. The Wave 1 migration deliberately omits
+Prisma's invalid `transcripts_search_vector_idx` drop and generated-column default rewrite. Roll
+application code back if necessary, but leave the additive schema in place. Remove an index only
+through a new forward migration.
 
 ## Rollback
 

@@ -1,4 +1,4 @@
-import { summarizeAnalysisSpend } from "@/lib/analysis/usage";
+import { getWorkspaceCostSummary } from "@/lib/cost/rollup";
 import { formatDate, titleCaseStatus } from "@/lib/format";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -36,13 +36,13 @@ export default async function OperationsPage() {
   const user = await requireCurrentUser();
   const membership = await requirePrimaryWorkspacePermission(user.id, "MANAGE_OPERATIONS");
   const workspace = membership.workspace;
-  const [events, spend] = await Promise.all([
+  const [events, cost] = await Promise.all([
     prisma.operationalEvent.findMany({
       where: { workspaceId: workspace.id },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
-    summarizeAnalysisSpend(prisma, workspace.id),
+    getWorkspaceCostSummary(prisma, workspace.id),
   ]);
 
   return (
@@ -58,35 +58,64 @@ export default async function OperationsPage() {
       </div>
 
       <div className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-medium text-teal-800">AI analysis spend</p>
+        <p className="text-sm font-medium text-teal-800">Processing cost</p>
         <div className="mt-3 grid gap-4 sm:grid-cols-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-stone-500">Last {spend.windowDays} days</p>
+            <p className="text-xs uppercase tracking-wide text-stone-500">Last {cost.windowDays} days</p>
             <p className="mt-1 text-2xl font-semibold">
-              ${spend.estimatedCostUsd.toFixed(2)}
-              {spend.incomplete ? <span className="text-sm text-amber-700">+</span> : null}
+              ${cost.knownCostUsd.toFixed(2)}
+              {cost.unpricedEventCount > 0 ? <span className="text-sm text-amber-700">+</span> : null}
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-stone-500">Analyzed jobs</p>
-            <p className="mt-1 text-2xl font-semibold">{spend.jobCount}</p>
+            <p className="text-xs uppercase tracking-wide text-stone-500">Cost facts</p>
+            <p className="mt-1 text-2xl font-semibold">{cost.eventCount.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-stone-500">Input tokens</p>
-            <p className="mt-1 text-2xl font-semibold">{spend.totalInputTokens.toLocaleString()}</p>
+            <p className="text-xs uppercase tracking-wide text-stone-500">Retry facts</p>
+            <p className="mt-1 text-2xl font-semibold">{cost.retryCount.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-stone-500">Output tokens</p>
-            <p className="mt-1 text-2xl font-semibold">{spend.totalOutputTokens.toLocaleString()}</p>
+            <p className="text-xs uppercase tracking-wide text-stone-500">Unpriced facts</p>
+            <p className="mt-1 text-2xl font-semibold">{cost.unpricedEventCount.toLocaleString()}</p>
           </div>
         </div>
         <p className="mt-3 text-xs text-stone-500">
-          List-price estimate from per-job Claude token usage; the Anthropic invoice is the source
-          of truth. Heuristic-scored jobs cost nothing and are not counted.
-          {spend.incomplete
-            ? " Some usage could not be fully priced or counted — treat this as a lower bound."
-            : ""}
+          Durable daily totals from all processing stages. Provider invoices are the source of
+          truth. A plus sign means one or more facts have no configured price, so the known total
+          is a lower bound.
         </p>
+        {cost.stages.length > 0 ? (
+          <div className="mt-5 overflow-hidden rounded-md border border-stone-200">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-stone-50 text-xs uppercase tracking-wide text-stone-500">
+                <tr>
+                  <th className="px-3 py-2">Stage</th>
+                  <th className="px-3 py-2">Provider / model</th>
+                  <th className="px-3 py-2">Facts</th>
+                  <th className="px-3 py-2">Known cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cost.stages.map((stage) => (
+                  <tr key={`${stage.stage}:${stage.provider}:${stage.model ?? ""}`} className="border-t border-stone-100">
+                    <td className="px-3 py-2">{titleCaseStatus(stage.stage)}</td>
+                    <td className="px-3 py-2 text-stone-600">
+                      {stage.provider}{stage.model ? ` / ${stage.model}` : ""}
+                    </td>
+                    <td className="px-3 py-2">
+                      {stage.eventCount.toLocaleString()}
+                      {stage.unpricedEventCount > 0 ? ` (${stage.unpricedEventCount} unpriced)` : ""}
+                    </td>
+                    <td className="px-3 py-2">${stage.knownCostUsd.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-stone-500">No processing-cost rollups recorded yet.</p>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
@@ -118,6 +147,7 @@ export default async function OperationsPage() {
                 </td>
                 <td className="px-4 py-3 text-xs text-stone-500">
                   {event.projectId ? <p>project: {event.projectId}</p> : null}
+                  {event.clipId ? <p>clip: {event.clipId}</p> : null}
                   {event.jobId ? <p>job: {event.jobId}</p> : null}
                   {event.exportJobId ? <p>export: {event.exportJobId}</p> : null}
                 </td>

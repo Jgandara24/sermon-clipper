@@ -2,7 +2,7 @@ import os from "node:os";
 import { accessSync, constants } from "node:fs";
 import { spawnSync } from "node:child_process";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { env } from "@/lib/env";
+import { env, isExactTrue } from "@/lib/env";
 
 export const PROCESSING_MAX_ATTEMPTS = 3;
 export const EXPORT_MAX_ATTEMPTS = 3;
@@ -17,6 +17,39 @@ export type WorkerReadinessCheck = {
 type EnvLike = Record<string, string | undefined>;
 type CommandAvailable = (command: string, versionFlag?: string) => boolean;
 type FileReadable = (filePath: string) => boolean;
+
+export type IsolatedPeriodicBlock = {
+  name: string;
+  due: boolean;
+  run: () => Promise<void>;
+  markAttempted?: () => void;
+};
+
+/** Runs all due blocks even when an earlier block or its error reporter fails. */
+export async function runIsolatedPeriodicBlocks(
+  blocks: IsolatedPeriodicBlock[],
+  onError: (name: string, error: unknown) => Promise<void>,
+): Promise<void> {
+  for (const block of blocks) {
+    if (!block.due) continue;
+    try {
+      await block.run();
+    } catch (error) {
+      try {
+        await onError(block.name, error);
+      } catch (reportingError) {
+        console.error("[worker] failed to report periodic block error", block.name, reportingError);
+      }
+    } finally {
+      block.markAttempted?.();
+    }
+  }
+}
+
+/** Worker-side optimization only. The publisher repeats this gate as the authority. */
+export function automaticPublishingEnabled(env: EnvLike = process.env): boolean {
+  return isExactTrue(env.AUTOMATIC_PUBLISHING_ENABLED);
+}
 
 // ffmpeg-family binaries answer `-version`; yt-dlp only accepts `--version`, so each check
 // passes the flag its binary understands.

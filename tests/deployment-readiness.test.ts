@@ -7,6 +7,32 @@ import {
 } from "@/lib/deployment/readiness";
 
 describe("deployment readiness", () => {
+  it("reports the global publishing state without requiring it to be enabled", () => {
+    for (const value of [undefined, "false", "TRUE", "malformed"]) {
+      const checks = checkDeploymentEnvironment({ AUTOMATIC_PUBLISHING_ENABLED: value });
+      expect(checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "AUTOMATIC_PUBLISHING_ENABLED",
+            status: "ok",
+            message: expect.stringContaining("disabled"),
+          }),
+        ]),
+      );
+    }
+
+    const enabledChecks = checkDeploymentEnvironment({ AUTOMATIC_PUBLISHING_ENABLED: "true" });
+    expect(enabledChecks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "AUTOMATIC_PUBLISHING_ENABLED",
+          status: "ok",
+          message: expect.stringContaining("enabled"),
+        }),
+      ]),
+    );
+  });
+
   it("fails production readiness without S3 storage and required secrets", () => {
     const checks = checkDeploymentEnvironment({
       NODE_ENV: "production",

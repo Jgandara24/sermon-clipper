@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clearReschedulableScheduledPosts,
+  findScheduledPostCollision,
   scheduledDateForRank,
   slotAlreadyPublished,
 } from "@/lib/scheduling";
@@ -46,6 +47,44 @@ describe("re-analysis scheduling guards", () => {
       clip: { projectId: "project-1" },
       publishStatus: { in: ["NOT_STARTED", "FAILED"] },
     });
+  });
+
+  it("treats any earlier row on the workspace date as a collision", async () => {
+    const scheduledDate = new Date("2026-07-21T00:00:00.000Z");
+    const tx = {
+      scheduledPost: {
+        deleteMany: async () => ({ count: 0 }),
+        findFirst: async () => ({
+          id: "earlier-post",
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+          publishStatus: "FAILED" as const,
+          clip: { projectId: "earlier-project" },
+        }),
+      },
+    };
+
+    await expect(
+      findScheduledPostCollision(tx, { workspaceId: "ws-1", scheduledDate }),
+    ).resolves.toMatchObject({
+      id: "earlier-post",
+      publishStatus: "FAILED",
+      projectId: "earlier-project",
+    });
+  });
+
+  it("returns no collision when the workspace date is free", async () => {
+    const tx = {
+      scheduledPost: {
+        deleteMany: async () => ({ count: 0 }),
+        findFirst: async () => null,
+      },
+    };
+    await expect(
+      findScheduledPostCollision(tx, {
+        workspaceId: "ws-1",
+        scheduledDate: new Date("2026-07-22T00:00:00.000Z"),
+      }),
+    ).resolves.toBeNull();
   });
 
   it("reports a slot as published only when a SUCCEEDED/IN_PROGRESS row exists", async () => {

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "evidenceType": "proxy_cost_lower_bound",
+  "recordedOn": "2026-08-13",
+  "sourceArtifactId": "clip-count-retest-8-11",
+  "provider": "IPRoyal",
+  "proxyEndpointHost": "geo.iproyal.com",
+  "productionStorage": {
+    "provider": "Cloudflare R2",
+    "endpointHost": "04bed3f430e69de89a54a5ec15ac997a.r2.cloudflarestorage.com",
+    "contractedEgressPricePerGbUsd": 0
+  },
+  "measurementNotes": [
+    "The source duration is the recorded production service duration.",
+    "The source byte count is the production R2 object size read with HeadObject.",
+    "The contract rate is the actual 2 GB for $12.50 residential-proxy order, with no order ID or account data stored.",
+    "Stored file bytes can undercount provider-billed protocol traffic, so this is a lower bound.",
+    "Core cost includes only the measured $0.156798 analysis anchor; other core stages can only increase the monthly result."
+  ],
+  "measured": {
+    "sourceBytes": 392808104,
+    "sourceDurationSeconds": 2981.76,
+    "contractedPricePerGbUsd": 6.25,
+    "coreCostPerServiceUsd": 0.156798,
+    "servicesPerMonth": 8.66
+  },
+  "result": {
+    "proxyCostPerServiceUsd": 2.45505065,
+    "proxyCostPerSourceHourUsd": 2.964082400998068,
+    "projectedMonthlyProxyCostUsd": 21.260738629,
+    "projectedMonthlyLowerBoundUsd": 22.618609309,
+    "approved": false
+  },
+  "gate": {
+    "youtubeMonthlyChurchCostCapUsd": 12,
+    "hardStopApplied": true
+  }
+}

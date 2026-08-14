@@ -1124,11 +1124,464 @@ env var, so switching providers is a config change.
 
 Reversibility: high. `YTDLP_PROXY_URL` unset restores the previous behavior exactly.
 
-Status: Active — code merged and env var documented; **not yet proven against a real proxy
-endpoint**. Two open items: (1) buy a small amount of residential proxy traffic and confirm a real
+Status: Active — code merged and env var documented. **Proof status amended by the 2026-08-11
+entry "Residential Proxy Import Is Functionally Proven; Its Economics Remain Unproven": item (1)
+below is now satisfied for function but not for economics; item (2) is unchanged.** Two open items:
+(1) buy a small amount of residential proxy traffic and confirm a real
 import succeeds from Railway before relying on it; (2) PERC's automated MP4 retrieval has never
 worked end to end (Pulpit Engine's `current-build-status.md` records the one real recording
 returning `download_status = null`, resolved by pasting the URL by hand), so that needs its own
 proof before any church is migrated onto it. If Sermon Clipper adopts PERC it should use its own
 Cloudflare Stream account, not Pulpit Engine's — unlike the Meta App there is no review process to
 reuse, so sharing would add a failure point and buy nothing.
+
+## 2026-08-11 - Repository Stays Public Until P5; Strategy, Margin, and Editorial-Policy Documents Stay Private
+
+Decision: Keep `Jgandara24/sermon-clipper` public through P0–P4. Make it private before the first
+P5 commit lands. No GitHub visibility or protection setting changes at P0. P5 is the named trigger
+because it is the first phase that implements the proprietary Selector and Review Agent policies.
+P0–P4 consists of correctness, provenance, scheduling, cost, review-data, and media-index plumbing
+that can remain public.
+
+While the repository is public, never commit the external private `CTO.md`; margin, revenue, scale,
+acquisition, or price-positioning plans; or the private implementation plan's full P5 Selector
+policy and P6 Review Agent design. The P0.2 public plan copy must replace all protected sections
+with pointers to the private planning copy. Technical architecture, editorial invariants, provider
+unit costs, technical stage costs, cost gates, code, migrations, tests, `DECISIONS.md`, and sandbox
+evidence can be committed normally.
+
+Why: Public repositories support the required branch rules and free, unlimited standard GitHub
+Actions minutes. A private repository requires a paid plan to keep the same protection and changes
+the included Actions allowance. The heavy P0–P4 implementation sequence benefits from the current
+public CI capacity. The repository must become private before proprietary editorial logic enters
+history.
+
+Permanence rule: Public git history cannot be retracted. Changing the repository to private later
+does not remove indexed copies, archives, or existing public forks. Deferring the visibility change
+is safe only because protected documents and policy sections do not enter public history before
+the trigger. The `$49` proxy comparison already recorded above is a bounded public fact and cannot
+be withdrawn; this decision prevents the private margin, scale, acquisition, and editorial-policy
+material from being added or amplified.
+
+Verified state on 2026-08-11: visibility `PUBLIC` with `isPrivate=false`; required checks `verify`,
+`integration`, `e2e`, and `worker-image`; strict status checks and administrator enforcement enabled;
+force pushes and branch deletion blocked. This supersedes the open-ended revisit instruction in
+`docs/DEPLOYMENT.md` that accompanied the 2026-07-16 public visibility change.
+
+P5 entry procedure: activate a paid GitHub plan, change the repository to private, reapply and
+verify the saved branch-protection payload, and prove all four checks remain required on one pull
+request before any P5 policy commit lands. The current assumption is GitHub Pro at about $4 per
+month with 3,000 included Actions minutes. Recheck GitHub features and pricing when the trigger
+fires. Do not restore public visibility after proprietary policy enters history.
+
+Tradeoff: P0–P4 source remains publicly visible. This preserves free protected-branch CI during the
+largest implementation phase but accepts public exposure of non-proprietary correctness plumbing.
+The cost of reversing early is the paid plan and lower included Actions allowance. Going private
+earlier is always allowed. Going public again after P5 is not an acceptable rollback.
+
+Status: Active. The trigger is the start of P5.
+
+## 2026-08-11 - Catch-Up Record: ANALYZE Stage A Streams With a 32,000-Token Ceiling
+
+Decision: Recorded after the fact for commit `a4b0ab6` (2026-07-24, PR #23), which changed
+recorded ANALYZE behavior without a decision entry. Stage A classification now streams via
+`messages.stream` + `finalMessage()` with a 32,000-token ceiling, matching the fix PR #22 applied
+to Stage B, and throws a retryable `AnalysisResponseTruncatedError` on a `max_tokens` stop or
+unparseable output.
+
+Why: The production retest failed in Stage A with the same signature PR #22 had fixed for Stage B —
+`Failed to parse structured output as JSON` at position 14722, which is the ~4,096-token cap of the
+`messages.parse` call (4,096 tokens x ~3.6 chars/token is about 14,700 chars). Stage A emits one
+classification per candidate window and a full sermon produces up to 500 of them, so the cap was
+reached on any real service. The 32,000-token ceiling is provably sufficient: 500 candidates at
+about 15 tokens each is roughly 7.5K in the worst case.
+
+Tradeoff: Both analysis stages now use streaming rather than the simpler `messages.parse` helper,
+because 32,000 exceeds the SDK's non-streaming guidance. The added `AnalysisResponseTruncatedError`
+turns a previously silent failure — classifying nothing and continuing — into a retryable job
+failure, which is louder but correct.
+
+Status: Active.
+
+## 2026-08-11 - Catch-Up Record: Candidate Windows Cover the Whole Sermon; Verified 2026-08-11
+
+Decision: Recorded after the fact for commit `c1603cd` (2026-07-24, PR #24), which changed
+recorded ANALYZE behavior without a decision entry. Candidate generation changed in three ways.
+Each start position now emits at most `DURATION_TARGETS_PER_START = 3` windows at durations evenly
+spaced from 20s to 90s, replacing a window at every segment end. When the candidate pool exceeds
+the 500 cap it is now **evenly sampled across the whole transcript** rather than truncated at the
+front. Stage A survivors are thinned by IoU greater than 0.5 before the fixed
+`MAX_STAGE_B_CANDIDATES = 25` slice.
+
+Why: The 2026-07-24 production run exposed the funnel as 500 candidates to 6 scored to 2 kept, with
+both kept clips drawn from the opening 90 seconds of a 50-minute service. Front-truncating the
+candidate pool meant the analyzer never saw most of the sermon.
+
+Verification (2026-08-11): This change had never been tested against a real service — it was
+written in response to the failing run and deployed about 16 hours after it. It has now been
+verified by re-importing the same source video (`z4FCS3JcZPs`, 49:41) through the same production
+path, as project `Clip Count Retest 8-11` in workspace `Jake's Church`:
+
+- Clips generated: **6**, against 2 before. The configured `targetClipCount` of 6 was met exactly.
+  Part of the increase is configuration — the earlier run was in a two-service workspace with a
+  target of 3 — so the count is not a clean like-for-like comparison.
+- Content: all six are sermon material (Philippians paradoxes, Paul rejoicing in chains, the
+  creator-creature distinction, a critique of Mormon theology). The 2026-07-24 run produced two
+  announcement clips and never reached the sermon. This change is not explainable by configuration.
+- Cost: $0.157 for the analysis stage, against $0.19 before, at 74,662 input and 9,348 output
+  tokens across Haiku Stage A and Sonnet Stage B.
+- Pipeline: FINALIZE through ANALYZE completed in about 6 minutes for a 50-minute source.
+- Transcript coverage was confirmed complete — 978 segments ending at 49:41 against a 49:41 source
+  — ruling out silent transcription truncation as a cause of any clustering.
+
+Open issue: coverage is improved but not whole-sermon. All six clips fall between 1:25 and 10:58 of
+a 50-minute service; minutes 11 through 50 produced nothing. Analysis metadata shows 500 candidate
+windows in and `scoredCount` of 6, so Stage A classification — not window generation and not Stage B
+ranking — is the binding constraint, and the candidates it approves cluster early. Whether that is a
+defect is not yet established: a sermon's opening states its thesis and may honestly be the most
+clippable material. This is recorded as the measured baseline that the P5 Selector work must beat,
+and P0.4's charter tests capture it as a named scenario.
+
+Status: Active. The commit's "covering the whole sermon" claim is accurate for candidate generation
+and not yet accurate for candidate selection.
+
+## 2026-08-11 - Catch-Up Record: Clip Boundaries Are Edited on a Drag Timeline
+
+Decision: Recorded after the fact for commit `4d51e5d` (2026-07-27, originally `004db2f` before the
+authorship rewrite recorded below), which changed the editor without a decision entry. The clip
+editor gained a drag-to-trim timeline: new `src/components/editor/clip-timeline.tsx` and pure
+boundary math in `src/lib/editor/trim.ts` (`MIN_CLIP_MS` 3,000; viewport padding 15s to 60s;
+snap-to-word-boundary; start/end/region clamping). `VideoPreview` gained `onCurrentMsChange` and a
+token-keyed external seek.
+
+Why: Boundary adjustment was previously only possible through numeric fields. The timeline was
+built self-contained so planned canvas text and banner overlay controls can mount alongside it the
+same way.
+
+Tradeoff: The timeline writes only `state.source.startMs` and `state.source.endMs`. It adds no new
+edit-state fields, no schema change, and no change to kept-range or word-deletion behavior. This
+turns out to align exactly with the continuous-source rule adopted on 2026-08-10: start and end are
+permitted edits, and the timeline is the surface that will remain after the word-deletion controls
+are removed in P1.4.
+
+Status: Active.
+
+## 2026-08-11 - Residential Proxy Import Is Functionally Proven; Its Economics Remain Unproven
+
+Decision: Amends the proof status recorded in the 2026-07-23 entry "YouTube Import Goes Through a
+Residential Proxy; PERC Is the Post-90-Day Cost Path", which stated that the path was "not yet
+proven against a real proxy endpoint". Proxy import is now functionally proven: a real 49:41 YouTube
+service was imported end to end through `YTDLP_PROXY_URL` in production on 2026-07-24, and again on
+2026-08-11. Both runs completed FINALIZE, PROBE, TRANSCRIBE, and ANALYZE.
+
+What remains unproven, and is unchanged: transferred bytes and the contracted price per GB are not
+measured anywhere — the yt-dlp path records no byte or cost telemetry, so the roughly $10 per church
+per month estimate is still an assumption, not a measurement. PERC's automated MP4 retrieval has
+still never worked end to end and has no implementation. The ADR's revisit trigger — monthly proxy
+spend above about $200 or church count above about 25 — remains unfired and is now additionally
+gated by the P0 cost-truth work, which makes byte measurement a launch gate rather than a
+background concern.
+
+Why: The original entry's status conflated "the code path works" with "the economics are
+acceptable". Those are separate claims with separate evidence, and only the first is now satisfied.
+Recording them separately prevents a future reader from treating one real import as economic
+validation.
+
+Status: Active. Supersedes only the proof-status sentence of the 2026-07-23 entry; that entry's
+decision, rationale, and revisit trigger stand.
+
+## 2026-08-11 - Agentic Editor Architecture, Editorial Standard, and Plan Are Frozen in the Repository
+
+Decision: The accepted agentic-editor architecture is now recorded in the repository as three
+documents. `docs/PULPIT_ENGINE_EDITORIAL_STANDARD.md` states what a clip is allowed to be and
+governs both the automatic system and human editing. `docs/AGENTIC_EDITOR_REV2_FROZEN.md` is the
+architecture of record. `docs/AGENTIC_EDITOR_IMPLEMENTATION_PLAN.md` is the commit-by-commit plan.
+Authority order is: product-owner decisions, then the frozen architecture, then the plan, with the
+editorial standard binding on all three.
+
+Three product-owner overrides are recorded as part of the freeze. First, master candidate default
+and maximum are built now, together with a hidden per-church override that only platform staff can
+change and that no church-facing screen or API response exposes. Second, the human-only reference
+period is a fixed full 30 days; it may be extended by an outage but never shortened, superseding the
+earlier permission to compress it after two or three services. Third, every delivered clip uses one
+continuous source range — this binds the operator's own revisions as well as automatic clips, and
+internal word, filler, pause, and repeated-phrase deletion are forbidden at the render boundary
+rather than only in the editor.
+
+The plan copy in this repository is sanitized. Revenue and gross-margin projections, the scale
+model, price positioning, and the P5 Selector policy and P6 Review Agent design are withheld and
+marked in place, per the 2026-08-11 repository-visibility decision. The withheld material lives with
+the private planning copy and is added here after the repository becomes private at the start of P5.
+Everything the build needs is public: usage profiles, per-stage technical costs, the intake
+comparison, the code-enforced cost gates, the measured production anchors, provider price sources,
+and the full P0-P4 commit sequence.
+
+Why: An agent cannot learn from review decisions if the system cannot prove which edit version
+produced the reviewed file. Freezing the editorial invariants and the phase order before any code
+changes means later commits are auditable against a fixed standard instead of a moving one, and it
+prevents the correctness work from being quietly relitigated commit by commit. Recording the
+overrides in the repository — rather than leaving them in planning conversation — is what makes them
+enforceable in review.
+
+Tradeoff: The repository now carries a large planning document that will drift from reality as
+P0-P4 lands, and the sanitized copy is deliberately incomplete, so a reader may find pointers to
+material they cannot access. Both are accepted. Drift is handled by treating the decision log, not
+the plan, as the record of what actually happened; incompleteness is the price of deferring the
+go-private trigger to the phase that first produces proprietary editorial logic.
+
+Status: Active.
+
+## 2026-08-12 - Candidate Limits Are Internal Capacity Controls
+
+Decision: The retained candidate-pool limit is an internal Pulpit Engine capacity control. The
+application has a master default and hard maximum. Trusted staff can set or clear a hidden
+per-workspace override with the operations CLI. The value is stored under the protected
+`Workspace.settings.internalOperations` subtree. Church users cannot read or change it through
+church settings, routes, or screens. Each staff change creates a workspace-scoped operational
+event.
+
+Why: Candidate capacity affects processing cost and the size of the editorial reserve. It is not a
+church editing preference or a customer-facing quantity promise. A protected override lets staff
+control cost or test a larger pool without adding an unsafe tenant setting.
+
+Tradeoff: This P0.6 control changes the live workspace setting. P0.7 snapshots the effective value
+when a project is created, so later master or workspace changes affect only new projects.
+
+Status: Active.
+
+## 2026-08-12 - Project Candidate and Schedule Settings Freeze at Creation
+
+Decision: Each project copies its effective candidate limit, scheduled count, timezone, configured
+service weekdays, service frequency, service occurrence, and configuration version into
+`Project.processingConfig` when the project is created. Upload, pasted-URL, and automatic channel
+imports all use the same snapshot builder. Later master-control or workspace-setting changes affect
+only new projects.
+
+Why: Analysis, scheduling, review, and audit code must operate against the configuration that
+created a project. Reading live workspace settings would change old project behavior without a
+project edit and would make an analysis run impossible to reproduce.
+
+Tradeoff: Existing projects have incomplete snapshots. Defensive readers supply current defaults
+for missing fields. Until P1.8, an unmatched service date is still snapshotted as `PRIMARY` by the
+existing occurrence derivation.
+
+Status: Active.
+
+## 2026-08-12 - Production Analysis Fails Closed Without Claude
+
+Decision: Development and tests can automatically use deterministic, labeled `heuristic-v1`
+analysis when no Claude key exists. Production ANALYZE jobs fail closed when the key is missing,
+rejected, the provider is unavailable, or the Claude call fails. The only production fallback is
+the exact-string `ANALYSIS_ALLOW_HEURISTIC=true` incident override. Every override use records a
+warning operational event and explicit provider, model, selection-reason, and override provenance.
+
+Why: Silent heuristic fallback creates output that appears production-ready without the required
+AI analysis and hides a paid-provider outage from operators. Job-time enforcement is necessary
+because the web and worker services can have different environments.
+
+Tradeoff: A Claude incident stops normal analysis. An operator can use the visible, time-bounded
+override to restore degraded service, but the web readiness check remains failed and affected jobs
+remain labeled. The override must be removed after recovery.
+
+Status: Active.
+
+## 2026-08-12 - Processing COGS Facts Are Separate From Customer Minute Entitlements
+
+Decision: All paid-provider and local-compute cost telemetry uses one versioned processing-cost
+fact stored in `OperationalEvent.metadata`. A cost fact records stage, quantity, unit price or
+unpriced status, provider and model provenance, bytes, CPU and wall time, cache state, attempt, and
+workspace/project/clip/job attribution. Cost recording does not read or write `UsageLedger`.
+
+Why: COGS answers what Pulpit Engine spent to process work. The usage ledger answers how many
+customer plan minutes were reserved, charged, or refunded. Combining them would corrupt billing
+entitlements and make retries or zero-cost local work hard to measure accurately.
+
+Tradeoff: Raw cost facts live in operational-event JSON until Migration Wave 1 adds durable rollup
+models and direct clip attribution. A null unit price stays explicitly unpriced and blocks a cost
+gate; it is never treated as zero.
+
+Status: Active.
+
+## 2026-08-12 - Proxy Economics Are a Measured Launch Gate
+
+Decision: Each URL-source download records two processing-cost facts. The first records direct or
+residential-proxy acquisition bytes. The second records Railway-to-storage egress bytes. Both facts
+include source duration, calculated bitrate, elapsed time, attempt, outcome, and automatic-channel
+attribution when available. A direct acquisition has a known zero network price. A configured proxy
+or Railway egress price uses USD per decimal GB. A missing price stays explicitly unpriced. Stored
+proxy data contains only the host name and never contains the proxy URL or credentials.
+
+The residential-proxy ADR's revisit trigger remains monthly proxy spend above about $200 or church
+count above about 25. This trigger is now a measured launch gate. Launch evidence must use recorded
+bytes and configured prices. An estimate without cost facts does not satisfy the gate.
+
+Why: Functional production imports prove that the proxy path works. They do not prove that its
+economics are acceptable. Attributable facts make successful transfers, partial failures, and
+retries visible without mixing infrastructure cost with customer minute entitlements.
+
+Tradeoff: The current fact records downloaded file bytes and any partial bytes left by yt-dlp. A
+provider can bill more protocol traffic than the final file size. Operators must compare recorded
+facts with provider invoices before launch and must keep the configured per-GB prices current.
+
+Status: Active.
+
+## 2026-08-12 - Filler Tags Never Delete Spoken Words by Default
+
+Decision: A filler tag is transcript and editor display metadata only. It does not delete a word.
+Low transcription confidence does not create a filler tag and does not create a deletion. A new
+editor state keeps every spoken word. Only an explicit word id in `deletedWordIds` changes the
+rendered range. The legacy `restoredFillerIds` field remains readable so existing editor documents
+still parse.
+
+This decision supersedes only the automatic-filler-removal behavior described in the 2026-07-06
+entry "Export Rendering Is A Real Multi-Pass FFmpeg Pipeline". The multi-pass render decision and
+explicit legacy edit behavior remain active until P1 removes internal word deletion from delivery.
+
+Why: A confidence score describes the transcription system's certainty. It is not an instruction
+to remove what the speaker said. Automatic filler deletion can also change meaning, cadence, and
+pastoral tone. Faithful delivery requires the default export to preserve the continuous source.
+
+Tradeoff: Filler tags remain visible as chips, but they no longer shorten a clip automatically.
+Existing explicit deletion documents still render for compatibility. P1 must block those edits
+from delivery before the continuous-source invariant is fully enforced.
+
+Status: Active.
+
+## 2026-08-12 - Automatic Publishing Requires an Exact Global Positive Enable
+
+Decision: Automatic publication requires the exact environment value
+`AUTOMATIC_PUBLISHING_ENABLED=true`. Missing, false, malformed, uppercase, padded, or any other
+value disables publication before the publisher reads or claims a due row. This global kill switch
+takes precedence over the Meta token, the workspace Page ID, the workspace auto-post flag, and all
+later delivery gates. The publisher enforces the switch itself so direct callers cannot bypass it.
+
+The worker records one disabled-state operational event per process-level disabled period. It
+continues to inspect and reconcile stale `IN_PROGRESS` claims because reconciliation makes no Meta
+request and cannot create a new publish claim. Readiness reports the switch state, but disabled is
+a valid ready state.
+
+Why: A repository-visible positive enable gives operators one fail-closed control before schema and
+delivery-eligibility changes. It also prevents a configured Meta token or church flag from enabling
+publication by itself.
+
+Tradeoff: The switch cannot cancel a Meta request already in flight. Deployment and rollback must
+inspect `IN_PROGRESS` rows. Keep the switch false through P1 and P2 sandbox preparation. Use exact
+true only for the controlled sandbox publication defined by the implementation plan.
+
+Status: Active.
+
+## 2026-08-12 - Wave 1 Is Expand-First and Historical Exports Stay Unproven
+
+Decision: Agentic Editor Wave 1 adds only forward-compatible nullable fields, new enum values,
+new tables, foreign keys, and indexes. Historical `ExportJob.editVersion` values stay null because
+the rendered edit identity cannot be proved after the fact. A null edit version is permanently
+ineligible for automatic delivery. It is not backfilled from the latest current edit.
+
+Each non-`MISSED` scheduled post reserves its `(workspaceId, scheduledDate)`. `NOT_STARTED`,
+`IN_PROGRESS`, `SUCCEEDED`, `FAILED`, `BLOCKED`, and `UNFILLED` all reserve the date. Only `MISSED`
+releases it. A slot binds to at most one exact export. The foreign key cannot prove workspace,
+project, and clip agreement, so every delivery consumer must also use the shared fail-closed
+identity contract.
+
+The schedule enum expansion is a small migration immediately before the main Wave 1 migration.
+PostgreSQL requires the new `missed` value to commit before an index predicate can use it. The main
+migration omits Prisma's two known invalid transcript-search-vector statements. The local P0.15
+census found zero legacy exports and zero date collisions. The production audits are still a hard
+deployment precondition and their output is the authoritative production blast radius.
+
+Why: Expand-first schema lets the existing web and worker binaries continue to run while P1 adds
+consumers. Guessing legacy identity would recreate the unsafe latest-export behavior. One active
+date owner makes a cross-project collision a visible failure instead of a duplicate publication.
+
+Tradeoff: Existing exports cannot become automatically deliverable without a new pinned render.
+The additive schema remains in place during an application rollback. Index removal requires a new
+forward migration.
+
+Status: Active.
+
+## 2026-08-13 - Plan-Grid Conflicts Are Reported Without Changing Entitlements
+
+Decision: Keep the current Free, Starter, and Pro entitlement values unchanged during P0. Add a
+deterministic plan-grid report and source validator. The report measures the current limits against
+one weekly 70-minute service, one weekly 90-minute service, and the published light, typical, and
+heavy church profiles. A later small decision commit will select any price, included-minute,
+maximum-duration, overage, or upload-gate change.
+
+The measured conflicts are: Free grants 60 minutes but permits one 90-minute video; Starter grants
+300 minutes but one weekly 70-minute service needs 303.1 minutes per average month; and Starter does
+not cover the 358-, 618-, or 878-minute profile midpoints. Pro's 1,200 minutes cover all three
+published profile midpoints. The reservation remains a hard block. It does not use the declared
+`overageAllowed` field.
+
+Paid-period grants accumulate. `grantMinutesForBillingPeriod` adds a new invoice grant to the
+existing balance and does not reset it. Carryover can delay a recurring shortfall, but it does not
+remove a steady-state deficit. Prices remain Stripe Price IDs resolved through
+`STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO`; no dollar amount was added to the plan-limit table.
+
+The upload presign gate checks only `minuteBalance > 0`. It does not know the video duration.
+`FINALIZE` calculates the real reservation later, so a low-balance church can transfer a full file
+before receiving `INSUFFICIENT_MINUTES`. This is recorded as a small later UX fix, not changed in
+this report-only commit.
+
+Why: The current plan grid cannot support its stated limits and church usage in every case. A
+measured report makes the conflicts visible without silently changing customer promises or mixing
+an engineering audit with a pricing decision.
+
+Status: Active. The conflicts are proven. The entitlement response is intentionally undecided.
+
+## 2026-08-13 - The Current IPRoyal Contract Fails the YouTube Cost Gate
+
+Decision: Apply the P0.19 hard stop. Do not approve the current YouTube proxy path and do not spend
+on a redundant second service until the proxy contract or intake path changes. The actual IPRoyal
+residential order was 2 GB for $12.50, or $6.25 per decimal GB. No account, order, payment, or
+credential identifier is stored in the repository.
+
+The existing real 49:41 production service has a 392,808,104-byte source object in production
+Cloudflare R2. At the contracted proxy rate, stored source bytes alone cost $2.4551 per service,
+or $2.9641 per source hour. At 8.66 services per typical month, proxy cost alone is $21.26. Adding
+only the measured $0.156798 analysis anchor creates a conservative $22.62 monthly lower bound. The
+YouTube-path gate is $12. Protocol overhead and all omitted core stages can only increase this
+result.
+
+Production storage is Cloudflare R2 at
+`04bed3f430e69de89a54a5ec15ac997a.r2.cloudflarestorage.com`, with contracted direct egress at
+$0/GB. This settles the P0 storage-provider and egress question. The complete all-stage Gate A
+report remains open because P0.11 and P0.12 telemetry landed after the reference run, and the new
+price variables are not deployed in production.
+
+Why: A new paid run cannot turn a lower bound that already exceeds the cap into a pass. Recording
+the measured failure prevents an estimate or successful import from being misreported as economic
+approval. The next decision must change intake economics before the full real-service run is
+useful.
+
+Status: Active. YouTube economics failed. Gate A has not passed.
+
+## 2026-08-13 - Direct Upload Passes the P0 Cost-Truth Gate
+
+Decision: Approve direct upload as the P0 Gate A intake path. One paid production run used the
+existing 47:00 service file. It completed direct upload, probe, local transcription, paid Claude
+analysis, approval, and one final export. Automatic publishing stayed disabled. The public-safe
+report is `evaluation/p0-cost-truth-2026-08-13.json`.
+
+The measured source was 158,665,289 bytes. Proxy bytes and proxy cost per source hour were zero.
+Railway egress for the browser-to-R2 transfer cost $0.007933. Core processing cost $0.201123 per
+service. Total measured cost was $0.209056 per service and $1.810427 per typical church month at
+8.66 services. The direct-upload monthly gate is $8.00. Production storage is Cloudflare R2 with
+contracted direct egress at $0/GB. All required stages had priced or contract-confirmed zero-cost
+facts. Gate A passed.
+
+The paid run used `claude-haiku-4-5` for classification and `claude-sonnet-5` for scoring. It used
+92,189 input tokens and 11,130 output tokens. Both totals are within 25 percent of the committed
+Run 2 usage anchor. Analysis cost was $0.201123, which is 28.3 percent above the old $0.156798 cost
+anchor. This difference is valid because the current model and token mix changed. Gate A uses
+token volume for the cross-run plausibility check. It records actual paid cost separately and
+enforces the $1.50 core cost cap.
+
+The successful direct-upload report does not approve the YouTube proxy path. The current IPRoyal
+contract still fails its separate $12 monthly gate.
+
+Why: Token volume is comparable across model price changes. Paid cost is not. Using token volume
+for the sandbox reconciliation keeps the plausibility check stable. The separate cost caps still
+block an uneconomic run.
+
+Status: Active. Direct upload passed Gate A. YouTube proxy intake remains disapproved.

@@ -258,6 +258,10 @@ test.describe("Phase 6/7 browser workflow", () => {
 
     await page.getByLabel("Edit this clip").click();
     await expect(page.getByRole("heading", { name: "Peace Stays With Us" })).toBeVisible();
+    await page.getByRole("button", { name: "Face" }).click();
+    await expect(
+      page.getByText("Face mode currently uses the same static center crop as Center."),
+    ).toBeVisible();
     await page.getByRole("button", { name: "says" }).click();
     await page.getByRole("button", { name: /Sunday Sermon/ }).click();
     await page.getByRole("button", { name: "Save" }).click();

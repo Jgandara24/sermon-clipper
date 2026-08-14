@@ -1,3 +1,5 @@
+import type { SchedulePublishStatus } from "@prisma/client";
+
 /**
  * Maps a clip's rank (1-indexed, best first) to its calendar posting date, per Pulpit
  * Engine's scheduling rule (docs/BUSINESS_OVERVIEW.md): the Nth-best clip posts N days
@@ -31,6 +33,33 @@ type ScheduledPostQueryClient = {
   };
 };
 
+type ScheduledPostCollisionClient = {
+  scheduledPost: {
+    findFirst(args: {
+      where: { workspaceId: string; scheduledDate: Date };
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }];
+      select: {
+        id: true;
+        createdAt: true;
+        publishStatus: true;
+        clip: { select: { projectId: true } };
+      };
+    }): Promise<{
+      id: string;
+      createdAt: Date;
+      publishStatus: SchedulePublishStatus;
+      clip: { projectId: string } | null;
+    } | null>;
+  };
+};
+
+export type ScheduledPostCollision = {
+  id: string;
+  createdAt: Date;
+  publishStatus: SchedulePublishStatus;
+  projectId: string | null;
+};
+
 /**
  * Clears the re-schedulable (NOT_STARTED/FAILED) calendar slots of a project's clips before
  * re-analysis regenerates them. SUCCEEDED/IN_PROGRESS rows are publish history — the only
@@ -48,6 +77,31 @@ export async function clearReschedulableScheduledPosts(
       publishStatus: { in: ["NOT_STARTED", "FAILED"] },
     },
   });
+}
+
+/** Returns the earliest row that already reserves a workspace posting date, in any state. */
+export async function findScheduledPostCollision(
+  tx: ScheduledPostCollisionClient,
+  params: { workspaceId: string; scheduledDate: Date },
+): Promise<ScheduledPostCollision | null> {
+  const existing = await tx.scheduledPost.findFirst({
+    where: { workspaceId: params.workspaceId, scheduledDate: params.scheduledDate },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      createdAt: true,
+      publishStatus: true,
+      clip: { select: { projectId: true } },
+    },
+  });
+  return existing
+    ? {
+        id: existing.id,
+        createdAt: existing.createdAt,
+        publishStatus: existing.publishStatus,
+        projectId: existing.clip?.projectId ?? null,
+      }
+    : null;
 }
 
 /**

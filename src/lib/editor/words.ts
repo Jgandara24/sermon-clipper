@@ -45,13 +45,13 @@ export function wordsInRange(words: EditorWord[], startMs: number, endMs: number
 
 export type EditorWordWithDeletion = EditorWord & { effectiveDeleted: boolean };
 
-/** Annotates each word with whether it's effectively deleted under the current editor state. */
+/** Annotates each word with its explicit deletion state; filler tags are display metadata only. */
 export function applyEditorDeletions(
   words: EditorWord[],
   state: EditorState,
 ): EditorWordWithDeletion[] {
   return words.map((word) => ({
     ...word,
-    effectiveDeleted: isWordDeleted(state, word.id, word.isFiller),
+    effectiveDeleted: isWordDeleted(state, word.id),
   }));
 }

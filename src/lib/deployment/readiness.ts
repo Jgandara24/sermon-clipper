@@ -219,6 +219,17 @@ export function checkDeploymentEnvironment(env: EnvLike = process.env): Readines
     ...checkApprovalNotificationEnv(env),
     ...checkStripeEnv(env),
     ...checkGenerationProviderEnv(env),
+    env.AUTOMATIC_PUBLISHING_ENABLED === "true"
+      ? {
+          name: "AUTOMATIC_PUBLISHING_ENABLED",
+          status: "ok",
+          message: "Automatic publishing is enabled by the global switch.",
+        }
+      : {
+          name: "AUTOMATIC_PUBLISHING_ENABLED",
+          status: "ok",
+          message: "Automatic publishing is disabled by the global switch.",
+        },
   ];
 
   const storageProvider = env.STORAGE_PROVIDER ?? "local";

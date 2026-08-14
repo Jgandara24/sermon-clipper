@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LocalDiskStorageProvider } from "@/lib/storage/local-disk-provider";
+import { storageTransferCostFact } from "@/lib/storage";
 
 let tmpDir: string;
 
@@ -40,5 +41,48 @@ describe("LocalDiskStorageProvider file bridge", () => {
     expect(await storage.readAsBuffer("exports/workspace-1/output.txt")).toEqual(
       Buffer.from("rendered body"),
     );
+  });
+});
+
+describe("storageTransferCostFact", () => {
+  it("records local traffic as known zero cost with measured bytes", () => {
+    expect(
+      storageTransferCostFact({
+        direction: "download",
+        bytes: 1_000_000_000,
+        provider: "local",
+        configuredPricePerGbUsd: null,
+        wallTimeMs: 25,
+        attempt: 1,
+        outcome: "succeeded",
+      }),
+    ).toMatchObject({
+      stage: "download",
+      quantity: 1,
+      unit: "gigabyte",
+      unitCostUsd: 0,
+      provider: "local_storage",
+      bytes: 1_000_000_000,
+    });
+  });
+
+  it("keeps a remote transfer unpriced when no price is configured", () => {
+    expect(
+      storageTransferCostFact({
+        direction: "upload",
+        bytes: 500,
+        provider: "s3",
+        configuredPricePerGbUsd: null,
+        wallTimeMs: 10,
+        attempt: 2,
+        outcome: "failed",
+      }),
+    ).toMatchObject({
+      stage: "upload",
+      unitCostUsd: null,
+      provider: "s3_storage",
+      attempt: 2,
+      outcome: "failed",
+    });
   });
 });

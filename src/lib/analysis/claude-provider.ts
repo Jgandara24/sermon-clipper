@@ -95,13 +95,14 @@ function toSubscore(llm: { score: number; note: string }): Subscore {
   return { score: llm.score, letter: scoreToLetter(llm.score), note: llm.note };
 }
 
-function toModelCall(model: string, usage: Anthropic.Usage): AnalysisModelCall {
+function toModelCall(model: string, usage: Anthropic.Usage, wallTimeMs: number): AnalysisModelCall {
   return {
     model,
     inputTokens: usage.input_tokens ?? 0,
     outputTokens: usage.output_tokens ?? 0,
     cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
     cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+    wallTimeMs,
   };
 }
 
@@ -136,6 +137,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
     // classification array scales with the transcript and easily overruns a small token cap.
     // Same reasoning as Stage B below: stream with generous headroom, and treat a truncated or
     // unparseable result as an explicit retryable failure instead of a silent empty classification.
+    const stageAStartedAt = Date.now();
     const stageAStream = client.messages.stream({
       model: stageAModel,
       max_tokens: STAGE_A_MAX_TOKENS,
@@ -155,7 +157,8 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
       output_config: { format: zodOutputFormat(StageAResultSchema) },
     });
     const stageA = await stageAStream.finalMessage();
-    modelCalls.push(toModelCall(stageAModel, stageA.usage));
+    modelCalls.push(toModelCall(stageAModel, stageA.usage, Date.now() - stageAStartedAt));
+    this.lastUsage = buildAnalysisUsage(modelCalls);
 
     if (stageA.stop_reason === "max_tokens") {
       throw new AnalysisResponseTruncatedError(
@@ -177,6 +180,8 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
         { cause: error },
       );
     }
+    modelCalls[0].outcome = "succeeded";
+    this.lastUsage = buildAnalysisUsage(modelCalls);
 
     // Stage A survivors are heavily overlapping (candidate windows share start positions), and
     // Stage B has a fixed number of slots. Thin overlapping survivors before slicing so those
@@ -205,6 +210,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
     // truncation at the token cap. We stream (the SDK's guidance once max_tokens exceeds
     // ~16k) with generous headroom, and treat a `max_tokens` stop as an explicit retryable
     // failure rather than letting it surface as an "unterminated JSON" parse crash.
+    const stageBStartedAt = Date.now();
     const stageBStream = client.messages.stream({
       model: stageBModel,
       max_tokens: STAGE_B_MAX_TOKENS,
@@ -230,7 +236,7 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
     });
     const stageB = await stageBStream.finalMessage();
 
-    modelCalls.push(toModelCall(stageBModel, stageB.usage));
+    modelCalls.push(toModelCall(stageBModel, stageB.usage, Date.now() - stageBStartedAt));
     this.lastUsage = buildAnalysisUsage(modelCalls);
 
     if (stageB.stop_reason === "max_tokens") {
@@ -254,6 +260,8 @@ export class ClaudeAnalysisProvider implements AnalysisProvider {
         { cause: error },
       );
     }
+    modelCalls[1].outcome = "succeeded";
+    this.lastUsage = buildAnalysisUsage(modelCalls);
 
     return scoredClips
       .filter((clip) => clip.index >= 0 && clip.index < candidates.length)

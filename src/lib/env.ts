@@ -20,6 +20,16 @@ import { z } from "zod";
 
 const optionalString = z.string().optional();
 
+/** Positive-enable feature flags accept only the exact lower-case string `true`. */
+export function isExactTrue(raw: string | undefined): boolean {
+  return raw === "true";
+}
+
+const exactTrue = z
+  .string()
+  .optional()
+  .transform(isExactTrue);
+
 /** `Number(raw ?? fallback)` with no garbage guard — garbage yields NaN, exactly as before. */
 const rawNumber = (fallback: number) =>
   z
@@ -46,6 +56,16 @@ const nonNegativeNumber = (fallback: number) =>
       const value = Number(raw ?? fallback);
       return Number.isFinite(value) && value >= 0 ? value : fallback;
     });
+
+/** Finite and >= 0; unset or invalid values stay undefined so cost facts remain unpriced. */
+const optionalNonNegativeNumber = z
+  .string()
+  .optional()
+  .transform((raw) => {
+    if (raw === undefined || raw.trim() === "") return undefined;
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 ? value : undefined;
+  });
 
 /** Finite and > 0; anything else falls back. No flooring. */
 const positiveNumber = (fallback: number) =>
@@ -90,6 +110,8 @@ const fieldSchemas = {
     .string()
     .optional()
     .transform((raw) => raw === "true"),
+  STORAGE_DOWNLOAD_PRICE_PER_GB_USD: optionalNonNegativeNumber,
+  STORAGE_UPLOAD_PRICE_PER_GB_USD: optionalNonNegativeNumber,
 
   // Email / notifications
   RESEND_API_KEY: optionalString,
@@ -117,13 +139,18 @@ const fieldSchemas = {
   FFPROBE_PATH: optionalString,
   YTDLP_PATH: optionalString,
   YTDLP_PROXY_URL: optionalString,
+  YTDLP_PROXY_PRICE_PER_GB_USD: optionalNonNegativeNumber,
+  RAILWAY_EGRESS_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   WHISPER_CPP_BINARY: optionalString,
   WHISPER_MODEL_PATH: optionalString,
 
   // AI analysis
   ANTHROPIC_API_KEY: optionalString,
+  ANALYSIS_ALLOW_HEURISTIC: exactTrue,
   ANALYSIS_MODEL_CLASSIFY: optionalString,
   ANALYSIS_MODEL_SCORING: optionalString,
+  CANDIDATE_LIMIT_DEFAULT: positiveInt(18),
+  CANDIDATE_LIMIT_MAXIMUM: positiveInt(18),
 
   // YouTube Data API v3 (channel auto-import). App-level key, like ANTHROPIC_API_KEY.
   YOUTUBE_API_KEY: optionalString,
@@ -133,6 +160,7 @@ const fieldSchemas = {
   // Facebook Auto-Posting Will Reuse Pulpit Engine's Meta App/Business Manager") — a System
   // User token, not a per-church OAuth token. Absence of META_SYSTEM_USER_TOKEN must fail
   // closed (see src/lib/integrations/facebook.ts), never silently no-op.
+  AUTOMATIC_PUBLISHING_ENABLED: exactTrue,
   META_SYSTEM_USER_TOKEN: optionalString,
   META_GRAPH_API_VERSION: z.string().default("v23.0"),
 
@@ -155,6 +183,8 @@ const fieldSchemas = {
   WORKER_POLL_INTERVAL_MS: rawNumber(2000),
   WORKER_RECOVERY_INTERVAL_MS: rawNumber(60_000),
   WORKER_CLEANUP_INTERVAL_MS: rawNumber(3_600_000),
+  COST_ROLLUP_INTERVAL_MS: rawNumber(60 * 60_000),
+  COST_ROLLUP_LOOKBACK_DAYS: positiveInt(7),
   WORKER_HEARTBEAT_INTERVAL_MS: rawNumber(30_000),
   WORKER_PROCESS_HEARTBEAT_INTERVAL_MS: rawNumber(30_000),
   WORKER_STALE_JOB_TIMEOUT_MS: rawNumber(15 * 60_000),

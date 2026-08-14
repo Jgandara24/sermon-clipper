@@ -3,11 +3,22 @@ import os from "node:os";
 import path from "node:path";
 import { Prisma, ProcessingJobType, ProjectStatus, SourceOrigin, type SourceVideo } from "@prisma/client";
 import { estimateProcessingMinutes, planForCode, type PlanLimits } from "@/lib/billing/plans";
+import { findChannelImportCostAttribution } from "@/lib/channel-import-service";
+import { recordProcessingCostFact } from "@/lib/cost/record";
+import type { ProcessingCostOutcome } from "@/lib/cost/types";
+import { env } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import { MAX_UPLOAD_BYTES, MAX_VIDEO_DURATION_S } from "@/lib/limits";
 import { probeVideoFile } from "@/lib/media/probe";
-import { downloadYtDlpVideo, fetchYtDlpMetadata, YtDlpFileTooLargeError } from "@/lib/media/ytdlp";
+import {
+  buildYtDlpCostFacts,
+  downloadYtDlpVideo,
+  fetchYtDlpMetadata,
+  YtDlpDownloadError,
+  YtDlpFileTooLargeError,
+  type YtDlpTransferTelemetry,
+} from "@/lib/media/ytdlp";
 import { getStorageProvider, type StorageProvider } from "@/lib/storage";
 import { InsufficientBalanceError, reserveMinutesForJob } from "@/lib/usage-ledger";
 
@@ -17,7 +28,11 @@ import { InsufficientBalanceError, reserveMinutesForJob } from "@/lib/usage-ledg
  */
 export type UrlImportDeps = {
   fetchMetadata: typeof fetchYtDlpMetadata;
-  downloadVideo: typeof downloadYtDlpVideo;
+  downloadVideo: (
+    url: string,
+    destPath: string,
+    opts: { maxBytes: number; durationS?: number },
+  ) => Promise<YtDlpTransferTelemetry>;
 };
 
 const defaultUrlImportDeps: UrlImportDeps = {
@@ -39,8 +54,12 @@ async function importSourceVideoFromUrl(params: {
   storage: StorageProvider;
   workDir: string;
   deps: UrlImportDeps;
+  projectId: string;
+  jobId: string;
+  attempt: number;
 }): Promise<string> {
-  const { prisma, sourceVideo, originUrl, plan, storage, workDir, deps } = params;
+  const { prisma, sourceVideo, originUrl, plan, storage, workDir, deps, projectId, jobId, attempt } =
+    params;
 
   let metadata;
   try {
@@ -67,10 +86,26 @@ async function importSourceVideoFromUrl(params: {
 
   const downloadPath = path.join(workDir, "url-download");
   const storageKey = `src/${sourceVideo.workspaceId}/${sourceVideo.id}-url-import.mp4`;
+  let telemetry: YtDlpTransferTelemetry | null = null;
   try {
-    await deps.downloadVideo(originUrl, downloadPath, { maxBytes: MAX_UPLOAD_BYTES });
+    telemetry = await deps.downloadVideo(originUrl, downloadPath, {
+      maxBytes: MAX_UPLOAD_BYTES,
+      durationS: metadata.durationS,
+    });
     await storage.uploadFile(storageKey, downloadPath, "video/mp4");
   } catch (error) {
+    const failedTelemetry = telemetry ?? (error instanceof YtDlpDownloadError ? error.telemetry : null);
+    if (failedTelemetry) {
+      await recordUrlImportCostFacts({
+        prisma,
+        sourceVideo,
+        projectId,
+        jobId,
+        attempt,
+        telemetry: failedTelemetry,
+        outcome: "failed",
+      });
+    }
     if (error instanceof YtDlpFileTooLargeError) {
       throw new JobFailureError(
         "VIDEO_TOO_LARGE",
@@ -85,12 +120,49 @@ async function importSourceVideoFromUrl(params: {
     );
   }
 
+  await recordUrlImportCostFacts({
+    prisma,
+    sourceVideo,
+    projectId,
+    jobId,
+    attempt,
+    telemetry,
+    outcome: "succeeded",
+  });
+
   await prisma.sourceVideo.update({
     where: { id: sourceVideo.id },
-    data: { storageKey },
+    data: { storageKey, sizeBytes: telemetry ? BigInt(telemetry.bytes) : undefined },
   });
 
   return storageKey;
+}
+
+async function recordUrlImportCostFacts(params: {
+  prisma: Parameters<JobHandler>[0]["prisma"];
+  sourceVideo: SourceVideo;
+  projectId: string;
+  jobId: string;
+  attempt: number;
+  telemetry: YtDlpTransferTelemetry;
+  outcome: ProcessingCostOutcome;
+}) {
+  const channel = await findChannelImportCostAttribution(params.prisma, params.projectId);
+  const facts = buildYtDlpCostFacts(params.telemetry, {
+    proxyPricePerGbUsd: env.YTDLP_PROXY_PRICE_PER_GB_USD ?? null,
+    railwayEgressPricePerGbUsd: env.RAILWAY_EGRESS_PRICE_PER_GB_USD ?? null,
+    attempt: Math.max(1, params.attempt),
+    outcome: params.outcome,
+  });
+  for (const fact of facts) {
+    await recordProcessingCostFact(params.prisma, {
+      ...fact,
+      details: { ...fact.details, ...(channel ?? {}) },
+      workspaceId: params.sourceVideo.workspaceId,
+      projectId: params.projectId,
+      jobId: params.jobId,
+    });
+  }
 }
 
 /**
@@ -126,6 +198,9 @@ export function createFinalizeJobHandler(deps: UrlImportDeps = defaultUrlImportD
           storage,
           workDir,
           deps,
+          projectId: project.id,
+          jobId: job.id,
+          attempt: job.attempt,
         });
       }
 

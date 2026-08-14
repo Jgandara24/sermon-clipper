@@ -18,11 +18,12 @@ import { recordOperationalEventSafely } from "@/lib/observability/operational-ev
  * go-live flag set (DECISIONS.md, "Tier 3 Freeze Lifted") — publishes it as a scheduled,
  * unpublished Facebook video post via the Meta Graph API.
  *
- * Fails closed at three independent layers, same discipline as the rest of this codebase's
- * integrations: no META_SYSTEM_USER_TOKEN means the whole poll is a no-op; a workspace without
- * the go-live flag is skipped per-row; a clip with no completed export is skipped per-row (this
- * module never triggers an export itself — a human still reviews/exports clips through the
- * normal flow before Tier 3 can post them).
+ * Fails closed at four independent layers, same discipline as the rest of this codebase's
+ * integrations: the exact global AUTOMATIC_PUBLISHING_ENABLED=true switch is required; no
+ * META_SYSTEM_USER_TOKEN means the whole poll is a no-op; a workspace without the go-live flag is
+ * skipped per-row; a clip with no completed export is skipped per-row (this module never triggers
+ * an export itself — a human still reviews/exports clips through the normal flow before Tier 3 can
+ * post them).
  *
  * Idempotency mirrors Pulpit Engine's proven `schedule_push_status` state machine: a durable
  * `NOT_STARTED -> IN_PROGRESS` claim (conditional update, only proceeds if this run wins the
@@ -51,6 +52,23 @@ function retryBackoffMs(attemptCount: number): number {
 // enough to bound how long a signed link stays valid if leaked.
 const MEDIA_URL_TTL_SECONDS = 30 * 60;
 const ERROR_MESSAGE_MAX_LENGTH = 500;
+
+// One event is enough to make the process state visible. An enabled call resets the latch so a
+// later disabled period produces a new event. The promise also coalesces concurrent disabled calls.
+let publishingDisabledEvent: Promise<void> | null = null;
+
+function reportPublishingDisabled(client: PrismaClient): Promise<void> {
+  if (!publishingDisabledEvent) {
+    publishingDisabledEvent = recordOperationalEventSafely(client, {
+      category: "facebook_publish",
+      eventType: "automatic_publishing_disabled",
+      message:
+        "Automatic publishing is disabled by the global AUTOMATIC_PUBLISHING_ENABLED switch.",
+      metadata: { automaticPublishingEnabled: false },
+    }).then(() => undefined);
+  }
+  return publishingDisabledEvent;
+}
 
 function truncateErrorMessage(message: string): string {
   return message.length > ERROR_MESSAGE_MAX_LENGTH
@@ -170,6 +188,14 @@ export async function publishDueScheduledPosts(
     postsSkippedMisconfigured: 0,
     postsFailed: 0,
   };
+
+  // This is the authoritative publish gate. Scripts and direct callers cannot bypass it. No due
+  // row is inspected or claimed before the exact positive-enable value is present.
+  if (!env.AUTOMATIC_PUBLISHING_ENABLED) {
+    await reportPublishingDisabled(client);
+    return summary;
+  }
+  publishingDisabledEvent = null;
 
   // Fail closed, quietly: Tier 3 is entirely unconfigured in this environment.
   if (!env.META_SYSTEM_USER_TOKEN) {

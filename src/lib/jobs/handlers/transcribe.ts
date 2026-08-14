@@ -2,13 +2,86 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ProcessingJobType } from "@prisma/client";
+import { recordProcessingCostFact } from "@/lib/cost/record";
+import {
+  finishRuntimeMeasurement,
+  startRuntimeMeasurement,
+  type RuntimeMeasurement,
+} from "@/lib/cost/runtime";
+import type { ProcessingCostOutcome } from "@/lib/cost/types";
+import { env } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
-import { getStorageProvider } from "@/lib/storage";
+import {
+  getStorageProvider,
+  storageProviderKind,
+  storageTransferCostFact,
+} from "@/lib/storage";
 import { applyFillerDetection } from "@/lib/transcription/filler-detection";
 import { getTranscriptionProvider } from "@/lib/transcription";
 import { parseSrt, SrtParseError } from "@/lib/transcription/srt";
-import { TranscriptionProviderUnavailableError, type TranscriptionResult } from "@/lib/transcription/types";
+import {
+  TranscriptionProviderUnavailableError,
+  type TranscriptionResult,
+} from "@/lib/transcription/types";
+
+async function recordTranscriptionFact(params: {
+  prisma: Parameters<JobHandler>[0]["prisma"];
+  workspaceId: string;
+  projectId: string;
+  jobId: string;
+  attempt: number;
+  provider: string;
+  durationS: number;
+  runtime: RuntimeMeasurement;
+  outcome: ProcessingCostOutcome;
+  source: "audio" | "srt_override";
+}) {
+  await recordProcessingCostFact(params.prisma, {
+    stage: "transcription",
+    quantity: params.durationS / 60,
+    unit: "minute",
+    unitCostUsd: 0,
+    provider: params.provider,
+    model: params.provider,
+    providerProvenance: "runtime_provider_selection",
+    cpuTimeMs: params.runtime.cpuTimeMs,
+    wallTimeMs: params.runtime.wallTimeMs,
+    cacheState: "miss",
+    attempt: Math.max(1, params.attempt),
+    outcome: params.outcome,
+    details: { source: params.source },
+    workspaceId: params.workspaceId,
+    projectId: params.projectId,
+    jobId: params.jobId,
+  });
+}
+
+async function recordStorageDownloadFact(params: {
+  prisma: Parameters<JobHandler>[0]["prisma"];
+  workspaceId: string;
+  projectId: string;
+  jobId: string;
+  attempt: number;
+  bytes: number;
+  wallTimeMs: number;
+  outcome: ProcessingCostOutcome;
+}) {
+  await recordProcessingCostFact(params.prisma, {
+    ...storageTransferCostFact({
+      direction: "download",
+      bytes: params.bytes,
+      provider: storageProviderKind(),
+      configuredPricePerGbUsd: env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD ?? null,
+      wallTimeMs: params.wallTimeMs,
+      attempt: Math.max(1, params.attempt),
+      outcome: params.outcome,
+    }),
+    workspaceId: params.workspaceId,
+    projectId: params.projectId,
+    jobId: params.jobId,
+  });
+}
 
 /**
  * Transcribes the extracted audio (or parses a user-supplied SRT override, skipping ASR
@@ -31,10 +104,50 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   let providerName: string;
 
   if (sourceVideo.srtOverrideKey) {
-    const srtText = (await storage.readAsBuffer(sourceVideo.srtOverrideKey)).toString("utf-8");
+    const downloadStartedAt = Date.now();
+    let srtBuffer: Buffer;
+    try {
+      srtBuffer = await storage.readAsBuffer(sourceVideo.srtOverrideKey);
+      await recordStorageDownloadFact({
+        prisma,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        jobId: job.id,
+        attempt: job.attempt,
+        bytes: srtBuffer.byteLength,
+        wallTimeMs: Date.now() - downloadStartedAt,
+        outcome: "succeeded",
+      });
+    } catch (error) {
+      await recordStorageDownloadFact({
+        prisma,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        jobId: job.id,
+        attempt: job.attempt,
+        bytes: 0,
+        wallTimeMs: Date.now() - downloadStartedAt,
+        outcome: "failed",
+      });
+      throw error;
+    }
+    const srtText = srtBuffer.toString("utf-8");
+    const transcriptionStartedAt = startRuntimeMeasurement();
     try {
       result = parseSrt(srtText, sourceVideo.language ?? "en");
     } catch (error) {
+      await recordTranscriptionFact({
+        prisma,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        jobId: job.id,
+        attempt: job.attempt,
+        provider: "srt_upload",
+        durationS: sourceVideo.durationS?.toNumber() ?? 0,
+        runtime: finishRuntimeMeasurement(transcriptionStartedAt),
+        outcome: "failed",
+        source: "srt_override",
+      });
       if (error instanceof SrtParseError) {
         throw new JobFailureError("INVALID_FILE_TYPE", "That SRT file couldn't be read.", {
           cause: error,
@@ -43,6 +156,20 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
       throw error;
     }
     providerName = "srt_upload";
+    await recordTranscriptionFact({
+      prisma,
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      jobId: job.id,
+      attempt: job.attempt,
+      provider: providerName,
+      durationS:
+        sourceVideo.durationS?.toNumber() ??
+        Math.max(0, ...result.segments.map((segment) => segment.endMs / 1_000)),
+      runtime: finishRuntimeMeasurement(transcriptionStartedAt),
+      outcome: "succeeded",
+      source: "srt_override",
+    });
   } else {
     if (!sourceVideo.audioKey) {
       throw new JobFailureError("STORAGE_UNAVAILABLE", "Storage hiccup — try again in a minute.");
@@ -50,13 +177,70 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
     const provider = await getTranscriptionProvider();
     const workDir = await mkdtemp(path.join(os.tmpdir(), "sermon-transcribe-"));
     const audioPath = path.join(workDir, "audio.wav");
+    const audioBytes = await storage.size(sourceVideo.audioKey).catch(() => 0);
+    const downloadStartedAt = Date.now();
+    let downloadSucceeded = false;
     try {
       await storage.downloadToFile(sourceVideo.audioKey, audioPath);
-      result = await provider.transcribe({
-        audioPath,
-        language: sourceVideo.language ?? undefined,
+      downloadSucceeded = true;
+      await recordStorageDownloadFact({
+        prisma,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        jobId: job.id,
+        attempt: job.attempt,
+        bytes: audioBytes,
+        wallTimeMs: Date.now() - downloadStartedAt,
+        outcome: "succeeded",
+      });
+      const transcriptionStartedAt = startRuntimeMeasurement();
+      try {
+        result = await provider.transcribe({
+          audioPath,
+          language: sourceVideo.language ?? undefined,
+        });
+      } catch (error) {
+        await recordTranscriptionFact({
+          prisma,
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+          jobId: job.id,
+          attempt: job.attempt,
+          provider: provider.name,
+          durationS: sourceVideo.durationS?.toNumber() ?? 0,
+          runtime: provider.lastTelemetry ?? finishRuntimeMeasurement(transcriptionStartedAt),
+          outcome: "failed",
+          source: "audio",
+        });
+        throw error;
+      }
+      await recordTranscriptionFact({
+        prisma,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        jobId: job.id,
+        attempt: job.attempt,
+        provider: provider.name,
+        durationS:
+          sourceVideo.durationS?.toNumber() ??
+          Math.max(0, ...result.segments.map((segment) => segment.endMs / 1_000)),
+        runtime: provider.lastTelemetry ?? finishRuntimeMeasurement(transcriptionStartedAt),
+        outcome: "succeeded",
+        source: "audio",
       });
     } catch (error) {
+      if (!downloadSucceeded) {
+        await recordStorageDownloadFact({
+          prisma,
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+          jobId: job.id,
+          attempt: job.attempt,
+          bytes: audioBytes,
+          wallTimeMs: Date.now() - downloadStartedAt,
+          outcome: "failed",
+        });
+      }
       if (error instanceof TranscriptionProviderUnavailableError) {
         throw new JobFailureError(
           "TRANSCRIBE_PROVIDER_UNAVAILABLE",

@@ -9,12 +9,21 @@ import {
 import {
   calendarDateInTimezone,
   deriveServiceSlot,
+  isValidIanaTimezone,
   parseChurchProfile,
   targetClipCountFor,
   type ChurchProfile,
-  type SermonsPerWeek,
   type ServiceSlot,
 } from "@/lib/church-profile";
+import {
+  readCandidateLimit,
+  readTargetClipCount,
+  resolveCandidateLimit,
+} from "@/lib/analysis/candidate-limit";
+import { env } from "@/lib/env";
+import { readCandidateLimitOverride } from "@/lib/operations/candidate-limit-override";
+
+export const PROCESSING_CONFIGURATION_VERSION = 1;
 
 export type DraftProjectInput = {
   name: string;
@@ -48,14 +57,78 @@ export function normalizeProjectName(name: string) {
   return normalized;
 }
 
-export function buildDefaultProcessingConfig(sermonsPerWeek: SermonsPerWeek = 1) {
+export function buildDefaultProcessingConfig(
+  profile: ChurchProfile = parseChurchProfile(null),
+  serviceOccurrence: ServiceSlot = "PRIMARY",
+  candidateLimitOverride?: unknown,
+) {
+  const targetClipCount = targetClipCountFor(profile.sermonsPerWeek);
   return {
     language: "en",
     lengthBucket: "60-89s",
     timeframe: null,
     genre: "sermon",
     mode: "clip",
-    targetClipCount: targetClipCountFor(sermonsPerWeek),
+    configurationVersion: PROCESSING_CONFIGURATION_VERSION,
+    candidateLimit: resolveCandidateLimit({
+      targetClipCount,
+      churchOverride: candidateLimitOverride,
+      masterDefault: env.CANDIDATE_LIMIT_DEFAULT,
+      masterMaximum: env.CANDIDATE_LIMIT_MAXIMUM,
+    }),
+    targetClipCount,
+    timezone: profile.timezone,
+    serviceDay: profile.serviceDay,
+    secondServiceDay: profile.secondServiceDay,
+    sermonsPerWeek: profile.sermonsPerWeek,
+    serviceOccurrence,
+  };
+}
+
+function readObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readNonEmptyString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+/** Reads a project snapshot defensively so legacy projects use the current code defaults. */
+export function readProjectProcessingConfig(processingConfig: unknown) {
+  const raw = readObject(processingConfig);
+  const defaults = buildDefaultProcessingConfig();
+  const targetClipCount = readTargetClipCount(raw);
+  const candidateLimit = readCandidateLimit(raw, {
+    masterDefault: env.CANDIDATE_LIMIT_DEFAULT,
+    masterMaximum: env.CANDIDATE_LIMIT_MAXIMUM,
+  });
+  const timezone =
+    typeof raw.timezone === "string" && isValidIanaTimezone(raw.timezone)
+      ? raw.timezone
+      : defaults.timezone;
+
+  return {
+    language: readNonEmptyString(raw.language, defaults.language),
+    lengthBucket: readNonEmptyString(raw.lengthBucket, defaults.lengthBucket),
+    timeframe: typeof raw.timeframe === "string" ? raw.timeframe : defaults.timeframe,
+    genre: readNonEmptyString(raw.genre, defaults.genre),
+    mode: readNonEmptyString(raw.mode, defaults.mode),
+    configurationVersion:
+      typeof raw.configurationVersion === "number" &&
+      Number.isInteger(raw.configurationVersion) &&
+      raw.configurationVersion > 0
+        ? raw.configurationVersion
+        : defaults.configurationVersion,
+    candidateLimit,
+    targetClipCount,
+    timezone,
+    serviceDay: readNonEmptyString(raw.serviceDay, defaults.serviceDay),
+    secondServiceDay:
+      typeof raw.secondServiceDay === "string" ? raw.secondServiceDay : defaults.secondServiceDay,
+    sermonsPerWeek: raw.sermonsPerWeek === 2 ? 2 : defaults.sermonsPerWeek,
+    serviceOccurrence: raw.serviceOccurrence === "SECONDARY" ? "SECONDARY" : defaults.serviceOccurrence,
   };
 }
 
@@ -63,11 +136,12 @@ export function buildDraftProjectRecord(
   workspaceId: string,
   input: DraftProjectInput,
   sourceVideoId?: string,
-  sermonsPerWeek: SermonsPerWeek = 1,
+  profile: ChurchProfile = parseChurchProfile(null),
   serviceContext: { sermonDate: Date; serviceSlot: ServiceSlot } = {
     sermonDate: calendarDateInTimezone(new Date(), "America/Chicago"),
     serviceSlot: "PRIMARY",
   },
+  candidateLimitOverride?: unknown,
 ): Prisma.ProjectUncheckedCreateInput {
   return {
     workspaceId,
@@ -76,21 +150,28 @@ export function buildDraftProjectRecord(
     status: ProjectStatus.DRAFT,
     series: input.series?.trim() || null,
     speaker: input.speaker?.trim() || null,
-    processingConfig: buildDefaultProcessingConfig(sermonsPerWeek),
+    processingConfig: buildDefaultProcessingConfig(
+      profile,
+      serviceContext.serviceSlot,
+      candidateLimitOverride,
+    ),
     sermonDate: serviceContext.sermonDate,
     serviceSlot: serviceContext.serviceSlot,
   };
 }
 
-async function getChurchProfile(
+async function getWorkspaceProjectSettings(
   tx: PrismaClient | Prisma.TransactionClient,
   workspaceId: string,
-): Promise<ChurchProfile> {
+) {
   const workspace = await tx.workspace.findUniqueOrThrow({
     where: { id: workspaceId },
     select: { settings: true },
   });
-  return parseChurchProfile(workspace.settings);
+  return {
+    churchProfile: parseChurchProfile(workspace.settings),
+    candidateLimitOverride: readCandidateLimitOverride(workspace.settings),
+  };
 }
 
 /**
@@ -132,7 +213,7 @@ export async function createDraftProjectForWorkspace(
       throw new Error("Workspace access denied for project creation.");
     }
 
-    const churchProfile = await getChurchProfile(tx, workspaceId);
+    const { churchProfile, candidateLimitOverride } = await getWorkspaceProjectSettings(tx, workspaceId);
     const serviceContext = buildServiceContext(churchProfile, input.publishedAt);
 
     const sourceUrl = input.sourceUrl?.trim();
@@ -153,8 +234,9 @@ export async function createDraftProjectForWorkspace(
           workspaceId,
           input,
           sourceVideo?.id,
-          churchProfile.sermonsPerWeek,
+          churchProfile,
           serviceContext,
+          candidateLimitOverride,
         ),
         ...(sourceVideo ? { status: ProjectStatus.QUEUED } : {}),
       },
@@ -203,7 +285,7 @@ export async function createProjectFromUploadedSourceVideo(
     const sourceVideo = await tx.sourceVideo.findUniqueOrThrow({ where: { id: input.sourceVideoId } });
     assertWorkspaceScope(sourceVideo.workspaceId, workspaceId, "source video");
 
-    const churchProfile = await getChurchProfile(tx, workspaceId);
+    const { churchProfile, candidateLimitOverride } = await getWorkspaceProjectSettings(tx, workspaceId);
     const serviceContext = buildServiceContext(churchProfile);
 
     const project = await tx.project.create({
@@ -212,8 +294,9 @@ export async function createProjectFromUploadedSourceVideo(
           workspaceId,
           input,
           sourceVideo.id,
-          churchProfile.sermonsPerWeek,
+          churchProfile,
           serviceContext,
+          candidateLimitOverride,
         ),
         status: ProjectStatus.QUEUED,
       },

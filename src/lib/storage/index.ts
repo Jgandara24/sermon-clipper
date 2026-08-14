@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { ProcessingCostFactInput, ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
 import { LocalDiskStorageProvider } from "./local-disk-provider";
 import { S3StorageProvider } from "./s3-provider";
@@ -14,6 +15,37 @@ export function getStorageProvider(): StorageProvider {
   }
 
   return globalForStorage.storageProvider;
+}
+
+export type StorageProviderKind = "local" | "s3";
+
+export function storageProviderKind(): StorageProviderKind {
+  return env.STORAGE_PROVIDER === "s3" ? "s3" : "local";
+}
+
+export function storageTransferCostFact(input: {
+  direction: "download" | "upload";
+  bytes: number;
+  provider: StorageProviderKind;
+  configuredPricePerGbUsd: number | null;
+  wallTimeMs: number;
+  attempt: number;
+  outcome: ProcessingCostOutcome;
+}): ProcessingCostFactInput {
+  return {
+    stage: input.direction,
+    quantity: input.bytes / 1_000_000_000,
+    unit: "gigabyte",
+    unitCostUsd: input.provider === "local" ? 0 : input.configuredPricePerGbUsd,
+    provider: `${input.provider}_storage`,
+    model: null,
+    providerProvenance: "storage_provider_config",
+    bytes: input.bytes,
+    wallTimeMs: input.wallTimeMs,
+    cacheState: "not_applicable",
+    attempt: input.attempt,
+    outcome: input.outcome,
+  };
 }
 
 function createStorageProvider(): StorageProvider {
