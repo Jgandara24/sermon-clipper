@@ -2,78 +2,61 @@ import { Prisma } from "@prisma/client";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 
 export type PlanLimits = {
-  code: string;
-  name: string;
-  includedMinutes: number;
+  code: "trial" | "paid";
+  name: "Trial" | "Paid";
+  includedMinutes: 0;
   maxUploadBytes: number;
   maxVideoDurationS: number;
-  overageAllowed: boolean;
-  stripePriceEnvVar?: string;
+  overageAllowed: true;
+  stripePriceEnvVar?: "STRIPE_PRICE_PAID";
 };
 
-const PLAN_LIMITS: Record<string, PlanLimits> = {
-  free: {
-    code: "free",
-    name: "Free",
-    includedMinutes: 60,
-    maxUploadBytes: Math.min(MAX_UPLOAD_BYTES, 2 * 1024 * 1024 * 1024),
-    maxVideoDurationS: 90 * 60,
-    overageAllowed: false,
-  },
-  starter: {
-    code: "starter",
-    name: "Starter",
-    includedMinutes: 300,
-    maxUploadBytes: MAX_UPLOAD_BYTES,
-    maxVideoDurationS: 3 * 60 * 60,
-    overageAllowed: false,
-    stripePriceEnvVar: "STRIPE_PRICE_STARTER",
-  },
-  pro: {
-    code: "pro",
-    name: "Pro",
-    includedMinutes: 1_200,
-    maxUploadBytes: MAX_UPLOAD_BYTES,
-    maxVideoDurationS: 3 * 60 * 60,
-    overageAllowed: false,
-    stripePriceEnvVar: "STRIPE_PRICE_PRO",
-  },
-  dev: {
-    code: "dev",
-    name: "Development",
-    includedMinutes: 60,
-    maxUploadBytes: MAX_UPLOAD_BYTES,
-    maxVideoDurationS: 3 * 60 * 60,
-    overageAllowed: false,
+const SHARED_TECHNICAL_LIMITS = {
+  includedMinutes: 0 as const,
+  maxUploadBytes: MAX_UPLOAD_BYTES,
+  maxVideoDurationS: 3 * 60 * 60,
+  overageAllowed: true as const,
+};
+
+const PLAN_LIMITS: Record<"trial" | "paid", PlanLimits> = {
+  trial: { code: "trial", name: "Trial", ...SHARED_TECHNICAL_LIMITS },
+  paid: {
+    code: "paid",
+    name: "Paid",
+    ...SHARED_TECHNICAL_LIMITS,
+    stripePriceEnvVar: "STRIPE_PRICE_PAID",
   },
 };
 
+/** Legacy plan codes remain readable during migration, but the product exposes only Trial and Paid. */
 export function planForCode(planCode: string | null | undefined): PlanLimits {
-  return PLAN_LIMITS[planCode ?? "free"] ?? PLAN_LIMITS.free;
+  return planCode === "starter" || planCode === "pro" || planCode === "dev" || planCode === "paid"
+    ? PLAN_LIMITS.paid
+    : PLAN_LIMITS.trial;
 }
 
 export function paidPlans(): PlanLimits[] {
-  return Object.values(PLAN_LIMITS).filter((plan) => plan.stripePriceEnvVar);
+  return [PLAN_LIMITS.paid];
 }
 
-export function stripePriceIdForPlan(planCode: string, env: NodeJS.ProcessEnv = process.env): string | null {
-  const plan = planForCode(planCode);
-  return plan.stripePriceEnvVar ? (env[plan.stripePriceEnvVar] ?? null) : null;
+export function stripePriceIdForPlan(
+  planCode: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return planForCode(planCode).code === "paid" ? (env.STRIPE_PRICE_PAID ?? null) : null;
 }
 
 export function planForStripePriceId(
   priceId: string | null | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): PlanLimits | null {
-  if (!priceId) return null;
-  return paidPlans().find((plan) => plan.stripePriceEnvVar && env[plan.stripePriceEnvVar] === priceId) ?? null;
+  return priceId && env.STRIPE_PRICE_PAID === priceId ? PLAN_LIMITS.paid : null;
 }
 
+/** Kept as a usage measurement. It is not an entitlement or access gate. */
 export function estimateProcessingMinutes(durationS: number | Prisma.Decimal): Prisma.Decimal {
   const seconds = durationS instanceof Prisma.Decimal ? durationS.toNumber() : durationS;
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    return new Prisma.Decimal(1);
-  }
+  if (!Number.isFinite(seconds) || seconds <= 0) return new Prisma.Decimal(1);
   return new Prisma.Decimal(Math.max(1, Math.ceil(seconds / 60)));
 }
 

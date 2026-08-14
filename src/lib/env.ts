@@ -130,8 +130,7 @@ const fieldSchemas = {
   // Stripe (prefix rules enforced by readiness.ts, not here)
   STRIPE_SECRET_KEY: optionalString,
   STRIPE_WEBHOOK_SECRET: optionalString,
-  STRIPE_PRICE_STARTER: optionalString,
-  STRIPE_PRICE_PRO: optionalString,
+  STRIPE_PRICE_PAID: optionalString,
 
   // Media tooling (call sites apply `|| "ffmpeg"`-style defaults via the helpers below so an
   // empty string still falls back, exactly as before)
@@ -146,6 +145,7 @@ const fieldSchemas = {
 
   // AI analysis
   ANTHROPIC_API_KEY: optionalString,
+  GEMINI_API_KEY: optionalString,
   ANALYSIS_ALLOW_HEURISTIC: exactTrue,
   ANALYSIS_MODEL_CLASSIFY: optionalString,
   ANALYSIS_MODEL_SCORING: optionalString,

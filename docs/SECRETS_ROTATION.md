@@ -52,8 +52,7 @@ revoke old**. Never revoke first.
 ### Going live (separate step, after rotation)
 
 1. Complete Stripe account activation for live mode.
-2. Create live-mode Products/Prices for Starter ($15) and Pro ($29); put the live `price_...`
-   ids in `STRIPE_PRICE_STARTER` / `STRIPE_PRICE_PRO` on Railway.
+2. Create one live-mode Paid Product/Price. Put its `price_...` ID in `STRIPE_PRICE_PAID` on Railway.
 3. Create a live-mode webhook endpoint pointing at `/api/stripe/webhook`; set its secret.
 4. Swap `STRIPE_SECRET_KEY` to the live key; redeploy; run one real checkout with a real card
    and refund it; confirm the plan flip + included-minute grant on the workspace.

@@ -1,7 +1,6 @@
-import { formatDate, formatMinutes, titleCaseStatus } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
-import { formatBytes, paidPlans, planForCode } from "@/lib/billing/plans";
-import { prisma } from "@/lib/prisma";
+import { decideWorkspaceAccess } from "@/lib/billing/access";
 
 export const dynamic = "force-dynamic";
 
@@ -14,118 +13,83 @@ export default async function BillingPage({
   const membership = await requirePrimaryWorkspacePermission(user.id, "MANAGE_BILLING");
   const workspace = membership.workspace;
   const params = await searchParams;
-  const ledger = await prisma.usageLedger.findMany({
-    where: { workspaceId: workspace.id },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
-  const plan = planForCode(workspace.planCode);
+  const access = decideWorkspaceAccess(workspace, "manage_billing");
 
   return (
-    <section className="grid gap-6">
+    <section className="grid max-w-4xl gap-6">
       <div className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
         <p className="text-sm font-medium text-teal-800">Billing</p>
-        <h1 className="mt-1 text-2xl font-semibold">Usage ledger</h1>
+        <h1 className="mt-1 text-2xl font-semibold">Workspace access</h1>
         <p className="mt-2 text-sm text-stone-500">
-          Current plan limits and minute ledger for this workspace.
+          Trial and Paid have the same features. The trial lasts for 30 days.
         </p>
         {params.checkout === "success" ? (
           <div className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
-            Checkout completed. Stripe will confirm the subscription by webhook before credits are applied.
+            Checkout is complete. Stripe will confirm Paid access.
           </div>
         ) : null}
         {params.checkout === "cancelled" ? (
           <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            Checkout was cancelled. Your current plan is unchanged.
+            Checkout was canceled. Access did not change.
           </div>
         ) : null}
-        <div className="mt-5 grid gap-3 rounded-md bg-stone-50 p-4 sm:grid-cols-3">
+        <dl className="mt-5 grid gap-3 rounded-md bg-stone-50 p-4 sm:grid-cols-3">
           <div>
-            <p className="text-sm text-stone-500">Plan</p>
-            <p className="mt-1 text-2xl font-semibold text-stone-800">{plan.name}</p>
-          </div>
-          <div>
-            <p className="text-sm text-stone-500">Included minutes</p>
-            <p className="mt-1 text-2xl font-semibold text-stone-800">{plan.includedMinutes}</p>
+            <dt className="text-sm text-stone-500">Plan</dt>
+            <dd className="mt-1 text-2xl font-semibold text-stone-800">
+              {access.state === "paid" ? "Paid" : "Trial"}
+            </dd>
           </div>
           <div>
-            <p className="text-sm text-stone-500">Upload limit</p>
-            <p className="mt-1 text-2xl font-semibold text-stone-800">{formatBytes(plan.maxUploadBytes)}</p>
+            <dt className="text-sm text-stone-500">Trial started</dt>
+            <dd className="mt-1 font-semibold text-stone-800">{formatDate(workspace.trialStartedAt)}</dd>
           </div>
-        </div>
-        <div className="mt-3 rounded-md bg-stone-50 p-4">
-          <p className="text-sm text-stone-500">Current minute balance</p>
-          <p className="mt-1 text-3xl font-semibold text-teal-800">
-            {formatMinutes(workspace.minuteBalance)}
-          </p>
-        </div>
-        <div className="mt-5 grid gap-3 rounded-md border border-stone-200 p-4">
           <div>
-            <p className="text-sm font-semibold text-stone-800">Stripe subscription</p>
-            <p className="mt-1 text-sm text-stone-500">
-              Status: {workspace.stripeSubscriptionStatus ?? "not connected"}
-            </p>
-            {workspace.stripeCurrentPeriodEnd ? (
-              <p className="mt-1 text-sm text-stone-500">
-                Current period ends {formatDate(workspace.stripeCurrentPeriodEnd)}
-              </p>
-            ) : null}
+            <dt className="text-sm text-stone-500">Trial ends</dt>
+            <dd className="mt-1 font-semibold text-stone-800">{formatDate(workspace.trialEndsAt)}</dd>
           </div>
-          <div className="flex flex-wrap gap-3">
-            {workspace.stripeCustomerId ? (
-              <form action="/api/billing/portal" method="post">
-                <button
-                  type="submit"
-                  className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
-                >
-                  Open customer portal
-                </button>
-              </form>
-            ) : (
-              paidPlans().map((paidPlan) => (
-                <form key={paidPlan.code} action="/api/billing/checkout" method="post">
-                  <input type="hidden" name="planCode" value={paidPlan.code} />
-                  <button
-                    type="submit"
-                    className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
-                  >
-                    Start {paidPlan.name}
-                  </button>
-                </form>
-              ))
-            )}
-          </div>
-        </div>
+        </dl>
+        <p className="mt-4 text-sm text-stone-600">
+          There are no published customer usage limits during the pilot. Technical safety limits and
+          rate limits still apply.
+        </p>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-stone-50 text-xs uppercase tracking-wide text-stone-500">
-            <tr>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Kind</th>
-              <th className="px-4 py-3">Delta</th>
-              <th className="px-4 py-3">Balance</th>
-              <th className="px-4 py-3">Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ledger.map((entry) => (
-              <tr key={entry.id} className="border-t border-stone-100">
-                <td className="px-4 py-3">{formatDate(entry.createdAt)}</td>
-                <td className="px-4 py-3">{titleCaseStatus(entry.kind)}</td>
-                <td className="px-4 py-3">{formatMinutes(entry.minutesDelta)}</td>
-                <td className="px-4 py-3">{formatMinutes(entry.balanceAfter)}</td>
-                <td className="px-4 py-3 text-stone-500">{entry.note ?? ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {ledger.length === 0 ? (
-          <p className="border-t border-stone-100 px-4 py-6 text-sm text-stone-500">
-            No usage rows yet.
+      <div className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold">Paid access</h2>
+        <p className="mt-2 text-sm text-stone-500">
+          Paid access keeps the workspace active after the trial. No card is required during the trial.
+        </p>
+        <p className="mt-3 text-sm text-stone-500">
+          Stripe status: {workspace.stripeSubscriptionStatus ?? "not connected"}
+        </p>
+        {workspace.stripeCurrentPeriodEnd ? (
+          <p className="mt-1 text-sm text-stone-500">
+            Current period ends {formatDate(workspace.stripeCurrentPeriodEnd)}
           </p>
         ) : null}
+        <div className="mt-5">
+          {workspace.stripeCustomerId ? (
+            <form action="/api/billing/portal" method="post">
+              <button
+                type="submit"
+                className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+              >
+                Open customer portal
+              </button>
+            </form>
+          ) : (
+            <form action="/api/billing/checkout" method="post">
+              <input type="hidden" name="planCode" value="paid" />
+              <button
+                type="submit"
+                className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+              >
+                Change to Paid
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </section>
   );

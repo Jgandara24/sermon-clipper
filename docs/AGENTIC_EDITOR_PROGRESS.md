@@ -4,7 +4,7 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-08-13, after P0.20.
+**Last updated:** 2026-08-13, after the pre-P1 product decisions.
 
 ---
 
@@ -32,16 +32,16 @@ say. `DECISIONS.md` remains the authoritative record of decisions; this is a wor
 | P0.17 correctness-substrate migration | `e747196` | done | Expand-first schema wave; publishing stays disabled |
 | P0.18 daily cost rollups and worker isolation | `354ea5d` | done | Durable totals and independent periodic blocks |
 | P0.19 real-service cost-truth gate | `cef55a5` | done | Direct upload passed at $1.81 per typical month; YouTube remains disapproved |
-| P0.20 plan-grid conflict report | _(see `git log`)_ | done | Conflicts exposed; no entitlement changed |
+| P0.20 plan-grid conflict report | `dd010e7` | done | Superseded by the Trial/Paid decision |
 
-A commit cannot contain its own hash, so the newest row's SHA is backfilled by the following
-commit. P0.20 is the most recent; `git log --oneline` is authoritative.
+P0 merged to `main` as `331dbc5`.
 
-Branch: `feat/reel-builder-trim`, twenty-two commits ahead of `origin/main`. **Nothing pushed yet.**
-The P0 pull request must include `4d51e5d` (drag-to-trim), which predates the program.
+Current branch: `codex/pre-p1-model-routing-trial`.
 
-Suite as of P0.20: **67 unit test files, 516 tests**; **21 integration test files, 189 tests**.
-`npm run verify` and `npm run test:integration` green.
+The pre-P1 change adds versioned per-stage analysis routing, an effective-dated model price
+catalog, a Google Gemini adapter, a no-mutation shadow evaluation command, and Trial/Paid access.
+The old minute balance remains as history. It is not an access gate. The P0.19 Gate A report was
+corrected to use the Sonnet 5 price that was active on the run date.
 
 ---
 
@@ -132,7 +132,10 @@ produced 2 clips, both announcements, both at minute 0.
 
 ## Open items not owned by any commit yet
 
-- **Push and open the P0 pull request.** Nothing is pushed. All four CI jobs must pass before merge.
+- **Finish and publish the pre-P1 branch.** Run one paid Gemini shadow evaluation before a draft
+  routing policy can be promoted.
+- **OpenAI adapter.** The policy schema reserves `openai`, but the activation command refuses it
+  until an adapter and benchmark exist.
 - **Stage A recall** is now the known product bottleneck. It is P5's target, not a P0 fix.
 - **PERC** has no implementation and its retrieval has never worked end to end.
 - **YouTube proxy economics failed.** The current contract exceeds its monthly gate. Direct upload

@@ -10,7 +10,12 @@ vi.mock("@/lib/auth", () => ({
   requireCurrentUser: vi.fn(async () => ({ id: "user-1" })),
   requirePrimaryWorkspacePermission: vi.fn(async () => ({
     role: "OWNER",
-    workspace: { id: "ws-1" },
+    workspace: {
+      id: "ws-1",
+      accessPlan: "PAID",
+      trialStartedAt: new Date("2026-01-01T00:00:00Z"),
+      trialEndsAt: new Date("2026-01-31T00:00:00Z"),
+    },
   })),
 }));
 

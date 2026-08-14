@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { parseChurchProfile, wallClockInstantInTimezone } from "@/lib/church-profile";
 import { env } from "@/lib/env";
+import { decideWorkspaceAccess } from "@/lib/billing/access";
 import { isEligibleForAutoPost, parseFacebookConnection } from "@/lib/facebook-connection";
 import {
   publishScheduledVideo as defaultPublishScheduledVideo,
@@ -217,7 +218,9 @@ export async function publishDueScheduledPosts(
     },
     orderBy: { scheduledDate: "asc" },
     include: {
-      workspace: { select: { settings: true } },
+      workspace: {
+        select: { settings: true, accessPlan: true, trialStartedAt: true, trialEndsAt: true },
+      },
       clip: {
         select: {
           title: true,
@@ -253,6 +256,10 @@ export async function publishDueScheduledPosts(
 
   for (const post of duePosts) {
     try {
+      if (!decideWorkspaceAccess(post.workspace, "publish_post", now()).allowed) {
+        summary.postsSkippedNotEligible++;
+        continue;
+      }
       const churchProfile = parseChurchProfile(post.workspace.settings);
       const facebookConnection = parseFacebookConnection(post.workspace.settings);
 

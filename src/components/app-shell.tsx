@@ -1,5 +1,4 @@
-import type { Prisma } from "@prisma/client";
-import type { WorkspaceRole } from "@prisma/client";
+import type { WorkspaceAccessPlan, WorkspaceRole } from "@prisma/client";
 import {
   Activity,
   Calendar,
@@ -14,15 +13,16 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/app/actions/auth";
-import { formatMinutes } from "@/lib/format";
 import { hasWorkspacePermission, type WorkspacePermission } from "@/lib/authorization";
+import { decideWorkspaceAccess } from "@/lib/billing/access";
 
 type AppShellProps = {
   children: React.ReactNode;
   workspace: {
     name: string;
-    minuteBalance: number | Prisma.Decimal;
-    planCode: string;
+    accessPlan: WorkspaceAccessPlan;
+    trialStartedAt: Date;
+    trialEndsAt: Date;
   };
   user: {
     email: string;
@@ -51,6 +51,7 @@ export function AppShell({ children, workspace, user, role }: AppShellProps) {
   const visibleNavItems = navItems.filter(
     (item) => !item.permission || hasWorkspacePermission(role, item.permission),
   );
+  const access = decideWorkspaceAccess(workspace, "read");
 
   return (
     <div className="min-h-screen bg-[#f6f5f0] text-stone-950">
@@ -82,13 +83,13 @@ export function AppShell({ children, workspace, user, role }: AppShellProps) {
           <div className="mt-8 rounded-lg border border-stone-200 bg-stone-50 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Workspace</p>
             <p className="mt-2 text-sm font-semibold">{workspace.name}</p>
-            <div className="mt-4 rounded-md bg-white p-3">
-              <p className="text-xs text-stone-500">Minute balance</p>
-              <p className="text-2xl font-semibold text-teal-800">
-                {formatMinutes(workspace.minuteBalance)}
-              </p>
-            </div>
-            <p className="mt-3 text-xs text-stone-500">Plan: {workspace.planCode}</p>
+            <p className="mt-3 text-sm font-semibold text-teal-800">
+              {access.state === "paid"
+                ? "Paid"
+                : access.state === "trial_active"
+                  ? "Trial active"
+                  : "Trial ended · Read-only"}
+            </p>
           </div>
         </aside>
 

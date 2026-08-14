@@ -22,6 +22,7 @@ import {
 } from "@/lib/analysis/candidate-limit";
 import { env } from "@/lib/env";
 import { readCandidateLimitOverride } from "@/lib/operations/candidate-limit-override";
+import { assertWorkspaceAccess } from "@/lib/billing/access";
 
 export const PROCESSING_CONFIGURATION_VERSION = 1;
 
@@ -166,8 +167,9 @@ async function getWorkspaceProjectSettings(
 ) {
   const workspace = await tx.workspace.findUniqueOrThrow({
     where: { id: workspaceId },
-    select: { settings: true },
+    select: { settings: true, accessPlan: true, trialStartedAt: true, trialEndsAt: true },
   });
+  assertWorkspaceAccess(workspace, "import_media");
   return {
     churchProfile: parseChurchProfile(workspace.settings),
     candidateLimitOverride: readCandidateLimitOverride(workspace.settings),

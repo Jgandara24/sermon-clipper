@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Prisma, ProcessingJobType, ProjectStatus, SourceOrigin, type SourceVideo } from "@prisma/client";
-import { estimateProcessingMinutes, planForCode, type PlanLimits } from "@/lib/billing/plans";
+import { planForCode, type PlanLimits } from "@/lib/billing/plans";
 import { findChannelImportCostAttribution } from "@/lib/channel-import-service";
 import { recordProcessingCostFact } from "@/lib/cost/record";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
@@ -20,7 +20,6 @@ import {
   type YtDlpTransferTelemetry,
 } from "@/lib/media/ytdlp";
 import { getStorageProvider, type StorageProvider } from "@/lib/storage";
-import { InsufficientBalanceError, reserveMinutesForJob } from "@/lib/usage-ledger";
 
 /**
  * yt-dlp is the true external boundary of the URL-import branch; tests inject fakes here the
@@ -233,28 +232,9 @@ export function createFinalizeJobHandler(deps: UrlImportDeps = defaultUrlImportD
       );
     }
 
-    const estimatedMinutes = estimateProcessingMinutes(probeResult.durationS);
-    try {
-      await reserveMinutesForJob(prisma, {
-        workspaceId: project.workspaceId,
-        projectId: project.id,
-        jobId: job.id,
-        minutes: estimatedMinutes,
-        note: `Reserved ${estimatedMinutes.toString()} processing minutes for ${Math.ceil(probeResult.durationS)} seconds of video.`,
-      });
-    } catch (error) {
-      if (error instanceof InsufficientBalanceError) {
-        throw new JobFailureError(
-          "INSUFFICIENT_MINUTES",
-          `This sermon needs ${estimatedMinutes.toString()} minutes to process. Add minutes or upgrade your plan.`,
-          { cause: error, retryable: false },
-        );
-      }
-      throw error;
-    }
     await prisma.processingJob.update({
       where: { id: job.id },
-      data: { minutesReserved: estimatedMinutes },
+      data: { minutesReserved: new Prisma.Decimal(0) },
     });
 
     await prisma.sourceVideo.update({

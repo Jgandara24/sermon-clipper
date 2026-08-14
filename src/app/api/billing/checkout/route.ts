@@ -10,7 +10,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const checkoutSchema = z.object({
-  planCode: z.enum(["starter", "pro"]),
+  planCode: z.literal("paid"),
 });
 
 export async function POST(request: Request) {
