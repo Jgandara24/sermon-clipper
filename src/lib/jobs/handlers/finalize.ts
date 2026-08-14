@@ -4,7 +4,7 @@ import path from "node:path";
 import { Prisma, ProcessingJobType, ProjectStatus, SourceOrigin, type SourceVideo } from "@prisma/client";
 import { planForCode, type PlanLimits } from "@/lib/billing/plans";
 import { findChannelImportCostAttribution } from "@/lib/channel-import-service";
-import { recordProcessingCostFact } from "@/lib/cost/record";
+import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs/queue";
@@ -156,7 +156,7 @@ async function recordUrlImportCostFacts(params: {
       outcome: params.outcome,
     });
     for (const fact of facts) {
-      await recordProcessingCostFact(params.prisma, {
+      await recordProcessingCostFactSafely(params.prisma, {
         ...fact,
         details: { ...fact.details, ...(channel ?? {}) },
         workspaceId: params.sourceVideo.workspaceId,

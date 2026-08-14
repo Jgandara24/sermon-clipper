@@ -428,10 +428,16 @@ export async function getProjectCostReport(client: PrismaClient, projectId: stri
     },
     orderBy: [{ day: "asc" }, { stage: "asc" }],
   });
+  // Run-time cost recording is best effort, so a report must state how many facts were dropped.
+  // Gate A refuses any cost-truth artifact whose recording.costFactRecordFailures is above zero.
+  const costFactRecordFailures = await client.operationalEvent.count({
+    where: { workspaceId: project.workspaceId, projectId, eventType: "cost_fact_record_failed" },
+  });
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     project,
+    recording: { costFactRecordFailures },
     ...summarizeRows(rows),
   };
 }

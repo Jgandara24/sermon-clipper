@@ -6,7 +6,7 @@ import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { analysisCallCostFact } from "@/lib/analysis/usage";
 import { resolveAndSnapshotProjectAnalysisRouting } from "@/lib/analysis/routing-store";
 import { AnalysisProviderUnavailableError, type ScoredCandidate } from "@/lib/analysis/types";
-import { recordProcessingCostFact } from "@/lib/cost/record";
+import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement, type RuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
@@ -37,7 +37,7 @@ type AnalyzeJobDependencies = {
     routing?: Parameters<typeof getAnalysisProvider>[0],
   ) => Promise<AnalysisProviderSelection>;
   resolveRouting?: typeof resolveAndSnapshotProjectAnalysisRouting;
-  recordCostFact?: typeof recordProcessingCostFact;
+  recordCostFact?: typeof recordProcessingCostFactSafely;
 };
 
 async function recordAnalysisCostFacts(params: {
@@ -49,7 +49,7 @@ async function recordAnalysisCostFacts(params: {
   selection: AnalysisProviderSelection;
   runtime: RuntimeMeasurement;
   outcome: ProcessingCostOutcome;
-  record: typeof recordProcessingCostFact;
+  record: typeof recordProcessingCostFactSafely;
 }) {
   const { selection } = params;
   const calls = selection.provider.lastUsage?.calls ?? [];
@@ -96,7 +96,7 @@ async function recordAnalysisCostFacts(params: {
 export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {}): JobHandler {
   const selectProvider = dependencies.selectProvider ?? getAnalysisProvider;
   const resolveRouting = dependencies.resolveRouting ?? resolveAndSnapshotProjectAnalysisRouting;
-  const recordCostFact = dependencies.recordCostFact ?? recordProcessingCostFact;
+  const recordCostFact = dependencies.recordCostFact ?? recordProcessingCostFactSafely;
   return async ({ job, prisma }) => {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: job.projectId },
