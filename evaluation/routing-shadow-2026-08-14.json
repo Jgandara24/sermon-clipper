@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "mode": "shadow_no_customer_mutation",
+  "startedAt": "2026-08-14T04:12:00.581Z",
+  "sourceArtifactId": "gate-a-a5e016e0be13",
+  "projectId": "fe6090e0-a408-449d-8fdf-565c261151b6",
+  "routing": {
+    "policyVersion": 3,
+    "classification": {
+      "provider": "google",
+      "model": "gemini-3.1-flash-lite"
+    },
+    "scoring": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5"
+    },
+    "promptVersion": 1,
+    "schemaVersion": 1
+  },
+  "wallTimeMs": 82639,
+  "counts": {
+    "candidateCount": 491,
+    "scoredCount": 25
+  },
+  "funnelMetrics": {
+    "stageAPassRatio": 0.05091649694501019,
+    "keptRatio": 1,
+    "earliestStartFraction": 0,
+    "latestStartFraction": 0.22247434815597456,
+    "coverageSpanFraction": 0.22247434815597456,
+    "isFrontLoadedWithinFirstQuarter": true
+  },
+  "usage": {
+    "totalInputTokens": 92783,
+    "totalOutputTokens": 13178,
+    "estimatedCostUsd": 0.1211745,
+    "unpricedModels": [],
+    "calls": [
+      {
+        "stage": "analysis_classification",
+        "provider": "google",
+        "model": "gemini-3.1-flash-lite",
+        "inputTokens": 85782,
+        "outputTokens": 5418,
+        "wallTimeMs": 13098,
+        "estimatedCostUsd": 0.0295725
+      },
+      {
+        "stage": "analysis_scoring",
+        "provider": "anthropic",
+        "model": "claude-sonnet-5",
+        "inputTokens": 7001,
+        "outputTokens": 7760,
+        "wallTimeMs": 69521,
+        "estimatedCostUsd": 0.091602
+      }
+    ]
+  },
+  "sameServiceClaudeBaseline": {
+    "keptCount": 12,
+    "latestStartFraction": 0.1993752792097743,
+    "isFrontLoadedWithinFirstQuarter": true,
+    "estimatedCostUsd": 0.174481
+  },
+  "comparison": {
+    "candidateCountComparisonAvailable": false,
+    "candidateCountComparisonNote": "Google scoredCount and Claude keptCount are different funnel stages and are not a recall comparison.",
+    "estimatedSavingsUsd": 0.0533065,
+    "estimatedSavingsPercent": 30.551464056258272,
+    "frontLoadingFixed": false
+  },
+  "clipTimestampsMs": [
+    [0, 22400],
+    [12200, 71600],
+    [27480, 49600],
+    [36900, 57240],
+    [46100, 103040],
+    [73160, 96480],
+    [82680, 143680],
+    [110880, 168400],
+    [118880, 143680],
+    [136480, 191800],
+    [180240, 236920],
+    [201560, 228920],
+    [204720, 261480],
+    [232120, 291800],
+    [262120, 318920],
+    [285840, 343880],
+    [329080, 351360],
+    [367680, 425400],
+    [389680, 451680],
+    [415240, 487880],
+    [544480, 569480],
+    [552480, 587480],
+    [569480, 593480],
+    [587480, 642480],
+    [627480, 717480]
+  ],
+  "humanReview": {
+    "reviewedOn": "2026-08-14",
+    "accepted": false,
+    "replacementRequired": true,
+    "editorialQualityNote": "The cost result passed, but all candidate starts remained inside the first quarter of the service.",
+    "decision": "Keep Claude policy 1 active. Keep Google policy 3 as a draft. Proceed to P1."
+  }
+}

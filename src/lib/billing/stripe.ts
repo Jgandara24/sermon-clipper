@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient, type Workspace } from "@prisma/client";
+import { Prisma, WorkspaceAccessPlan, type PrismaClient, type Workspace } from "@prisma/client";
 import Stripe from "stripe";
 import { planForCode, planForStripePriceId, stripePriceIdForPlan } from "@/lib/billing/plans";
 import { env } from "@/lib/env";
@@ -73,7 +73,7 @@ function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
 
 function subscriptionStatusPlanCode(subscription: Stripe.Subscription): string {
   const pricePlan = planForStripePriceId(firstSubscriptionPriceId(subscription));
-  if (!pricePlan) return "free";
+  if (!pricePlan) return "trial";
 
   switch (subscription.status) {
     case "active":
@@ -81,7 +81,7 @@ function subscriptionStatusPlanCode(subscription: Stripe.Subscription): string {
     case "past_due":
       return pricePlan.code;
     default:
-      return "free";
+      return "trial";
   }
 }
 
@@ -167,6 +167,8 @@ async function handleCheckoutCompleted(client: PrismaClient, session: Stripe.Che
     where: { id: workspaceId },
     data: {
       planCode: plan.code,
+      accessPlan: WorkspaceAccessPlan.PAID,
+      paidAt: new Date(),
       stripeCustomerId: customerId ?? undefined,
       stripeSubscriptionId: subscriptionId ?? undefined,
       stripeSubscriptionStatus: subscriptionId ? "checkout_completed" : undefined,
@@ -244,6 +246,9 @@ async function handleSubscriptionUpdated(client: PrismaClient, subscription: Str
     where: { id: workspace.id },
     data: {
       planCode,
+      accessPlan:
+        planCode === "paid" ? WorkspaceAccessPlan.PAID : WorkspaceAccessPlan.TRIAL,
+      paidAt: planCode === "paid" ? workspace.paidAt ?? new Date() : workspace.paidAt,
       stripeCustomerId: customerId ?? workspace.stripeCustomerId,
       stripeSubscriptionId: subscription.id,
       stripeSubscriptionStatus: subscription.status,
@@ -256,7 +261,7 @@ async function handleSubscriptionUpdated(client: PrismaClient, subscription: Str
     workspaceId: workspace.id,
     category: "billing",
     eventType: "stripe_subscription_updated",
-    severity: planCode === "free" ? "warning" : "info",
+    severity: planCode === "trial" ? "warning" : "info",
     message: "Stripe subscription state updated.",
     metadata: {
       subscriptionId: subscription.id,
@@ -277,7 +282,7 @@ async function handleInvoicePaid(client: PrismaClient, invoice: Stripe.Invoice) 
   if (!workspace) return;
 
   const plan = planForCode(workspace.planCode);
-  if (plan.code === "free" || plan.includedMinutes <= 0) return;
+  if (plan.includedMinutes <= 0) return;
 
   await grantMinutesForBillingPeriod(client, {
     workspaceId: workspace.id,

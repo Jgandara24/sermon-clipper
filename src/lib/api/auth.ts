@@ -5,6 +5,25 @@ import {
   type WorkspacePermission,
 } from "@/lib/authorization";
 import { apiError } from "./response";
+import { decideWorkspaceAccess, type WorkspaceAction } from "@/lib/billing/access";
+
+function accessActionForPermission(permission?: WorkspacePermission): WorkspaceAction {
+  if (permission === "MANAGE_BILLING") return "manage_billing";
+  if (
+    permission === "MANAGE_WORKSPACE_PROFILE" ||
+    permission === "MANAGE_MEMBERS" ||
+    permission === "MANAGE_OPERATIONS" ||
+    permission === "CANCEL_PROJECT"
+  ) {
+    return "manage_settings";
+  }
+  if (permission === "IMPORT_MEDIA") return "import_media";
+  if (permission === "EXPORT_CLIP") return "export_clip";
+  if (permission === "MANAGE_SCHEDULE" || permission === "MANAGE_FACEBOOK_CONNECTION") {
+    return "schedule_post";
+  }
+  return permission ? "start_processing" : "read";
+}
 
 /**
  * Route-handler equivalent of requireCurrentUser/requirePrimaryWorkspace: those redirect (fine
@@ -40,6 +59,18 @@ export async function requireApiWorkspace(permission?: WorkspacePermission) {
       }
       throw error;
     }
+  }
+
+
+  const access = decideWorkspaceAccess(membership.workspace, accessActionForPermission(permission));
+  if (!access.allowed) {
+    return {
+      error: apiError(
+        "TRIAL_EXPIRED",
+        "The 30-day trial ended. This workspace is read-only until it changes to Paid.",
+        { status: 402 },
+      ),
+    } as const;
   }
 
   return { user, workspace: membership.workspace, membership } as const;

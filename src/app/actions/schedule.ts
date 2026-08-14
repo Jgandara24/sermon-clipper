@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
+import { assertWorkspaceAccess } from "@/lib/billing/access";
 import { prisma } from "@/lib/prisma";
 
 const updatePlatformSchema = z.object({
@@ -25,6 +26,7 @@ const updatePlatformSchema = z.object({
 export async function updateScheduledPostPlatformAction(formData: FormData) {
   const user = await requireCurrentUser();
   const membership = await requirePrimaryWorkspacePermission(user.id, "MANAGE_SCHEDULE");
+  assertWorkspaceAccess(membership.workspace, "schedule_post");
 
   const parsed = updatePlatformSchema.safeParse({
     scheduledPostId: formData.get("scheduledPostId"),

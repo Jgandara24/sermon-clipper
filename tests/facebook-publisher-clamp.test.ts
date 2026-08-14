@@ -43,7 +43,12 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
             workspaceId: "ws-1",
             scheduledDate,
             attemptCount: options.attemptCount ?? 0,
-            workspace: { settings: eligibleSettings },
+            workspace: {
+              settings: eligibleSettings,
+              accessPlan: "PAID",
+              trialStartedAt: new Date("2026-01-01T00:00:00Z"),
+              trialEndsAt: new Date("2026-01-31T00:00:00Z"),
+            },
             clip: {
               title: "Clip title",
               hookText: "You need to hear this.",

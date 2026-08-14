@@ -1,4 +1,5 @@
 import type { ProcessingCostFactInput, ProcessingCostStage } from "@/lib/cost/types";
+import type { AnalysisModelPrice, AnalysisProviderKind } from "./routing";
 
 /**
  * Provider spend telemetry for AI analysis. Token usage is captured per model call in the
@@ -8,6 +9,8 @@ import type { ProcessingCostFactInput, ProcessingCostStage } from "@/lib/cost/ty
  */
 
 export type AnalysisModelCall = {
+  stage: Extract<ProcessingCostStage, "analysis_classification" | "analysis_scoring">;
+  provider: AnalysisProviderKind;
   model: string;
   inputTokens: number;
   outputTokens: number;
@@ -15,6 +18,7 @@ export type AnalysisModelCall = {
   cacheReadInputTokens: number;
   wallTimeMs?: number;
   outcome?: "succeeded" | "failed";
+  pricing: AnalysisModelPrice | null;
 };
 
 export type AnalysisUsage = {
@@ -27,24 +31,26 @@ export type AnalysisUsage = {
   unpricedModels: string[];
 };
 
-// USD per million tokens (list prices; cache writes bill at 1.25x input, reads at 0.1x input).
-const MODEL_PRICING_PER_MTOK: Record<string, { input: number; output: number }> = {
-  "claude-haiku-4-5": { input: 1, output: 5 },
-  "claude-sonnet-5": { input: 3, output: 15 },
-};
-
 const MTOK = 1_000_000;
 
 export function estimateCallCostUsd(call: AnalysisModelCall): number | null {
-  const pricing = MODEL_PRICING_PER_MTOK[call.model];
+  const pricing = call.pricing;
   if (!pricing) {
     return null;
   }
+  if (
+    (call.cacheCreationInputTokens > 0 && pricing.cacheWritePerMillionUsd === null) ||
+    (call.cacheReadInputTokens > 0 && pricing.cacheReadPerMillionUsd === null)
+  ) {
+    return null;
+  }
   return (
-    (call.inputTokens * pricing.input +
-      call.cacheCreationInputTokens * pricing.input * 1.25 +
-      call.cacheReadInputTokens * pricing.input * 0.1 +
-      call.outputTokens * pricing.output) /
+    (call.inputTokens * pricing.inputPerMillionUsd +
+      call.cacheCreationInputTokens *
+        (pricing.cacheWritePerMillionUsd ?? 0) +
+      call.cacheReadInputTokens *
+        (pricing.cacheReadPerMillionUsd ?? 0) +
+      call.outputTokens * pricing.outputPerMillionUsd) /
     MTOK
   );
 }
@@ -52,7 +58,6 @@ export function estimateCallCostUsd(call: AnalysisModelCall): number | null {
 /** Converts one model call to the shared P0 cost-fact contract without recording it. */
 export function analysisCallCostFact(
   call: AnalysisModelCall,
-  stage: Extract<ProcessingCostStage, "analysis_classification" | "analysis_scoring">,
   providerProvenance: string,
 ): ProcessingCostFactInput {
   const cacheState =
@@ -62,11 +67,11 @@ export function analysisCallCostFact(
         ? "partial"
         : "miss";
   return {
-    stage,
+    stage: call.stage,
     quantity: 1,
     unit: "call",
     unitCostUsd: estimateCallCostUsd(call),
-    provider: "anthropic",
+    provider: call.provider,
     model: call.model,
     providerProvenance,
     cacheState,
@@ -77,6 +82,8 @@ export function analysisCallCostFact(
       imageCount: 0,
       cacheCreationInputTokens: call.cacheCreationInputTokens,
       cacheReadInputTokens: call.cacheReadInputTokens,
+      pricingSourceUrl: call.pricing?.pricingSourceUrl ?? null,
+      pricingEffectiveFrom: call.pricing?.effectiveFrom.toISOString() ?? null,
     },
   };
 }

@@ -1527,7 +1527,8 @@ Why: The current plan grid cannot support its stated limits and church usage in 
 measured report makes the conflicts visible without silently changing customer promises or mixing
 an engineering audit with a pricing decision.
 
-Status: Active. The conflicts are proven. The entitlement response is intentionally undecided.
+Status: Superseded by the Trial and Paid decision below. The measured historical conflicts remain
+valid evidence for why the old plan grid was removed.
 
 ## 2026-08-13 - The Current IPRoyal Contract Fails the YouTube Cost Gate
 
@@ -1564,16 +1565,18 @@ analysis, approval, and one final export. Automatic publishing stayed disabled. 
 report is `evaluation/p0-cost-truth-2026-08-13.json`.
 
 The measured source was 158,665,289 bytes. Proxy bytes and proxy cost per source hour were zero.
-Railway egress for the browser-to-R2 transfer cost $0.007933. Core processing cost $0.201123 per
-service. Total measured cost was $0.209056 per service and $1.810427 per typical church month at
+Railway egress for the browser-to-R2 transfer cost $0.007933. Core processing cost was corrected
+to $0.174481 per service. Total measured cost was $0.182414 per service and $1.579708 per typical church month at
 8.66 services. The direct-upload monthly gate is $8.00. Production storage is Cloudflare R2 with
 contracted direct egress at $0/GB. All required stages had priced or contract-confirmed zero-cost
 facts. Gate A passed.
 
 The paid run used `claude-haiku-4-5` for classification and `claude-sonnet-5` for scoring. It used
 92,189 input tokens and 11,130 output tokens. Both totals are within 25 percent of the committed
-Run 2 usage anchor. Analysis cost was $0.201123, which is 28.3 percent above the old $0.156798 cost
-anchor. This difference is valid because the current model and token mix changed. Gate A uses
+Run 2 usage anchor. Analysis cost was $0.174481, which is 11.3 percent above the old $0.156798 cost
+anchor. The first report used the known September 2026 Sonnet 5 price before it became effective.
+The corrected report uses the $2 input and $10 output promotion price that was active on the run
+date. Gate A uses
 token volume for the cross-run plausibility check. It records actual paid cost separately and
 enforces the $1.50 core cost cap.
 
@@ -1585,3 +1588,55 @@ for the sandbox reconciliation keeps the plausibility check stable. The separate
 block an uneconomic run.
 
 Status: Active. Direct upload passed Gate A. YouTube proxy intake remains disapproved.
+
+## 2026-08-13 - Use Versioned Per-Stage Model Routing
+
+Decision: Store one active, versioned master analysis policy. The policy selects a provider and a
+model for Stage A and Stage B separately. A project copies the exact policy into its processing
+configuration when analysis starts. A later master change does not change that project.
+
+Provider credentials stay in environment secrets. A model route cannot become active without an
+effective-dated price record. Master changes use an audited command. The system does not select the
+cheapest model automatically. A human promotes a tested policy after a shadow benchmark.
+
+Why: Model price and quality change. Static model names prevent safe comparison. Automatic cost
+routing can silently reduce editorial quality. Versioned routing permits controlled tests and
+reproducible results.
+
+Status: Active. The first policy preserves the Claude production baseline. Google is the first
+alternate provider target. OpenAI remains an allowed provider kind for a later adapter.
+
+## 2026-08-13 - Replace Free, Starter, and Pro with Trial and Paid
+
+Decision: The product has two plans. Trial lasts for 30 days. Trial and Paid have the same
+capabilities. No card is required during the pilot. When Trial ends, existing work stays visible,
+but the workspace cannot start new imports, processing, exports, scheduling, or publishing. Paid
+has no published customer usage limit during the pilot.
+
+Keep technical safety limits, rate limits, global switches, cost facts, and cost alerts. Stop using
+the minute balance as an access gate. Use one Stripe price named by `STRIPE_PRICE_PAID`. Map old
+Starter, Pro, and Development workspaces to Paid. Map old Free workspaces to Trial and keep their
+original workspace creation date as the trial start.
+
+Why: The pilot needs simple access and direct observation of real church use. Product limits can be
+selected later from measured cost and behavior. Safety controls remain separate from billing.
+
+Status: Active. This decision supersedes the 2026-08-13 P0 plan-grid decision.
+
+## 2026-08-14 - Keep Claude Active After the First Google Shadow Test
+
+Decision: Keep Claude routing policy version 1 active. Keep Google routing policy version 3 as a
+draft. Proceed to P1 without activating the Google route. Re-test the route after selector work can
+improve full-service coverage.
+
+The paid, no-mutation shadow run used `gemini-3.1-flash-lite` for Stage A and
+`claude-sonnet-5` for Stage B. Estimated analysis cost was $0.1211745, which was 30.6 percent below
+the $0.174481 Claude Gate A baseline on the same service. However, every scored candidate still
+started inside the first quarter of the service. The front-loading defect remains. The public-safe
+test facts and the human review are in `evaluation/routing-shadow-2026-08-14.json`.
+
+Why: Lower cost is useful, but cost does not replace editorial coverage. The versioned routing
+system permits P1 to continue with the proven Claude baseline while the cheaper Google route stays
+available for another controlled test.
+
+Status: Active. Google policy version 3 is not approved for activation.

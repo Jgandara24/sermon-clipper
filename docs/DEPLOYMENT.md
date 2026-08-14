@@ -11,12 +11,12 @@ bucket.
   account-specific `STORAGE_S3_ENDPOINT`.
 - A public HTTPS domain used by `NEXT_PUBLIC_APP_URL`.
 - Resend credentials for email OTP sign-in.
-- Stripe account with Starter and Pro recurring Prices plus a webhook endpoint for
+- Stripe account with one Paid recurring Price plus a webhook endpoint for
   `/api/stripe/webhook`.
 - Resend notification email or Twilio SMS credentials for production approval notifications.
 - `ffmpeg`/`ffprobe` available on worker hosts, with libass enabled for caption burn-in.
 - `whisper-cli` plus a local ggml model on every worker host for sermon transcription.
-- Anthropic API access for Claude-backed sermon clip classification and scoring.
+- API access for each provider in the active analysis routing policy.
 
 ## Required Environment
 
@@ -36,8 +36,7 @@ AUTH_EMAIL_FROM_NAME=Sermon Clipper
 
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_STARTER=price_...
-STRIPE_PRICE_PRO=price_...
+STRIPE_PRICE_PAID=price_...
 
 STORAGE_PROVIDER=s3
 STORAGE_S3_BUCKET=sermon-clipper-production
@@ -56,6 +55,8 @@ WORKER_STALE_JOB_TIMEOUT_MS=900000
 WORKER_RECOVERY_INTERVAL_MS=60000
 
 ANTHROPIC_API_KEY=sk-ant-...
+# Set this when an active stage uses Google Gemini.
+GEMINI_API_KEY=...
 WHISPER_MODEL_PATH=/models/ggml-base.en.bin
 WHISPER_CPP_BINARY=whisper-cli
 ```
@@ -211,19 +212,44 @@ degraded or warning.
 
 ## Stripe Billing
 
-- Create recurring monthly Stripe Prices for the Starter and Pro plans.
-- Set `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` to those Price IDs.
+- Create one recurring monthly Stripe Price for Paid.
+- Set `STRIPE_PRICE_PAID` to that Price ID.
 - Production readiness requires `STRIPE_SECRET_KEY` to start with `sk_`, `STRIPE_WEBHOOK_SECRET`
-  to start with `whsec_`, and both plan IDs to start with `price_`.
+  to start with `whsec_`, and the Paid Price ID to start with `price_`.
 - Configure a Stripe webhook endpoint at `https://clips.example.org/api/stripe/webhook`.
 - Subscribe the endpoint to `checkout.session.completed`, `customer.subscription.created`,
   `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
-  `invoice.payment_failed` (dunning visibility as warning billing events), and `charge.refunded`
-  (a fully refunded charge claws back that invoice's granted minutes, floored at the current
-  balance so it never goes negative; partial refunds only record an event).
+  `invoice.payment_failed` (dunning visibility as warning billing events), and `charge.refunded`.
 - The app uses Checkout Sessions for subscription starts, the Stripe Customer Portal for
-  self-service changes/cancellation, and signed webhooks to update workspace plan state and grant
-  included minutes once an invoice is paid.
+  self-service changes/cancellation, and signed webhooks to update workspace access.
+
+## Analysis Routing
+
+The active policy selects one provider and model for Stage A and one for Stage B. The command makes
+one audited version active. It refuses a model without a current price or provider key.
+
+```sh
+npm run set:analysis-routing -- \
+  --create-draft \
+  --name "Gemini A and Claude B" \
+  --stage-a-provider google \
+  --stage-a-model gemini-3.1-flash-lite \
+  --stage-b-provider anthropic \
+  --stage-b-model claude-sonnet-5
+```
+
+Run a paid shadow evaluation before promotion. This command does not change customer clips.
+
+```sh
+npm run evaluate:analysis-routing -- --project-id <uuid> --policy-version <integer>
+```
+
+Store only the output counts, timestamps, usage, and human review. Do not store transcript text in
+an evaluation report. Promote the tested version only after a human accepts the result.
+
+```sh
+npm run set:analysis-routing -- --activate-version <integer>
+```
 
 ## Storage Bucket
 
@@ -238,7 +264,7 @@ degraded or warning.
 
 ## Backups & Restore
 
-The Postgres database holds workspaces, minute balances, the usage ledger, Stripe billing state,
+The Postgres database holds workspaces, retained usage history, Stripe billing state,
 and approval audit trails. Losing it loses money-relevant data, so backups are a launch
 requirement, not an optimization.
 
@@ -661,16 +687,15 @@ notes.
 3. Terminal job failures release reserved minutes and mark the project failed; the affected
    church re-runs the upload once the cause is fixed. Exports have a retry endpoint from the UI.
 
-**Stripe webhooks failing** (payments succeed but plans/minutes don't update)
+**Stripe webhooks failing** (payments succeed but Paid access does not update)
 
 1. Stripe Dashboard → Developers → Webhooks → check the endpoint's recent delivery attempts and
    error responses.
 2. Common causes: rotated `STRIPE_WEBHOOK_SECRET` not updated in the environment, or the web
    process rejecting with 4xx (check web logs for signature errors).
 3. After fixing config, resend the failed events from the Stripe dashboard — handlers are
-   idempotent (`stripe_webhook_events` dedupe; `invoice.paid` grants dedupe by invoice), so
-   resending is always safe.
-4. Verify: workspace plan and minute balance in `/app/settings/billing`, `billing` events in
+   idempotent through `stripe_webhook_events`, so resending is safe.
+4. Verify workspace access in `/app/settings/billing` and `billing` events in
    operations.
 
 **Storage unreachable** (uploads fail, media 5xx, `storage` health check failed)

@@ -18,55 +18,20 @@ The church keeps doing exactly what it already does: preach and record. From the
 
 The result: the church's Facebook page stays active every single day with good content, without anyone on staff lifting a finger after the initial setup.
 
-## Current Billing Plan-Grid Report
+## Billing Plans
 
-This report records the current code. It does not select a new plan grid and does not change a
-customer entitlement. Reproduce it with `npm run validate:plan-grid`.
+The product has two plans: Trial and Paid.
 
-The system reserves `ceil(video seconds / 60)` minutes during `FINALIZE`.
+- Trial lasts for 30 days.
+- Trial and Paid have the same features.
+- The pilot does not publish customer usage limits.
+- The system still applies technical safety limits, rate limits, cost alerts, and global switches.
+- The trial does not require a card.
+- When a trial ends, the workspace becomes read-only. Existing work stays visible.
+- A manual Stripe upgrade changes the workspace to Paid.
 
-| Plan | Included minutes per paid period | Maximum video | One grant funds one maximum video | Price source |
-|---|---:|---:|---|---|
-| Free | 60 | 90 minutes | No | No Stripe price |
-| Starter | 300 | 180 minutes | Yes | `STRIPE_PRICE_STARTER` |
-| Pro | 1,200 | 180 minutes | Yes | `STRIPE_PRICE_PRO` |
-
-The Free plan is internally inconsistent. It permits a 90-minute video, but its normal 60-minute
-balance cannot reserve that video. The reservation hard-blocks before the balance can become
-negative.
-
-Recurring church demand shows a second conflict. The model uses 4.33 weeks per month.
-
-| Usage case | Source minutes per month | Starter covers it | Pro covers it |
-|---|---:|---|---|
-| One 70-minute service each week | 303.1 | No | Yes |
-| One 90-minute service each week | 389.7 | No | Yes |
-| Light profile midpoint | 358 | No | Yes |
-| Typical profile midpoint | 618 | No | Yes |
-| Heavy profile midpoint | 878 | No | Yes |
-
-Starter supports at most about 69.28 source minutes each week in steady state. Existing unused
-minutes carry forward because each paid Stripe invoice adds its grant to the current balance. No
-monthly reset occurs. Carryover can delay a block, but a recurring deficit still consumes the
-carryover.
-
-Other verified code facts:
-
-- Every plan declares `overageAllowed: false`, but runtime code never reads that field.
-- Dollar prices are not stored in `plans.ts`. Paid plan prices resolve through Stripe environment
-  variables.
-- The upload presign route checks only that the balance is greater than zero. A church with one
-  minute can upload a full source. `FINALIZE` can then reject it with `INSUFFICIENT_MINUTES` after
-  the transfer.
-
-Options for a later business decision are explicit. They are not selected here:
-
-- Align Free by increasing its included minutes to 90, or by reducing its maximum video to 60
-  minutes.
-- Cover one weekly 70-minute service with at least 304 included minutes per month.
-- Cover one weekly 90-minute service with at least 390 included minutes per month.
-- Cover the published light, typical, or heavy midpoint with at least 358, 618, or 878 minutes.
-- Add an early duration-aware upload check so a known low balance fails before a large transfer.
+The only Stripe price variable is `STRIPE_PRICE_PAID`. The system measures processing use and cost.
+It does not use the old minute balance as an access gate.
 
 ## Scheduling Rules (How Many Clips We Need)
 

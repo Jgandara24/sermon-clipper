@@ -1,12 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { z } from "zod";
 import { env } from "@/lib/env";
-import { computeIoU } from "./chunking";
-import { computePlatformFit, computeSpeakerEnergy } from "./computed-subscores";
-import { buildChurchSubscores } from "./church-scoring";
-import { detectScriptureReferences } from "./scripture";
-import { computeTotal, scoreToLetter, SERMON_WEIGHTS } from "./scoring";
+import {
+  mapStageBResult,
+  stageAPrompt,
+  stageBPrompt,
+  StageAResultSchema,
+  StageBResultSchema,
+  thinStageASurvivors,
+} from "./pipeline";
+import type { AnalysisModelPrice } from "./routing";
+import type {
+  AnalysisStageAdapter,
+  ClassificationStageOutput,
+  ScoringStageOutput,
+} from "./stage-adapter";
 import { buildAnalysisUsage, type AnalysisModelCall, type AnalysisUsage } from "./usage";
 import {
   AnalysisProviderUnavailableError,
@@ -14,15 +22,12 @@ import {
   type AnalysisContext,
   type AnalysisProvider,
   type ScoredCandidate,
-  type Subscore,
 } from "./types";
 
-// claude-haiku-4-5 for the cheap Stage A pass, claude-sonnet-5 for Stage B scoring/rationale —
-// per guide §3. Sonnet 5 rejects a non-default temperature, so neither call sets one.
-// Env-overridable so a model deprecation is a config change, not a code deploy. New model IDs
-// should also be added to the pricing table in usage.ts or spend telemetry undercounts.
 const DEFAULT_CLASSIFY_MODEL = "claude-haiku-4-5";
 const DEFAULT_SCORING_MODEL = "claude-sonnet-5";
+const STAGE_A_MAX_TOKENS = 32000;
+const STAGE_B_MAX_TOKENS = 32000;
 
 export function classifyModel(): string {
   return env.ANALYSIS_MODEL_CLASSIFY || DEFAULT_CLASSIFY_MODEL;
@@ -32,281 +37,185 @@ export function scoringModel(): string {
   return env.ANALYSIS_MODEL_SCORING || DEFAULT_SCORING_MODEL;
 }
 
-const MAX_STAGE_B_CANDIDATES = 25;
-
-// Output ceilings for the two Claude passes. Both must hold the FULL response — constrained
-// JSON (output_config.format) can only fail to parse if the token cap cuts it off mid-string.
-// Stage A emits one classification per candidate window, and a full-length sermon produces
-// hundreds of windows, so its output scales with the transcript, not a fixed clip count.
-// Stage B holds up to MAX_STAGE_B_CANDIDATES fully-scored clips (title/hook/summary/excerpt +
-// six subscore notes each) under Sonnet 5's heavier tokenizer. Both exceed ~16k, so both stream.
-const STAGE_A_MAX_TOKENS = 32000;
-const STAGE_B_MAX_TOKENS = 32000;
-
-/** A stage produced no parseable output — almost always truncated at the token cap. */
+/** A stage produced no parseable output. */
 export class AnalysisResponseTruncatedError extends Error {}
 
-const MomentTypeSchema = z.enum([
-  "hook",
-  "complete_thought",
-  "story",
-  "quotable",
-  "emotional_peak",
-  "teachable",
-  "call_to_action",
-  "reject",
-]);
-
-const StageAResultSchema = z.object({
-  classifications: z.array(
-    z.object({
-      index: z.number().int(),
-      momentType: MomentTypeSchema,
-    }),
-  ),
-});
-
-const LlmSubscoreSchema = z.object({
-  score: z.number().int().min(0).max(100),
-  note: z.string(),
-});
-
-const StageBResultSchema = z.object({
-  scoredClips: z.array(
-    z.object({
-      index: z.number().int(),
-      title: z.string(),
-      hookText: z.string(),
-      summary: z.string(),
-      excerpt: z.string(),
-      subscores: z.object({
-        hookStrength: LlmSubscoreSchema,
-        clarity: LlmSubscoreSchema,
-        emotionalImpact: LlmSubscoreSchema,
-        completeness: LlmSubscoreSchema,
-        shareability: LlmSubscoreSchema,
-        topicRelevance: LlmSubscoreSchema,
-      }),
-    }),
-  ),
-});
-
-function toSubscore(llm: { score: number; note: string }): Subscore {
-  return { score: llm.score, letter: scoreToLetter(llm.score), note: llm.note };
-}
-
-function toModelCall(model: string, usage: Anthropic.Usage, wallTimeMs: number): AnalysisModelCall {
+function callFromUsage(
+  stage: AnalysisModelCall["stage"],
+  model: string,
+  usage: Anthropic.Usage,
+  wallTimeMs: number,
+  pricing: AnalysisModelPrice | null,
+): AnalysisModelCall {
   return {
+    stage,
+    provider: "anthropic",
     model,
     inputTokens: usage.input_tokens ?? 0,
     outputTokens: usage.output_tokens ?? 0,
     cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
     cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
     wallTimeMs,
+    outcome: "failed",
+    pricing,
   };
 }
 
-/** Real Claude API analysis — Stage A (Haiku) classifies/rejects, Stage B (Sonnet) scores. */
-export class ClaudeAnalysisProvider implements AnalysisProvider {
-  get name(): string {
-    return scoringModel();
-  }
+function textContent(message: Anthropic.Message): string {
+  return message.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("");
+}
 
-  /** Token usage for the most recent scoreCandidates call — spend telemetry, see usage.ts. */
-  lastUsage: AnalysisUsage | null = null;
+export class ClaudeStageAdapter implements AnalysisStageAdapter {
+  readonly provider = "anthropic" as const;
+  lastCall: AnalysisModelCall | null = null;
+
+  constructor(
+    readonly model: string,
+    private readonly pricing: AnalysisModelPrice | null,
+  ) {}
 
   async isAvailable(): Promise<boolean> {
     return Boolean(env.ANTHROPIC_API_KEY);
   }
 
-  async scoreCandidates(
-    candidates: AnalysisCandidate[],
-    context: AnalysisContext,
-  ): Promise<ScoredCandidate[]> {
+  async classifyCandidates(candidates: AnalysisCandidate[]): Promise<ClassificationStageOutput> {
     if (!(await this.isAvailable())) {
       throw new AnalysisProviderUnavailableError("ANTHROPIC_API_KEY is not configured.");
     }
-
-    this.lastUsage = null;
-    const stageAModel = classifyModel();
-    const stageBModel = scoringModel();
-    const modelCalls: AnalysisModelCall[] = [];
-    const client = new Anthropic();
-
-    // Stage A classifies every candidate window; a full-length sermon produces hundreds, so the
-    // classification array scales with the transcript and easily overruns a small token cap.
-    // Same reasoning as Stage B below: stream with generous headroom, and treat a truncated or
-    // unparseable result as an explicit retryable failure instead of a silent empty classification.
-    const stageAStartedAt = Date.now();
-    const stageAStream = client.messages.stream({
-      model: stageAModel,
+    this.lastCall = null;
+    const startedAt = Date.now();
+    const stream = new Anthropic().messages.stream({
+      model: this.model,
       max_tokens: STAGE_A_MAX_TOKENS,
-      messages: [
-        {
-          role: "user",
-          content:
-            `Classify each numbered transcript excerpt below by its strongest moment type. ` +
-            `Reserve "reject" for excerpts that are genuinely unusable as a standalone clip: no ` +
-            `discernible point, cut off so badly the idea can't be followed, or pure housekeeping ` +
-            `(announcements, greetings, mic checks). An excerpt with slightly rough edges that ` +
-            `still carries a complete, compelling idea should be classified by that idea, not ` +
-            `rejected — a later pass scores and trims the survivors.\n\n` +
-            candidates.map((c, i) => `[${i}] ${c.text}`).join("\n\n"),
-        },
-      ],
+      messages: [{ role: "user", content: stageAPrompt(candidates) }],
       output_config: { format: zodOutputFormat(StageAResultSchema) },
     });
-    const stageA = await stageAStream.finalMessage();
-    modelCalls.push(toModelCall(stageAModel, stageA.usage, Date.now() - stageAStartedAt));
-    this.lastUsage = buildAnalysisUsage(modelCalls);
-
-    if (stageA.stop_reason === "max_tokens") {
+    const message = await stream.finalMessage();
+    const call = callFromUsage(
+      "analysis_classification",
+      this.model,
+      message.usage,
+      Date.now() - startedAt,
+      this.pricing,
+    );
+    this.lastCall = call;
+    if (message.stop_reason === "max_tokens") {
       throw new AnalysisResponseTruncatedError(
-        `Stage A classification output was truncated at the ${STAGE_A_MAX_TOKENS.toLocaleString()}-token ` +
-          `cap while classifying ${candidates.length} candidates.`,
+        `Stage A classification output was truncated at the ${STAGE_A_MAX_TOKENS.toLocaleString()}-token cap while classifying ${candidates.length} candidates.`,
       );
     }
-
-    let stageAText = "";
-    for (const block of stageA.content) {
-      if (block.type === "text") stageAText += block.text;
-    }
-    let classifications: z.infer<typeof StageAResultSchema>["classifications"];
     try {
-      classifications = StageAResultSchema.parse(JSON.parse(stageAText)).classifications;
+      const result = StageAResultSchema.parse(JSON.parse(textContent(message)));
+      call.outcome = "succeeded";
+      return { kept: thinStageASurvivors(candidates, result.classifications), call };
     } catch (error) {
       throw new AnalysisResponseTruncatedError(
         "Stage A classification returned output that did not match the expected schema.",
         { cause: error },
       );
     }
-    modelCalls[0].outcome = "succeeded";
-    this.lastUsage = buildAnalysisUsage(modelCalls);
+  }
 
-    // Stage A survivors are heavily overlapping (candidate windows share start positions), and
-    // Stage B has a fixed number of slots. Thin overlapping survivors before slicing so those
-    // slots spread across distinct moments in the recording — otherwise Stage B scores 25
-    // variations of the same opening and the post-scoring dedup collapses them to a clip or two.
-    const survivors = classifications
-      .filter((c) => c.momentType !== "reject")
-      .map((c) => c.index)
-      .filter((i) => i >= 0 && i < candidates.length);
-    const kept: number[] = [];
-    for (const index of survivors) {
-      if (kept.length >= MAX_STAGE_B_CANDIDATES) break;
-      const overlapsKept = kept.some((k) => computeIoU(candidates[k], candidates[index]) > 0.5);
-      if (!overlapsKept) kept.push(index);
+  async scoreCandidates(
+    candidates: AnalysisCandidate[],
+    kept: number[],
+    context: AnalysisContext,
+  ): Promise<ScoringStageOutput> {
+    if (!(await this.isAvailable())) {
+      throw new AnalysisProviderUnavailableError("ANTHROPIC_API_KEY is not configured.");
     }
-
-    if (kept.length === 0) {
-      this.lastUsage = buildAnalysisUsage(modelCalls);
-      return [];
-    }
-
-    // Scoring up to MAX_STAGE_B_CANDIDATES clips — each with six subscore notes plus a
-    // title/hook/summary/excerpt — is a large structured payload, and Sonnet 5's tokenizer
-    // runs ~30% heavier than older models. With `output_config.format`, generation is
-    // constrained to schema-valid JSON, so the only way the result can fail to parse is
-    // truncation at the token cap. We stream (the SDK's guidance once max_tokens exceeds
-    // ~16k) with generous headroom, and treat a `max_tokens` stop as an explicit retryable
-    // failure rather than letting it surface as an "unterminated JSON" parse crash.
-    const stageBStartedAt = Date.now();
-    const stageBStream = client.messages.stream({
-      model: stageBModel,
+    this.lastCall = null;
+    const startedAt = Date.now();
+    const stream = new Anthropic().messages.stream({
+      model: this.model,
       max_tokens: STAGE_B_MAX_TOKENS,
       thinking: { type: "disabled" },
-      output_config: {
-        effort: "medium",
-        format: zodOutputFormat(StageBResultSchema),
-      },
-      messages: [
-        {
-          role: "user",
-          content:
-            `You are scoring short-form video clip candidates cut from a longer ${context.genre} ` +
-            "recording. For each numbered excerpt, score these categories 0-100: hook strength " +
-            "(does the opening grab attention), clarity (understandable without earlier context), " +
-            "emotional impact, completeness (the thought resolves), shareability (would someone " +
-            "send this to a friend), and topic relevance (connects to the recording's main ideas). " +
-            "Write a short title (max 60 characters, no clickbait), a hook line (max 8 words), a " +
-            "one-sentence rationale, and an excerpt quote supporting your scoring.\n\n" +
-            kept.map((i) => `[${i}] ${candidates[i].text}`).join("\n\n"),
-        },
-      ],
+      output_config: { effort: "medium", format: zodOutputFormat(StageBResultSchema) },
+      messages: [{ role: "user", content: stageBPrompt(candidates, kept, context) }],
     });
-    const stageB = await stageBStream.finalMessage();
-
-    modelCalls.push(toModelCall(stageBModel, stageB.usage, Date.now() - stageBStartedAt));
-    this.lastUsage = buildAnalysisUsage(modelCalls);
-
-    if (stageB.stop_reason === "max_tokens") {
+    const message = await stream.finalMessage();
+    const call = callFromUsage(
+      "analysis_scoring",
+      this.model,
+      message.usage,
+      Date.now() - startedAt,
+      this.pricing,
+    );
+    this.lastCall = call;
+    if (message.stop_reason === "max_tokens") {
       throw new AnalysisResponseTruncatedError(
-        `Stage B scoring output was truncated at the ${STAGE_B_MAX_TOKENS.toLocaleString()}-token ` +
-          `cap while scoring ${kept.length} candidates.`,
+        `Stage B scoring output was truncated at the ${STAGE_B_MAX_TOKENS.toLocaleString()}-token cap while scoring ${kept.length} candidates.`,
       );
     }
-
-    let stageBText = "";
-    for (const block of stageB.content) {
-      if (block.type === "text") stageBText += block.text;
-    }
-
-    let scoredClips: z.infer<typeof StageBResultSchema>["scoredClips"];
     try {
-      scoredClips = StageBResultSchema.parse(JSON.parse(stageBText)).scoredClips;
+      const result = StageBResultSchema.parse(JSON.parse(textContent(message)));
+      call.outcome = "succeeded";
+      return { scored: mapStageBResult(candidates, context, result, this.model), call };
     } catch (error) {
       throw new AnalysisResponseTruncatedError(
         "Stage B scoring returned output that did not match the expected schema.",
         { cause: error },
       );
     }
-    modelCalls[1].outcome = "succeeded";
-    this.lastUsage = buildAnalysisUsage(modelCalls);
+  }
+}
 
-    return scoredClips
-      .filter((clip) => clip.index >= 0 && clip.index < candidates.length)
-      .map((clip) => {
-        const candidate = candidates[clip.index];
-        const durationS = (candidate.endMs - candidate.startMs) / 1000;
-        const wordCount = candidate.text.split(/\s+/).filter(Boolean).length;
+export type ClaudeAnalysisProviderOptions = {
+  classificationModel?: string;
+  scoringModel?: string;
+  classificationPrice?: AnalysisModelPrice | null;
+  scoringPrice?: AnalysisModelPrice | null;
+};
 
-        const baseSubscores = {
-          hook_strength: toSubscore(clip.subscores.hookStrength),
-          clarity: toSubscore(clip.subscores.clarity),
-          emotional_impact: toSubscore(clip.subscores.emotionalImpact),
-          completeness: toSubscore(clip.subscores.completeness),
-          shareability: toSubscore(clip.subscores.shareability),
-          topic_relevance: toSubscore(clip.subscores.topicRelevance),
-          speaker_energy: computeSpeakerEnergy(wordCount, durationS),
-          platform_fit: computePlatformFit(durationS),
-        };
-        const isSermon = context.genre.toLowerCase() === "sermon";
-        const scriptureReferences = isSermon ? detectScriptureReferences(candidate.text) : [];
-        const subscores = isSermon
-          ? {
-              clarity: baseSubscores.clarity,
-              emotional_impact: baseSubscores.emotional_impact,
-              completeness: baseSubscores.completeness,
-              shareability: baseSubscores.shareability,
-              speaker_energy: baseSubscores.speaker_energy,
-              platform_fit: baseSubscores.platform_fit,
-              ...buildChurchSubscores(candidate.text),
-            }
-          : baseSubscores;
+/** Compatibility wrapper for the default all-Claude route. */
+export class ClaudeAnalysisProvider implements AnalysisProvider {
+  readonly classification: ClaudeStageAdapter;
+  readonly scoring: ClaudeStageAdapter;
+  lastUsage: AnalysisUsage | null = null;
 
-        return {
-          startMs: candidate.startMs,
-          endMs: candidate.endMs,
-          text: candidate.text,
-          title: clip.title,
-          hookText: clip.hookText,
-          summary: clip.summary,
-          excerpt: clip.excerpt,
-          total: computeTotal(subscores, isSermon ? SERMON_WEIGHTS : undefined),
-          subscores,
-          modelVersion: stageBModel,
-          scriptureReferences,
-        };
-      });
+  constructor(private readonly options: ClaudeAnalysisProviderOptions = {}) {
+    this.classification = new ClaudeStageAdapter(
+      options.classificationModel ?? classifyModel(),
+      options.classificationPrice ?? null,
+    );
+    this.scoring = new ClaudeStageAdapter(
+      options.scoringModel ?? scoringModel(),
+      options.scoringPrice ?? null,
+    );
+  }
+
+  get name(): string {
+    return this.scoring.model;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return this.classification.isAvailable();
+  }
+
+  async scoreCandidates(
+    candidates: AnalysisCandidate[],
+    context: AnalysisContext,
+  ): Promise<ScoredCandidate[]> {
+    this.lastUsage = null;
+    const calls: AnalysisModelCall[] = [];
+    try {
+      const classification = await this.classification.classifyCandidates(candidates);
+      calls.push(classification.call);
+      this.lastUsage = buildAnalysisUsage(calls);
+      if (classification.kept.length === 0) return [];
+      const scoring = await this.scoring.scoreCandidates(candidates, classification.kept, context);
+      calls.push(scoring.call);
+      this.lastUsage = buildAnalysisUsage(calls);
+      return scoring.scored;
+    } catch (error) {
+      for (const adapter of [this.classification, this.scoring]) {
+        if (adapter.lastCall && !calls.includes(adapter.lastCall)) calls.push(adapter.lastCall);
+      }
+      this.lastUsage = buildAnalysisUsage(calls);
+      throw error;
+    }
   }
 }

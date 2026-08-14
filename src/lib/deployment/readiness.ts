@@ -151,19 +151,12 @@ function checkStripeEnv(env: EnvLike): ReadinessCheck[] {
           status: "fail",
           message: "STRIPE_WEBHOOK_SECRET must be a Stripe webhook secret starting with whsec_.",
         },
-    env.STRIPE_PRICE_STARTER?.startsWith("price_")
-      ? { name: "STRIPE_PRICE_STARTER", status: "ok", message: "Starter Stripe price is configured." }
+    env.STRIPE_PRICE_PAID?.startsWith("price_")
+      ? { name: "STRIPE_PRICE_PAID", status: "ok", message: "Paid Stripe price is configured." }
       : {
-          name: "STRIPE_PRICE_STARTER",
+          name: "STRIPE_PRICE_PAID",
           status: "fail",
-          message: "STRIPE_PRICE_STARTER must be a Stripe Price ID starting with price_.",
-        },
-    env.STRIPE_PRICE_PRO?.startsWith("price_")
-      ? { name: "STRIPE_PRICE_PRO", status: "ok", message: "Pro Stripe price is configured." }
-      : {
-          name: "STRIPE_PRICE_PRO",
-          status: "fail",
-          message: "STRIPE_PRICE_PRO must be a Stripe Price ID starting with price_.",
+          message: "STRIPE_PRICE_PAID must be a Stripe Price ID starting with price_.",
         },
   ];
 }
@@ -179,12 +172,16 @@ function checkGenerationProviderEnv(env: EnvLike): ReadinessCheck[] {
           status: "fail",
           message: "WHISPER_MODEL_PATH is required in production so workers can transcribe uploaded sermons.",
         },
-    env.ANTHROPIC_API_KEY?.startsWith("sk-ant")
-      ? { name: "ANTHROPIC_API_KEY", status: "ok", message: "Claude analysis provider is configured." }
+    env.ANTHROPIC_API_KEY?.startsWith("sk-ant") || Boolean(env.GEMINI_API_KEY)
+      ? {
+          name: "ANALYSIS_PROVIDER_API_KEY",
+          status: "ok",
+          message: "At least one analysis provider API key is configured.",
+        }
       : {
-          name: "ANTHROPIC_API_KEY",
+          name: "ANALYSIS_PROVIDER_API_KEY",
           status: "fail",
-          message: "ANTHROPIC_API_KEY must be configured for production AI clip scoring.",
+          message: "ANTHROPIC_API_KEY or GEMINI_API_KEY must be configured for production analysis.",
         },
   ];
 }

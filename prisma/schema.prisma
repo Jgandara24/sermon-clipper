@@ -60,6 +60,30 @@ enum ProjectStatus {
   @@map("project_status")
 }
 
+enum AnalysisProviderKind {
+  ANTHROPIC @map("anthropic")
+  OPENAI    @map("openai")
+  GOOGLE    @map("google")
+  HEURISTIC @map("heuristic")
+
+  @@map("analysis_provider_kind")
+}
+
+enum AnalysisRoutingPolicyState {
+  DRAFT   @map("draft")
+  ACTIVE  @map("active")
+  RETIRED @map("retired")
+
+  @@map("analysis_routing_policy_state")
+}
+
+enum WorkspaceAccessPlan {
+  TRIAL @map("trial")
+  PAID  @map("paid")
+
+  @@map("workspace_access_plan")
+}
+
 enum ProcessingJobType {
   FINALIZE       @map("finalize")
   PROBE          @map("probe")
@@ -257,7 +281,11 @@ model Workspace {
   id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                     String
   ownerId                  String    @map("owner_id") @db.Uuid
-  planCode                 String    @default("free") @map("plan_code")
+  planCode                 String    @default("trial") @map("plan_code")
+  accessPlan               WorkspaceAccessPlan @default(TRIAL) @map("access_plan")
+  trialStartedAt           DateTime  @default(now()) @map("trial_started_at")
+  trialEndsAt              DateTime  @default(dbgenerated("(CURRENT_TIMESTAMP + interval '30 days')")) @map("trial_ends_at")
+  paidAt                   DateTime? @map("paid_at")
   minuteBalance            Decimal   @default(60) @map("minute_balance") @db.Decimal(10, 2)
   stripeCustomerId         String?   @unique @map("stripe_customer_id")
   stripeSubscriptionId     String?   @unique @map("stripe_subscription_id")
@@ -460,6 +488,50 @@ model Project {
   @@index([workspaceId])
   @@index([sourceVideoId])
   @@map("projects")
+}
+
+// Master routing is versioned. Projects copy one policy into processingConfig when analysis
+// starts, so later policy changes cannot alter an existing project's result.
+model AnalysisRoutingPolicy {
+  id                     String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  version                Int                        @unique
+  name                   String
+  state                  AnalysisRoutingPolicyState @default(DRAFT)
+  classificationProvider AnalysisProviderKind       @map("classification_provider")
+  classificationModel    String                     @map("classification_model")
+  scoringProvider        AnalysisProviderKind       @map("scoring_provider")
+  scoringModel           String                     @map("scoring_model")
+  promptVersion          Int                        @default(1) @map("prompt_version")
+  schemaVersion          Int                        @default(1) @map("schema_version")
+  activatedAt            DateTime?                  @map("activated_at")
+  createdAt              DateTime                   @default(now()) @map("created_at")
+  updatedAt              DateTime                   @updatedAt @map("updated_at")
+
+  @@index([state, version])
+  @@map("analysis_routing_policies")
+}
+
+// Prices are immutable, effective-dated facts. A route cannot become active without a price for
+// each paid model. This supports run-date cost reports and known future price changes.
+model AnalysisModelPrice {
+  id                       String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider                 AnalysisProviderKind
+  model                    String
+  currency                 String               @default("USD")
+  effectiveFrom            DateTime             @map("effective_from")
+  effectiveUntil           DateTime?            @map("effective_until")
+  inputPerMillionUsd       Decimal              @map("input_per_million_usd") @db.Decimal(12, 6)
+  cacheReadPerMillionUsd   Decimal?             @map("cache_read_per_million_usd") @db.Decimal(12, 6)
+  cacheWritePerMillionUsd  Decimal?             @map("cache_write_per_million_usd") @db.Decimal(12, 6)
+  outputPerMillionUsd      Decimal              @map("output_per_million_usd") @db.Decimal(12, 6)
+  pricingSourceUrl         String               @map("pricing_source_url")
+  verifiedAt               DateTime             @map("verified_at")
+  createdAt                DateTime             @default(now()) @map("created_at")
+  updatedAt                DateTime             @updatedAt @map("updated_at")
+
+  @@unique([provider, model, effectiveFrom])
+  @@index([provider, model, effectiveFrom])
+  @@map("analysis_model_prices")
 }
 
 model ProcessingJob {

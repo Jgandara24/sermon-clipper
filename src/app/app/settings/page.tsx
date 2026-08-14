@@ -91,7 +91,9 @@ export default async function SettingsPage({
           </div>
           <div className="rounded-md border border-stone-200 p-4">
             <dt className="text-sm text-stone-500">Plan</dt>
-            <dd className="mt-1 font-semibold">{workspace.planCode}</dd>
+            <dd className="mt-1 font-semibold">
+              {workspace.accessPlan === "PAID" ? "Paid" : "Trial"}
+            </dd>
           </div>
           <div className="rounded-md border border-stone-200 p-4">
             <dt className="text-sm text-stone-500">Timezone</dt>

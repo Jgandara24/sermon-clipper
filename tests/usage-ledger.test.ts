@@ -36,8 +36,8 @@ describe("computeReservationDelta", () => {
 });
 
 describe("billing plans", () => {
-  it("falls back to the free plan for unknown plan codes", () => {
-    expect(planForCode("unknown").code).toBe("free");
+  it("falls back to Trial for unknown plan codes", () => {
+    expect(planForCode("unknown").code).toBe("trial");
   });
 
   it("ceil-estimates processing minutes from video duration", () => {
@@ -49,14 +49,12 @@ describe("billing plans", () => {
   it("maps paid app plans to configured Stripe prices", () => {
     const env = {
       NODE_ENV: "test",
-      STRIPE_PRICE_STARTER: "price_starter",
-      STRIPE_PRICE_PRO: "price_pro",
+      STRIPE_PRICE_PAID: "price_paid",
     } as NodeJS.ProcessEnv;
 
-    expect(stripePriceIdForPlan("starter", env)).toBe("price_starter");
-    expect(stripePriceIdForPlan("pro", env)).toBe("price_pro");
-    expect(stripePriceIdForPlan("free", env)).toBeNull();
-    expect(planForStripePriceId("price_pro", env)?.code).toBe("pro");
+    expect(stripePriceIdForPlan("paid", env)).toBe("price_paid");
+    expect(stripePriceIdForPlan("trial", env)).toBeNull();
+    expect(planForStripePriceId("price_paid", env)?.code).toBe("paid");
     expect(planForStripePriceId("price_unknown", env)).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidat
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { analysisCallCostFact } from "@/lib/analysis/usage";
+import { resolveAndSnapshotProjectAnalysisRouting } from "@/lib/analysis/routing-store";
 import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
 import { recordProcessingCostFact } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement, type RuntimeMeasurement } from "@/lib/cost/runtime";
@@ -32,7 +33,10 @@ function readGenre(processingConfig: unknown): string {
 }
 
 type AnalyzeJobDependencies = {
-  selectProvider?: () => Promise<AnalysisProviderSelection>;
+  selectProvider?: (
+    routing?: Parameters<typeof getAnalysisProvider>[0],
+  ) => Promise<AnalysisProviderSelection>;
+  resolveRouting?: typeof resolveAndSnapshotProjectAnalysisRouting;
 };
 
 async function recordAnalysisCostFacts(params: {
@@ -48,13 +52,9 @@ async function recordAnalysisCostFacts(params: {
   const { selection } = params;
   const calls = selection.provider.lastUsage?.calls ?? [];
   if (calls.length > 0) {
-    for (const [index, call] of calls.entries()) {
+    for (const call of calls) {
       await recordProcessingCostFact(params.prisma, {
-        ...analysisCallCostFact(
-          call,
-          index === 0 ? "analysis_classification" : "analysis_scoring",
-          selection.selectionReason,
-        ),
+        ...analysisCallCostFact(call, selection.selectionReason),
         attempt: Math.max(1, params.attempt),
         outcome: call.outcome ?? params.outcome,
         workspaceId: params.workspaceId,
@@ -65,15 +65,21 @@ async function recordAnalysisCostFacts(params: {
     return;
   }
 
+  const modelBacked = selection.providerKind !== "heuristic";
   await recordProcessingCostFact(params.prisma, {
-    stage: selection.providerKind === "claude" ? "analysis_classification" : "analysis_scoring",
+    stage: modelBacked ? "analysis_classification" : "analysis_scoring",
     quantity: 1,
-    unit: selection.providerKind === "claude" ? "call" : "operation",
-    unitCostUsd: selection.providerKind === "claude" ? null : 0,
-    provider: selection.providerKind === "claude" ? "anthropic" : "heuristic",
-    model: selection.providerKind === "claude" ? null : selection.provider.name,
+    unit: modelBacked ? "call" : "operation",
+    unitCostUsd: modelBacked ? null : 0,
+    provider:
+      selection.providerKind === "claude"
+        ? "anthropic"
+        : selection.providerKind === "google"
+          ? "google"
+          : selection.providerKind,
+    model: selection.provider.name,
     providerProvenance: selection.selectionReason,
-    cpuTimeMs: selection.providerKind === "claude" ? null : params.runtime.cpuTimeMs,
+    cpuTimeMs: modelBacked ? null : params.runtime.cpuTimeMs,
     wallTimeMs: params.runtime.wallTimeMs,
     cacheState: "not_applicable",
     attempt: Math.max(1, params.attempt),
@@ -87,6 +93,7 @@ async function recordAnalysisCostFacts(params: {
 /** Builds the ANALYZE handler with an injectable provider boundary for policy tests. */
 export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {}): JobHandler {
   const selectProvider = dependencies.selectProvider ?? getAnalysisProvider;
+  const resolveRouting = dependencies.resolveRouting ?? resolveAndSnapshotProjectAnalysisRouting;
   return async ({ job, prisma }) => {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: job.projectId },
@@ -99,7 +106,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
 
   const transcript = project.sourceVideo?.transcript;
   if (!transcript || transcript.segments.length === 0) {
-    throw new JobFailureError("ANALYZE_FAILED", "Clip analysis failed — your minutes were returned.");
+    throw new JobFailureError("ANALYZE_FAILED", "Clip analysis failed. Try again.");
   }
 
   const segments = transcript.segments.map((segment) => ({
@@ -133,7 +140,8 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
 
   let selection;
   try {
-    selection = await selectProvider();
+    const routing = await resolveRouting(prisma, project.id);
+    selection = await selectProvider(routing);
   } catch (error) {
     if (error instanceof AnalysisProviderUnavailableError) {
       await recordOperationalEventSafely(prisma, {
@@ -141,7 +149,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
         category: "analysis",
         eventType: "analysis_provider_unavailable",
         severity: "error",
-        message: "ANALYZE failed closed because the Claude provider was unavailable.",
+        message: "ANALYZE failed closed because the selected provider was unavailable.",
         projectId: project.id,
         jobId: job.id,
         metadata: { selectionReason: "production_no_api_key", emergencyOverride: false },
@@ -210,7 +218,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
         category: "analysis",
         eventType: "analysis_provider_failed",
         severity: "error",
-        message: "ANALYZE failed closed after the Claude provider became unavailable.",
+        message: "ANALYZE failed closed after the selected provider became unavailable.",
         projectId: project.id,
         jobId: job.id,
         metadata: {
@@ -225,13 +233,13 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
         { cause: error },
       );
     }
-    if (selection.providerKind === "claude" && process.env.NODE_ENV === "production") {
+    if (selection.providerKind !== "heuristic" && process.env.NODE_ENV === "production") {
       await recordOperationalEventSafely(prisma, {
         workspaceId: project.workspaceId,
         category: "analysis",
         eventType: "analysis_provider_failed",
         severity: "error",
-        message: "ANALYZE failed closed after the Claude provider call failed.",
+        message: "ANALYZE failed closed after the selected provider call failed.",
         projectId: project.id,
         jobId: job.id,
         metadata: {
@@ -241,7 +249,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
         },
       });
     }
-    throw new JobFailureError("ANALYZE_FAILED", "Clip analysis failed — your minutes were returned.", {
+    throw new JobFailureError("ANALYZE_FAILED", "Clip analysis failed. Try again.", {
       cause: error,
     });
   }

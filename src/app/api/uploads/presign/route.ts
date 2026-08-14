@@ -50,25 +50,6 @@ export async function POST(request: Request) {
     );
   }
 
-  if (workspace.minuteBalance.lessThanOrEqualTo(0)) {
-    await recordOperationalEventSafely(prisma, {
-      workspaceId: workspace.id,
-      category: "billing",
-      eventType: "upload_rejected_insufficient_minutes",
-      severity: "warning",
-      message: "Upload presign rejected because the workspace had no processing minutes.",
-      metadata: {
-        filename: parsed.data.filename,
-        minuteBalance: workspace.minuteBalance.toString(),
-      },
-    });
-    return apiError(
-      "INSUFFICIENT_MINUTES",
-      `This needs minutes to process; you have ${workspace.minuteBalance.toString()}.`,
-      { status: 402 },
-    );
-  }
-
   const rateLimit = await checkUploadPresignLimit(prisma, workspace.id);
   if (!rateLimit.allowed) {
     await recordOperationalEventSafely(prisma, {

@@ -37,7 +37,8 @@ async function main() {
       data: {
         name: "First Baptist Demo",
         ownerId: user.id,
-        planCode: "dev",
+        planCode: "paid",
+        accessPlan: "PAID",
         minuteBalance: 60,
         settings: {
           churchProfile: {

@@ -201,7 +201,7 @@ describe("URL import pipeline", () => {
     expect(probeJob.type).toBe(ProcessingJobType.PROBE);
 
     const finalizeJob = await prisma.processingJob.findUniqueOrThrow({ where: { id: job.id } });
-    expect(Number(finalizeJob.minutesReserved)).toBeGreaterThan(0);
+    expect(Number(finalizeJob.minutesReserved)).toBe(0);
 
     const costEvents = await prisma.operationalEvent.findMany({
       where: { jobId: job.id, eventType: "processing_cost_fact" },

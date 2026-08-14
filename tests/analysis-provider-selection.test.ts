@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getAnalysisProvider } from "@/lib/analysis";
 import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
+import type { ResolvedAnalysisRouting } from "@/lib/analysis/routing-store";
 
 const originalEnv = { ...process.env };
 
@@ -8,6 +9,7 @@ beforeEach(() => {
   process.env = { ...originalEnv };
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.ANALYSIS_ALLOW_HEURISTIC;
+  delete process.env.GEMINI_API_KEY;
 });
 
 function setNodeEnv(value: "test" | "development" | "production") {
@@ -74,5 +76,30 @@ describe("getAnalysisProvider", () => {
     expect(selection.selectionReason).toBe("claude_available");
     expect(selection.emergencyOverride).toBe(false);
     expect(selection.provider.name).toBe("claude-sonnet-5");
+  });
+
+  it("composes different providers from one versioned master policy", async () => {
+    setNodeEnv("production");
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    process.env.GEMINI_API_KEY = "gemini-test";
+    const resolved: ResolvedAnalysisRouting = {
+      routing: {
+        policyId: "policy-2",
+        policyVersion: 2,
+        classification: { provider: "google", model: "gemini-2.5-flash-lite" },
+        scoring: { provider: "anthropic", model: "claude-sonnet-5" },
+        promptVersion: 1,
+        schemaVersion: 1,
+      },
+      source: "master_policy",
+      prices: { classification: null, scoring: null },
+    };
+
+    const selection = await getAnalysisProvider(resolved);
+
+    expect(selection.providerKind).toBe("mixed");
+    expect(selection.selectionReason).toBe("master_policy");
+    expect(selection.provider.name).toContain("google:gemini-2.5-flash-lite");
+    expect(selection.provider.name).toContain("anthropic:claude-sonnet-5");
   });
 });
