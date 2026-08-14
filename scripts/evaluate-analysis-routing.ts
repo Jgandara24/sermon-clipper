@@ -48,6 +48,12 @@ async function main() {
         : allCandidates;
     const resolved = await loadAnalysisRoutingPolicyForEvaluation(prisma, policyVersion, startedAt);
     const selection = await getAnalysisProvider(resolved);
+    if (selection.selectionReason !== "master_policy") {
+      throw new Error(
+        `The policy's providers are not available here (selection: ${selection.selectionReason}). ` +
+          "Set the provider API keys first — a shadow report must not silently fall back to the heuristic scorer.",
+      );
+    }
     const runStartedAt = Date.now();
     const scored = await selection.provider.scoreCandidates(candidates, {
       fullText: transcript.fullText,

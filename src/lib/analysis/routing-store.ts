@@ -5,6 +5,8 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import {
+  activeModelPrice,
+  assertRoutingPolicyActivatable,
   assertRoutingPolicyPriced,
   resolveProjectAnalysisRouting,
   type AnalysisModelPrice,
@@ -102,20 +104,12 @@ export async function loadAnalysisRoutingPolicyForEvaluation(
     promptVersion: policy.promptVersion,
     schemaVersion: policy.schemaVersion,
   };
-  const findPrice = (provider: AnalysisProviderKind, model: string) =>
-    prices.find(
-      (price) =>
-        price.provider === provider &&
-        price.model === model &&
-        price.effectiveFrom <= at &&
-        (price.effectiveUntil === null || price.effectiveUntil > at),
-    ) ?? null;
   return {
     routing,
     source: "master_policy",
     prices: {
-      classification: findPrice(routing.classification.provider, routing.classification.model),
-      scoring: findPrice(routing.scoring.provider, routing.scoring.model),
+      classification: activeModelPrice(prices, routing.classification, at),
+      scoring: activeModelPrice(prices, routing.scoring, at),
     },
   };
 }
@@ -206,6 +200,7 @@ export async function activateAnalysisRoutingPolicy(
       }),
     ]);
     const policy = policyFromRow(row);
+    assertRoutingPolicyActivatable(policy);
     assertRoutingPolicyPriced(policy, priceRows.map(priceFromRow), activatedAt);
     await tx.analysisRoutingPolicy.updateMany({
       where: { state: AnalysisRoutingPolicyState.ACTIVE },
@@ -279,20 +274,11 @@ export async function resolveAndSnapshotProjectAnalysisRouting(
       });
     }
 
-    const routePrice = (route: AnalysisRoutingSnapshot["classification"]) =>
-      prices.find(
-        (price) =>
-          price.provider === route.provider &&
-          price.model === route.model &&
-          price.effectiveFrom <= at &&
-          (price.effectiveUntil === null || price.effectiveUntil > at),
-      ) ?? null;
-
     return {
       ...resolved,
       prices: {
-        classification: routePrice(resolved.routing.classification),
-        scoring: routePrice(resolved.routing.scoring),
+        classification: activeModelPrice(prices, resolved.routing.classification, at),
+        scoring: activeModelPrice(prices, resolved.routing.scoring, at),
       },
     };
   });

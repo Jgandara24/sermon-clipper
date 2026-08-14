@@ -226,7 +226,10 @@ degraded or warning.
 ## Analysis Routing
 
 The active policy selects one provider and model for Stage A and one for Stage B. The command makes
-one audited version active. It refuses a model without a current price or provider key.
+one audited version active. It refuses a model without a current price or provider key. It also
+refuses a heuristic or OpenAI stage: production heuristic analysis stays behind the visible
+`ANALYSIS_ALLOW_HEURISTIC` incident override, and no OpenAI adapter is installed yet. Heuristic
+stages remain usable in draft policies for shadow evaluation only.
 
 ```sh
 npm run set:analysis-routing -- \

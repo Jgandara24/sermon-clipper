@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AnalysisResponseTruncatedError } from "@/lib/analysis/claude-provider";
 import { GeminiStageAdapter } from "@/lib/analysis/gemini-provider";
 import { RoutedAnalysisProvider } from "@/lib/analysis/routed-provider";
 import type { AnalysisModelPrice } from "@/lib/analysis/routing";
@@ -78,5 +79,47 @@ describe("Gemini analysis adapter", () => {
     const firstBody = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body));
     expect(firstBody.generationConfig.responseMimeType).toBe("application/json");
     expect(firstBody.generationConfig.responseJsonSchema).toBeTypeOf("object");
+  });
+
+  it("fails a truncated response instead of parsing partial output", async () => {
+    process.env.GEMINI_API_KEY = "gemini-test-key";
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          candidates: [
+            { finishReason: "MAX_TOKENS", content: { parts: [{ text: '{"classifications":[' }] } },
+          ],
+          usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 32000 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const adapter = new GeminiStageAdapter("gemini-2.5-flash-lite", price, fetchImpl);
+
+    await expect(
+      adapter.classifyCandidates([{ startMs: 0, endMs: 30_000, text: "Hope." }]),
+    ).rejects.toThrow(AnalysisResponseTruncatedError);
+    // The truncated call's token usage still reaches spend telemetry.
+    expect(adapter.lastCall).toMatchObject({
+      stage: "analysis_classification",
+      provider: "google",
+      outcome: "failed",
+      outputTokens: 32000,
+    });
+  });
+
+  it("surfaces the provider error for a failed HTTP request", async () => {
+    process.env.GEMINI_API_KEY = "gemini-test-key";
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { message: "API key not valid." } }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const adapter = new GeminiStageAdapter("gemini-2.5-flash-lite", price, fetchImpl);
+
+    await expect(
+      adapter.classifyCandidates([{ startMs: 0, endMs: 30_000, text: "Hope." }]),
+    ).rejects.toThrow("API key not valid.");
   });
 });

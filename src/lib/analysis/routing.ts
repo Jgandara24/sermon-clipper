@@ -81,15 +81,45 @@ export function activeModelPrice(
   at: Date,
 ): AnalysisModelPrice | null {
   if (route.provider === "heuristic") return null;
-  return (
-    prices.find(
-      (price) =>
-        price.provider === route.provider &&
-        price.model === route.model &&
-        price.effectiveFrom <= at &&
-        (price.effectiveUntil === null || price.effectiveUntil > at),
-    ) ?? null
-  );
+  let best: AnalysisModelPrice | null = null;
+  for (const price of prices) {
+    if (
+      price.provider === route.provider &&
+      price.model === route.model &&
+      price.effectiveFrom <= at &&
+      (price.effectiveUntil === null || price.effectiveUntil > at)
+    ) {
+      // Overlapping windows resolve deterministically: the latest-starting active window wins,
+      // never the database's return order.
+      if (!best || price.effectiveFrom > best.effectiveFrom) best = price;
+    }
+  }
+  return best;
+}
+
+/** Providers with an installed production adapter. Only these can hold an ACTIVE stage. */
+const INSTALLED_STAGE_PROVIDERS: ReadonlySet<AnalysisProviderKind> = new Set([
+  "anthropic",
+  "google",
+]);
+
+/**
+ * Refuses to make a policy the production master when a stage cannot run as normal paid
+ * analysis. Heuristic stages stay evaluation-only — production heuristic use is reserved for
+ * the visible, per-job-logged ANALYSIS_ALLOW_HEURISTIC incident override (2026-08-12 fail-closed
+ * decision) — and OpenAI has no installed adapter yet.
+ */
+export function assertRoutingPolicyActivatable(policy: AnalysisRoutingPolicy): void {
+  for (const [stage, route] of [
+    ["classification", policy.classification],
+    ["scoring", policy.scoring],
+  ] as const) {
+    if (!INSTALLED_STAGE_PROVIDERS.has(route.provider)) {
+      throw new Error(
+        `Cannot activate analysis routing: ${stage} provider ${route.provider} is not an installed production adapter.`,
+      );
+    }
+  }
 }
 
 /** Refuses activation when a paid model has no current, verified price. */
