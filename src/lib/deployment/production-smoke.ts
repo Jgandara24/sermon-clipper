@@ -33,6 +33,7 @@ const REQUIRED_HEALTH_CHECKS = [
   "STRIPE_PRICE_PAID",
   "WHISPER_MODEL_PATH",
   "ANALYSIS_PROVIDER_API_KEY",
+  "analysis_routing",
   "STORAGE_PROVIDER",
   "storage",
   "database",

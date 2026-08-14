@@ -28,6 +28,7 @@ function healthPayload(overrides: Record<string, unknown> = {}) {
     "STRIPE_PRICE_PAID",
     "WHISPER_MODEL_PATH",
     "ANALYSIS_PROVIDER_API_KEY",
+    "analysis_routing",
     "STORAGE_PROVIDER",
     "storage",
     "database",

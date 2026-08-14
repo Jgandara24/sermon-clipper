@@ -254,6 +254,11 @@ an evaluation report. Promote the tested version only after a human accepts the 
 npm run set:analysis-routing -- --activate-version <integer>
 ```
 
+`/api/health` includes an `analysis_routing` check in production: the active policy must have an
+installed adapter, a configured provider key, and a currently effective price for each stage.
+It fails when a deploy's keys do not match the active route, or when a price window lapses with
+no successor row — both would otherwise fail every ANALYZE job at run time.
+
 ## Storage Bucket
 
 - Create a private bucket. Do not make objects public.

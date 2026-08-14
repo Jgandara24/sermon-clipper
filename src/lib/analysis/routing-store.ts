@@ -230,6 +230,62 @@ export async function activateAnalysisRoutingPolicy(
   });
 }
 
+/**
+ * Deployment-readiness audit of the ACTIVE policy: does each stage have an installed adapter,
+ * a configured provider key, and a currently effective price? Catches a deploy whose environment
+ * cannot run the active route (every ANALYZE would fail closed) and a price window lapsing with
+ * no successor row (every ANALYZE would throw at routing resolution).
+ */
+export async function auditActiveAnalysisRouting(
+  prisma: PrismaClient,
+  env: Record<string, string | undefined> = process.env,
+  at = new Date(),
+): Promise<{ ok: boolean; detail: string }> {
+  const row = await prisma.analysisRoutingPolicy.findFirst({
+    where: { state: AnalysisRoutingPolicyState.ACTIVE },
+    orderBy: { version: "desc" },
+  });
+  if (!row) {
+    return { ok: false, detail: "No active analysis routing policy exists." };
+  }
+  const policy = policyFromRow(row);
+  const priceRows = await prisma.analysisModelPrice.findMany({
+    where: {
+      effectiveFrom: { lte: at },
+      OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: at } }],
+    },
+  });
+  const prices = priceRows.map(priceFromRow);
+
+  const problems: string[] = [];
+  for (const [stage, route] of [
+    ["Stage A", policy.classification],
+    ["Stage B", policy.scoring],
+  ] as const) {
+    if (route.provider === "anthropic") {
+      if (!env.ANTHROPIC_API_KEY) problems.push(`${stage} needs ANTHROPIC_API_KEY`);
+    } else if (route.provider === "google") {
+      if (!env.GEMINI_API_KEY) problems.push(`${stage} needs GEMINI_API_KEY`);
+    } else {
+      problems.push(`${stage} provider ${route.provider} has no installed production adapter`);
+    }
+    if (route.provider !== "heuristic" && !activeModelPrice(prices, route, at)) {
+      problems.push(`${stage} model ${route.provider}/${route.model} has no active price`);
+    }
+  }
+
+  if (problems.length > 0) {
+    return { ok: false, detail: `Active analysis routing policy ${policy.version}: ${problems.join("; ")}.` };
+  }
+  return {
+    ok: true,
+    detail:
+      `Active analysis routing policy ${policy.version} ` +
+      `(${policy.classification.provider}/${policy.classification.model} -> ` +
+      `${policy.scoring.provider}/${policy.scoring.model}) is keyed and priced.`,
+  };
+}
+
 /** Loads the active master policy and writes one immutable project snapshot when needed. */
 export async function resolveAndSnapshotProjectAnalysisRouting(
   prisma: PrismaClient,
