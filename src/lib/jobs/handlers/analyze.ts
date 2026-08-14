@@ -5,7 +5,7 @@ import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/a
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { analysisCallCostFact } from "@/lib/analysis/usage";
 import { resolveAndSnapshotProjectAnalysisRouting } from "@/lib/analysis/routing-store";
-import { AnalysisProviderUnavailableError } from "@/lib/analysis/types";
+import { AnalysisProviderUnavailableError, type ScoredCandidate } from "@/lib/analysis/types";
 import { recordProcessingCostFact } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement, type RuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
@@ -37,6 +37,7 @@ type AnalyzeJobDependencies = {
     routing?: Parameters<typeof getAnalysisProvider>[0],
   ) => Promise<AnalysisProviderSelection>;
   resolveRouting?: typeof resolveAndSnapshotProjectAnalysisRouting;
+  recordCostFact?: typeof recordProcessingCostFact;
 };
 
 async function recordAnalysisCostFacts(params: {
@@ -48,12 +49,13 @@ async function recordAnalysisCostFacts(params: {
   selection: AnalysisProviderSelection;
   runtime: RuntimeMeasurement;
   outcome: ProcessingCostOutcome;
+  record: typeof recordProcessingCostFact;
 }) {
   const { selection } = params;
   const calls = selection.provider.lastUsage?.calls ?? [];
   if (calls.length > 0) {
     for (const call of calls) {
-      await recordProcessingCostFact(params.prisma, {
+      await params.record(params.prisma, {
         ...analysisCallCostFact(call, selection.selectionReason),
         attempt: Math.max(1, params.attempt),
         outcome: call.outcome ?? params.outcome,
@@ -66,7 +68,7 @@ async function recordAnalysisCostFacts(params: {
   }
 
   const modelBacked = selection.providerKind !== "heuristic";
-  await recordProcessingCostFact(params.prisma, {
+  await params.record(params.prisma, {
     stage: modelBacked ? "analysis_classification" : "analysis_scoring",
     quantity: 1,
     unit: modelBacked ? "call" : "operation",
@@ -94,6 +96,7 @@ async function recordAnalysisCostFacts(params: {
 export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {}): JobHandler {
   const selectProvider = dependencies.selectProvider ?? getAnalysisProvider;
   const resolveRouting = dependencies.resolveRouting ?? resolveAndSnapshotProjectAnalysisRouting;
+  const recordCostFact = dependencies.recordCostFact ?? recordProcessingCostFact;
   return async ({ job, prisma }) => {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: job.projectId },
@@ -152,7 +155,10 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
         message: "ANALYZE failed closed because the selected provider was unavailable.",
         projectId: project.id,
         jobId: job.id,
-        metadata: { selectionReason: "production_no_api_key", emergencyOverride: false },
+        metadata: {
+          emergencyOverride: false,
+          detail: error instanceof Error ? error.message : String(error),
+        },
       });
       throw new JobFailureError(
         "ANALYZE_PROVIDER_UNAVAILABLE",
@@ -185,23 +191,22 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       ? filterSermonCandidates(candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text })))
       : candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text }));
   const analysisRuntime = startRuntimeMeasurement();
-  let scored;
+  let scored: ScoredCandidate[] | undefined;
+  let scoreFailure: { error: unknown } | null = null;
   try {
     scored = await provider.scoreCandidates(
       scoreableCandidates,
       { fullText: transcript.fullText, genre },
     );
-    await recordAnalysisCostFacts({
-      prisma,
-      workspaceId: project.workspaceId,
-      projectId: project.id,
-      jobId: job.id,
-      attempt: job.attempt,
-      selection,
-      runtime: finishRuntimeMeasurement(analysisRuntime),
-      outcome: "succeeded",
-    });
   } catch (error) {
+    scoreFailure = { error };
+  }
+
+  // One best-effort recording pass for both outcomes. Recording after the try/catch keeps every
+  // model call recorded exactly once (the old success-then-catch shape re-recorded already
+  // written calls when a later insert failed — double counting), and a telemetry write failure
+  // must not fail paid work that succeeded — it surfaces as a warning event instead.
+  try {
     await recordAnalysisCostFacts({
       prisma,
       workspaceId: project.workspaceId,
@@ -210,8 +215,26 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       attempt: job.attempt,
       selection,
       runtime: finishRuntimeMeasurement(analysisRuntime),
-      outcome: "failed",
+      outcome: scoreFailure ? "failed" : "succeeded",
+      record: recordCostFact,
     });
+  } catch (recordError) {
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: project.workspaceId,
+      category: "cost",
+      eventType: "cost_fact_record_failed",
+      severity: "warning",
+      message: "ANALYZE could not record its analysis cost facts.",
+      projectId: project.id,
+      jobId: job.id,
+      metadata: {
+        detail: recordError instanceof Error ? recordError.message : String(recordError),
+      },
+    });
+  }
+
+  if (scoreFailure) {
+    const error = scoreFailure.error;
     if (error instanceof AnalysisProviderUnavailableError) {
       await recordOperationalEventSafely(prisma, {
         workspaceId: project.workspaceId,
@@ -254,7 +277,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     });
   }
 
-  if (scored.length === 0) {
+  if (!scored || scored.length === 0) {
     throw new JobFailureError(
       "NO_CLIPS_FOUND",
       "We didn't find strong standalone moments. Try a narrower timeframe or a prompt.",
@@ -328,8 +351,9 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       const rank = idx + 1;
       if (rank <= targetClipCount && project.sermonDate) {
         const scheduledDate = scheduledDateForRank(project.sermonDate, rank);
-        // Until Wave 1 adds active-date uniqueness, the earliest armed row owns the date in every
-        // state. A later project keeps its analyzed candidates but cannot silently double-book.
+        // The earliest armed row owns the date in every state; a later project keeps its
+        // analyzed candidates but cannot silently double-book. Wave 1's partial unique index
+        // (non-MISSED workspace/date) backs this read-then-create at commit time.
         const collision = await findScheduledPostCollision(tx, {
           workspaceId: project.workspaceId,
           scheduledDate,

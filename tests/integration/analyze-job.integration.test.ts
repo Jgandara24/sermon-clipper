@@ -17,8 +17,9 @@ import { JobFailureError } from "@/lib/jobs/types";
  * candidate-pool assertions from the old hard-coded ceiling to the accepted project snapshot.
  *
  * Nothing here asserts desired behavior. Several cases pin down bugs the plan intends to fix
- * (Sunday spill in P1.8/P1.9, destructive reanalysis in P1.7, the unguarded cross-project date
- * collision in P0.15/P1.9). When those commits land they must *change* these assertions and say so
+ * (Sunday spill in P1.8/P1.9, destructive reanalysis in P1.7). The cross-project date collision
+ * case was inverted by P0.15 and now asserts the app-level guard; the remaining concurrency race
+ * belongs to P1.9. When the owning commits land they must *change* these assertions and say so
  * — that is the point. An assertion that quietly still passes after a fix means the fix missed.
  *
  * Provider note: with no ANTHROPIC_API_KEY (the CI condition) `getAnalysisProvider()` returns the
@@ -77,6 +78,7 @@ async function analyzeProject(options: {
   sermonDate: Date | null;
   targetClipCount?: number;
   candidateLimit?: number;
+  handler?: typeof runAnalyzeJob;
 }) {
   const { workspaceId, segmentCount, sermonDate } = options;
   const durationS = (segmentCount * SEGMENT_MS) / 1000;
@@ -123,7 +125,8 @@ async function analyzeProject(options: {
     },
   });
 
-  const result = await runAnalyzeJob({ job, prisma } as Parameters<typeof runAnalyzeJob>[0]);
+  const run = options.handler ?? runAnalyzeJob;
+  const result = await run({ job, prisma } as Parameters<typeof runAnalyzeJob>[0]);
 
   const clips = await prisma.generatedClip.findMany({
     where: { projectId: project.id },
@@ -562,5 +565,52 @@ describe("ANALYZE preflight — cross-project date collision", () => {
         }),
       ]),
     );
+  });
+});
+
+describe("ANALYZE cost-fact recording", () => {
+  it("keeps a successful analysis when cost-fact recording fails, with a visible warning", async () => {
+    const workspaceId = await seedWorkspace();
+    const handler = createAnalyzeJobHandler({
+      recordCostFact: async () => {
+        throw new Error("cost facts table unavailable");
+      },
+    });
+
+    const { projectId, metadata, clips } = await analyzeProject({
+      workspaceId,
+      segmentCount: 20,
+      sermonDate: null,
+      handler,
+    });
+
+    expect(clips.length).toBeGreaterThan(0);
+    expect(metadata.keptCount).toBe(clips.length);
+
+    const warning = await prisma.operationalEvent.findFirstOrThrow({
+      where: { workspaceId, projectId, eventType: "cost_fact_record_failed" },
+    });
+    expect(warning.severity).toBe("warning");
+    // The failed write recorded nothing — no partial or duplicate cost facts.
+    await expect(
+      prisma.operationalEvent.count({
+        where: { workspaceId, projectId, eventType: "processing_cost_fact" },
+      }),
+    ).resolves.toBe(0);
+  });
+
+  it("records exactly one cost fact for a normal heuristic run", async () => {
+    const workspaceId = await seedWorkspace();
+    const { projectId } = await analyzeProject({
+      workspaceId,
+      segmentCount: 20,
+      sermonDate: null,
+    });
+
+    await expect(
+      prisma.operationalEvent.count({
+        where: { workspaceId, projectId, eventType: "processing_cost_fact" },
+      }),
+    ).resolves.toBe(1);
   });
 });

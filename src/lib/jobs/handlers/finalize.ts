@@ -10,6 +10,7 @@ import { env } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import { MAX_UPLOAD_BYTES, MAX_VIDEO_DURATION_S } from "@/lib/limits";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { probeVideoFile } from "@/lib/media/probe";
 import {
   buildYtDlpCostFacts,
@@ -146,20 +147,40 @@ async function recordUrlImportCostFacts(params: {
   telemetry: YtDlpTransferTelemetry;
   outcome: ProcessingCostOutcome;
 }) {
-  const channel = await findChannelImportCostAttribution(params.prisma, params.projectId);
-  const facts = buildYtDlpCostFacts(params.telemetry, {
-    proxyPricePerGbUsd: env.YTDLP_PROXY_PRICE_PER_GB_USD ?? null,
-    railwayEgressPricePerGbUsd: env.RAILWAY_EGRESS_PRICE_PER_GB_USD ?? null,
-    attempt: Math.max(1, params.attempt),
-    outcome: params.outcome,
-  });
-  for (const fact of facts) {
-    await recordProcessingCostFact(params.prisma, {
-      ...fact,
-      details: { ...fact.details, ...(channel ?? {}) },
+  try {
+    const channel = await findChannelImportCostAttribution(params.prisma, params.projectId);
+    const facts = buildYtDlpCostFacts(params.telemetry, {
+      proxyPricePerGbUsd: env.YTDLP_PROXY_PRICE_PER_GB_USD ?? null,
+      railwayEgressPricePerGbUsd: env.RAILWAY_EGRESS_PRICE_PER_GB_USD ?? null,
+      attempt: Math.max(1, params.attempt),
+      outcome: params.outcome,
+    });
+    for (const fact of facts) {
+      await recordProcessingCostFact(params.prisma, {
+        ...fact,
+        details: { ...fact.details, ...(channel ?? {}) },
+        workspaceId: params.sourceVideo.workspaceId,
+        projectId: params.projectId,
+        jobId: params.jobId,
+      });
+    }
+  } catch (recordError) {
+    // Best-effort: a telemetry write failure must not change the download outcome. On the
+    // failure path it would replace YtDlpFileTooLargeError's non-retryable VIDEO_TOO_LARGE with
+    // a retryable INTERNAL_ERROR — re-downloading the oversized video through the paid proxy on
+    // every retry. On the success path it would fail a job whose video already uploaded, and
+    // the retry would re-download it. The gap stays visible as a warning event.
+    await recordOperationalEventSafely(params.prisma, {
       workspaceId: params.sourceVideo.workspaceId,
+      category: "cost",
+      eventType: "cost_fact_record_failed",
+      severity: "warning",
+      message: "URL import could not record its transfer cost facts.",
       projectId: params.projectId,
       jobId: params.jobId,
+      metadata: {
+        detail: recordError instanceof Error ? recordError.message : String(recordError),
+      },
     });
   }
 }
