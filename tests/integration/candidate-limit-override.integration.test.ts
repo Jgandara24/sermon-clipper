@@ -46,9 +46,27 @@ beforeAll(async () => {
   workspaceId = workspace.id;
 });
 
+// Override audit events are platform-scoped (workspaceId null); the workspace link lives in
+// metadata, so cleanup and queries filter on the metadata path.
+function overrideAuditEvents() {
+  return prisma.operationalEvent.findMany({
+    where: {
+      eventType: { in: ["candidate_limit_override_set", "candidate_limit_override_cleared"] },
+      metadata: { path: ["workspaceId"], equals: workspaceId },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
 beforeEach(async () => {
   await prisma.workspace.update({ where: { id: workspaceId }, data: { settings: baselineSettings() } });
   await prisma.operationalEvent.deleteMany({ where: { workspaceId } });
+  await prisma.operationalEvent.deleteMany({
+    where: {
+      eventType: { in: ["candidate_limit_override_set", "candidate_limit_override_cleared"] },
+      metadata: { path: ["workspaceId"], equals: workspaceId },
+    },
+  });
 });
 
 afterAll(async () => {
@@ -101,26 +119,34 @@ describe("candidate-limit override operations", () => {
     expect((workspace.settings as { internalOperations: unknown }).internalOperations).toEqual({
       protectedNote: "keep",
     });
-    const eventTypes = await prisma.operationalEvent.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: "asc" },
-      select: { eventType: true },
-    });
-    expect(eventTypes).toEqual([
-      { eventType: "candidate_limit_override_set" },
-      { eventType: "candidate_limit_override_cleared" },
+    const events = await overrideAuditEvents();
+    expect(events.map((event) => event.eventType)).toEqual([
+      "candidate_limit_override_set",
+      "candidate_limit_override_cleared",
     ]);
   });
 
-  it("records an audit event for the operations change", async () => {
+  it("records a platform-scoped audit event for the operations change", async () => {
     await setCandidateLimitOverride(prisma, { workspaceId, candidateLimitOverride: 12 });
 
-    const event = await prisma.operationalEvent.findFirstOrThrow({
-      where: { workspaceId, eventType: "candidate_limit_override_set" },
-    });
+    const [event] = await overrideAuditEvents();
+    expect(event).toBeDefined();
     expect(event.category).toBe("analysis");
     expect(event.severity).toBe("info");
-    expect(event.metadata).toEqual({ candidateLimitOverride: 12 });
+    expect(event.workspaceId).toBeNull();
+    expect(event.metadata).toEqual({ workspaceId, candidateLimitOverride: 12 });
+  });
+
+  it("keeps the override audit off the church-facing operations feed", async () => {
+    await setCandidateLimitOverride(prisma, { workspaceId, candidateLimitOverride: 12 });
+
+    // The /app/settings/operations page (visible to church OWNER/ADMIN) lists events
+    // where workspaceId = workspace.id; the override value must never appear there.
+    const churchVisible = await prisma.operationalEvent.findMany({ where: { workspaceId } });
+    expect(
+      churchVisible.filter((event) => event.eventType.startsWith("candidate_limit_override")),
+    ).toEqual([]);
+    expect(JSON.stringify(churchVisible)).not.toContain("candidateLimitOverride");
   });
 
   it("retries a concurrent settings update without losing either change", async () => {

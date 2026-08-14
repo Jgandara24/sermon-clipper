@@ -29,6 +29,39 @@ type ExecFile = (
 
 export class YtDlpParseError extends Error {}
 
+/** A metadata fetch failed. The message is proxy-redacted and safe for operational events. */
+export class YtDlpMetadataFetchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "YtDlpMetadataFetchError";
+  }
+}
+
+/**
+ * Node's promisified execFile bakes the full command line — including `--proxy <url>` with its
+ * credentials — into the rejection message, and runner.causeDetail copies that message into a
+ * workspace-visible operational event. Strip every form of the secret before an error escapes.
+ */
+function redactProxyUrl(text: string): string {
+  const proxyUrl = resolveYtDlpProxyUrl();
+  if (!text || !proxyUrl) return text;
+  let redacted = text.split(proxyUrl).join("[proxy-url]");
+  try {
+    const parsed = new URL(proxyUrl);
+    if (parsed.username || parsed.password) {
+      redacted = redacted
+        .split(`${parsed.username}:${parsed.password}`)
+        .join("[proxy-credentials]");
+    }
+    if (parsed.host) {
+      redacted = redacted.split(parsed.host).join("[proxy-host]");
+    }
+  } catch {
+    // Not URL-parseable — the full-string replacement above already covered it.
+  }
+  return redacted;
+}
+
 export type YtDlpTransferTelemetry = {
   bytes: number;
   sourceDurationS: number | null;
@@ -154,16 +187,24 @@ export async function fetchYtDlpMetadata(
   execFile: ExecFile = execFileWithTimeout,
 ): Promise<YtDlpMetadata> {
   const ytDlpPath = resolveYtDlpPath();
-  const { stdout } = await execFile(
-    ytDlpPath,
-    [...baseArgs(), "--dump-json", "--skip-download", "--no-playlist", url],
-    {
-      timeoutMs: envTimeoutMs("YTDLP_METADATA_TIMEOUT_MS", 30_000),
-      // --dump-json routinely exceeds Node's 1 MiB default (large formats lists plus
-      // auto-caption entries for ~150 languages) — same 64 MiB headroom as render.ts.
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
+  let stdout: string;
+  try {
+    ({ stdout } = await execFile(
+      ytDlpPath,
+      [...baseArgs(), "--dump-json", "--skip-download", "--no-playlist", url],
+      {
+        timeoutMs: envTimeoutMs("YTDLP_METADATA_TIMEOUT_MS", 30_000),
+        // --dump-json routinely exceeds Node's 1 MiB default (large formats lists plus
+        // auto-caption entries for ~150 languages) — same 64 MiB headroom as render.ts.
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    ));
+  } catch (error) {
+    // No `cause`: the original error carries the unredacted `--proxy <url>` command line.
+    throw new YtDlpMetadataFetchError(
+      redactProxyUrl(error instanceof Error ? error.message : String(error)),
+    );
+  }
   return parseYtDlpMetadataJson(stdout);
 }
 

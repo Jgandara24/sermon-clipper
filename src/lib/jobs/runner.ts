@@ -6,7 +6,7 @@ import { releaseReservationsForProject } from "@/lib/usage-ledger";
 import { HeartbeatLostError, withHeartbeat } from "@/lib/worker/reliability";
 import { jobHandlers } from "./handlers";
 import { claimNextJob, heartbeatJob, markJobFailed, markJobFailedOrRetry, markJobSucceeded } from "./queue";
-import { JobFailureError } from "./types";
+import { JobFailureError, type JobSuccessMetadata } from "./types";
 
 const SUPPORTED_TYPES = Object.keys(jobHandlers) as ProcessingJobType[];
 
@@ -64,7 +64,7 @@ export async function runOnePendingJob(): Promise<boolean> {
       message: `${job.type} job succeeded.`,
       projectId: job.projectId,
       jobId: job.id,
-      metadata: { type: job.type, attempt: job.attempt, ...(result?.metadata ?? {}) },
+      metadata: successEventMetadata(job.type, job.attempt, result?.metadata),
     });
   } catch (error) {
     if (error instanceof HeartbeatLostError) {
@@ -127,6 +127,24 @@ export async function runOnePendingJob(): Promise<boolean> {
   }
 
   return true;
+}
+
+/**
+ * Success events are workspace-scoped, and workspace-scoped events feed the church-facing
+ * /app/settings/operations page. The frozen candidate rule keeps the internal ceiling — which
+ * can be a hidden per-church override — off every church-facing surface, so the event copy of
+ * ANALYZE result metadata drops it. The requested limit stays durable for staff in the
+ * project's processingConfig snapshot.
+ */
+export function successEventMetadata(
+  type: string,
+  attempt: number,
+  resultMetadata: JobSuccessMetadata | undefined,
+): JobSuccessMetadata {
+  const safeMetadata = Object.fromEntries(
+    Object.entries(resultMetadata ?? {}).filter(([key]) => key !== "candidateLimit"),
+  );
+  return { type, attempt, ...safeMetadata };
 }
 
 /**

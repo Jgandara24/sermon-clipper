@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   YtDlpDownloadError,
   YtDlpFileTooLargeError,
+  YtDlpMetadataFetchError,
   YtDlpParseError,
   downloadYtDlpVideo,
   fetchYtDlpMetadata,
@@ -152,6 +153,39 @@ describe("YTDLP_PROXY_URL", () => {
       } finally {
         await rm(dir, { recursive: true, force: true });
       }
+    } finally {
+      delete process.env.YTDLP_PROXY_URL;
+    }
+  });
+
+  it("redacts the proxy URL from a failed metadata fetch", async () => {
+    // Node's execFile bakes the full command line — including `--proxy <url>` with credentials —
+    // into the rejection message, and runner.causeDetail copies that message into a
+    // church-visible operational event. The secret must not survive the throw.
+    process.env.YTDLP_PROXY_URL = "http://user:secretpass@gate.proxy.example:7777";
+    try {
+      const failingExec = async (binary: string, args: string[]) => {
+        throw new Error(
+          `Command failed: ${binary} ${args.join(" ")}\nERROR: [youtube] Sign in to confirm you're not a bot.`,
+        );
+      };
+      const error: unknown = await fetchYtDlpMetadata(
+        "https://youtube.com/watch?v=dQw4w9WgXcQ",
+        failingExec,
+      ).then(
+        () => {
+          throw new Error("fetchYtDlpMetadata should have rejected");
+        },
+        (rejection: unknown) => rejection,
+      );
+
+      expect(error).toBeInstanceOf(YtDlpMetadataFetchError);
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toContain("Sign in to confirm");
+      expect(message).not.toContain("secretpass");
+      expect(message).not.toContain("gate.proxy.example");
+      // No `cause`: the original error still carries the unredacted command line.
+      expect((error as Error).cause).toBeUndefined();
     } finally {
       delete process.env.YTDLP_PROXY_URL;
     }
