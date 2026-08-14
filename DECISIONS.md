@@ -1622,3 +1622,21 @@ Why: The pilot needs simple access and direct observation of real church use. Pr
 selected later from measured cost and behavior. Safety controls remain separate from billing.
 
 Status: Active. This decision supersedes the 2026-08-13 P0 plan-grid decision.
+
+## 2026-08-14 - Keep Claude Active After the First Google Shadow Test
+
+Decision: Keep Claude routing policy version 1 active. Keep Google routing policy version 3 as a
+draft. Proceed to P1 without activating the Google route. Re-test the route after selector work can
+improve full-service coverage.
+
+The paid, no-mutation shadow run used `gemini-3.1-flash-lite` for Stage A and
+`claude-sonnet-5` for Stage B. Estimated analysis cost was $0.1211745, which was 30.6 percent below
+the $0.174481 Claude Gate A baseline on the same service. However, every scored candidate still
+started inside the first quarter of the service. The front-loading defect remains. The public-safe
+test facts and the human review are in `evaluation/routing-shadow-2026-08-14.json`.
+
+Why: Lower cost is useful, but cost does not replace editorial coverage. The versioned routing
+system permits P1 to continue with the proven Claude baseline while the cheaper Google route stays
+available for another controlled test.
+
+Status: Active. Google policy version 3 is not approved for activation.

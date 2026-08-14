@@ -97,8 +97,10 @@
     [627480, 717480]
   ],
   "humanReview": {
+    "reviewedOn": "2026-08-14",
     "accepted": false,
-    "replacementRequired": null,
-    "editorialQualityNote": "Pending. Do not activate before human review."
+    "replacementRequired": true,
+    "editorialQualityNote": "The cost result passed, but all candidate starts remained inside the first quarter of the service.",
+    "decision": "Keep Claude policy 1 active. Keep Google policy 3 as a draft. Proceed to P1."
   }
 }

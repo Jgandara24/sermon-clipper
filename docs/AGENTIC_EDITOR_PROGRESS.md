@@ -49,8 +49,9 @@ shadow test because Google no longer offers `gemini-2.5-flash-lite` to new users
 uses the current stable `gemini-3.1-flash-lite` model and completed one paid, no-mutation shadow run
 against the existing 47-minute Gate A service. It sent 25 of 491 candidates to Stage B and reduced
 estimated analysis cost by 30.6 percent, but all candidate starts remained inside the first quarter
-of the service. Do not activate version 3 without the required human review. The public-safe facts
-are in `evaluation/routing-shadow-2026-08-14.json`.
+of the service. Human review rejected activation on 2026-08-14. Keep Claude policy version 1 active,
+keep Google policy version 3 as a draft, and proceed to P1. The public-safe facts are in
+`evaluation/routing-shadow-2026-08-14.json`.
 
 ---
 
