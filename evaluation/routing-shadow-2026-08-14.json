@@ -57,13 +57,14 @@
     ]
   },
   "sameServiceClaudeBaseline": {
-    "scoredCount": 12,
+    "keptCount": 12,
     "latestStartFraction": 0.1993752792097743,
     "isFrontLoadedWithinFirstQuarter": true,
     "estimatedCostUsd": 0.174481
   },
   "comparison": {
-    "scoredCountMultiple": 2.0833333333333335,
+    "candidateCountComparisonAvailable": false,
+    "candidateCountComparisonNote": "Google scoredCount and Claude keptCount are different funnel stages and are not a recall comparison.",
     "estimatedSavingsUsd": 0.0533065,
     "estimatedSavingsPercent": 30.551464056258272,
     "frontLoadingFixed": false
