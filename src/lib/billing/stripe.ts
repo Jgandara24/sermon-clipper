@@ -144,7 +144,14 @@ export function constructStripeWebhookEvent(requestBody: string, signature: stri
   return getStripeClient().webhooks.constructEvent(requestBody, signature, webhookSecret);
 }
 
-async function markEventReceived(client: PrismaClient, event: Stripe.Event): Promise<boolean> {
+/**
+ * Records the processed-event marker. Written AFTER the handler runs: a marker written first
+ * would turn Stripe's retry of a failed delivery into a silent duplicate no-op, permanently
+ * dropping the event (e.g. a Paid activation). Returns false when a concurrent delivery of the
+ * same event won the marker race — the handlers are idempotent, so both deliveries converging
+ * on the same state is safe.
+ */
+async function markEventProcessed(client: PrismaClient, event: Stripe.Event): Promise<boolean> {
   try {
     await client.stripeWebhookEvent.create({ data: { id: event.id, type: event.type } });
     return true;
@@ -355,8 +362,11 @@ async function handleChargeRefunded(client: PrismaClient, charge: Stripe.Charge)
 }
 
 export async function handleStripeWebhookEvent(client: PrismaClient, event: Stripe.Event) {
-  const shouldProcess = await markEventReceived(client, event);
-  if (!shouldProcess) return { processed: false, duplicate: true };
+  const alreadyProcessed = await client.stripeWebhookEvent.findUnique({
+    where: { id: event.id },
+    select: { id: true },
+  });
+  if (alreadyProcessed) return { processed: false, duplicate: true };
 
   switch (event.type) {
     case "checkout.session.completed":
@@ -380,5 +390,6 @@ export async function handleStripeWebhookEvent(client: PrismaClient, event: Stri
       break;
   }
 
+  await markEventProcessed(client, event);
   return { processed: true, duplicate: false };
 }

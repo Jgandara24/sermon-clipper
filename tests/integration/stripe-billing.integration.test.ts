@@ -230,4 +230,53 @@ describe("Stripe billing integration", () => {
     expect(events).toHaveLength(1);
     expect(events[0].severity).toBe("warning");
   });
+
+  it("keeps a failed event retryable, processes the retry, then deduplicates", async () => {
+    // A processing failure must not persist the dedupe marker: Stripe retries on a non-2xx
+    // response, and a marked-but-unprocessed event would make the retry a silent no-op —
+    // permanently losing, for example, a Paid activation.
+    const workspaceId = crypto.randomUUID();
+    const eventId = `evt_retryable_${runId}`;
+    const failingThenOk = event(eventId, "checkout.session.completed", {
+      id: `cs_retryable_${runId}`,
+      object: "checkout.session",
+      client_reference_id: workspaceId,
+      customer: `cus_retryable_${runId}`,
+      subscription: `sub_retryable_${runId}`,
+      metadata: { workspaceId, planCode: "paid" },
+    });
+
+    // First delivery fails mid-processing (the workspace does not exist yet).
+    await expect(handleStripeWebhookEvent(prisma, failingThenOk)).rejects.toThrow();
+    await expect(
+      prisma.stripeWebhookEvent.findUnique({ where: { id: eventId } }),
+    ).resolves.toBeNull();
+
+    // Recovery: the workspace exists when Stripe redelivers the same event id.
+    const email = `stripe-retryable-${runId}@example.com`;
+    userEmailsToDelete.push(email);
+    const user = await prisma.user.create({ data: { email } });
+    await prisma.workspace.create({
+      data: {
+        id: workspaceId,
+        name: "Stripe Retry Church",
+        ownerId: user.id,
+        members: { create: { userId: user.id, role: WorkspaceRole.OWNER } },
+      },
+    });
+    workspaceIdsToDelete.push(workspaceId);
+
+    await expect(handleStripeWebhookEvent(prisma, failingThenOk)).resolves.toEqual({
+      processed: true,
+      duplicate: false,
+    });
+    const updated = await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
+    expect(updated.accessPlan).toBe(WorkspaceAccessPlan.PAID);
+
+    // A redelivery after successful processing stays a deduplicated no-op.
+    await expect(handleStripeWebhookEvent(prisma, failingThenOk)).resolves.toEqual({
+      processed: false,
+      duplicate: true,
+    });
+  });
 });
