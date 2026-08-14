@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient, WorkspaceAccessPlan, WorkspaceRole } from "@prisma/client";
 import type Stripe from "stripe";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { decideWorkspaceAccess } from "@/lib/billing/access";
 import { handleStripeWebhookEvent } from "@/lib/billing/stripe";
 
 const prisma = new PrismaClient();
@@ -145,6 +146,15 @@ describe("Stripe billing integration", () => {
     expect(updated.planCode).toBe("trial");
     expect(updated.accessPlan).toBe(WorkspaceAccessPlan.TRIAL);
     expect(updated.stripeSubscriptionStatus).toBe("canceled");
+
+    // paidAt survives the cancellation, so access resolves as lapsed rather than resuming the
+    // workspace's original 30-day trial window (which is still open for a fresh workspace).
+    expect(updated.paidAt).not.toBeNull();
+    expect(decideWorkspaceAccess(updated, "import_media")).toMatchObject({
+      allowed: false,
+      state: "lapsed",
+    });
+    expect(decideWorkspaceAccess(updated, "read").allowed).toBe(true);
   });
 
   it("ignores a late event for a superseded subscription", async () => {

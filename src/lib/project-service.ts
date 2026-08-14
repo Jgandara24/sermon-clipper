@@ -167,7 +167,13 @@ async function getWorkspaceProjectSettings(
 ) {
   const workspace = await tx.workspace.findUniqueOrThrow({
     where: { id: workspaceId },
-    select: { settings: true, accessPlan: true, trialStartedAt: true, trialEndsAt: true },
+    select: {
+      settings: true,
+      accessPlan: true,
+      trialStartedAt: true,
+      trialEndsAt: true,
+      paidAt: true,
+    },
   });
   assertWorkspaceAccess(workspace, "import_media");
   return {

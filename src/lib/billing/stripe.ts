@@ -255,7 +255,14 @@ async function handleSubscriptionUpdated(client: PrismaClient, subscription: Str
       planCode,
       accessPlan:
         planCode === "paid" ? WorkspaceAccessPlan.PAID : WorkspaceAccessPlan.TRIAL,
-      paidAt: planCode === "paid" ? workspace.paidAt ?? new Date() : workspace.paidAt,
+      // paidAt is the durable "this workspace has paid" marker that keeps a cancellation from
+      // resuming an unfinished trial. Stamp it when a subscription ends on a workspace that was
+      // Paid without one, so a manual upgrade or data drift cannot defeat the lapse rule.
+      paidAt:
+        planCode === "paid"
+          ? workspace.paidAt ?? new Date()
+          : workspace.paidAt ??
+            (workspace.accessPlan === WorkspaceAccessPlan.PAID ? new Date() : null),
       stripeCustomerId: customerId ?? workspace.stripeCustomerId,
       stripeSubscriptionId: subscription.id,
       stripeSubscriptionStatus: subscription.status,

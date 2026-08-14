@@ -23,6 +23,7 @@ type AppShellProps = {
     accessPlan: WorkspaceAccessPlan;
     trialStartedAt: Date;
     trialEndsAt: Date;
+    paidAt: Date | null;
   };
   user: {
     email: string;
@@ -88,7 +89,9 @@ export function AppShell({ children, workspace, user, role }: AppShellProps) {
                 ? "Paid"
                 : access.state === "trial_active"
                   ? "Trial active"
-                  : "Trial ended · Read-only"}
+                  : access.state === "lapsed"
+                    ? "Subscription ended · Read-only"
+                    : "Trial ended · Read-only"}
             </p>
           </div>
         </aside>
