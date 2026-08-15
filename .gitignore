@@ -54,3 +54,12 @@ next-env.d.ts
 
 # local working artifacts (planning scratch, not project docs)
 /OUTPUTS/
+
+# private strategy document — never commit while this repository is public.
+# Public git history cannot be retracted: going private later does not unpublish
+# what was already crawled, archived, or forked. See DECISIONS.md, 2026-08-11,
+# "Repository Stays Public Until P5". The rest of that never-commit list (margin,
+# revenue, scale, acquisition, and price-positioning material, and the private
+# plan's P5 Selector policy and P6 Review Agent design) is content, not a fixed
+# filename, so it cannot be ignored by path — it stays in the Dropbox workspace.
+/CTO.md
