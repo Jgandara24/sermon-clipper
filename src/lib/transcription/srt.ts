@@ -75,5 +75,22 @@ export function parseSrt(srtText: string, language = "en"): TranscriptionResult 
     throw new SrtParseError("No valid cues found in SRT file.");
   }
 
-  return { language, segments };
+  // Some caption tools keep the prior cue visible after the next cue starts. Those display
+  // windows overlap even though the speech is sequential. For word timing, the next cue start
+  // is the only precise boundary present in the SRT, so do not spread the prior cue beyond it.
+  const speechSegments = segments.map((segment, index) => {
+    const nextStartMs = segments[index + 1]?.startMs;
+    const endMs =
+      nextStartMs !== undefined && nextStartMs > segment.startMs
+        ? Math.min(segment.endMs, nextStartMs)
+        : segment.endMs;
+    if (endMs === segment.endMs) return segment;
+    return {
+      ...segment,
+      endMs,
+      words: interpolateWords(segment.text, segment.startMs, endMs),
+    };
+  });
+
+  return { language, segments: speechSegments };
 }

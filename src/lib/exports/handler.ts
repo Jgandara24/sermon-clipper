@@ -147,6 +147,10 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     id: segment.id,
     startMs: segment.startMs,
     endMs: segment.endMs,
+    timingMode:
+      sourceVideo.transcript?.provider === "srt_upload"
+        ? ("srt-interpolated" as const)
+        : ("measured" as const),
     words: segment.words as Array<{
       word: string;
       startMs: number;

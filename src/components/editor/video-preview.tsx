@@ -2,8 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
-import { wordScaleAt } from "@/lib/editor/caption-animation";
+import {
+  activeCaptionWordId,
+  overshootScale,
+  wordScaleAt,
+} from "@/lib/editor/caption-animation";
 import { layoutCaptionLine } from "@/lib/editor/caption-layout";
+import {
+  resizeCaptionFromCorner,
+  type CaptionResizeCorner,
+} from "@/lib/editor/caption-transform";
+import { CAPTION_STYLE_LIMITS } from "@/lib/editor/caption-presets";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import { safeAreaBounds, UNIVERSAL_SOCIAL_SAFE_AREA } from "@/lib/editor/social-safe-area";
 import type { EditorState } from "@/lib/editor/types";
@@ -34,6 +43,7 @@ export function VideoPreview({
   captionSelected = true,
   onCaptionSelectedChange,
   onCaptionPositionChange,
+  onCaptionSizeChange,
   seek,
   fillHeight = false,
 }: {
@@ -48,6 +58,8 @@ export function VideoPreview({
   onCaptionSelectedChange?: (selected: boolean) => void;
   /** Caption object drag writes its center position (0-100) into the editor state. */
   onCaptionPositionChange?: (placement: CaptionPlacement) => void;
+  /** Corner-handle resize writes the caption font size into the editor state. */
+  onCaptionSizeChange?: (sizePx: number) => void;
   /** External seek request (from clicking/dragging the timeline). Bump `token` to re-seek. */
   seek?: { ms: number; token: number } | null;
   fillHeight?: boolean;
@@ -57,7 +69,16 @@ export function VideoPreview({
   const [currentMs, setCurrentMsState] = useState(state.source.startMs);
   const [stageScale, setStageScale] = useState(0.2);
   const [dragPlacement, setDragPlacement] = useState<CaptionPlacement | null>(null);
+  const [resizeSizePx, setResizeSizePx] = useState<number | null>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const resizeRef = useRef<{
+    corner: CaptionResizeCorner;
+    centerX: number;
+    centerY: number;
+    boundsWidth: number;
+    boundsHeight: number;
+    startSizePx: number;
+  } | null>(null);
   const seekedRef = useRef(false);
   const lastReportedRef = useRef(0);
 
@@ -74,9 +95,13 @@ export function VideoPreview({
     [onCurrentMsChange],
   );
 
-  const style = useMemo(
+  const resolvedStyle = useMemo(
     () => resolveCaptionStyle(state.captions.presetId, state.captions.overrides),
     [state.captions.presetId, state.captions.overrides],
+  );
+  const style = useMemo(
+    () => (resizeSizePx === null ? resolvedStyle : { ...resolvedStyle, sizePx: resizeSizePx }),
+    [resizeSizePx, resolvedStyle],
   );
   const { measure, ready: fontsReady } = useTextMeasurer(style.fontFamily, style.fontWeight);
 
@@ -96,9 +121,13 @@ export function VideoPreview({
     );
   }, [words, state.captions.textOverrides, state.source.endMs, style.maxWordsPerLine]);
 
-  const currentLine = captionLines.find(
-    (line) => currentMs >= line.startMs && currentMs < line.endMs,
+  const activeWordId = activeCaptionWordId(
+    captionLines.flatMap((line) => line.words),
+    currentMs,
   );
+  const currentLine =
+    captionLines.find((line) => line.words.some((word) => word.id === activeWordId)) ??
+    captionLines.find((line) => currentMs >= line.startMs && currentMs < line.endMs);
 
   const layout = useMemo(
     () =>
@@ -191,15 +220,18 @@ export function VideoPreview({
   const safeBounds = safeAreaBounds({ width: STAGE_WIDTH, height: STAGE_HEIGHT });
   const maxRowWidth = Math.max(0, ...(layout?.rows.map((row) => row.widthPx) ?? []));
   const maxWordWidth = Math.max(0, ...(layout?.words.map((word) => word.widthPx) ?? []));
-  const popReserveX = (maxWordWidth * Math.max(0, style.highlightScale - 1)) / 2;
+  const maximumPopScale = overshootScale(style.highlightScale);
+  const popReserveX = (maxWordWidth * Math.max(0, maximumPopScale - 1)) / 2;
   const popReserveY =
-    ((layout?.rows[0]?.heightPx ?? style.sizePx) * Math.max(0, style.highlightScale - 1)) / 2;
+    ((layout?.rows[0]?.heightPx ?? style.sizePx) * Math.max(0, maximumPopScale - 1)) / 2;
+  const transformPaddingX = style.sizePx * 0.5;
+  const transformPaddingY = style.sizePx * 0.7;
   const selectionBounds = layout
     ? {
-        left: layout.blockCenterX - maxRowWidth / 2 - popReserveX,
-        top: layout.blockTopY - popReserveY,
-        width: maxRowWidth + popReserveX * 2,
-        height: layout.blockHeightPx + popReserveY * 2,
+        left: layout.blockCenterX - maxRowWidth / 2 - popReserveX - transformPaddingX,
+        top: layout.blockTopY - popReserveY - transformPaddingY,
+        width: maxRowWidth + popReserveX * 2 + transformPaddingX * 2,
+        height: layout.blockHeightPx + popReserveY * 2 + transformPaddingY * 2,
       }
     : null;
   const dragDelta =
@@ -297,6 +329,85 @@ export function VideoPreview({
     });
   }
 
+  function pointerInStage(clientX: number, clientY: number) {
+    const rect = stageWrapRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return {
+      x: ((clientX - rect.left) / rect.width) * STAGE_WIDTH,
+      y: ((clientY - rect.top) / rect.height) * STAGE_HEIGHT,
+    };
+  }
+
+  function sizeFromPointer(clientX: number, clientY: number): number | null {
+    const session = resizeRef.current;
+    const pointer = pointerInStage(clientX, clientY);
+    if (!session || !pointer) return null;
+    return resizeCaptionFromCorner({
+      corner: session.corner,
+      pointerX: pointer.x,
+      pointerY: pointer.y,
+      centerX: session.centerX,
+      centerY: session.centerY,
+      boundsWidth: session.boundsWidth,
+      boundsHeight: session.boundsHeight,
+      startSizePx: session.startSizePx,
+      minSizePx: CAPTION_STYLE_LIMITS.sizePx.min,
+      maxSizePx: CAPTION_STYLE_LIMITS.sizePx.max,
+    });
+  }
+
+  function handleResizePointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!layout || !selectionBounds) return;
+    const corner = event.currentTarget.dataset.corner as CaptionResizeCorner;
+    event.preventDefault();
+    event.stopPropagation();
+    videoRef.current?.pause();
+    onCaptionSelectedChange?.(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = {
+      corner,
+      centerX: layout.blockCenterX,
+      centerY: layout.blockCenterY,
+      boundsWidth: selectionBounds.width,
+      boundsHeight: selectionBounds.height,
+      startSizePx: resolvedStyle.sizePx,
+    };
+    setResizeSizePx(resolvedStyle.sizePx);
+  }
+
+  function handleResizePointerMove(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!resizeRef.current) return;
+    const sizePx = sizeFromPointer(event.clientX, event.clientY);
+    if (sizePx !== null) setResizeSizePx(sizePx);
+  }
+
+  function handleResizePointerUp(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!resizeRef.current) return;
+    const sizePx = sizeFromPointer(event.clientX, event.clientY);
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    resizeRef.current = null;
+    setResizeSizePx(null);
+    if (sizePx !== null) onCaptionSizeChange?.(sizePx);
+  }
+
+  function handleResizeKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    const direction =
+      event.key === "ArrowRight" || event.key === "ArrowUp"
+        ? 1
+        : event.key === "ArrowLeft" || event.key === "ArrowDown"
+          ? -1
+          : 0;
+    if (direction === 0) return;
+    event.preventDefault();
+    const step = event.shiftKey ? 5 : 1;
+    onCaptionSizeChange?.(
+      Math.min(
+        CAPTION_STYLE_LIMITS.sizePx.max,
+        Math.max(CAPTION_STYLE_LIMITS.sizePx.min, resolvedStyle.sizePx + direction * step),
+      ),
+    );
+  }
+
   return (
     <div
       className={`overflow-hidden rounded-lg border border-white/10 bg-black shadow-2xl ${
@@ -376,10 +487,7 @@ export function VideoPreview({
                   })
                 : null}
               {layout.words.map((word) => {
-                const active =
-                  style.highlightMode === "word" &&
-                  currentMs >= word.startMs &&
-                  currentMs < word.endMs;
+                const active = style.highlightMode === "word" && word.id === activeWordId;
                 const scale = active
                   ? wordScaleAt(currentMs - word.startMs, style.highlightScale)
                   : 1;
@@ -418,20 +526,20 @@ export function VideoPreview({
         </div>
 
         {/* The caption block itself is the drag target. */}
-        {onCaptionPositionChange && selectionBounds ? (
+        {(onCaptionPositionChange || onCaptionSizeChange) && selectionBounds ? (
           <div
-            role="button"
-            aria-label="Move all captions"
+            role="group"
+            aria-label="Caption transform controls"
             tabIndex={0}
             onPointerDown={handleDragPointerDown}
             onPointerMove={handleDragPointerMove}
             onPointerUp={handleDragPointerUp}
             onKeyDown={handleDragKeyDown}
-            className={`group absolute z-10 cursor-move touch-none rounded-md border-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
+            className={`group absolute z-10 cursor-move touch-none border focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
               captionSelected || dragPlacement
                 ? visuallySafe
-                  ? "border-white/90 bg-white/5"
-                  : "border-amber-400 bg-amber-400/10"
+                  ? "border-white"
+                  : "border-amber-400"
                 : "border-transparent"
             }`}
             style={{
@@ -441,11 +549,27 @@ export function VideoPreview({
               height: `${(selectionBounds.height / STAGE_HEIGHT) * 100}%`,
             }}
           >
-            {captionSelected || dragPlacement ? (
-              <span className={`absolute -top-6 left-0 whitespace-nowrap rounded px-2 py-1 text-[9px] font-bold uppercase tracking-wide ${visuallySafe ? "bg-white text-black" : "bg-amber-400 text-black"}`}>
-                {visuallySafe ? "All captions · drag" : "Outside social-safe area"}
-              </span>
-            ) : null}
+            {captionSelected || dragPlacement || resizeSizePx !== null
+              ? ([
+                  ["top-left", "left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize"],
+                  ["top-right", "right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize"],
+                  ["bottom-left", "bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize"],
+                  ["bottom-right", "bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize"],
+                ] as const).map(([corner, positionClass]) => (
+                  <button
+                    key={corner}
+                    type="button"
+                    data-corner={corner}
+                    aria-label={`Resize captions from ${corner.replace("-", " ")}`}
+                    onPointerDown={handleResizePointerDown}
+                    onPointerMove={handleResizePointerMove}
+                    onPointerUp={handleResizePointerUp}
+                    onPointerCancel={handleResizePointerUp}
+                    onKeyDown={handleResizeKeyDown}
+                    className={`absolute h-3.5 w-3.5 touch-none rounded-full border-2 border-white bg-black shadow-[0_0_0_1px_rgba(0,0,0,0.5)] ${positionClass}`}
+                  />
+                ))
+              : null}
           </div>
         ) : null}
 

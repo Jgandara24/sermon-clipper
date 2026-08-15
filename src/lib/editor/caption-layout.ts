@@ -1,4 +1,5 @@
 import type { CaptionLine, CaptionWord } from "./caption-lines";
+import { overshootScale } from "./caption-animation";
 import type { CaptionStyle } from "./caption-presets";
 import { safeAreaBounds } from "./social-safe-area";
 
@@ -68,13 +69,14 @@ export function layoutCaptionLine(
   const spaceWidth = measure(" ", style.sizePx, style.fontFamily, style.fontWeight);
   const maxRowWidth = frame.width * MAX_ROW_WIDTH_RATIO;
   const lineHeight = Math.round(style.sizePx * LINE_HEIGHT_RATIO);
+  const maximumPopScale = overshootScale(style.highlightScale);
 
   // Greedy wrap into rows. buildCaptionLines' word cap usually keeps this to one row; this is
   // the overflow guard for long words or large sizes.
   type MeasuredWord = { word: CaptionWord; text: string; widthPx: number };
   const motionClearance = (left: MeasuredWord, right: MeasuredWord) =>
     spaceWidth +
-    ((style.highlightScale - 1) * Math.max(left.widthPx, right.widthPx)) / 2;
+    ((maximumPopScale - 1) * Math.max(left.widthPx, right.widthPx)) / 2;
   const rowWidth = (rowWords: MeasuredWord[]) =>
     rowWords.reduce((sum, item) => sum + item.widthPx, 0) +
     rowWords.slice(1).reduce(
@@ -100,7 +102,7 @@ export function layoutCaptionLine(
   // Safe anchors align the maximum animated block with the common social-safe envelope.
   // Custom placement keeps the legacy positionY/anchor contract intact.
   const safe = safeAreaBounds(frame);
-  const verticalPopReserve = (lineHeight * Math.max(0, style.highlightScale - 1)) / 2;
+  const verticalPopReserve = (lineHeight * Math.max(0, maximumPopScale - 1)) / 2;
   const anchorY = (style.positionY / 100) * frame.height;
   const rawTop =
     style.safeAnchor === "top-safe"
@@ -120,9 +122,9 @@ export function layoutCaptionLine(
   const positionedRows: CaptionRow[] = rows.map((rowWords, rowIndex) => {
     const measuredRowWidth = rowWidth(rowWords);
     const requestedCenter = (style.positionX / 100) * frame.width;
-    const leftPopReserve = ((style.highlightScale - 1) * (rowWords[0]?.widthPx ?? 0)) / 2;
+    const leftPopReserve = ((maximumPopScale - 1) * (rowWords[0]?.widthPx ?? 0)) / 2;
     const rightPopReserve =
-      ((style.highlightScale - 1) * (rowWords[rowWords.length - 1]?.widthPx ?? 0)) / 2;
+      ((maximumPopScale - 1) * (rowWords[rowWords.length - 1]?.widthPx ?? 0)) / 2;
     const frameMargin = frame.width * MIN_BLOCK_MARGIN_RATIO;
     const minCenter = frameMargin + measuredRowWidth / 2 + leftPopReserve;
     const maxCenter = frame.width - frameMargin - measuredRowWidth / 2 - rightPopReserve;

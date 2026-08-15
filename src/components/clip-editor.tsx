@@ -281,6 +281,16 @@ export function ClipEditor({
     }));
   }
 
+  function handleCaptionSizeChange(sizePx: number) {
+    updateState((prev) => ({
+      ...prev,
+      captions: {
+        ...prev.captions,
+        overrides: { ...prev.captions.overrides, sizePx },
+      },
+    }));
+  }
+
   function handleExtend(direction: "before" | "after") {
     updateState((prev) => {
       const nextSource =
@@ -417,6 +427,7 @@ export function ClipEditor({
             }}
             onCurrentMsChange={setCurrentMs}
             onCaptionPositionChange={handleCaptionPositionChange}
+            onCaptionSizeChange={handleCaptionSizeChange}
             seek={seek}
             fillHeight
           />

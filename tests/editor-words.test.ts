@@ -34,6 +34,36 @@ describe("flattenWords", () => {
     expect(words.map((w) => w.id)).toEqual(["seg-1:0", "seg-1:1", "seg-1:2", "seg-2:0"]);
     expect(words.map((w) => w.word)).toEqual(["Peace", "um", "is", "here."]);
   });
+
+  it("repairs stored SRT words when rolling cue display windows overlap", () => {
+    const words = flattenWords([
+      {
+        id: "old-cue",
+        startMs: 1000,
+        endMs: 5000,
+        timingMode: "srt-interpolated",
+        words: [
+          { word: "one", startMs: 1000, endMs: 3000, confidence: 1, isFiller: false, deleted: false },
+          { word: "two", startMs: 3000, endMs: 5000, confidence: 1, isFiller: false, deleted: false },
+        ],
+      },
+      {
+        id: "next-cue",
+        startMs: 3000,
+        endMs: 6000,
+        timingMode: "srt-interpolated",
+        words: [
+          { word: "three", startMs: 3000, endMs: 6000, confidence: 1, isFiller: false, deleted: false },
+        ],
+      },
+    ]);
+
+    expect(words.map((word) => [word.word, word.startMs, word.endMs])).toEqual([
+      ["one", 1000, 2000],
+      ["two", 2000, 3000],
+      ["three", 3000, 6000],
+    ]);
+  });
 });
 
 describe("wordsInRange", () => {

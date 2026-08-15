@@ -36,6 +36,22 @@ describe("parseSrt", () => {
     }
   });
 
+  it("uses the next cue start as the speech boundary for overlapping rolling captions", () => {
+    const result = parseSrt(`1
+00:00:01,000 --> 00:00:05,000
+late eighties early
+
+2
+00:00:03,000 --> 00:00:07,000
+nineties I prayed
+`);
+
+    expect(result.segments[0].endMs).toBe(3000);
+    expect(result.segments[0].words.at(-1)?.endMs).toBe(3000);
+    expect(result.segments[1].startMs).toBe(3000);
+    expect(result.segments[1].words[0].startMs).toBe(3000);
+  });
+
   it("gives longer words proportionally more time than short ones", () => {
     const result = parseSrt("1\n00:00:00,000 --> 00:00:03,000\na extraordinarily\n");
     const [short, long] = result.segments[0].words;

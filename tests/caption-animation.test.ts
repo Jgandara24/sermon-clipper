@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activeCaptionWordId,
   overshootScale,
   POP_IN_MS,
   POP_SETTLE_MS,
@@ -44,5 +45,16 @@ describe("wordScaleAt", () => {
       expect(s).toBeGreaterThanOrEqual(1);
       expect(s).toBeLessThanOrEqual(overshootScale(hs));
     }
+  });
+});
+
+describe("activeCaptionWordId", () => {
+  it("selects only the most recently started word when source timings overlap", () => {
+    const words = [
+      { id: "early", startMs: 1000, endMs: 1800 },
+      { id: "spoken-now", startMs: 1400, endMs: 2000 },
+    ];
+
+    expect(activeCaptionWordId(words, 1500)).toBe("spoken-now");
   });
 });

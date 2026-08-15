@@ -11,6 +11,35 @@ export const POP_SETTLE_MS = 130;
 export const POP_IN_ACCEL = 0.6;
 export const POP_SETTLE_ACCEL = 1.4;
 
+type TimedCaptionWord = { id: string; startMs: number; endMs: number };
+
+/**
+ * Returns one active word. If source timestamps overlap, the word that started most recently
+ * wins because it is the newest spoken word at that frame.
+ */
+export function activeCaptionWordId(words: TimedCaptionWord[], currentMs: number): string | null {
+  let active: TimedCaptionWord | null = null;
+  for (const word of words) {
+    if (currentMs < word.startMs || currentMs >= word.endMs) continue;
+    if (!active || word.startMs >= active.startMs) active = word;
+  }
+  return active?.id ?? null;
+}
+
+/** End one word's active window when the next word starts, even if source intervals overlap. */
+export function exclusiveCaptionWordEnds(words: TimedCaptionWord[]): Map<string, number> {
+  const ordered = [...words].sort((a, b) => a.startMs - b.startMs);
+  return new Map(
+    ordered.map((word, index) => {
+      const nextStartMs = ordered[index + 1]?.startMs;
+      return [
+        word.id,
+        nextStartMs === undefined ? word.endMs : Math.min(word.endMs, nextStartMs),
+      ];
+    }),
+  );
+}
+
 /** The pop overshoots its resting scale, then settles — the CapCut-style "pop". */
 export function overshootScale(highlightScale: number): number {
   return 1 + (highlightScale - 1) * 1.5;

@@ -4,6 +4,8 @@ export type TranscriptSegmentInput = {
   id: string;
   startMs: number;
   endMs: number;
+  /** Stored SRT cues need a compatibility repair when their display windows overlap. */
+  timingMode?: "measured" | "srt-interpolated";
   words: Array<{
     word: string;
     startMs: number;
@@ -25,13 +27,30 @@ export type EditorWord = {
 /** Flattens every segment's word list into one time-ordered list with stable editor word ids. */
 export function flattenWords(segments: TranscriptSegmentInput[]): EditorWord[] {
   const words: EditorWord[] = [];
-  for (const segment of segments) {
+  for (const [segmentIndex, segment] of segments.entries()) {
+    const nextStartMs = segments[segmentIndex + 1]?.startMs;
+    const repairedEndMs =
+      segment.timingMode === "srt-interpolated" &&
+      nextStartMs !== undefined &&
+      nextStartMs > segment.startMs
+        ? Math.min(segment.endMs, nextStartMs)
+        : segment.endMs;
+    const originalDuration = segment.endMs - segment.startMs;
+    const repairedDuration = repairedEndMs - segment.startMs;
+    const retime = (ms: number) =>
+      repairedEndMs === segment.endMs || originalDuration <= 0
+        ? ms
+        : Math.round(
+            segment.startMs +
+              ((ms - segment.startMs) / originalDuration) * repairedDuration,
+          );
+
     segment.words.forEach((word, index) => {
       words.push({
         id: wordId(segment.id, index),
         word: word.word,
-        startMs: word.startMs,
-        endMs: word.endMs,
+        startMs: retime(word.startMs),
+        endMs: retime(word.endMs),
         isFiller: word.isFiller,
       });
     });

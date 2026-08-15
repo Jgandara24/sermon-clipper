@@ -25,10 +25,10 @@ describe("layoutCaptionLine", () => {
     const layout = layoutCaptionLine({ words: words("one", "two") }, style, FRAME, measure);
 
     expect(layout.rows).toHaveLength(1);
-    // Natural space is 10px. Kinetic's 14% pop reserves another 2.1px for either word.
-    expect(layout.rows[0].widthPx).toBe(72);
-    expect(layout.words[0].xCenter).toBe(Math.round((1080 - 72.1) / 2 + 15));
-    expect(layout.words[1].xCenter).toBe(Math.round((1080 - 72.1) / 2 + 30 + 12.1 + 15));
+    // Natural space is 10px. Kinetic's 21% animation overshoot reserves another 3.15px.
+    expect(layout.rows[0].widthPx).toBe(73);
+    expect(layout.words[0].xCenter).toBe(Math.round((1080 - 73.15) / 2 + 15));
+    expect(layout.words[1].xCenter).toBe(Math.round((1080 - 73.15) / 2 + 30 + 13.15 + 15));
     // both words share the row's vertical center
     expect(layout.words[0].yCenter).toBe(layout.words[1].yCenter);
   });
@@ -74,6 +74,20 @@ describe("layoutCaptionLine", () => {
     expect(popped.words[1].xCenter - popped.words[0].xCenter).toBeGreaterThan(
       base.words[1].xCenter - base.words[0].xCenter,
     );
+  });
+
+  it("reserves clearance for the pop animation overshoot", () => {
+    const layout = layoutCaptionLine(
+      { words: words("abcdefghij", "short") },
+      { ...kinetic, sizePx: 40, uppercase: false, highlightScale: 1.4 },
+      FRAME,
+      measure,
+    );
+    const [left, right] = layout.words;
+    const baseGap = right.xCenter - right.widthPx / 2 - (left.xCenter + left.widthPx / 2);
+
+    // 10px natural space + 30px reserve for the 1.6x animation overshoot on a 100px word.
+    expect(baseGap).toBe(40);
   });
 
   it("moves rows horizontally with positionX", () => {

@@ -1,4 +1,5 @@
 import {
+  exclusiveCaptionWordEnds,
   overshootScale,
   POP_IN_ACCEL,
   POP_IN_MS,
@@ -107,6 +108,7 @@ export function generateAssSubtitles(params: GenerateAssSubtitlesParams): string
   ].join("\n");
 
   const events: string[] = [];
+  const activeWordEnds = exclusiveCaptionWordEnds(lines.flatMap((line) => line.words));
 
   for (const line of lines) {
     if (line.words.length === 0 || line.endMs - line.startMs < MIN_EVENT_MS) continue;
@@ -144,7 +146,10 @@ export function generateAssSubtitles(params: GenerateAssSubtitlesParams): string
 
       // Clamp the active window inside the line; degenerate windows fall back to a plain event.
       const activeStart = Math.max(line.startMs, Math.min(word.startMs, line.endMs));
-      const activeEnd = Math.max(activeStart, Math.min(word.endMs, line.endMs));
+      const activeEnd = Math.max(
+        activeStart,
+        Math.min(activeWordEnds.get(word.id) ?? word.endMs, line.endMs),
+      );
       if (activeEnd - activeStart < MIN_EVENT_MS) {
         events.push(
           `Dialogue: 0,${msToAssTime(line.startMs)},${msToAssTime(line.endMs)},Caption,,0,0,0,,${at}}${text}`,

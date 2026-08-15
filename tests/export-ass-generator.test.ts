@@ -73,6 +73,16 @@ describe("generateAssSubtitles", () => {
     expect(middleBases[1]).toContain("0:00:00.80,0:00:01.20");
   });
 
+  it("ends the prior active event when the next spoken word starts", () => {
+    const lines = buildCaptionLines(words(["first", 0, 800], ["second", 400, 1000]));
+    const active = dialogues(
+      generate({ ...getCaptionPreset("kinetic").style, background: "none" }, lines),
+    ).filter((event) => event.startsWith("Dialogue: 1,"));
+
+    expect(active[0]).toContain("0:00:00.00,0:00:00.40");
+    expect(active[1]).toContain("0:00:00.40,0:00:01.00");
+  });
+
   it("animates the active word with the shared two-phase pop curve", () => {
     const style = getCaptionPreset("kinetic").style; // highlightScale 1.14
     const ass = generate(style);
