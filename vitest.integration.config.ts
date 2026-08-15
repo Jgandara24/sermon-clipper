@@ -13,5 +13,11 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/integration/**/*.test.ts"],
+    // One shared database, one shared job queue. `claimNextJob` takes the globally oldest
+    // QUEUED/RETRYING row — it is not scoped to a project — so parallel test files steal each
+    // other's jobs: the thief runs the job under its own fakes, and the owner then finds no
+    // `processing_job_succeeded` event and no downloaded file. Production wants that global
+    // claim, so serialize the files instead. Costs ~20s; buys a deterministic suite.
+    fileParallelism: false,
   },
 });
