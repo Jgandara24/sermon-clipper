@@ -122,15 +122,19 @@ export async function auditProxySecretExposure(
     churchVisibleEventCount: rows.filter((row) => row.workspace_id !== null).length,
     ...summary,
     // Samples are redacted before they reach a terminal, a log, or a paste buffer.
+    // Redact the whole string first, then truncate. Truncating first can cut a credential in
+    // half, and redactProxySecrets matches whole tokens by exact substring, so neither half
+    // matches and the leading fragment survives verbatim. The placeholders are short, so
+    // redacting first never costs excerpt room.
     samples: classified.slice(0, SAMPLE_LIMIT).map((entry) => ({
       operationalEventId: entry.row.id,
       eventType: entry.row.event_type,
       workspaceId: entry.row.workspace_id,
       createdAt: entry.row.created_at.toISOString(),
       severity: entry.severity,
-      redactedExcerpt: redactProxySecrets(
-        entry.row.metadata_text.slice(0, EXCERPT_LENGTH),
-        proxyUrl,
+      redactedExcerpt: redactProxySecrets(entry.row.metadata_text, proxyUrl).slice(
+        0,
+        EXCERPT_LENGTH,
       ),
     })),
   };

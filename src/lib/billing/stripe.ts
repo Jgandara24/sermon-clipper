@@ -170,16 +170,25 @@ async function handleCheckoutCompleted(client: PrismaClient, session: Stripe.Che
   const plan = planForCode(session.metadata?.planCode);
   const subscriptionId = stringId(session.subscription);
   const customerId = stringId(session.customer);
+  // Converge rather than overwrite. The event marker is written after this handler, so a
+  // failure in between leaves the event retryable and this code runs twice. If a
+  // customer.subscription.updated landed in the gap, a blind rewrite would push
+  // stripeSubscriptionStatus back from the live status to "checkout_completed" and restamp
+  // paidAt with a later time. paidAt is the durable "has ever paid" marker that stops a
+  // cancellation from resuming an unfinished trial, so first-payment time is the correct
+  // value to keep. Same shape as handleSubscriptionUpdated below.
+  const workspace = await client.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
   await client.workspace.update({
     where: { id: workspaceId },
     data: {
       planCode: plan.code,
       accessPlan: WorkspaceAccessPlan.PAID,
-      paidAt: new Date(),
-      stripeCustomerId: customerId ?? undefined,
-      stripeSubscriptionId: subscriptionId ?? undefined,
-      stripeSubscriptionStatus: subscriptionId ? "checkout_completed" : undefined,
-      stripePriceId: stripePriceIdForPlan(plan.code) ?? undefined,
+      paidAt: workspace.paidAt ?? new Date(),
+      stripeCustomerId: customerId ?? workspace.stripeCustomerId,
+      stripeSubscriptionId: subscriptionId ?? workspace.stripeSubscriptionId,
+      stripeSubscriptionStatus:
+        workspace.stripeSubscriptionStatus ?? (subscriptionId ? "checkout_completed" : undefined),
+      stripePriceId: stripePriceIdForPlan(plan.code) ?? workspace.stripePriceId,
     },
   });
 
