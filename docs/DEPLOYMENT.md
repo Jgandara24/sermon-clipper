@@ -226,7 +226,10 @@ degraded or warning.
 ## Analysis Routing
 
 The active policy selects one provider and model for Stage A and one for Stage B. The command makes
-one audited version active. It refuses a model without a current price or provider key.
+one audited version active. It refuses a model without a current price or provider key. It also
+refuses a heuristic or OpenAI stage: production heuristic analysis stays behind the visible
+`ANALYSIS_ALLOW_HEURISTIC` incident override, and no OpenAI adapter is installed yet. Heuristic
+stages remain usable in draft policies for shadow evaluation only.
 
 ```sh
 npm run set:analysis-routing -- \
@@ -250,6 +253,22 @@ an evaluation report. Promote the tested version only after a human accepts the 
 ```sh
 npm run set:analysis-routing -- --activate-version <integer>
 ```
+
+`/api/health` includes an `analysis_routing` check in production: the active policy must have an
+installed adapter, a configured provider key, and a currently effective price for each stage. It
+catches a deploy whose keys do not match the active route, and a price window that lapses with no
+successor row — both would otherwise fail every ANALYZE job at run time.
+
+The check reports **degraded**, never failed, and this is deliberate. Railway health-checks
+`/api/health` (`railway.json`), and that route answers 503 on a failing readiness status. A
+failing severity here would take the whole web service down — login, existing clips, and the
+billing page included — for a fault that only stops new ANALYZE jobs on the worker, which has no
+health check at all. Because prices are effective-dated rows, an end-dated price with no
+successor would arm that outage on a timestamp, with no deploy and nobody watching.
+
+`npm run smoke:production` is where an undeployable routing policy hard-fails: it fails the run
+when the check is not `ok`, and also when the check is absent, which means the deployment predates
+it. Treat a degraded `analysis_routing` as release-blocking even though the service stays up.
 
 ## Storage Bucket
 

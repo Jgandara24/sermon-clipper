@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ProcessingJobType } from "@prisma/client";
-import { recordProcessingCostFact } from "@/lib/cost/record";
+import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import {
   finishRuntimeMeasurement,
   startRuntimeMeasurement,
@@ -37,7 +37,7 @@ async function recordTranscriptionFact(params: {
   outcome: ProcessingCostOutcome;
   source: "audio" | "srt_override";
 }) {
-  await recordProcessingCostFact(params.prisma, {
+  await recordProcessingCostFactSafely(params.prisma, {
     stage: "transcription",
     quantity: params.durationS / 60,
     unit: "minute",
@@ -67,7 +67,7 @@ async function recordStorageDownloadFact(params: {
   wallTimeMs: number;
   outcome: ProcessingCostOutcome;
 }) {
-  await recordProcessingCostFact(params.prisma, {
+  await recordProcessingCostFactSafely(params.prisma, {
     ...storageTransferCostFact({
       direction: "download",
       bytes: params.bytes,

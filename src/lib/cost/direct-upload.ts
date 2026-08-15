@@ -1,5 +1,5 @@
 import { storageTransferCostFact, type StorageProviderKind } from "@/lib/storage";
-import { recordProcessingCostFact } from "./record";
+import { recordProcessingCostFactSafely } from "./record";
 import type { ProcessingCostFactInput, ProcessingCostOutcome } from "./types";
 
 export type DirectUploadCostInput = {
@@ -64,15 +64,11 @@ export function buildDirectUploadCostFacts(
 
 /** Records upload metering without making an observability failure break a completed transfer. */
 export async function recordDirectUploadCostFactsSafely(
-  client: Parameters<typeof recordProcessingCostFact>[0],
+  client: Parameters<typeof recordProcessingCostFactSafely>[0],
   attribution: { workspaceId: string },
   input: DirectUploadCostInput,
 ): Promise<void> {
-  try {
-    for (const fact of buildDirectUploadCostFacts(input)) {
-      await recordProcessingCostFact(client, { ...fact, ...attribution });
-    }
-  } catch (error) {
-    console.error("[cost] failed to record direct-upload cost facts", error);
+  for (const fact of buildDirectUploadCostFacts(input)) {
+    await recordProcessingCostFactSafely(client, { ...fact, ...attribution });
   }
 }

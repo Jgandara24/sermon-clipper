@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { auditActiveAnalysisRouting } from "@/lib/analysis/routing-store";
 import { MIN_MEDIA_URL_SECRET_LENGTH } from "@/lib/media/signed-url";
 import { getStorageProvider } from "@/lib/storage";
 import { staleJobTimeoutMs } from "@/lib/worker/reliability";
@@ -381,6 +382,52 @@ export async function checkWorkerHeartbeatReadiness(
   ];
 }
 
+/**
+ * Env-only key presence (ANALYSIS_PROVIDER_API_KEY) cannot see WHICH provider the active
+ * routing policy needs — a deploy with only a Gemini key would pass while the active Claude
+ * route fails every ANALYZE job closed. This DB-backed check audits the active policy's
+ * stages against installed adapters, configured keys, and current prices.
+ *
+ * It never returns "fail". `railway.json` health-checks `/api/health`, which answers 503 on a
+ * failing readiness status, so a "fail" here would take the whole web service down — login,
+ * existing clips, and the billing page included — for a fault that only stops new ANALYZE jobs
+ * on the worker. Prices are effective-dated rows, so an end-dated price with no successor would
+ * arm that outage on a timestamp, with no deploy and nobody watching. Degraded is the honest
+ * severity; `npm run smoke:production` is where it hard-fails a release.
+ */
+export async function checkAnalysisRoutingReadiness(
+  client: PrismaClient,
+  env: EnvLike = process.env,
+): Promise<ReadinessCheck[]> {
+  if (env.NODE_ENV !== "production") {
+    return [
+      {
+        name: "analysis_routing",
+        status: "ok",
+        message: "Analysis routing is audited in production.",
+      },
+    ];
+  }
+  try {
+    const audit = await auditActiveAnalysisRouting(client, env);
+    return [
+      {
+        name: "analysis_routing",
+        status: audit.ok ? "ok" : "warning",
+        message: audit.detail,
+      },
+    ];
+  } catch (error) {
+    return [
+      {
+        name: "analysis_routing",
+        status: "warning",
+        message: error instanceof Error ? error.message : "Could not inspect analysis routing.",
+      },
+    ];
+  }
+}
+
 export function summarizeReadiness(checks: ReadinessCheck[]): DeploymentReadiness["status"] {
   if (checks.some((check) => check.status === "fail")) return "fail";
   if (checks.some((check) => check.status === "warning")) return "degraded";
@@ -395,6 +442,7 @@ export async function checkDeploymentReadiness(
   const checks = [
     ...checkDeploymentEnvironment(env),
     ...(await checkDatabaseReadiness(client)),
+    ...(await checkAnalysisRoutingReadiness(client, env)),
     ...(await checkWorkerHeartbeatReadiness(client, env)),
     checkStorageReadiness(),
   ];

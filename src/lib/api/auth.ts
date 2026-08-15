@@ -5,7 +5,11 @@ import {
   type WorkspacePermission,
 } from "@/lib/authorization";
 import { apiError } from "./response";
-import { decideWorkspaceAccess, type WorkspaceAction } from "@/lib/billing/access";
+import {
+  decideWorkspaceAccess,
+  workspaceAccessMessage,
+  type WorkspaceAction,
+} from "@/lib/billing/access";
 
 function accessActionForPermission(permission?: WorkspacePermission): WorkspaceAction {
   if (permission === "MANAGE_BILLING") return "manage_billing";
@@ -66,8 +70,8 @@ export async function requireApiWorkspace(permission?: WorkspacePermission) {
   if (!access.allowed) {
     return {
       error: apiError(
-        "TRIAL_EXPIRED",
-        "The 30-day trial ended. This workspace is read-only until it changes to Paid.",
+        access.state === "lapsed" ? "SUBSCRIPTION_ENDED" : "TRIAL_EXPIRED",
+        workspaceAccessMessage(access),
         { status: 402 },
       ),
     } as const;

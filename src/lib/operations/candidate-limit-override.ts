@@ -70,13 +70,18 @@ export async function setCandidateLimitOverride(
   );
 
   const cleared = input.candidateLimitOverride === null;
+  // Platform-scoped on purpose: workspace-scoped events feed the church-facing
+  // /app/settings/operations page, and the hidden override must never appear on a church
+  // surface. The workspace link lives in metadata for staff queries.
   await recordOperationalEvent(client, {
-    workspaceId: input.workspaceId,
     category: "analysis",
     eventType: cleared ? "candidate_limit_override_cleared" : "candidate_limit_override_set",
     message: cleared
       ? "The internal candidate limit override was cleared."
       : "The internal candidate limit override was set.",
-    metadata: { candidateLimitOverride: input.candidateLimitOverride },
+    metadata: {
+      workspaceId: input.workspaceId,
+      candidateLimitOverride: input.candidateLimitOverride,
+    },
   });
 }

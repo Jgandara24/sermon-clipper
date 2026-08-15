@@ -82,6 +82,68 @@ revoke old**. Never revoke first.
 - `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`: rotate the same way; only invalidates in-flight server
   action payloads across a deploy boundary.
 
+## 6a. Residential proxy (`YTDLP_PROXY_URL`) — check for stored copies first
+
+Until the 2026-08-14 fix, a failed yt-dlp metadata fetch rethrew Node's `execFile` error. That
+message contains the whole command line, including `--proxy <url>` with its credentials, and the
+job runner copies the message into `processing_job_failed` and `processing_job_retrying` event
+metadata. The church-facing `/app/settings/operations` page renders that metadata to OWNER and
+ADMIN roles. Bot-blocked YouTube fetches were common, so stored copies are likely.
+
+New leaks are fixed forward. A code fix cannot retract rows that already exist, so census them:
+
+```sh
+# Read-only. Runs SELECT statements only. Never pass the proxy URL as an argument — a credential
+# in argv reaches shell history, `ps`, and the command line npm echoes.
+export DATABASE_URL=...
+export YTDLP_PROXY_URL=...
+npm run audit:event-exposure
+```
+
+The audit exits non-zero when it finds anything, and every printed sample is redacted. Read
+`proxyExposure`:
+
+- `credentialEventCount` above zero — the credential itself is stored. **Rotate the proxy
+  credential with the provider**, then purge or redact those rows.
+- `matchedEventCount` above zero with `credentialEventCount` zero — a proxy URL or a bare
+  `--proxy` marker is stored without a matched credential. Review, then purge at your
+  discretion.
+- `churchVisibleEventCount` counts the rows a church admin can actually read today. Treat that
+  number as the exposure, and the rest as internal history.
+
+The same audit reports `candidateLimitExposure`: workspace-scoped events that carry the internal
+candidate ceiling or the hidden override, which the frozen candidate rule keeps off church-facing
+surfaces. Those are an internal number rather than a credential, so they need no rotation — only
+a decision about purging the rows.
+
+### Remediating what the audit finds
+
+Rotate the proxy credential **first**. Redaction removes the copy in this database. It cannot
+un-expose a credential that a church admin may already have read.
+
+```sh
+export DATABASE_URL=...
+export YTDLP_PROXY_URL=...          # the OLD value, so its stored copies still match
+npm run purge:event-exposure        # dry run: plans, changes nothing
+npm run purge:event-exposure -- --apply
+```
+
+The remediation redacts in place and never deletes an event. Each action mirrors the shape the
+fixed code now writes:
+
+- proxy secrets in any string value become the same placeholders the runtime guard uses;
+- the internal candidate ceiling is stripped from church-visible metadata;
+- the staff override audit row is re-scoped from workspace to platform, keeping the workspace id
+  in metadata.
+
+The event, its timestamp, and its error code all survive, so on-call history and the audit trail
+stay intact. The run is idempotent, and `--apply` re-runs the audit afterwards and exits non-zero
+if any credential remains. The remediation itself records one platform-scoped
+`stored_event_exposure_redacted` event carrying counts only.
+
+Use the OLD proxy URL for this run. Once the credential is rotated, the new value no longer
+matches the stored copies, and the bare `--proxy` marker is all the audit can find.
+
 ## 7. Get secrets out of Dropbox
 
 After all rotations are verified:

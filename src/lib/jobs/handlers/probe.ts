@@ -2,7 +2,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ProcessingJobType } from "@prisma/client";
-import { recordProcessingCostFact } from "@/lib/cost/record";
+import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome, ProcessingCostStage } from "@/lib/cost/types";
 import { env } from "@/lib/env";
@@ -30,7 +30,7 @@ async function recordProbeStorageFact(params: {
     params.direction === "download"
       ? env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD
       : env.STORAGE_UPLOAD_PRICE_PER_GB_USD;
-  await recordProcessingCostFact(params.prisma, {
+  await recordProcessingCostFactSafely(params.prisma, {
     ...storageTransferCostFact({
       direction: params.direction,
       bytes: params.bytes,
@@ -59,7 +59,7 @@ async function recordProbeComputeFact(params: {
   wallTimeMs: number;
   outcome: ProcessingCostOutcome;
 }) {
-  await recordProcessingCostFact(params.prisma, {
+  await recordProcessingCostFactSafely(params.prisma, {
     stage: params.stage,
     quantity: params.quantity,
     unit: params.unit,

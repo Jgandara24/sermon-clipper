@@ -219,7 +219,13 @@ export async function publishDueScheduledPosts(
     orderBy: { scheduledDate: "asc" },
     include: {
       workspace: {
-        select: { settings: true, accessPlan: true, trialStartedAt: true, trialEndsAt: true },
+        select: {
+          settings: true,
+          accessPlan: true,
+          trialStartedAt: true,
+          trialEndsAt: true,
+          paidAt: true,
+        },
       },
       clip: {
         select: {

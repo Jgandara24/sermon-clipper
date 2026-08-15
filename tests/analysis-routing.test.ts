@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  activeModelPrice,
+  assertRoutingPolicyActivatable,
   assertRoutingPolicyPriced,
   resolveProjectAnalysisRouting,
   type AnalysisModelPrice,
@@ -66,5 +68,51 @@ describe("analysis routing", () => {
     expect(() =>
       assertRoutingPolicyPriced(masterPolicy, prices.slice(0, 1), new Date("2026-08-13T00:00:00Z")),
     ).toThrow("scoring model anthropic/claude-sonnet-5 has no active price");
+  });
+
+  it("refuses to activate a policy with a heuristic or not-installed stage", () => {
+    // Production heuristic analysis stays behind the visible ANALYSIS_ALLOW_HEURISTIC incident
+    // override (2026-08-12 fail-closed decision); an ACTIVE heuristic policy would be a
+    // standing silent degradation. OpenAI has no installed adapter.
+    expect(() =>
+      assertRoutingPolicyActivatable({
+        ...masterPolicy,
+        classification: { provider: "heuristic", model: "heuristic-v1" },
+      }),
+    ).toThrow(/heuristic/);
+    expect(() =>
+      assertRoutingPolicyActivatable({
+        ...masterPolicy,
+        scoring: { provider: "openai", model: "gpt-5" },
+      }),
+    ).toThrow(/openai/);
+    expect(() => assertRoutingPolicyActivatable(masterPolicy)).not.toThrow();
+  });
+
+  it("selects the latest-starting active price when windows overlap", () => {
+    const standard: AnalysisModelPrice = {
+      ...prices[1],
+      effectiveFrom: new Date("2026-01-01T00:00:00Z"),
+      effectiveUntil: null,
+      inputPerMillionUsd: 3,
+    };
+    const promotion: AnalysisModelPrice = {
+      ...prices[1],
+      effectiveFrom: new Date("2026-06-01T00:00:00Z"),
+      effectiveUntil: null,
+      inputPerMillionUsd: 2,
+    };
+    const at = new Date("2026-08-13T00:00:00Z");
+    const route = masterPolicy.scoring;
+
+    // Deterministic in both storage orders: the row does not depend on database return order.
+    expect(activeModelPrice([standard, promotion], route, at)?.inputPerMillionUsd).toBe(2);
+    expect(activeModelPrice([promotion, standard], route, at)?.inputPerMillionUsd).toBe(2);
+    // Before the promotion window opens, the standard row still applies.
+    expect(
+      activeModelPrice([promotion, standard], route, new Date("2026-03-01T00:00:00Z"))
+        ?.inputPerMillionUsd,
+    ).toBe(3);
+    expect(activeModelPrice([], route, at)).toBeNull();
   });
 });

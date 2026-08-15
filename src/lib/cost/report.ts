@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { ProcessingCostStage, ProcessingCostUnit } from "./types";
 
-export const COST_TRUTH_SCHEMA_VERSION = 1;
+/** Version 2 adds the recording-completeness block that Gate A now enforces. */
+export const COST_TRUTH_SCHEMA_VERSION = 2;
 export const TYPICAL_SERVICES_PER_MONTH = 8.66;
 export const CORE_COST_PER_SERVICE_CAP_USD = 1.5;
 export const DIRECT_UPLOAD_MONTHLY_CHURCH_COST_CAP_USD = 8;
@@ -136,6 +137,9 @@ const costTruthReportSchema = z.object({
     outputTokens: z.number().int().nonnegative(),
   }),
   projection: z.object({ servicesPerMonth: z.number().finite().positive() }),
+  // Cost recording is best effort at run time so telemetry cannot destroy customer work. The
+  // evidence gate is where completeness is enforced: any dropped fact makes the report unusable.
+  recording: z.object({ costFactRecordFailures: z.number().int().nonnegative() }),
   charges: z.array(chargeSchema).min(1),
   measuredTotals: z.object({
     proxyCostPerSourceHourUsd: nonNegative,
@@ -237,6 +241,7 @@ export function summarizeCostTruthReport(input: CostTruthReportInput): CostTruth
   const stages = presentStages(charges);
   const gateAPassed =
     REQUIRED_STAGES.every((stage) => stages.has(stage)) &&
+    report.recording.costFactRecordFailures === 0 &&
     charges.every((charge) => charge.pricingStatus !== "unpriced") &&
     coreCostPerServiceUsd <= CORE_COST_PER_SERVICE_CAP_USD &&
     projectedMonthlyChurchCostUsd <= monthlyCostCapUsd(report) &&
@@ -310,6 +315,11 @@ export function validateCostTruthReport(input: unknown): CostTruthValidationResu
   const stages = presentStages(charges);
   for (const stage of REQUIRED_STAGES) {
     if (!stages.has(stage)) issues.push(`Missing required processing stage: ${stage}.`);
+  }
+  if (report.recording.costFactRecordFailures > 0) {
+    issues.push(
+      `${report.recording.costFactRecordFailures} cost fact(s) failed to record; the measured totals are incomplete.`,
+    );
   }
   if (!charges.some((charge) => charge.stage === "upload" && charge.provider.endsWith("_storage"))) {
     issues.push("Missing required production storage upload fact.");

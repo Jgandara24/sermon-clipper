@@ -144,7 +144,14 @@ export function constructStripeWebhookEvent(requestBody: string, signature: stri
   return getStripeClient().webhooks.constructEvent(requestBody, signature, webhookSecret);
 }
 
-async function markEventReceived(client: PrismaClient, event: Stripe.Event): Promise<boolean> {
+/**
+ * Records the processed-event marker. Written AFTER the handler runs: a marker written first
+ * would turn Stripe's retry of a failed delivery into a silent duplicate no-op, permanently
+ * dropping the event (e.g. a Paid activation). Returns false when a concurrent delivery of the
+ * same event won the marker race — the handlers are idempotent, so both deliveries converging
+ * on the same state is safe.
+ */
+async function markEventProcessed(client: PrismaClient, event: Stripe.Event): Promise<boolean> {
   try {
     await client.stripeWebhookEvent.create({ data: { id: event.id, type: event.type } });
     return true;
@@ -163,16 +170,25 @@ async function handleCheckoutCompleted(client: PrismaClient, session: Stripe.Che
   const plan = planForCode(session.metadata?.planCode);
   const subscriptionId = stringId(session.subscription);
   const customerId = stringId(session.customer);
+  // Converge rather than overwrite. The event marker is written after this handler, so a
+  // failure in between leaves the event retryable and this code runs twice. If a
+  // customer.subscription.updated landed in the gap, a blind rewrite would push
+  // stripeSubscriptionStatus back from the live status to "checkout_completed" and restamp
+  // paidAt with a later time. paidAt is the durable "has ever paid" marker that stops a
+  // cancellation from resuming an unfinished trial, so first-payment time is the correct
+  // value to keep. Same shape as handleSubscriptionUpdated below.
+  const workspace = await client.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
   await client.workspace.update({
     where: { id: workspaceId },
     data: {
       planCode: plan.code,
       accessPlan: WorkspaceAccessPlan.PAID,
-      paidAt: new Date(),
-      stripeCustomerId: customerId ?? undefined,
-      stripeSubscriptionId: subscriptionId ?? undefined,
-      stripeSubscriptionStatus: subscriptionId ? "checkout_completed" : undefined,
-      stripePriceId: stripePriceIdForPlan(plan.code) ?? undefined,
+      paidAt: workspace.paidAt ?? new Date(),
+      stripeCustomerId: customerId ?? workspace.stripeCustomerId,
+      stripeSubscriptionId: subscriptionId ?? workspace.stripeSubscriptionId,
+      stripeSubscriptionStatus:
+        workspace.stripeSubscriptionStatus ?? (subscriptionId ? "checkout_completed" : undefined),
+      stripePriceId: stripePriceIdForPlan(plan.code) ?? workspace.stripePriceId,
     },
   });
 
@@ -248,7 +264,14 @@ async function handleSubscriptionUpdated(client: PrismaClient, subscription: Str
       planCode,
       accessPlan:
         planCode === "paid" ? WorkspaceAccessPlan.PAID : WorkspaceAccessPlan.TRIAL,
-      paidAt: planCode === "paid" ? workspace.paidAt ?? new Date() : workspace.paidAt,
+      // paidAt is the durable "this workspace has paid" marker that keeps a cancellation from
+      // resuming an unfinished trial. Stamp it when a subscription ends on a workspace that was
+      // Paid without one, so a manual upgrade or data drift cannot defeat the lapse rule.
+      paidAt:
+        planCode === "paid"
+          ? workspace.paidAt ?? new Date()
+          : workspace.paidAt ??
+            (workspace.accessPlan === WorkspaceAccessPlan.PAID ? new Date() : null),
       stripeCustomerId: customerId ?? workspace.stripeCustomerId,
       stripeSubscriptionId: subscription.id,
       stripeSubscriptionStatus: subscription.status,
@@ -355,8 +378,11 @@ async function handleChargeRefunded(client: PrismaClient, charge: Stripe.Charge)
 }
 
 export async function handleStripeWebhookEvent(client: PrismaClient, event: Stripe.Event) {
-  const shouldProcess = await markEventReceived(client, event);
-  if (!shouldProcess) return { processed: false, duplicate: true };
+  const alreadyProcessed = await client.stripeWebhookEvent.findUnique({
+    where: { id: event.id },
+    select: { id: true },
+  });
+  if (alreadyProcessed) return { processed: false, duplicate: true };
 
   switch (event.type) {
     case "checkout.session.completed":
@@ -380,5 +406,6 @@ export async function handleStripeWebhookEvent(client: PrismaClient, event: Stri
       break;
   }
 
+  await markEventProcessed(client, event);
   return { processed: true, duplicate: false };
 }

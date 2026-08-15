@@ -106,6 +106,10 @@ cap. It also enforces:
 - projected typical direct-upload cost of no more than $8.00 per church month, or YouTube-proxy
   cost of no more than $12.00 per church month;
 - no unpriced unit;
+- no dropped cost fact. Recording is best effort at run time, so a failure records one
+  `cost_fact_record_failed` warning event instead of failing the work. The generator counts those
+  events into `recording.costFactRecordFailures`, and any count above zero fails the gate. Find
+  the cause, then repeat the run.
 - production intake, relay, and storage evidence;
 - the contracted relay and storage egress rates;
 - production proxy host and contracted price evidence for a YouTube-proxy report;

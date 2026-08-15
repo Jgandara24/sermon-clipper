@@ -37,7 +37,11 @@ export default async function BillingPage({
           <div>
             <dt className="text-sm text-stone-500">Plan</dt>
             <dd className="mt-1 text-2xl font-semibold text-stone-800">
-              {access.state === "paid" ? "Paid" : "Trial"}
+              {access.state === "paid"
+                ? "Paid"
+                : access.state === "lapsed"
+                  ? "Ended"
+                  : "Trial"}
             </dd>
           </div>
           <div>

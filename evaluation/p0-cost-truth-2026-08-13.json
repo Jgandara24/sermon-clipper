@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "recordedAt": "2026-08-13T22:23:26.679Z",
   "evidenceType": "real_service",
   "source": {
@@ -32,6 +32,9 @@
   },
   "projection": {
     "servicesPerMonth": 8.66
+  },
+  "recording": {
+    "costFactRecordFailures": 0
   },
   "charges": [
     {
@@ -162,7 +165,7 @@
       "provider": "s3_storage",
       "model": null,
       "providerProvenance": "storage_provider_config",
-      "quantity": 0.000014249,
+      "quantity": 1.4249e-05,
       "unit": "gigabyte",
       "unitCostUsd": 0,
       "pricingStatus": "zero_cost",

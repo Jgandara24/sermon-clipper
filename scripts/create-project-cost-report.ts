@@ -193,8 +193,17 @@ async function main(): Promise<void> {
     if (!intakeProvider) throw new Error("No measured source-acquisition provider was found.");
 
     const endpointHost = hostFromUrl(env.STORAGE_S3_ENDPOINT, "STORAGE_S3_ENDPOINT");
+    // Run-time cost recording is best effort, so the artifact must state whether any fact was
+    // dropped. The validator rejects a report with a non-zero count.
+    const costFactRecordFailures = await prisma.operationalEvent.count({
+      where: {
+        workspaceId: project.workspaceId,
+        projectId,
+        eventType: "cost_fact_record_failed",
+      },
+    });
     const draft: CostTruthReportInput = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       recordedAt: new Date().toISOString(),
       evidenceType: "real_service",
       source: {
@@ -245,6 +254,7 @@ async function main(): Promise<void> {
         outputTokens: 9_348,
       },
       projection: { servicesPerMonth: TYPICAL_SERVICES_PER_MONTH },
+      recording: { costFactRecordFailures },
       charges,
       measuredTotals: {
         proxyCostPerSourceHourUsd: 0,

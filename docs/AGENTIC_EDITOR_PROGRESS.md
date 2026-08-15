@@ -53,6 +53,18 @@ of the service. Human review rejected activation on 2026-08-14. Keep Claude poli
 keep Google policy version 3 as a draft, and proceed to P1. The public-safe facts are in
 `evaluation/routing-shadow-2026-08-14.json`.
 
+An independent review of all P0 commits and the pre-P1 merge `aff7979` ran on 2026-08-14, on
+branch `review/p0-pre-p1-audit`. It confirmed eight defects and fixed them: the yt-dlp proxy URL
+reaching church-visible events, the hidden candidate ceiling and override reaching the same
+operations page, Stripe webhook events lost after a processing failure, routing activation
+accepting heuristic stages, the shadow evaluation falling back to the heuristic scorer,
+non-deterministic price selection across overlapping windows, double-recorded and
+work-destroying cost facts, and a readiness check that could pass while the active routing policy
+could not run. It also closed two decisions: a workspace that has paid never returns to an
+unfinished trial, and cost telemetry never fails customer work while Gate A enforces completeness
+(cost-truth schema version 2). No charter assertion was changed. The Stage A front-loading
+baseline stays intact for P5 to invert.
+
 ---
 
 ## Deviations from the plan
@@ -148,3 +160,11 @@ produced 2 clips, both announcements, both at minute 0.
 - **PERC** has no implementation and its retrieval has never worked end to end.
 - **YouTube proxy economics failed.** The current contract exceeds its monthly gate. Direct upload
   passed Gate A and is the approved P0 intake path.
+- **Channel imports denied by an expired trial are terminal.** `channel-poller.ts` records a
+  `failed` row when project creation refuses the workspace, and `failed` is final by design
+  (`channel-poller.ts:233-235`), so the sermons streamed during a lapsed period never import after
+  the church pays. The remedy is a retryable status beside `skipped_cap`, which already transitions
+  in place on a later poll; the existing daily import cap bounds the catch-up burst. Reviewed
+  2026-08-14 and deliberately deferred: channel import fetches YouTube, and that intake path is
+  economically disapproved today, so this matters only once PERC or a better proxy contract makes
+  it viable. Revisit with that intake decision.

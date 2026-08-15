@@ -28,6 +28,7 @@ function healthPayload(overrides: Record<string, unknown> = {}) {
     "STRIPE_PRICE_PAID",
     "WHISPER_MODEL_PATH",
     "ANALYSIS_PROVIDER_API_KEY",
+    "analysis_routing",
     "STORAGE_PROVIDER",
     "storage",
     "database",
@@ -153,7 +154,13 @@ describe("production smoke checks", () => {
     const result = await runProductionSmoke({
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
-        "/api/health": response({ status: "degraded", checks: [] }, { status: 200 }),
+        "/api/health": response(
+          {
+            status: "degraded",
+            checks: [{ name: "analysis_routing", status: "ok", message: "routing ok" }],
+          },
+          { status: 200 },
+        ),
         "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
@@ -169,6 +176,36 @@ describe("production smoke checks", () => {
     expect(result.checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "health", status: "warning" })]),
     );
+  });
+
+  it("fails a release when analysis routing is not deployable", async () => {
+    // Readiness reports this as degraded on purpose, so it can never 503 the health-checked web
+    // service. Release verification is where it must stop the deploy — including when the check
+    // is missing entirely, which means the deployment predates it.
+    for (const routingCheck of [
+      { name: "analysis_routing", status: "warning", message: "Stage A needs GEMINI_API_KEY." },
+      { name: "unrelated_check", status: "ok", message: "no routing check present" },
+    ]) {
+      const result = await runProductionSmoke({
+        baseUrl: "https://clips.example.com",
+        fetchImpl: fetchFor({
+          "/api/health": response({ status: "degraded", checks: [routingCheck] }, { status: 200 }),
+          "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+          "/app": response("", { status: 307, headers: { location: "/login" } }),
+        }),
+      });
+
+      expect(result.status).toBe("fail");
+      expect(result.checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "health",
+            status: "fail",
+            message: expect.stringContaining("not deployable"),
+          }),
+        ]),
+      );
+    }
   });
 
   it("fails when development login is exposed in production", async () => {

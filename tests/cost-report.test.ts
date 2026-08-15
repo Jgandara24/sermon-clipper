@@ -184,7 +184,7 @@ const baseCharges: CostTruthReportInput["charges"] = [
 
 function completeReport(): CostTruthReportInput {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     recordedAt: "2026-08-12T12:00:00.000Z",
     evidenceType: "real_service",
     source: {
@@ -216,6 +216,7 @@ function completeReport(): CostTruthReportInput {
       outputTokens: 9_348,
     },
     projection: { servicesPerMonth: 8.66 },
+    recording: { costFactRecordFailures: 0 },
     charges: structuredClone(baseCharges),
     measuredTotals: {
       proxyCostPerSourceHourUsd: 0.48,
@@ -294,6 +295,20 @@ describe("P0 cost-truth report", () => {
       ok: false,
       issues: expect.arrayContaining([expect.stringContaining("transcription")]),
     });
+  });
+
+  it("rejects a report whose window dropped a cost fact", () => {
+    // Run-time recording is best effort so telemetry cannot destroy customer work. Completeness
+    // is enforced here instead: a dropped fact means the measured totals undercount.
+    const report = completeReport();
+    report.recording = { costFactRecordFailures: 1 };
+
+    const result = validateCostTruthReport(report);
+    expect(result).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([expect.stringContaining("failed to record")]),
+    });
+    expect(summarizeCostTruthReport(report).gateAPassed).toBe(false);
   });
 
   it("rejects an unpriced paid unit", () => {

@@ -1,10 +1,55 @@
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  checkAnalysisRoutingReadiness,
   checkDeploymentEnvironment,
   checkWorkerHeartbeatReadiness,
   getDeploymentMetadata,
   summarizeReadiness,
 } from "@/lib/deployment/readiness";
+
+function routingClient(options: {
+  policy?: {
+    classificationProvider: string;
+    classificationModel: string;
+    scoringProvider: string;
+    scoringModel: string;
+  } | null;
+  prices?: Array<{ provider: string; model: string }>;
+  failWith?: Error;
+}): PrismaClient {
+  return {
+    analysisRoutingPolicy: {
+      findFirst: async () => {
+        if (options.failWith) throw options.failWith;
+        if (!options.policy) return null;
+        return {
+          id: "policy-id",
+          version: 1,
+          name: "test policy",
+          state: "ACTIVE",
+          promptVersion: 1,
+          schemaVersion: 1,
+          ...options.policy,
+        };
+      },
+    },
+    analysisModelPrice: {
+      findMany: async () =>
+        (options.prices ?? []).map((price) => ({
+          provider: price.provider,
+          model: price.model,
+          effectiveFrom: new Date("2026-01-01T00:00:00Z"),
+          effectiveUntil: null,
+          inputPerMillionUsd: new Prisma.Decimal(1),
+          cacheReadPerMillionUsd: null,
+          cacheWritePerMillionUsd: null,
+          outputPerMillionUsd: new Prisma.Decimal(5),
+          pricingSourceUrl: "https://example.test/pricing",
+        })),
+    },
+  } as unknown as PrismaClient;
+}
 
 describe("deployment readiness", () => {
   it("reports the global publishing state without requiring it to be enabled", () => {
@@ -330,5 +375,128 @@ describe("deployment readiness", () => {
     expect(checks).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "worker_heartbeat", status: "ok" })]),
     );
+  });
+});
+
+describe("analysis routing readiness", () => {
+  const claudePolicy = {
+    classificationProvider: "ANTHROPIC",
+    classificationModel: "claude-haiku-4-5",
+    scoringProvider: "ANTHROPIC",
+    scoringModel: "claude-sonnet-5",
+  };
+  const claudePrices = [
+    { provider: "ANTHROPIC", model: "claude-haiku-4-5" },
+    { provider: "ANTHROPIC", model: "claude-sonnet-5" },
+  ];
+
+  it("passes when the active policy's stages are keyed and priced", async () => {
+    const checks = await checkAnalysisRoutingReadiness(
+      routingClient({ policy: claudePolicy, prices: claudePrices }),
+      { NODE_ENV: "production", ANTHROPIC_API_KEY: "sk-ant-test" },
+    );
+
+    expect(checks).toEqual([
+      expect.objectContaining({ name: "analysis_routing", status: "ok" }),
+    ]);
+  });
+
+  it("degrades when the active policy's provider key is missing", async () => {
+    // The env-only ANALYSIS_PROVIDER_API_KEY check accepts ANY one key; this catches a deploy
+    // whose configured key does not match the provider the active policy actually routes to.
+    const checks = await checkAnalysisRoutingReadiness(
+      routingClient({
+        policy: { ...claudePolicy, classificationProvider: "GOOGLE", classificationModel: "gemini-3.1-flash-lite" },
+        prices: [...claudePrices, { provider: "GOOGLE", model: "gemini-3.1-flash-lite" }],
+      }),
+      { NODE_ENV: "production", ANTHROPIC_API_KEY: "sk-ant-test" },
+    );
+
+    expect(checks).toEqual([
+      expect.objectContaining({
+        name: "analysis_routing",
+        status: "warning",
+        message: expect.stringContaining("GEMINI_API_KEY"),
+      }),
+    ]);
+  });
+
+  it("degrades when an active stage has no currently effective price", async () => {
+    const checks = await checkAnalysisRoutingReadiness(
+      routingClient({
+        policy: claudePolicy,
+        prices: [{ provider: "ANTHROPIC", model: "claude-haiku-4-5" }],
+      }),
+      { NODE_ENV: "production", ANTHROPIC_API_KEY: "sk-ant-test" },
+    );
+
+    expect(checks).toEqual([
+      expect.objectContaining({
+        name: "analysis_routing",
+        status: "warning",
+        message: expect.stringContaining("no active price"),
+      }),
+    ]);
+  });
+
+  it("degrades when no active policy exists", async () => {
+    const checks = await checkAnalysisRoutingReadiness(routingClient({ policy: null }), {
+      NODE_ENV: "production",
+    });
+
+    expect(checks).toEqual([
+      expect.objectContaining({ name: "analysis_routing", status: "warning" }),
+    ]);
+  });
+
+  it("never returns fail, because /api/health is the Railway health check", async () => {
+    // railway.json health-checks /api/health, and that route answers 503 on a failing readiness
+    // status. A "fail" here would take the whole web service down — login, existing clips, the
+    // billing page — for a fault that only stops new ANALYZE jobs on the worker. Prices are
+    // effective-dated, so an end-dated price with no successor would arm that outage on a
+    // timestamp with no deploy involved. smoke:production is where this hard-fails a release.
+    const unusable = [
+      routingClient({ policy: null }),
+      routingClient({ policy: claudePolicy, prices: [] }),
+      routingClient({ failWith: new Error("database unavailable") }),
+      routingClient({
+        policy: {
+          ...claudePolicy,
+          classificationProvider: "HEURISTIC",
+          classificationModel: "heuristic-v1",
+        },
+        prices: claudePrices,
+      }),
+    ];
+
+    for (const client of unusable) {
+      const checks = await checkAnalysisRoutingReadiness(client, {
+        NODE_ENV: "production",
+        ANTHROPIC_API_KEY: "sk-ant-test",
+      });
+      expect(checks[0].status).not.toBe("fail");
+      expect(summarizeReadiness(checks)).toBe("degraded");
+    }
+  });
+
+  it("degrades to a warning when the audit itself cannot run", async () => {
+    const checks = await checkAnalysisRoutingReadiness(
+      routingClient({ failWith: new Error("database unavailable") }),
+      { NODE_ENV: "production" },
+    );
+
+    expect(checks).toEqual([
+      expect.objectContaining({ name: "analysis_routing", status: "warning" }),
+    ]);
+  });
+
+  it("reports informationally outside production", async () => {
+    const checks = await checkAnalysisRoutingReadiness(routingClient({ policy: null }), {
+      NODE_ENV: "test",
+    });
+
+    expect(checks).toEqual([
+      expect.objectContaining({ name: "analysis_routing", status: "ok" }),
+    ]);
   });
 });

@@ -33,6 +33,7 @@ const REQUIRED_HEALTH_CHECKS = [
   "STRIPE_PRICE_PAID",
   "WHISPER_MODEL_PATH",
   "ANALYSIS_PROVIDER_API_KEY",
+  "analysis_routing",
   "STORAGE_PROVIDER",
   "storage",
   "database",
@@ -119,6 +120,13 @@ function healthHasNonOkCheck(checks: unknown[]) {
   });
 }
 
+function findHealthCheck(checks: unknown[], name: string) {
+  return checks.find(
+    (check): check is { name: string; status?: unknown; message?: unknown } =>
+      check !== null && typeof check === "object" && "name" in check && check.name === name,
+  );
+}
+
 export async function runProductionSmoke(options: ProductionSmokeOptions): Promise<SmokeResult> {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
   const timeoutMs = options.timeoutMs ?? 15_000;
@@ -151,6 +159,19 @@ export async function runProductionSmoke(options: ProductionSmokeOptions): Promi
       }
       if (payload.status === "fail") {
         return { name: "health", status: "fail", message: "Deployment readiness is failing." };
+      }
+      // Checked before the degraded branch below, which returns early: analysis routing is
+      // deliberately only "degraded" in readiness so it can never 503 the health-checked web
+      // service. Release verification is where an undeployable routing policy must hard-fail.
+      const routing = findHealthCheck(payload.checks, "analysis_routing");
+      if (!routing || routing.status !== "ok") {
+        return {
+          name: "health",
+          status: "fail",
+          message: `Active analysis routing is not deployable: ${
+            typeof routing?.message === "string" ? routing.message : "check missing from /api/health"
+          }`,
+        };
       }
       if (payload.status === "degraded") {
         return { name: "health", status: "warning", message: "Deployment readiness is degraded." };

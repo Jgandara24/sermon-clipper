@@ -6,6 +6,8 @@ export type WorkspaceAccessRecord = {
   accessPlan: WorkspaceAccessPlan;
   trialStartedAt: Date;
   trialEndsAt: Date;
+  /** Set once the workspace has ever been Paid, and preserved through cancellation. */
+  paidAt: Date | null;
 };
 
 export type WorkspaceAction =
@@ -20,13 +22,19 @@ export type WorkspaceAction =
 
 export type WorkspaceAccessDecision = {
   allowed: boolean;
-  state: "trial_active" | "trial_expired" | "paid";
-  reason: "allowed" | "trial_expired_read_only";
+  state: "trial_active" | "trial_expired" | "paid" | "lapsed";
+  reason: "allowed" | "trial_expired_read_only" | "subscription_ended_read_only";
 };
+
+export function workspaceAccessMessage(decision: WorkspaceAccessDecision): string {
+  return decision.state === "lapsed"
+    ? "The subscription ended. This workspace is read-only until it changes to Paid."
+    : "The trial ended. This workspace is read-only until it changes to Paid.";
+}
 
 export class WorkspaceAccessError extends Error {
   constructor(readonly decision: WorkspaceAccessDecision) {
-    super("The trial ended. This workspace is read-only until it changes to Paid.");
+    super(workspaceAccessMessage(decision));
   }
 }
 
@@ -44,6 +52,14 @@ export function decideWorkspaceAccess(
 ): WorkspaceAccessDecision {
   if (workspace.accessPlan === WorkspaceAccessPlan.PAID) {
     return { allowed: true, state: "paid", reason: "allowed" };
+  }
+  // A workspace that has paid before never returns to its original trial window. Stripe maps a
+  // canceled subscription back to accessPlan TRIAL, so without this rule a church that upgraded
+  // and canceled inside its first 30 days would keep full free access for the rest of them.
+  if (workspace.paidAt !== null) {
+    return READ_ONLY_ACTIONS.has(action)
+      ? { allowed: true, state: "lapsed", reason: "allowed" }
+      : { allowed: false, state: "lapsed", reason: "subscription_ended_read_only" };
   }
   if (at < workspace.trialEndsAt) {
     return { allowed: true, state: "trial_active", reason: "allowed" };

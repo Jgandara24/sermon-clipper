@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import {
   recordOperationalEvent,
+  recordOperationalEventSafely,
   type OperationalEventClient,
 } from "@/lib/observability/operational-events";
 import { buildProcessingCostFact, type ProcessingCostFactInput } from "./types";
@@ -35,4 +36,38 @@ export async function recordProcessingCostFact(
     // Keep the metadata copy for pre-Wave readers. OperationalEvent.clipId is the indexed source.
     metadata: { ...fact, clipId: clipId ?? null },
   });
+}
+
+/**
+ * Records a COGS fact without letting a telemetry failure change the outcome of real work.
+ *
+ * Failing the job instead is strictly worse for cost truth: the fact is lost either way, the
+ * customer loses completed work, and the retry spends real money again on calls whose facts can
+ * fail again. The gap stays countable as one `cost_fact_record_failed` warning event, and Gate A
+ * refuses any cost-truth report whose window contains one.
+ */
+export async function recordProcessingCostFactSafely(
+  client: OperationalEventClient | PrismaClient,
+  input: RecordProcessingCostFactInput,
+): Promise<void> {
+  try {
+    await recordProcessingCostFact(client, input);
+  } catch (error) {
+    await recordOperationalEventSafely(client, {
+      workspaceId: input.workspaceId,
+      category: "cost",
+      eventType: "cost_fact_record_failed",
+      severity: "warning",
+      message: `${input.stage} cost fact could not be recorded.`,
+      projectId: input.projectId,
+      clipId: input.clipId,
+      jobId: input.jobId,
+      exportJobId: input.exportJobId,
+      metadata: {
+        stage: input.stage,
+        provider: input.provider,
+        detail: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
 }

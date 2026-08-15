@@ -1640,3 +1640,45 @@ system permits P1 to continue with the proven Claude baseline while the cheaper 
 available for another controlled test.
 
 Status: Active. Google policy version 3 is not approved for activation.
+
+## 2026-08-14 - A Workspace That Has Paid Never Returns to an Unfinished Trial
+
+Decision: A workspace becomes read-only when its subscription ends, whatever its original trial
+window says. `Workspace.paidAt` is the durable marker. It is set when a workspace first becomes
+Paid, it survives cancellation, and a subscription that ends on a Paid workspace without one
+stamps it. Access reports this state as `lapsed`, separately from `trial_expired`. Read actions,
+billing, and settings stay available, so existing work stays visible.
+
+Stripe maps a canceled subscription back to `accessPlan` TRIAL. Without this rule, a church that
+upgraded on day 5 and canceled on day 10 kept full free access until day 30. A cancellation must
+not refund unused trial days. Stripe's normal cancel-at-period-end flow still delivers the whole
+paid period, because it sends `customer.subscription.deleted` only when that period ends.
+
+The accepted trade: a workspace whose first payment does not complete (for example an
+authentication step that the church abandons) becomes read-only instead of returning to its
+remaining trial days. An operator can extend `trialEndsAt` by hand for a goodwill case. That is a
+deliberate act with an audit trail, not a billing loophole.
+
+Why: The 2026-08-13 Trial and Paid decision defines two billing states and one read-only rule. It
+does not describe a workspace that paid and then stopped. Reusing the trial window for that case
+made cancellation refund free access.
+
+Status: Active. Supersedes nothing; it completes the Trial and Paid access rules.
+
+## 2026-08-14 - Cost Telemetry Never Fails Customer Work; the Gate Enforces Completeness
+
+Decision: Recording a processing cost fact is best effort at every stage. A recording failure
+emits one `cost_fact_record_failed` warning event and the work continues. Gate A enforces
+completeness instead: a cost-truth report carries `recording.costFactRecordFailures`, and the
+validator fails any report where that count is above zero.
+
+Failing a job on a telemetry error was strictly worse for cost truth. The fact was lost anyway,
+the customer lost the work, and the retry spent real money again on calls whose facts could fail
+again. One failure could also turn a non-retryable oversized-download refusal into a retryable
+error, which repeated a paid proxy download.
+
+Why: Cost facts are COGS telemetry, separate from customer entitlements by the 2026-08-12
+decision. Telemetry must not destroy customer work or cause repeated paid spend. Completeness
+belongs at the evidence gate, where an incomplete report must be rejected.
+
+Status: Active. Cost-truth report schema version 2 adds the recording block.

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "audit:event-exposure": "tsx scripts/audit-event-exposure.ts",
     "audit:legacy-exports": "tsx scripts/audit-legacy-exports.ts",
     "audit:schedule-collisions": "tsx scripts/audit-scheduled-post-collisions.ts",
     "build": "npm run prisma:generate && next build",
@@ -19,6 +20,7 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "prisma:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://sermon_clipper:sermon_clipper@localhost:5432/sermon_clipper?schema=public} prisma generate",
     "prisma:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://sermon_clipper:sermon_clipper@localhost:5432/sermon_clipper?schema=public} prisma validate",
+    "purge:event-exposure": "tsx scripts/purge-event-exposure.ts",
     "record:launch-evidence": "tsx scripts/record-launch-evidence.ts",
     "report:project-cost": "tsx scripts/report-project-cost.ts",
     "set:analysis-routing": "tsx scripts/set-analysis-routing-policy.ts",
