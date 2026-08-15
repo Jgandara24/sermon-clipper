@@ -28,12 +28,17 @@ import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { VideoPreview, type CaptionPlacement } from "@/components/editor/video-preview";
+import { activeCaptionWordId } from "@/lib/editor/caption-animation";
 import { convertToContinuous, hasInternalCuts } from "@/lib/editor/continuous-edit";
 import {
   createDocumentHistory,
   updateDocumentHistory,
 } from "@/lib/editor/document-history";
 import { MIN_CLIP_MS } from "@/lib/editor/trim";
+import {
+  selectTranscriptWord,
+  type WordNavigationRequest,
+} from "@/lib/editor/transcript-workspace";
 import type { EditorState } from "@/lib/editor/types";
 import {
   applyEditorDeletions,
@@ -85,12 +90,15 @@ export function ClipEditor({
   // Playback position (from the preview) and outgoing seek requests (from the trim timeline).
   const [currentMs, setCurrentMs] = useState(initialState.source.startMs);
   const [seek, setSeek] = useState<{ ms: number; token: number } | null>(null);
+  const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
+  const [wordNavigation, setWordNavigation] = useState<WordNavigationRequest | null>(null);
   const stateRef = useRef(initialState);
   const clientRevisionRef = useRef(0);
   const versionRef = useRef(initialVersion);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyGroupRef = useRef<string | null>(null);
   const historyGroupSequenceRef = useRef(0);
+  const navigationSequenceRef = useRef(0);
 
   const allWords = useMemo(() => flattenWords(segments), [segments]);
   // Snap targets for the trim handles: every word's start and end, de-duplicated and sorted.
@@ -262,7 +270,8 @@ export function ClipEditor({
   }
 
   function requestSeek(ms: number) {
-    setSeek((prev) => ({ ms, token: (prev?.token ?? 0) + 1 }));
+    navigationSequenceRef.current += 1;
+    setSeek({ ms, token: navigationSequenceRef.current });
   }
 
   function handleCaptionPositionChange(placement: CaptionPlacement) {
@@ -313,6 +322,48 @@ export function ClipEditor({
   const wordsInClip = useMemo(
     () => applyEditorDeletions(wordsInRange(allWords, state.source.startMs, state.source.endMs), state),
     [allWords, state],
+  );
+  const activeWordId = activeCaptionWordId(wordsInClip, currentMs);
+
+  function handleTranscriptWordSelect(wordId: string) {
+    navigationSequenceRef.current += 1;
+    const selection = selectTranscriptWord(wordsInClip, wordId, navigationSequenceRef.current);
+    if (!selection) return;
+    setSelectedWordId(selection.selectedWordId);
+    setWordNavigation(selection.navigation);
+    setSeek({ ms: selection.navigation.ms, token: selection.navigation.token });
+    setCurrentMs(selection.navigation.ms);
+  }
+
+  const transcriptPanelProps = {
+    words: wordsInClip,
+    clipStartMs: state.source.startMs,
+    activeWordId,
+    selectedWordId,
+    onWordSelect: handleTranscriptWordSelect,
+    onSelectionClear: () => setSelectedWordId(null),
+    onOpenCaptions: () => {
+      setInspectorTab("captions");
+      setMobileInspectorOpen(true);
+    },
+    onSetClipStart: (word: (typeof wordsInClip)[number]) =>
+      handleTrim(word.startMs, state.source.endMs),
+    onSetClipEnd: (word: (typeof wordsInClip)[number]) =>
+      handleTrim(state.source.startMs, word.endMs),
+    onExtendBefore: () => handleExtend("before"),
+    onExtendAfter: () => handleExtend("after"),
+    canExtendBefore: state.source.startMs > 0,
+    canExtendAfter: state.source.endMs < sourceDurationMs,
+    hasLegacyCuts: hasInternalCuts(state),
+    onRestoreAllWords: handleRestoreAllWords,
+  };
+  const captionStylePanel = (
+    <CaptionStylePanel
+      captions={state.captions}
+      onChange={(captions) => updateState((prev) => ({ ...prev, captions }))}
+      onInteractionStart={() => beginHistoryGroup("caption-style")}
+      onInteractionEnd={endHistoryGroup}
+    />
   );
 
   // Excludes the embedded `version` field: it's bookkeeping the server stamps into the saved
@@ -407,7 +458,11 @@ export function ClipEditor({
         </div>
       </header>
 
-      <main className="canvas-desk-stage relative flex min-h-0 items-center justify-center overflow-hidden bg-[#111111] p-2 sm:p-3 lg:p-5">
+      <aside className="canvas-desk-transcript hidden min-h-0 overflow-hidden border-r border-white/10 lg:block">
+        <ScriptEditorPanel {...transcriptPanelProps} dark />
+      </aside>
+
+      <main className="canvas-desk-stage relative flex min-h-0 items-center justify-center overflow-hidden bg-[#111111] p-2 sm:p-3 lg:p-4">
         {saveStatus === "conflict" ? (
           <p className="absolute left-4 right-4 top-4 z-20 rounded-md border border-amber-400/40 bg-amber-950/90 p-3 text-xs text-amber-100">
             This clip changed elsewhere. Reload the page before you save again.
@@ -449,32 +504,24 @@ export function ClipEditor({
           {mobileInspectorOpen ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
           {mobileInspectorOpen ? "Hide tools" : "Show tools"}
         </button>
-        <nav className="grid grid-cols-5 border-b border-stone-200" aria-label="Editor tools">
+        <nav className="grid grid-cols-5 border-b border-stone-200 lg:grid-cols-4" aria-label="Editor tools">
           <InspectorTabButton icon={Captions} label="Captions" active={inspectorTab === "captions"} onClick={() => handleInspectorTab("captions")} />
-          <InspectorTabButton icon={FileText} label="Script" active={inspectorTab === "script"} onClick={() => handleInspectorTab("script")} />
+          <InspectorTabButton className="lg:hidden" icon={FileText} label="Transcript" active={inspectorTab === "script"} onClick={() => handleInspectorTab("script")} />
           <InspectorTabButton icon={Frame} label="Frame" active={inspectorTab === "frame"} onClick={() => handleInspectorTab("frame")} />
           <InspectorTabButton icon={Palette} label="Brand" active={inspectorTab === "brand"} onClick={() => handleInspectorTab("brand")} />
           <InspectorTabButton icon={Download} label="Export" active={inspectorTab === "export"} onClick={() => handleInspectorTab("export")} />
         </nav>
         <div id="mobile-editor-tools" className="mobile-sheet-content min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-3">
           {inspectorTab === "captions" ? (
-            <CaptionStylePanel
-              captions={state.captions}
-              onChange={(captions) => updateState((prev) => ({ ...prev, captions }))}
-              onInteractionStart={() => beginHistoryGroup("caption-style")}
-              onInteractionEnd={endHistoryGroup}
-            />
+            captionStylePanel
           ) : null}
           {inspectorTab === "script" ? (
-            <ScriptEditorPanel
-              words={wordsInClip}
-              onExtendBefore={() => handleExtend("before")}
-              onExtendAfter={() => handleExtend("after")}
-              canExtendBefore={state.source.startMs > 0}
-              canExtendAfter={state.source.endMs < sourceDurationMs}
-              hasLegacyCuts={hasInternalCuts(state)}
-              onRestoreAllWords={handleRestoreAllWords}
-            />
+            <>
+              <div className="h-full lg:hidden">
+                <ScriptEditorPanel {...transcriptPanelProps} dark />
+              </div>
+              <div className="hidden lg:block">{captionStylePanel}</div>
+            </>
           ) : null}
           {inspectorTab === "frame" ? (
             <LayoutPanel
@@ -512,6 +559,10 @@ export function ClipEditor({
           wordBoundaries={wordBoundaries}
           onTrim={handleTrim}
           onScrub={requestSeek}
+          words={wordsInClip}
+          selectedWordId={selectedWordId}
+          focusRequest={wordNavigation}
+          onWordSelect={handleTranscriptWordSelect}
           onInteractionStart={() => beginHistoryGroup("trim")}
           onInteractionEnd={endHistoryGroup}
           compact
@@ -526,17 +577,19 @@ function InspectorTabButton({
   label,
   active,
   onClick,
+  className = "",
 }: {
   icon: React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>;
   label: string;
   active: boolean;
   onClick: () => void;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 border-b-2 px-1 py-2 text-[10px] font-semibold lg:min-h-0 lg:py-3 ${
+      className={`${className} flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 border-b-2 px-1 py-2 text-[10px] font-semibold lg:min-h-0 lg:py-3 ${
         active
           ? "border-red-600 bg-red-50 text-red-700"
           : "border-transparent text-stone-500 hover:bg-stone-50 hover:text-stone-900"

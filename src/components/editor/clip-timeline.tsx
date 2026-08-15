@@ -1,7 +1,7 @@
 "use client";
 
 import { Scissors } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   clampEnd,
   clampRegion,
@@ -10,6 +10,8 @@ import {
   snapToBoundary,
   type TrimViewport,
 } from "@/lib/editor/trim";
+import type { WordNavigationRequest } from "@/lib/editor/transcript-workspace";
+import type { EditorWordWithDeletion } from "@/lib/editor/words";
 
 // Nearest-boundary snap distance, as a fraction of the visible window — a couple percent, so it
 // grabs a word edge you're clearly aiming at without fighting fine adjustments.
@@ -23,6 +25,12 @@ type DragKind = "start" | "end" | "region";
 function formatClock(ms: number): string {
   const totalS = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(totalS / 60)}:${String(totalS % 60).padStart(2, "0")}`;
+}
+
+function formatPreciseClock(ms: number): string {
+  const totalSeconds = Math.max(0, ms) / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  return `${String(minutes).padStart(2, "0")}:${(totalSeconds - minutes * 60).toFixed(1).padStart(4, "0")}`;
 }
 
 function readKind(target: EventTarget | null): DragKind | null {
@@ -48,6 +56,10 @@ export function ClipTimeline({
   wordBoundaries,
   onTrim,
   onScrub,
+  words = [],
+  selectedWordId = null,
+  focusRequest = null,
+  onWordSelect,
   onInteractionStart,
   onInteractionEnd,
   compact = false,
@@ -59,17 +71,30 @@ export function ClipTimeline({
   wordBoundaries: number[];
   onTrim: (startMs: number, endMs: number) => void;
   onScrub: (ms: number) => void;
+  words?: EditorWordWithDeletion[];
+  selectedWordId?: string | null;
+  focusRequest?: WordNavigationRequest | null;
+  onWordSelect?: (wordId: string) => void;
   onInteractionStart?: () => void;
   onInteractionEnd?: () => void;
   compact?: boolean;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const wordStripRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ kind: DragKind; grabOffsetMs: number } | null>(null);
   // The viewport is derived from the clip each render, EXCEPT while dragging, when it's held to
   // the value captured at pointer-down (in `frozenView`) — so the pixel↔time scale doesn't shift
   // under the pointer as the clip edges move mid-gesture.
   const [frozenView, setFrozenView] = useState<TrimViewport | null>(null);
   const view = frozenView ?? computeTrimViewport(startMs, endMs, sourceDurationMs);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    const selected = wordStripRef.current?.querySelector<HTMLElement>(
+      `[data-timeline-word-id="${focusRequest.wordId}"]`,
+    );
+    selected?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [focusRequest]);
 
   const span = Math.max(1, view.end - view.start);
   const msToPct = useCallback(
@@ -167,9 +192,9 @@ export function ClipTimeline({
           <Scissors size={18} className={compact ? "text-red-500" : "text-red-700"} aria-hidden="true" />
           <h2 className="font-semibold">Trim</h2>
         </div>
-        <p className={`text-xs font-medium ${compact ? "text-stone-300" : "text-stone-600"}`}>
-          {formatClock(startMs)} – {formatClock(endMs)}
-          <span className="text-stone-400"> · {formatClock(endMs - startMs)} long</span>
+        <p className={`text-xs font-medium tabular-nums ${compact ? "text-stone-300" : "text-stone-600"}`}>
+          {compact ? formatPreciseClock(currentMs - startMs) : `${formatClock(startMs)} – ${formatClock(endMs)}`}
+          <span className="text-stone-500"> / {formatPreciseClock(endMs - startMs)}</span>
         </p>
       </div>
       {!compact ? (
@@ -237,6 +262,33 @@ export function ClipTimeline({
         <span>{formatClock(view.start)}</span>
         <span>{formatClock(view.end)}</span>
       </div>
+
+      {compact && words.length > 0 ? (
+        <div
+          ref={wordStripRef}
+          className="mt-2 hidden snap-x items-center gap-1 overflow-x-auto rounded-md border border-white/10 bg-black/50 px-[45%] py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex"
+          aria-label="Transcript word timeline"
+        >
+          {words.map((word) => (
+            <button
+              key={word.id}
+              type="button"
+              data-timeline-word-id={word.id}
+              onClick={() => onWordSelect?.(word.id)}
+              className={`shrink-0 snap-center rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                word.id === selectedWordId
+                  ? "border-red-500 bg-red-600 text-white"
+                  : currentMs >= word.startMs && currentMs < word.endMs
+                    ? "border-red-500/50 bg-red-500/15 text-red-300"
+                    : "border-white/10 bg-[#242424] text-stone-400 hover:border-white/25 hover:text-white"
+              }`}
+              aria-pressed={word.id === selectedWordId}
+            >
+              {word.word}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
