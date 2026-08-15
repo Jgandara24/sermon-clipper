@@ -352,7 +352,13 @@ test.describe("Phase 6/7 upload-to-ranked-clips workflow", () => {
 
     await runPendingProcessingJobs();
     await page.reload();
-    await expect(page.getByText(/Local speech-to-text is not configured/i)).toBeVisible();
+    // Three components render this same warning — the project page, the transcript viewer, and
+    // the processing status tracker — and how many are mounted depends on job state at reload.
+    // The assertion is "the church is told transcription needs an SRT", so match the first.
+    // Without .first() this is a strict-mode violation whenever more than one is present.
+    await expect(
+      page.getByText(/Local speech-to-text is not configured/i).first(),
+    ).toBeVisible();
 
     const srt = `1
 00:00:00,000 --> 00:00:25,000
