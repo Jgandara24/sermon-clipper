@@ -387,6 +387,13 @@ export async function checkWorkerHeartbeatReadiness(
  * routing policy needs — a deploy with only a Gemini key would pass while the active Claude
  * route fails every ANALYZE job closed. This DB-backed check audits the active policy's
  * stages against installed adapters, configured keys, and current prices.
+ *
+ * It never returns "fail". `railway.json` health-checks `/api/health`, which answers 503 on a
+ * failing readiness status, so a "fail" here would take the whole web service down — login,
+ * existing clips, and the billing page included — for a fault that only stops new ANALYZE jobs
+ * on the worker. Prices are effective-dated rows, so an end-dated price with no successor would
+ * arm that outage on a timestamp, with no deploy and nobody watching. Degraded is the honest
+ * severity; `npm run smoke:production` is where it hard-fails a release.
  */
 export async function checkAnalysisRoutingReadiness(
   client: PrismaClient,
@@ -406,7 +413,7 @@ export async function checkAnalysisRoutingReadiness(
     return [
       {
         name: "analysis_routing",
-        status: audit.ok ? "ok" : "fail",
+        status: audit.ok ? "ok" : "warning",
         message: audit.detail,
       },
     ];

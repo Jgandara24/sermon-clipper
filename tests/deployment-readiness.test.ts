@@ -401,7 +401,7 @@ describe("analysis routing readiness", () => {
     ]);
   });
 
-  it("fails when the active policy's provider key is missing", async () => {
+  it("degrades when the active policy's provider key is missing", async () => {
     // The env-only ANALYSIS_PROVIDER_API_KEY check accepts ANY one key; this catches a deploy
     // whose configured key does not match the provider the active policy actually routes to.
     const checks = await checkAnalysisRoutingReadiness(
@@ -415,13 +415,13 @@ describe("analysis routing readiness", () => {
     expect(checks).toEqual([
       expect.objectContaining({
         name: "analysis_routing",
-        status: "fail",
+        status: "warning",
         message: expect.stringContaining("GEMINI_API_KEY"),
       }),
     ]);
   });
 
-  it("fails when an active stage has no currently effective price", async () => {
+  it("degrades when an active stage has no currently effective price", async () => {
     const checks = await checkAnalysisRoutingReadiness(
       routingClient({
         policy: claudePolicy,
@@ -433,20 +433,50 @@ describe("analysis routing readiness", () => {
     expect(checks).toEqual([
       expect.objectContaining({
         name: "analysis_routing",
-        status: "fail",
+        status: "warning",
         message: expect.stringContaining("no active price"),
       }),
     ]);
   });
 
-  it("fails when no active policy exists", async () => {
+  it("degrades when no active policy exists", async () => {
     const checks = await checkAnalysisRoutingReadiness(routingClient({ policy: null }), {
       NODE_ENV: "production",
     });
 
     expect(checks).toEqual([
-      expect.objectContaining({ name: "analysis_routing", status: "fail" }),
+      expect.objectContaining({ name: "analysis_routing", status: "warning" }),
     ]);
+  });
+
+  it("never returns fail, because /api/health is the Railway health check", async () => {
+    // railway.json health-checks /api/health, and that route answers 503 on a failing readiness
+    // status. A "fail" here would take the whole web service down — login, existing clips, the
+    // billing page — for a fault that only stops new ANALYZE jobs on the worker. Prices are
+    // effective-dated, so an end-dated price with no successor would arm that outage on a
+    // timestamp with no deploy involved. smoke:production is where this hard-fails a release.
+    const unusable = [
+      routingClient({ policy: null }),
+      routingClient({ policy: claudePolicy, prices: [] }),
+      routingClient({ failWith: new Error("database unavailable") }),
+      routingClient({
+        policy: {
+          ...claudePolicy,
+          classificationProvider: "HEURISTIC",
+          classificationModel: "heuristic-v1",
+        },
+        prices: claudePrices,
+      }),
+    ];
+
+    for (const client of unusable) {
+      const checks = await checkAnalysisRoutingReadiness(client, {
+        NODE_ENV: "production",
+        ANTHROPIC_API_KEY: "sk-ant-test",
+      });
+      expect(checks[0].status).not.toBe("fail");
+      expect(summarizeReadiness(checks)).toBe("degraded");
+    }
   });
 
   it("degrades to a warning when the audit itself cannot run", async () => {
