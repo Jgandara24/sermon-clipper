@@ -1,6 +1,20 @@
 "use client";
 
-import { ChevronLeft } from "lucide-react";
+import {
+  Captions,
+  ChevronDown,
+  ChevronLeft,
+  ChevronUp,
+  Download,
+  Eye,
+  EyeOff,
+  FileText,
+  Frame,
+  Palette,
+  Redo2,
+  Save as SaveIcon,
+  Undo2,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptionStylePanel } from "@/components/editor/caption-style-panel";
@@ -13,7 +27,12 @@ import { ClipTimeline } from "@/components/editor/clip-timeline";
 import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
-import { VideoPreview } from "@/components/editor/video-preview";
+import { VideoPreview, type CaptionPlacement } from "@/components/editor/video-preview";
+import { convertToContinuous, hasInternalCuts } from "@/lib/editor/continuous-edit";
+import {
+  createDocumentHistory,
+  updateDocumentHistory,
+} from "@/lib/editor/document-history";
 import { MIN_CLIP_MS } from "@/lib/editor/trim";
 import type { EditorState } from "@/lib/editor/types";
 import {
@@ -27,6 +46,7 @@ const AUTOSAVE_DEBOUNCE_MS = 2000;
 const EXTEND_STEP_MS = 15_000;
 
 type SaveStatus = "idle" | "saving" | "saved" | "error" | "conflict";
+type InspectorTab = "captions" | "script" | "frame" | "brand" | "export";
 
 export function ClipEditor({
   clipId,
@@ -51,11 +71,15 @@ export function ClipEditor({
   canExport: boolean;
   exportBlockedReason: string | null;
 }) {
-  const [state, setState] = useState<EditorState>(initialState);
+  const [history, setHistory] = useState(() => createDocumentHistory(initialState));
+  const state = history.present;
   const [version, setVersion] = useState(initialVersion);
   const [savedState, setSavedState] = useState<EditorState>(initialState);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [showSafeZones, setShowSafeZones] = useState(false);
+  const [captionSelected, setCaptionSelected] = useState(true);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("captions");
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [exportAllowed, setExportAllowed] = useState(canExport);
   const [exportReason, setExportReason] = useState(exportBlockedReason);
   // Playback position (from the preview) and outgoing seek requests (from the trim timeline).
@@ -65,6 +89,8 @@ export function ClipEditor({
   const clientRevisionRef = useRef(0);
   const versionRef = useRef(initialVersion);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historyGroupRef = useRef<string | null>(null);
+  const historyGroupSequenceRef = useRef(0);
 
   const allWords = useMemo(() => flattenWords(segments), [segments]);
   // Snap targets for the trim handles: every word's start and end, de-duplicated and sorted.
@@ -103,7 +129,9 @@ export function ClipEditor({
         setSavedState(json.data.state);
         if (clientRevisionRef.current === revisionAtRequest) {
           stateRef.current = json.data.state;
-          setState(json.data.state);
+          setHistory((current) =>
+            updateDocumentHistory(current, { type: "sync", document: json.data.state }),
+          );
         }
         if (json.data.approvalState) {
           setExportAllowed(false);
@@ -117,21 +145,85 @@ export function ClipEditor({
     [clipId],
   );
 
-  const updateState = useCallback(
-    (updater: (prev: EditorState) => EditorState) => {
-      setState((prev) => {
-        const next = updater(prev);
-        clientRevisionRef.current += 1;
-        stateRef.current = next;
-        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-        autosaveTimerRef.current = setTimeout(() => {
-          save(next, true);
-        }, AUTOSAVE_DEBOUNCE_MS);
-        return next;
-      });
+  const queueAutosave = useCallback(
+    (next: EditorState) => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = setTimeout(() => {
+        save(next, true);
+      }, AUTOSAVE_DEBOUNCE_MS);
     },
     [save],
   );
+
+  const updateState = useCallback(
+    (updater: (prev: EditorState) => EditorState) => {
+      setHistory((current) => {
+        const next = updater(current.present);
+        if (Object.is(next, current.present)) return current;
+        clientRevisionRef.current += 1;
+        stateRef.current = next;
+        queueAutosave(next);
+        return updateDocumentHistory(current, {
+          type: "edit",
+          document: next,
+          group: historyGroupRef.current ?? undefined,
+        });
+      });
+    },
+    [queueAutosave],
+  );
+
+  const beginHistoryGroup = useCallback((kind: string) => {
+    if (historyGroupRef.current) return;
+    historyGroupSequenceRef.current += 1;
+    historyGroupRef.current = `${kind}-${historyGroupSequenceRef.current}`;
+  }, []);
+
+  const endHistoryGroup = useCallback(() => {
+    const group = historyGroupRef.current;
+    if (!group) return;
+    historyGroupRef.current = null;
+    setHistory((current) => updateDocumentHistory(current, { type: "end-group", group }));
+  }, []);
+
+  const travelHistory = useCallback(
+    (direction: "undo" | "redo") => {
+      historyGroupRef.current = null;
+      setHistory((current) => {
+        const next = updateDocumentHistory(current, { type: direction });
+        if (next === current) return current;
+        clientRevisionRef.current += 1;
+        stateRef.current = next.present;
+        queueAutosave(next.present);
+        return next;
+      });
+    },
+    [queueAutosave],
+  );
+
+  useEffect(() => {
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input:not([type="range"]), textarea, [contenteditable="true"]')) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const direction =
+        key === "z" && !event.shiftKey
+          ? "undo"
+          : (key === "z" && event.shiftKey) || key === "y"
+            ? "redo"
+            : null;
+      if (!direction) return;
+      event.preventDefault();
+      travelHistory(direction);
+    };
+
+    window.addEventListener("keydown", handleHistoryShortcut);
+    return () => window.removeEventListener("keydown", handleHistoryShortcut);
+  }, [travelHistory]);
 
   useEffect(() => {
     return () => {
@@ -144,19 +236,19 @@ export function ClipEditor({
     save(stateRef.current, false);
   }
 
-  function toggleWord(word: { id: string; isFiller: boolean }) {
-    updateState((prev) => {
-      const deleted = prev.wordEdits.deletedWordIds.includes(word.id);
-      return {
-        ...prev,
-        wordEdits: {
-          ...prev.wordEdits,
-          deletedWordIds: deleted
-            ? prev.wordEdits.deletedWordIds.filter((id) => id !== word.id)
-            : [...prev.wordEdits.deletedWordIds, word.id],
-        },
-      };
-    });
+  function handleInspectorTab(nextTab: InspectorTab) {
+    if (nextTab === inspectorTab && mobileInspectorOpen) {
+      setMobileInspectorOpen(false);
+      return;
+    }
+    setInspectorTab(nextTab);
+    setMobileInspectorOpen(true);
+  }
+
+  // P1.4: the editor no longer creates internal word cuts. Legacy documents that carry them
+  // convert back to one continuous range via an explicit, versioned edit.
+  function handleRestoreAllWords() {
+    updateState((prev) => convertToContinuous(prev));
   }
 
   // Drag-to-trim writes the clip window directly; the timeline has already snapped and clamped,
@@ -171,6 +263,22 @@ export function ClipEditor({
 
   function requestSeek(ms: number) {
     setSeek((prev) => ({ ms, token: (prev?.token ?? 0) + 1 }));
+  }
+
+  function handleCaptionPositionChange(placement: CaptionPlacement) {
+    updateState((prev) => ({
+      ...prev,
+      captions: {
+        ...prev.captions,
+        overrides: {
+          ...prev.captions.overrides,
+          positionX: placement.positionX,
+          positionY: placement.positionY,
+          anchor: "center",
+          safeAnchor: "custom",
+        },
+      },
+    }));
   }
 
   function handleExtend(direction: "before" | "after") {
@@ -204,117 +312,245 @@ export function ClipEditor({
     JSON.stringify({ ...state, version: 0 }) !== JSON.stringify({ ...savedState, version: 0 });
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link href="../../.." className="text-stone-500 hover:text-stone-700">
+    <div
+      className="canvas-desk-editor grid min-h-0 min-w-0 overflow-hidden bg-black lg:-mx-8 lg:-my-6"
+      data-mobile-sheet={mobileInspectorOpen ? "edit" : "compact"}
+    >
+      <header className="canvas-desk-header flex items-center justify-between gap-2 border-b border-white/10 bg-black px-2 text-white sm:px-3 lg:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            href="../../.."
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-white/10 hover:text-white"
+            aria-label="Back to clips"
+          >
             <ChevronLeft size={20} aria-hidden="true" />
           </Link>
-          <div>
-            <p className="text-sm font-medium text-teal-800">Editing</p>
-            <h1 className="text-xl font-semibold">{clipTitle}</h1>
+          <div className="min-w-0 max-w-[72px] sm:max-w-[220px] lg:max-w-none">
+            <p className="hidden items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-stone-500 sm:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-red-600" /> Editing
+            </p>
+            <h1 className="truncate text-sm font-semibold">{clipTitle}</h1>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <SaveStatusLabel status={saveStatus} hasUnsavedChanges={hasUnsavedChanges} />
+        <div className="flex shrink-0 items-center gap-1 lg:gap-2">
+          <span className="hidden sm:inline">
+            <SaveStatusLabel status={saveStatus} hasUnsavedChanges={hasUnsavedChanges} dark />
+          </span>
+          <div className="flex items-center rounded-md border border-white/15" aria-label="Edit history">
+            <button
+              type="button"
+              onClick={() => travelHistory("undo")}
+              disabled={history.past.length === 0}
+              className="flex h-10 w-9 items-center justify-center rounded-l-md text-stone-300 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:text-stone-700 sm:w-10"
+              aria-label="Undo"
+              title="Undo (Command/Ctrl+Z)"
+            >
+              <Undo2 size={16} aria-hidden="true" />
+            </button>
+            <span className="h-5 w-px bg-white/10" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => travelHistory("redo")}
+              disabled={history.future.length === 0}
+              className="flex h-10 w-9 items-center justify-center rounded-r-md text-stone-300 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:text-stone-700 sm:w-10"
+              aria-label="Redo"
+              title="Redo (Command/Ctrl+Shift+Z)"
+            >
+              <Redo2 size={16} aria-hidden="true" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSafeZones((visible) => !visible)}
+            className={`hidden h-10 w-10 items-center justify-center gap-2 rounded-md border text-xs font-semibold min-[360px]:inline-flex sm:w-auto sm:px-3 ${
+              showSafeZones
+                ? "border-red-500 bg-red-500/15 text-red-300"
+                : "border-white/15 text-stone-300 hover:bg-white/10"
+            }`}
+            aria-label="Toggle safe area"
+          >
+            {showSafeZones ? <EyeOff size={15} /> : <Eye size={15} />}
+            <span className="hidden sm:inline">Safe area</span>
+          </button>
           <button
             type="button"
             onClick={handleSaveNow}
             disabled={saveStatus === "saving"}
-            className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+            className="inline-flex h-10 w-10 items-center justify-center gap-2 rounded-md border border-white/15 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50 sm:w-auto sm:px-4"
+            aria-label="Save editor changes"
           >
-            Save
+            <SaveIcon size={15} aria-hidden="true" />
+            <span className="hidden sm:inline">Save</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setInspectorTab("export");
+              setMobileInspectorOpen(true);
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center gap-2 rounded-md bg-red-600 text-xs font-bold text-white hover:bg-red-700 sm:w-auto sm:px-4"
+            aria-label="Open export tools"
+          >
+            <Download size={15} aria-hidden="true" />
+            <span className="hidden sm:inline">Export</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {saveStatus === "conflict" ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          This clip changed elsewhere. Reload the page to see the latest edit before saving again.
-        </p>
-      ) : null}
-
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <div className="grid gap-3">
+      <main className="canvas-desk-stage relative flex min-h-0 items-center justify-center overflow-hidden bg-[#111111] p-2 sm:p-3 lg:p-5">
+        {saveStatus === "conflict" ? (
+          <p className="absolute left-4 right-4 top-4 z-20 rounded-md border border-amber-400/40 bg-amber-950/90 p-3 text-xs text-amber-100">
+            This clip changed elsewhere. Reload the page before you save again.
+          </p>
+        ) : null}
+        <div className="h-full max-h-full max-w-full">
           <VideoPreview
             sourceVideoUrl={sourceVideoUrl}
             state={state}
             words={wordsInClip}
             showSafeZones={showSafeZones}
             brandTemplate={selectedBrandTemplate}
+            captionSelected={captionSelected}
+            onCaptionSelectedChange={(selected) => {
+              setCaptionSelected(selected);
+              if (selected) setInspectorTab("captions");
+            }}
             onCurrentMsChange={setCurrentMs}
+            onCaptionPositionChange={handleCaptionPositionChange}
             seek={seek}
+            fillHeight
           />
-          <label className="flex items-center gap-2 text-sm text-stone-600">
-            <input
-              type="checkbox"
-              checked={showSafeZones}
-              onChange={(event) => setShowSafeZones(event.target.checked)}
-            />
-            Show safe zones
-          </label>
-          <p className="text-xs text-stone-500">
-            Version {version} · {hasUnsavedChanges ? "editing" : "saved"}. Preview approximates
-            the final render — captions and layout are precise, playback trims are approximate.
-          </p>
         </div>
+        <p className="absolute bottom-3 left-4 hidden rounded-md bg-black/70 px-2 py-1 text-[10px] text-stone-400 lg:block">
+          Version {version} · captions and exported layout use the same coordinates
+        </p>
+      </main>
 
-        <div className="grid gap-4">
-          <ClipTimeline
-            sourceDurationMs={sourceDurationMs}
-            startMs={state.source.startMs}
-            endMs={state.source.endMs}
-            currentMs={currentMs}
-            wordBoundaries={wordBoundaries}
-            onTrim={handleTrim}
-            onScrub={requestSeek}
-          />
-          <ScriptEditorPanel
-            words={wordsInClip}
-            onToggleWord={toggleWord}
-            onExtendBefore={() => handleExtend("before")}
-            onExtendAfter={() => handleExtend("after")}
-            canExtendBefore={state.source.startMs > 0}
-            canExtendAfter={state.source.endMs < sourceDurationMs}
-          />
-          <CaptionStylePanel
-            captions={state.captions}
-            onChange={(captions) => updateState((prev) => ({ ...prev, captions }))}
-          />
-          <BrandTemplatePanel
-            templates={brandTemplates}
-            selectedId={state.brandTemplateId}
-            onApply={(template) =>
-              updateState((prev) => applyBrandTemplateToState(prev, template))
-            }
-          />
-          <LayoutPanel
-            layout={state.layout}
-            onChange={(layout) => updateState((prev) => ({ ...prev, layout }))}
-          />
-          <ExportPanel
-            clipId={clipId}
-            canExport={exportAllowed}
-            blockedReason={exportReason}
-          />
+      <aside className="canvas-desk-inspector flex min-h-0 flex-col overflow-hidden border-t border-stone-200 bg-white text-stone-950 lg:border-l lg:border-t-0">
+        <button
+          type="button"
+          onClick={() => setMobileInspectorOpen((open) => !open)}
+          className="mobile-sheet-handle flex h-11 shrink-0 items-center justify-center gap-2 border-b border-stone-200 bg-white text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500 lg:hidden"
+          aria-expanded={mobileInspectorOpen}
+          aria-controls="mobile-editor-tools"
+        >
+          <span className="h-1 w-10 rounded-full bg-stone-300" aria-hidden="true" />
+          {mobileInspectorOpen ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+          {mobileInspectorOpen ? "Hide tools" : "Show tools"}
+        </button>
+        <nav className="grid grid-cols-5 border-b border-stone-200" aria-label="Editor tools">
+          <InspectorTabButton icon={Captions} label="Captions" active={inspectorTab === "captions"} onClick={() => handleInspectorTab("captions")} />
+          <InspectorTabButton icon={FileText} label="Script" active={inspectorTab === "script"} onClick={() => handleInspectorTab("script")} />
+          <InspectorTabButton icon={Frame} label="Frame" active={inspectorTab === "frame"} onClick={() => handleInspectorTab("frame")} />
+          <InspectorTabButton icon={Palette} label="Brand" active={inspectorTab === "brand"} onClick={() => handleInspectorTab("brand")} />
+          <InspectorTabButton icon={Download} label="Export" active={inspectorTab === "export"} onClick={() => handleInspectorTab("export")} />
+        </nav>
+        <div id="mobile-editor-tools" className="mobile-sheet-content min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:p-3">
+          {inspectorTab === "captions" ? (
+            <CaptionStylePanel
+              captions={state.captions}
+              onChange={(captions) => updateState((prev) => ({ ...prev, captions }))}
+              onInteractionStart={() => beginHistoryGroup("caption-style")}
+              onInteractionEnd={endHistoryGroup}
+            />
+          ) : null}
+          {inspectorTab === "script" ? (
+            <ScriptEditorPanel
+              words={wordsInClip}
+              onExtendBefore={() => handleExtend("before")}
+              onExtendAfter={() => handleExtend("after")}
+              canExtendBefore={state.source.startMs > 0}
+              canExtendAfter={state.source.endMs < sourceDurationMs}
+              hasLegacyCuts={hasInternalCuts(state)}
+              onRestoreAllWords={handleRestoreAllWords}
+            />
+          ) : null}
+          {inspectorTab === "frame" ? (
+            <LayoutPanel
+              layout={state.layout}
+              onChange={(layout) => updateState((prev) => ({ ...prev, layout }))}
+              onInteractionStart={() => beginHistoryGroup("layout")}
+              onInteractionEnd={endHistoryGroup}
+            />
+          ) : null}
+          {inspectorTab === "brand" ? (
+            <BrandTemplatePanel
+              templates={brandTemplates}
+              selectedId={state.brandTemplateId}
+              onApply={(template) =>
+                updateState((prev) => applyBrandTemplateToState(prev, template))
+              }
+            />
+          ) : null}
+          {inspectorTab === "export" ? (
+            <ExportPanel
+              clipId={clipId}
+              canExport={exportAllowed}
+              blockedReason={exportReason}
+            />
+          ) : null}
         </div>
+      </aside>
+
+      <div className="canvas-desk-timeline overflow-hidden border-t border-white/10 bg-[#181818]">
+        <ClipTimeline
+          sourceDurationMs={sourceDurationMs}
+          startMs={state.source.startMs}
+          endMs={state.source.endMs}
+          currentMs={currentMs}
+          wordBoundaries={wordBoundaries}
+          onTrim={handleTrim}
+          onScrub={requestSeek}
+          onInteractionStart={() => beginHistoryGroup("trim")}
+          onInteractionEnd={endHistoryGroup}
+          compact
+        />
       </div>
     </div>
+  );
+}
+
+function InspectorTabButton({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 border-b-2 px-1 py-2 text-[10px] font-semibold lg:min-h-0 lg:py-3 ${
+        active
+          ? "border-red-600 bg-red-50 text-red-700"
+          : "border-transparent text-stone-500 hover:bg-stone-50 hover:text-stone-900"
+      }`}
+    >
+      <Icon size={16} />
+      <span className="truncate">{label}</span>
+    </button>
   );
 }
 
 function SaveStatusLabel({
   status,
   hasUnsavedChanges,
+  dark = false,
 }: {
   status: SaveStatus;
   hasUnsavedChanges: boolean;
+  dark?: boolean;
 }) {
-  if (status === "saving") return <span className="text-xs text-stone-500">Saving…</span>;
+  if (status === "saving") return <span className={`text-xs ${dark ? "text-stone-400" : "text-stone-500"}`}>Saving…</span>;
   if (status === "error") {
     return <span className="text-xs text-red-600">Couldn&apos;t save — try again</span>;
   }
   if (status === "conflict") return <span className="text-xs text-amber-700">Conflict — reload</span>;
-  if (hasUnsavedChanges) return <span className="text-xs text-stone-500">Unsaved changes</span>;
-  return <span className="text-xs text-emerald-700">Saved</span>;
+  if (hasUnsavedChanges) return <span className={`text-xs ${dark ? "text-stone-400" : "text-stone-500"}`}>Unsaved changes</span>;
+  return <span className={`text-xs ${dark ? "text-stone-300" : "text-stone-700"}`}>Saved</span>;
 }

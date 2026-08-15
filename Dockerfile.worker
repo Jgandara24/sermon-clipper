@@ -38,9 +38,21 @@ RUN npm ci --omit=dev
 
 FROM node:24-bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg ca-certificates curl \
+      ffmpeg ca-certificates curl fontconfig fonts-dejavu fonts-freefont-ttf \
     && rm -rf /var/lib/apt/lists/* \
     && ffmpeg -filters | grep -q subtitles
+
+# Caption fonts: the same TTFs the browser preview loads (public/fonts) are registered with
+# fontconfig so libass resolves the ASS Fontname to the identical face, and fontkit measures
+# with it. The fc-list grep is a build-time assertion in the same spirit as the subtitles
+# filter check above — a font that fails to register fails the image build instead of
+# silently falling back at render time.
+COPY public/fonts /usr/share/fonts/truetype/custom/
+RUN fc-cache -f -v \
+    && fc-list | grep -qi "Inter" \
+    && fc-list | grep -qi "Source Serif 4" \
+    && fc-list | grep -qi "Poppins"
+ENV CAPTION_FONT_DIR=/usr/share/fonts/truetype/custom
 
 # yt-dlp fetches URL-imported source videos (FINALIZE URL branch). The standalone Linux binary
 # bundles its Python runtime, so no python3 apt package is needed. Deliberately unpinned:

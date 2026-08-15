@@ -122,7 +122,7 @@ export function ExportPanel({
           <button
             type="button"
             onClick={handleRetry}
-            className="inline-flex items-center gap-1 text-xs font-medium text-teal-800 hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:underline"
           >
             <RefreshCw size={12} aria-hidden="true" />
             Try again
@@ -135,7 +135,7 @@ export function ExportPanel({
           type="button"
           onClick={handleExport}
           disabled={isStarting || !canExport}
-          className="inline-flex w-fit items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+          className="inline-flex w-fit items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
         >
           <Download size={14} aria-hidden="true" />
           Export 9:16 MP4

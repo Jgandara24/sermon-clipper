@@ -4,6 +4,7 @@ import path from "node:path";
 import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import { env } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
+import { mergeTokensIntoWords } from "./token-merge";
 import {
   TranscriptionProviderUnavailableError,
   type TranscriptionProvider,
@@ -30,33 +31,25 @@ type WhisperCppOutput = {
   transcription?: WhisperCppSegment[];
 };
 
-// whisper.cpp emits bracketed pseudo-tokens like [_BEG_], [_TT_160] alongside real words.
-const SPECIAL_TOKEN_PATTERN = /^\[.*\]$/;
-
 /** Pure parser for `whisper-cli -ojf` (output-json-full) output. */
 export function parseWhisperCppOutput(raw: string): TranscriptionResult {
   const parsed: WhisperCppOutput = JSON.parse(raw);
   const language = parsed.result?.language ?? "en";
 
-  const segments = (parsed.transcription ?? []).map((segment) => {
-    const words = (segment.tokens ?? [])
-      .map((token) => ({
-        word: token.text.trim(),
+  const segments = (parsed.transcription ?? []).map((segment) => ({
+    startMs: segment.offsets.from,
+    endMs: segment.offsets.to,
+    text: segment.text.trim(),
+    // Raw, untrimmed token text goes to the merger — the leading space IS the word boundary.
+    words: mergeTokensIntoWords(
+      (segment.tokens ?? []).map((token) => ({
+        text: token.text,
         startMs: token.offsets.from,
         endMs: token.offsets.to,
-        confidence: token.p,
-        isFiller: false,
-        deleted: false,
-      }))
-      .filter((word) => word.word.length > 0 && !SPECIAL_TOKEN_PATTERN.test(word.word));
-
-    return {
-      startMs: segment.offsets.from,
-      endMs: segment.offsets.to,
-      text: segment.text.trim(),
-      words,
-    };
-  });
+        p: token.p,
+      })),
+    ),
+  }));
 
   return { language, segments };
 }

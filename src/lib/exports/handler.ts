@@ -7,15 +7,16 @@ import type { ExportJob, PrismaClient } from "@prisma/client";
 import { recordProcessingCostFact } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
-import { env } from "@/lib/env";
+import { captionFontDir, env } from "@/lib/env";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
+import { hasInternalCuts } from "@/lib/editor/continuous-edit";
 import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
-import { applyEditorDeletions, flattenWords, wordsInRange } from "@/lib/editor/words";
+import { flattenWords, wordsInRange } from "@/lib/editor/words";
 import { generateAssSubtitles } from "@/lib/export/ass-generator";
 import { parseLowerThird } from "@/lib/brand-template";
 import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
-import { computeKeptRanges, mapToKeptTimeline } from "@/lib/export/kept-ranges";
+import { createFontkitMeasurer } from "@/lib/export/font-metrics";
 import { renderClipExport } from "@/lib/export/render";
 import { probeVideoFile } from "@/lib/media/probe";
 import {
@@ -156,62 +157,83 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     }>,
   }));
 
-  const allWords = flattenWords(segments);
-  const wordsInClip = applyEditorDeletions(
-    wordsInRange(allWords, state.source.startMs, state.source.endMs),
-    state,
-  );
+  // P1.5: deliverables render exactly one continuous range — a clip selects part of the
+  // sermon, it never rewrites what was said. Legacy documents still carrying internal word
+  // cuts must be converted in the editor first (the exports route rejects them up front; this
+  // guard keeps the worker authoritative for jobs that predate the route check).
+  if (hasInternalCuts(state)) {
+    throw new ExportFailureError(
+      "CONTINUOUS_RANGE_REQUIRED",
+      "This clip still has word deletions from an older editor. Open it and restore the deleted words, then export.",
+    );
+  }
 
-  const keptRanges = computeKeptRanges(wordsInClip, state.source.startMs, state.source.endMs);
-  if (keptRanges.length === 0) {
+  const sourceStartMs = state.source.startMs;
+  const sourceEndMs = state.source.endMs;
+  if (sourceEndMs <= sourceStartMs) {
     throw new ExportFailureError("RENDER_FAILED", "Export failed on our side — your clip is safe.");
   }
 
   const cropRect = resolveCropRect(state.layout, sourceVideo.width, sourceVideo.height);
   const cropPixels = cropRectToPixels(cropRect, sourceVideo.width, sourceVideo.height);
 
-  const activeWords = wordsInClip.filter((word) => !word.effectiveDeleted);
+  // Style before lines: it now decides line grouping (maxWordsPerLine) as well as looks.
+  const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
+
+  const allWords = flattenWords(segments);
+  const clipWords = wordsInRange(allWords, sourceStartMs, sourceEndMs);
   const captionLines = applyCaptionTextOverrides(
     buildCaptionLines(
-      activeWords.map((word) => ({
+      clipWords.map((word) => ({
         id: word.id,
         word: word.word,
         startMs: word.startMs,
-        endMs: word.endMs,
+        // A word whose start lands inside the range may end past the trim-out point; clamp so
+        // its caption never outlives the rendered video.
+        endMs: Math.min(word.endMs, sourceEndMs),
       })),
+      { maxWordsPerLine: style.maxWordsPerLine },
     ),
     state.captions.textOverrides,
   ).map((line) => ({
     ...line,
-    // Caption timestamps are on the original source timeline; remap to the concatenated
-    // (post-cut) output timeline the rendered file actually plays on.
-    startMs: mapToKeptTimeline(line.startMs, keptRanges),
-    endMs: mapToKeptTimeline(line.endMs, keptRanges),
+    // Caption timestamps are on the source timeline; the rendered file starts at the clip's
+    // source start, so the output timeline is a single constant offset away. Words carry the
+    // per-word highlight timing, so they remap too — dropping them would drift every pop.
+    startMs: line.startMs - sourceStartMs,
+    endMs: line.endMs - sourceStartMs,
+    words: line.words.map((word) => ({
+      ...word,
+      startMs: word.startMs - sourceStartMs,
+      endMs: word.endMs - sourceStartMs,
+    })),
   }));
 
-  const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
   const brandTemplate = state.brandTemplateId
     ? await prisma.brandTemplate.findFirst({
         where: { id: state.brandTemplateId, workspaceId: job.workspaceId },
       })
     : null;
   const lowerThird = brandTemplate ? parseLowerThird(brandTemplate.lowerThird) : null;
-  const assContent = generateAssSubtitles(
-    captionLines,
+  const assContent = generateAssSubtitles({
+    lines: captionLines,
     style,
-    OUTPUT_WIDTH,
-    OUTPUT_HEIGHT,
-    brandTemplate && lowerThird
-      ? {
-          headline: lowerThird.headline || brandTemplate.churchName,
-          subhead: lowerThird.subhead || brandTemplate.speakerName || "",
-          primaryColor: brandTemplate.primaryColor,
-          accentColor: brandTemplate.accentColor,
-          startMs: 0,
-          endMs: Math.min(4000, Math.max(1000, state.source.endMs - state.source.startMs)),
-        }
-      : null,
-  );
+    videoWidth: OUTPUT_WIDTH,
+    videoHeight: OUTPUT_HEIGHT,
+    // Measure with the same faces libass resolves via fontconfig — parity depends on it.
+    measure: createFontkitMeasurer(captionFontDir()),
+    lowerThird:
+      brandTemplate && lowerThird
+        ? {
+            headline: lowerThird.headline || brandTemplate.churchName,
+            subhead: lowerThird.subhead || brandTemplate.speakerName || "",
+            primaryColor: brandTemplate.primaryColor,
+            accentColor: brandTemplate.accentColor,
+            startMs: 0,
+            endMs: Math.min(4000, Math.max(1000, state.source.endMs - state.source.startMs)),
+          }
+        : null,
+  });
 
   const storage = getStorageProvider();
   const exportsKey = `exports/${job.workspaceId}/${job.id}.mp4`;
@@ -222,10 +244,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   let bytes: number;
   let checksum: string;
   let sourceBytes = Number(sourceVideo.sizeBytes ?? BigInt(0));
-  const outputDurationS = keptRanges.reduce(
-    (total, range) => total + (range.endMs - range.startMs) / 1_000,
-    0,
-  );
+  const outputDurationS = (sourceEndMs - sourceStartMs) / 1_000;
 
   try {
     const downloadStartedAt = Date.now();
@@ -258,9 +277,11 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     try {
       await renderClipExport({
         sourceFilePath,
-        keptRanges,
+        sourceStartMs,
+        sourceEndMs,
         cropPixels,
         assFileContent: assContent,
+        fontsDir: captionFontDir(),
         outputPath,
         outputWidth: OUTPUT_WIDTH,
         outputHeight: OUTPUT_HEIGHT,

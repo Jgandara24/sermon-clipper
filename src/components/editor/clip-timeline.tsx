@@ -48,6 +48,9 @@ export function ClipTimeline({
   wordBoundaries,
   onTrim,
   onScrub,
+  onInteractionStart,
+  onInteractionEnd,
+  compact = false,
 }: {
   sourceDurationMs: number;
   startMs: number;
@@ -56,6 +59,9 @@ export function ClipTimeline({
   wordBoundaries: number[];
   onTrim: (startMs: number, endMs: number) => void;
   onScrub: (ms: number) => void;
+  onInteractionStart?: () => void;
+  onInteractionEnd?: () => void;
+  compact?: boolean;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ kind: DragKind; grabOffsetMs: number } | null>(null);
@@ -96,6 +102,7 @@ export function ClipTimeline({
     event.preventDefault();
     const ms = clientXToMs(event.clientX);
     dragRef.current = { kind, grabOffsetMs: kind === "region" ? ms - startMs : 0 };
+    onInteractionStart?.();
     setFrozenView(computeTrimViewport(startMs, endMs, sourceDurationMs));
     trackRef.current?.setPointerCapture(event.pointerId);
   };
@@ -123,6 +130,7 @@ export function ClipTimeline({
     trackRef.current?.releasePointerCapture?.(event.pointerId);
     dragRef.current = null;
     setFrozenView(null);
+    onInteractionEnd?.();
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -147,21 +155,29 @@ export function ClipTimeline({
   const playheadVisible = currentMs >= view.start && currentMs <= view.end;
 
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+    <div
+      className={
+        compact
+          ? "h-full bg-[#181818] px-3 py-2 text-white lg:px-5 lg:py-3"
+          : "rounded-lg border border-stone-200 bg-white p-5 shadow-sm"
+      }
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Scissors size={18} className="text-teal-800" aria-hidden="true" />
+          <Scissors size={18} className={compact ? "text-red-500" : "text-red-700"} aria-hidden="true" />
           <h2 className="font-semibold">Trim</h2>
         </div>
-        <p className="text-xs font-medium text-stone-600">
+        <p className={`text-xs font-medium ${compact ? "text-stone-300" : "text-stone-600"}`}>
           {formatClock(startMs)} – {formatClock(endMs)}
           <span className="text-stone-400"> · {formatClock(endMs - startMs)} long</span>
         </p>
       </div>
-      <p className="mt-2 text-xs text-stone-500">
-        Drag the handles to set where the clip starts and ends. Drag the middle to move the whole
-        clip; click the track to preview a spot. Handles snap to the nearest spoken word.
-      </p>
+      {!compact ? (
+        <p className="mt-2 text-xs text-stone-500">
+          Drag the handles to set where the clip starts and ends. Drag the middle to move the whole
+          clip; click the track to preview a spot. Handles snap to the nearest spoken word.
+        </p>
+      ) : null}
 
       <div
         ref={trackRef}
@@ -169,7 +185,7 @@ export function ClipTimeline({
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className="relative mt-3 h-16 w-full touch-none select-none rounded-md bg-stone-100"
+        className={`relative mt-2 w-full touch-none select-none rounded-md lg:mt-3 ${compact ? "h-11 bg-black lg:h-14" : "h-16 bg-stone-100"}`}
         role="group"
         aria-label="Clip trim timeline"
       >
@@ -186,7 +202,7 @@ export function ClipTimeline({
         {/* The selected clip window — draggable to reposition. */}
         <div
           data-trim="region"
-          className="absolute inset-y-0 cursor-grab border-y-2 border-teal-500 bg-teal-500/15 active:cursor-grabbing"
+          className="absolute inset-y-0 cursor-grab border-y-2 border-red-500 bg-red-500/15 active:cursor-grabbing"
           style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
           aria-hidden="true"
         />
@@ -217,7 +233,7 @@ export function ClipTimeline({
         />
       </div>
 
-      <div className="mt-1 flex justify-between text-[10px] text-stone-400">
+      <div className={`mt-1 flex justify-between text-[10px] ${compact ? "text-stone-500" : "text-stone-400"}`}>
         <span>{formatClock(view.start)}</span>
         <span>{formatClock(view.end)}</span>
       </div>
@@ -251,10 +267,10 @@ function TrimHandle({
       aria-valuemax={Math.round(valueMax)}
       aria-valuenow={Math.round(valueNow)}
       aria-valuetext={valueLabel}
-      className="absolute inset-y-0 z-10 flex w-4 -translate-x-1/2 cursor-ew-resize touch-none items-center justify-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+      className="absolute inset-y-0 z-10 flex w-11 -translate-x-1/2 cursor-ew-resize touch-none items-center justify-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 lg:w-4"
       style={{ left: `${pct}%` }}
     >
-      <div className="pointer-events-none h-full w-1.5 rounded bg-teal-700 shadow" />
+      <div className="pointer-events-none h-full w-1.5 rounded bg-red-600 shadow" />
     </div>
   );
 }

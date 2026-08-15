@@ -64,13 +64,23 @@ describe("parseWhisperCppOutput", () => {
     expect(result.segments[0].endMs).toBe(3200);
   });
 
-  it("filters out bracketed special tokens", () => {
+  it("filters out bracketed special tokens and merges punctuation onto its word", () => {
     const result = parseWhisperCppOutput(REAL_FIXTURE);
     const words = result.segments[0].words.map((w) => w.word);
 
     expect(words).not.toContain("[_BEG_]");
     expect(words).not.toContain("[_TT_160]");
-    expect(words).toEqual(["This", "is", "a", "test", "sermon", "about", "peace", "."]);
+    expect(words).toEqual(["This", "is", "a", "test", "sermon", "about", "peace."]);
+  });
+
+  it("does not stretch a word to a punctuation token stamped after a long silence", () => {
+    const result = parseWhisperCppOutput(REAL_FIXTURE);
+    const last = result.segments[0].words[result.segments[0].words.length - 1];
+
+    // "." is stamped at the segment end (3200); "peace" spoke until 1640. The text attaches,
+    // the dead air does not — otherwise the caption highlight stalls on "peace." for 1.5s.
+    expect(last.word).toBe("peace.");
+    expect(last.endMs).toBe(1640);
   });
 
   it("preserves per-word timing and confidence", () => {

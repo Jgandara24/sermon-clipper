@@ -18,7 +18,7 @@ import {
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { approvalStateAfterEditorSave, isClipApprovedForExport } from "@/lib/approval";
-import { buildDefaultEditorState, wordId } from "@/lib/editor/types";
+import { buildDefaultEditorState } from "@/lib/editor/types";
 import { probeVideoFile } from "@/lib/media/probe";
 import { markExportJobSucceeded } from "@/lib/exports/queue";
 import { runExportJob } from "@/lib/exports/handler";
@@ -166,7 +166,7 @@ beforeAll(async () => {
     },
   });
 
-  const segment = await prisma.transcriptSegment.create({
+  await prisma.transcriptSegment.create({
     data: {
       transcriptId: transcript.id,
       idx: 0,
@@ -254,7 +254,6 @@ beforeAll(async () => {
         ...editorState,
         version: 1,
         brandTemplateId: template.id,
-        wordEdits: { ...editorState.wordEdits, deletedWordIds: [wordId(segment.id, 2)] },
         captions: {
           ...editorState.captions,
           presetId: template.captionPresetId,
@@ -345,6 +344,45 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
   it("invalidates approval after a subsequent editor save policy decision", () => {
     expect(approvalStateAfterEditorSave(ClipApprovalState.APPROVED)).toBe(ClipApprovalState.DRAFT);
   });
+
+  it("rejects a legacy edit that still carries internal word cuts (P1.5)", async () => {
+    const legacyEditorState = buildDefaultEditorState({ sourceVideoId, startMs: 0, endMs: 4000 });
+    await prisma.clipEdit.create({
+      data: {
+        clipId,
+        version: 2,
+        isAutosave: false,
+        savedBy: userId,
+        editorState: {
+          ...legacyEditorState,
+          version: 2,
+          // Any non-empty deletion list marks the document as carrying internal cuts; the id
+          // content is irrelevant to the continuous-range gate.
+          wordEdits: { ...legacyEditorState.wordEdits, deletedWordIds: ["legacy-segment:2"] },
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    const job = await prisma.exportJob.create({
+      data: {
+        clipId,
+        workspaceId,
+        preset: ExportPreset.MP4_1080,
+        state: ProcessingJobState.RUNNING,
+        filename: "legacy-cuts.mp4",
+        idempotencyKey: uniqueKey("legacy-cuts"),
+        attempt: 1,
+        startedAt: new Date(),
+      },
+    });
+
+    await expect(runExportJob(prisma, job)).rejects.toMatchObject({
+      code: "CONTINUOUS_RANGE_REQUIRED",
+    });
+
+    // Restore the continuous document so later tests keep exporting the clip.
+    await prisma.clipEdit.deleteMany({ where: { clipId, version: 2 } });
+  }, 120_000);
 
   it("exports a never-edited clip without deleting filler-tagged words", async () => {
     const sourceVideo = await prisma.sourceVideo.create({

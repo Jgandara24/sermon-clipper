@@ -1,3 +1,4 @@
+import { distributeDurationByWeight } from "./timing";
 import type { TranscriptSegmentResult, TranscriptWord, TranscriptionResult } from "./types";
 
 export class SrtParseError extends Error {}
@@ -15,15 +16,12 @@ function timecodeToMs(timecode: string): number {
 
 function interpolateWords(text: string, startMs: number, endMs: number): TranscriptWord[] {
   const tokens = text.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return [];
-
-  const duration = Math.max(endMs - startMs, tokens.length);
-  const perWord = duration / tokens.length;
-
-  return tokens.map((word, idx) => ({
-    word,
-    startMs: Math.round(startMs + idx * perWord),
-    endMs: Math.round(startMs + (idx + 1) * perWord),
+  // Weighted (by word length + punctuation pauses) rather than uniform slices, so word-level
+  // caption highlighting paces naturally through interpolated cues instead of jerking.
+  return distributeDurationByWeight(tokens, startMs, endMs).map(({ token, startMs, endMs }) => ({
+    word: token,
+    startMs,
+    endMs,
     confidence: 1,
     isFiller: false,
     deleted: false,

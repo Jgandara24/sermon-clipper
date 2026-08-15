@@ -14,9 +14,13 @@ const MODES: Array<{ value: Layout["mode"]; label: string; description: string }
 export function LayoutPanel({
   layout,
   onChange,
+  onInteractionStart,
+  onInteractionEnd,
 }: {
   layout: Layout;
   onChange: (next: Layout) => void;
+  onInteractionStart?: () => void;
+  onInteractionEnd?: () => void;
 }) {
   function updateCrop(partial: Partial<Layout["crop"]>) {
     onChange({ ...layout, crop: { ...layout.crop, ...partial } });
@@ -25,7 +29,7 @@ export function LayoutPanel({
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2">
-        <LayoutTemplate size={18} className="text-teal-800" aria-hidden="true" />
+        <LayoutTemplate size={18} className="text-red-700" aria-hidden="true" />
         <h2 className="font-semibold">Layout</h2>
       </div>
 
@@ -38,7 +42,7 @@ export function LayoutPanel({
             title={mode.description}
             className={`rounded-md border px-2 py-2 text-xs font-medium ${
               layout.mode === mode.value
-                ? "border-teal-700 bg-teal-50 text-teal-800"
+                ? "border-red-600 bg-red-50 text-red-800"
                 : "border-stone-300 text-stone-600 hover:bg-stone-50"
             }`}
           >
@@ -58,6 +62,9 @@ export function LayoutPanel({
               step={0.01}
               value={layout.crop.x}
               onChange={(event) => updateCrop({ x: Number(event.target.value) })}
+              onPointerDown={onInteractionStart}
+              onPointerUp={onInteractionEnd}
+              onPointerCancel={onInteractionEnd}
               className="mt-1 w-full"
             />
           </label>
@@ -70,6 +77,9 @@ export function LayoutPanel({
               step={0.01}
               value={layout.crop.y}
               onChange={(event) => updateCrop({ y: Number(event.target.value) })}
+              onPointerDown={onInteractionStart}
+              onPointerUp={onInteractionEnd}
+              onPointerCancel={onInteractionEnd}
               className="mt-1 w-full"
             />
           </label>
@@ -82,6 +92,9 @@ export function LayoutPanel({
               step={0.01}
               value={layout.crop.w}
               onChange={(event) => updateCrop({ w: Number(event.target.value) })}
+              onPointerDown={onInteractionStart}
+              onPointerUp={onInteractionEnd}
+              onPointerCancel={onInteractionEnd}
               className="mt-1 w-full"
             />
           </label>
@@ -94,6 +107,9 @@ export function LayoutPanel({
               step={0.01}
               value={layout.crop.h}
               onChange={(event) => updateCrop({ h: Number(event.target.value) })}
+              onPointerDown={onInteractionStart}
+              onPointerUp={onInteractionEnd}
+              onPointerCancel={onInteractionEnd}
               className="mt-1 w-full"
             />
           </label>

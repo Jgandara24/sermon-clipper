@@ -15,6 +15,56 @@ describe("buildDefaultEditorState", () => {
   });
 });
 
+describe("caption override schema compatibility", () => {
+  const base = buildDefaultEditorState({ sourceVideoId: "sv-1", startMs: 0, endMs: 5000 });
+
+  it("still parses a legacy document with only the original override keys", () => {
+    const legacy = {
+      ...base,
+      captions: {
+        presetId: "clean",
+        overrides: { sizePx: 48, position: "top", uppercase: true, highlightColor: "#facc15" },
+        textOverrides: [],
+      },
+    };
+    expect(() => editorStateSchema.parse(legacy)).not.toThrow();
+  });
+
+  it("parses the kinetic override keys", () => {
+    const next = {
+      ...base,
+      captions: {
+        presetId: "kinetic",
+        overrides: {
+          fontFamily: "Inter",
+          fontWeight: 800,
+          textColor: "#FFFFFF",
+          highlightMode: "word",
+          highlightScale: 1.14,
+          outlineColor: "#000000",
+          outlineWidthPx: 6,
+          shadowColor: "#000000",
+          shadowDistancePx: 2,
+          positionX: 50,
+          positionY: 62,
+          anchor: "center",
+          safeAnchor: "bottom-safe",
+        },
+        textOverrides: [],
+      },
+    };
+    expect(() => editorStateSchema.parse(next)).not.toThrow();
+  });
+
+  it("rejects out-of-range kinetic values", () => {
+    const bad = {
+      ...base,
+      captions: { presetId: "kinetic", overrides: { highlightScale: 3 }, textOverrides: [] },
+    };
+    expect(() => editorStateSchema.parse(bad)).toThrow();
+  });
+});
+
 describe("wordId", () => {
   it("combines segment id and word index deterministically", () => {
     expect(wordId("seg-1", 3)).toBe("seg-1:3");

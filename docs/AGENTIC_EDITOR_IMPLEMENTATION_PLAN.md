@@ -845,6 +845,18 @@ Before this UI edit, read the relevant bundled Next 16 data-fetching and server-
 
 P1 makes the current renderer, scheduler, and publisher safe. Automatic delivery remains globally disabled (P0.16 switch) until P2 supplies an exact human acceptance.
 
+> **Status revision (2026-08-13, kinetic captions resequencing):** P1.4, P1.5, and P1.6
+> LANDED first, out of order, because the kinetic caption feature builds directly on them
+> (P1.5 collapses caption timeline remapping to one offset; P1.4 removes the token-merge
+> migration hazard; P1.6's own ordering rule requires re-keying before caption tooling).
+> P1.6 landed WIDENED: line identity is anchored to source-word ids plus a deterministic
+> hash (`captionLineId` in `caption-lines.ts`), and override-generated words carry
+> line-namespaced ids — covering word identity in the same re-key. P1.1, P1.2, P1.3, and
+> P1.7+ are DEFERRED, unchanged in scope, and should resume from P1.1 after the caption
+> work. The kinetic caption implementation itself is recorded in DECISIONS.md
+> (2026-08-13 entries) and shipped as: token merge → style model → font registry/measurers →
+> shared layout+animation → per-word ASS generator → preview stage/drag handle → style panel.
+
 ### P1.1 — Make the worker able to render a pinned edit version
 
 **Commit:** `feat(exports): render an explicitly pinned edit version`

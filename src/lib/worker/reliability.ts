@@ -84,6 +84,7 @@ export function checkWorkerRuntimeEnvironment(
   const ffprobePath = env.FFPROBE_PATH || "ffprobe";
   const ytDlpBinary = env.YTDLP_PATH || "yt-dlp";
   const whisperBinary = env.WHISPER_CPP_BINARY || "whisper-cli";
+  const captionFontDir = env.CAPTION_FONT_DIR || "/usr/share/fonts/truetype/custom";
 
   const checks: WorkerReadinessCheck[] = [
     env.WORKER_ID?.trim()
@@ -127,6 +128,13 @@ export function checkWorkerRuntimeEnvironment(
           name: "WHISPER_MODEL_PATH",
           status: "fail",
           message: "WHISPER_MODEL_PATH must point to a readable model file on production workers.",
+        },
+    fileReadable(`${captionFontDir}/Inter-Regular.ttf`)
+      ? { name: "CAPTION_FONT_DIR", status: "ok", message: `Caption fonts are readable at ${captionFontDir}.` }
+      : {
+          name: "CAPTION_FONT_DIR",
+          status: "fail",
+          message: `Caption fonts are required on production workers so burned-in captions render the intended face. Checked: ${captionFontDir}/Inter-Regular.ttf.`,
         },
   ];
 
