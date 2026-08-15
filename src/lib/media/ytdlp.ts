@@ -6,6 +6,7 @@ import type {
 } from "@/lib/cost/types";
 import { ytDlpPath as resolveYtDlpPath, ytDlpProxyUrl as resolveYtDlpProxyUrl } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
+import { redactProxySecrets } from "@/lib/media/proxy-secret";
 
 export type YtDlpMetadata = {
   videoId: string;
@@ -43,23 +44,7 @@ export class YtDlpMetadataFetchError extends Error {
  * workspace-visible operational event. Strip every form of the secret before an error escapes.
  */
 function redactProxyUrl(text: string): string {
-  const proxyUrl = resolveYtDlpProxyUrl();
-  if (!text || !proxyUrl) return text;
-  let redacted = text.split(proxyUrl).join("[proxy-url]");
-  try {
-    const parsed = new URL(proxyUrl);
-    if (parsed.username || parsed.password) {
-      redacted = redacted
-        .split(`${parsed.username}:${parsed.password}`)
-        .join("[proxy-credentials]");
-    }
-    if (parsed.host) {
-      redacted = redacted.split(parsed.host).join("[proxy-host]");
-    }
-  } catch {
-    // Not URL-parseable — the full-string replacement above already covered it.
-  }
-  return redacted;
+  return redactProxySecrets(text, resolveYtDlpProxyUrl());
 }
 
 export type YtDlpTransferTelemetry = {

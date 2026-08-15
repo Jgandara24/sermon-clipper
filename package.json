@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "audit:event-exposure": "tsx scripts/audit-event-exposure.ts",
     "audit:legacy-exports": "tsx scripts/audit-legacy-exports.ts",
     "audit:schedule-collisions": "tsx scripts/audit-scheduled-post-collisions.ts",
     "build": "npm run prisma:generate && next build",
