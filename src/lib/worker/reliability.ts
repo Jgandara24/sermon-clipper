@@ -84,6 +84,8 @@ export function checkWorkerRuntimeEnvironment(
   const ffprobePath = env.FFPROBE_PATH || "ffprobe";
   const ytDlpBinary = env.YTDLP_PATH || "yt-dlp";
   const whisperBinary = env.WHISPER_CPP_BINARY || "whisper-cli";
+  const captionFontDir = env.CAPTION_FONT_DIR || "/usr/share/fonts/truetype/custom";
+  const scribeConfigured = Boolean(env.ELEVENLABS_API_KEY);
 
   const checks: WorkerReadinessCheck[] = [
     env.WORKER_ID?.trim()
@@ -114,19 +116,38 @@ export function checkWorkerRuntimeEnvironment(
           status: "fail",
           message: `yt-dlp is required on production workers for URL imports. Checked: ${ytDlpBinary}.`,
         },
-    commandAvailable(whisperBinary)
-      ? { name: "WHISPER_CPP_BINARY", status: "ok", message: `Whisper binary is available at ${whisperBinary}.` }
+    scribeConfigured || commandAvailable(whisperBinary)
+      ? {
+          name: "WHISPER_CPP_BINARY",
+          status: "ok",
+          message: scribeConfigured
+            ? "ElevenLabs Scribe is configured; the local whisper.cpp binary is an optional fallback."
+            : `Whisper binary is available at ${whisperBinary}.`,
+        }
       : {
           name: "WHISPER_CPP_BINARY",
           status: "fail",
           message: `whisper.cpp binary is required on production workers. Checked: ${whisperBinary}.`,
         },
-    env.WHISPER_MODEL_PATH && fileReadable(env.WHISPER_MODEL_PATH)
-      ? { name: "WHISPER_MODEL_PATH", status: "ok", message: "Whisper model file is readable." }
+    scribeConfigured || (env.WHISPER_MODEL_PATH && fileReadable(env.WHISPER_MODEL_PATH))
+      ? {
+          name: "WHISPER_MODEL_PATH",
+          status: "ok",
+          message: scribeConfigured
+            ? "ElevenLabs Scribe is configured; a local whisper model is an optional fallback."
+            : "Whisper model file is readable.",
+        }
       : {
           name: "WHISPER_MODEL_PATH",
           status: "fail",
           message: "WHISPER_MODEL_PATH must point to a readable model file on production workers.",
+        },
+    fileReadable(`${captionFontDir}/Inter-Regular.ttf`)
+      ? { name: "CAPTION_FONT_DIR", status: "ok", message: `Caption fonts are readable at ${captionFontDir}.` }
+      : {
+          name: "CAPTION_FONT_DIR",
+          status: "fail",
+          message: `Caption fonts are required on production workers so burned-in captions render the intended face. Checked: ${captionFontDir}/Inter-Regular.ttf.`,
         },
   ];
 

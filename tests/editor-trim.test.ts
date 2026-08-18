@@ -3,6 +3,7 @@ import {
   clampEnd,
   clampRegion,
   clampStart,
+  computeTimelineViewport,
   computeTrimViewport,
   MIN_CLIP_MS,
   snapToBoundary,
@@ -27,6 +28,33 @@ describe("computeTrimViewport", () => {
     const view = computeTrimViewport(0, 600_000, 2_000_000);
     // pad capped at VIEWPORT_PAD_MAX_MS on the right (left already at 0).
     expect(view.end).toBe(600_000 + VIEWPORT_PAD_MAX_MS);
+  });
+});
+
+describe("computeTimelineViewport", () => {
+  it("uses the padded trim view at minimum zoom", () => {
+    expect(computeTimelineViewport(30_000, 45_000, 90_000, 35_000, 0)).toEqual({
+      start: 15_000,
+      end: 60_000,
+    });
+  });
+
+  it("centers a smaller time window on the requested time", () => {
+    expect(computeTimelineViewport(30_000, 45_000, 90_000, 45_000, 1)).toEqual({
+      start: 39_000,
+      end: 51_000,
+    });
+  });
+
+  it("clamps the zoomed window to the source edges", () => {
+    expect(computeTimelineViewport(0, 20_000, 90_000, 1_000, 1)).toEqual({
+      start: 0,
+      end: 12_000,
+    });
+    expect(computeTimelineViewport(70_000, 90_000, 90_000, 89_000, 1)).toEqual({
+      start: 78_000,
+      end: 90_000,
+    });
   });
 });
 

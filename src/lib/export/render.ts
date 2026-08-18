@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { ffmpegPath as resolveFfmpegPath } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
-import type { TimeRange } from "./kept-ranges";
 
 export class RenderError extends Error {}
 
@@ -22,22 +21,32 @@ export function buildExportFilterGraph(
   outputWidth: number,
   outputHeight: number,
   assFilePath: string,
+  fontsDir?: string,
 ): string {
   const { x, y, w, h } = cropPixels;
   const assOption = escapeForFilterGraph(assFilePath);
+  // fontsdir makes libass resolve the ASS Fontname against our shipped TTFs directly —
+  // deterministic on any host, independent of what fontconfig happens to have registered
+  // (the worker image registers them too, as belt and braces).
+  const fontsOption = fontsDir ? `:fontsdir='${escapeForFilterGraph(fontsDir)}'` : "";
   return (
     `crop=${w}:${h}:${x}:${y},` +
     `scale=${outputWidth}:${outputHeight}:force_original_aspect_ratio=increase,` +
     `crop=${outputWidth}:${outputHeight},` +
-    `subtitles=filename='${assOption}'`
+    `subtitles=filename='${assOption}'${fontsOption}`
   );
+}
+
+export function buildAudioFilterGraph(originalVolume = 1): string {
+  const volume = Math.min(1, Math.max(0, originalVolume));
+  return `loudnorm=I=-16:TP=-1.5:LRA=11,volume=${volume.toFixed(2)}`;
 }
 
 async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
   try {
     await execFileWithTimeout(ffmpegPath, args, {
       maxBuffer: 1024 * 1024 * 64,
-      // Per encode pass; clip exports are seconds-to-minutes of output, so a pass that runs
+      // Single encode pass; clip exports are seconds-to-minutes of output, so a pass that runs
       // this long is wedged, not slow.
       timeoutMs: envTimeoutMs("EXPORT_FFMPEG_TIMEOUT_MS", 900_000),
     });
@@ -48,91 +57,59 @@ async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
 
 export type RenderClipExportParams = {
   sourceFilePath: string;
-  keptRanges: TimeRange[];
+  /** The clip's single continuous source range (P1.5: deliverables never contain internal cuts). */
+  sourceStartMs: number;
+  sourceEndMs: number;
   cropPixels: { x: number; y: number; w: number; h: number };
   assFileContent: string;
+  /** Directory of the caption TTFs, passed to libass as fontsdir. */
+  fontsDir: string;
   outputPath: string;
   outputWidth: number;
   outputHeight: number;
+  originalVolume?: number;
 };
 
 /**
- * Renders a clip export per guide §15 step 3: sub-range extraction (+concat for word-deletes)
- * → crop → scale → subtitles burn → loudnorm → x264/AAC encode. Three ffmpeg passes rather than
- * one filter_complex graph — simpler to reason about and debug, at the cost of one extra
- * encode; acceptable for short (seconds-to-minutes) clip exports.
+ * Renders a clip export as ONE ffmpeg pass over one continuous source range: seek → crop →
+ * scale → subtitles burn → loudnorm → x264/AAC encode. The former multi-range extract+concat
+ * pipeline (word-level internal cuts) was retired by P1.5 — deliverables select a range of the
+ * sermon, they don't rewrite it — which also removed two of the three encode passes.
  */
 export async function renderClipExport(params: RenderClipExportParams): Promise<void> {
-  if (params.keptRanges.length === 0) {
-    throw new RenderError("Nothing survived the edits — every word in this clip was deleted.");
+  const durationMs = params.sourceEndMs - params.sourceStartMs;
+  if (durationMs <= 0) {
+    throw new RenderError("The clip's source range is empty — nothing to render.");
   }
 
   const ffmpegPath = resolveFfmpegPath();
   const workDir = await mkdtemp(path.join(tmpdir(), "sermon-clipper-export-"));
 
   try {
-    // Pass 1: extract + re-encode each kept sub-range for frame-accurate cuts (stream copy can
-    // only cut at keyframes, which isn't precise enough for word-level deletes).
-    const segmentPaths: string[] = [];
-    for (const [index, range] of params.keptRanges.entries()) {
-      const segmentPath = path.join(workDir, `seg-${index}.mp4`);
-      await runFfmpeg(ffmpegPath, [
-        "-y",
-        "-ss",
-        (range.startMs / 1000).toFixed(3),
-        "-i",
-        params.sourceFilePath,
-        "-t",
-        ((range.endMs - range.startMs) / 1000).toFixed(3),
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "20",
-        "-c:a",
-        "aac",
-        "-avoid_negative_ts",
-        "make_zero",
-        segmentPath,
-      ]);
-      segmentPaths.push(segmentPath);
-    }
-
-    // Pass 2: concat via the concat demuxer — all segments share identical encode params, so a
-    // stream copy concat is lossless and fast even with just one segment (the no-deletes case).
-    const concatListPath = path.join(workDir, "concat.txt");
-    await writeFile(
-      concatListPath,
-      segmentPaths.map((segmentPath) => `file '${segmentPath.replace(/'/g, "'\\''")}'`).join("\n"),
-    );
-    const concatenatedPath = path.join(workDir, "concatenated.mp4");
-    await runFfmpeg(ffmpegPath, [
-      "-y",
-      "-f",
-      "concat",
-      "-safe",
-      "0",
-      "-i",
-      concatListPath,
-      "-c",
-      "copy",
-      concatenatedPath,
-    ]);
-
-    // Pass 3: crop/scale/caption-burn/loudnorm in one final encode.
     const assFilePath = path.join(workDir, "captions.ass");
     await writeFile(assFilePath, params.assFileContent, "utf8");
 
     await mkdir(path.dirname(params.outputPath), { recursive: true });
     await runFfmpeg(ffmpegPath, [
       "-y",
+      // Input seeking (-ss before -i) is frame-accurate here because the stream is re-encoded,
+      // and avoids decoding everything before the clip start.
+      "-ss",
+      (params.sourceStartMs / 1000).toFixed(3),
       "-i",
-      concatenatedPath,
+      params.sourceFilePath,
+      "-t",
+      (durationMs / 1000).toFixed(3),
       "-vf",
-      buildExportFilterGraph(params.cropPixels, params.outputWidth, params.outputHeight, assFilePath),
+      buildExportFilterGraph(
+        params.cropPixels,
+        params.outputWidth,
+        params.outputHeight,
+        assFilePath,
+        params.fontsDir,
+      ),
       "-af",
-      "loudnorm=I=-16:TP=-1.5:LRA=11",
+      buildAudioFilterGraph(params.originalVolume),
       "-c:v",
       "libx264",
       "-preset",

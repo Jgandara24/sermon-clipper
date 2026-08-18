@@ -97,6 +97,42 @@ describe("worker reliability helpers", () => {
     );
   });
 
+  it("does not require local whisper assets when Scribe is configured", () => {
+    const checks = checkWorkerRuntimeEnvironment(
+      {
+        NODE_ENV: "production",
+        WORKER_ID: "worker-1",
+        ELEVENLABS_API_KEY: "scribe-test-key",
+      },
+      (command) => command !== "whisper-cli",
+      () => true,
+    );
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "WHISPER_CPP_BINARY", status: "ok" }),
+        expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "ok" }),
+      ]),
+    );
+  });
+
+  it("requires readable caption fonts in production", () => {
+    const probedPaths: string[] = [];
+    const checks = checkWorkerRuntimeEnvironment(
+      { NODE_ENV: "production", WORKER_ID: "worker-1", CAPTION_FONT_DIR: "/custom/fonts" },
+      () => true,
+      (filePath) => {
+        probedPaths.push(filePath);
+        return !filePath.startsWith("/custom/fonts");
+      },
+    );
+
+    expect(probedPaths).toContain("/custom/fonts/Inter-Regular.ttf");
+    expect(checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "CAPTION_FONT_DIR", status: "fail" })]),
+    );
+  });
+
   it("probes yt-dlp with --version (yt-dlp rejects ffmpeg-style -version)", () => {
     const probed: Array<{ command: string; versionFlag?: string }> = [];
     checkWorkerRuntimeEnvironment(

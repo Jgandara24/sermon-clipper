@@ -845,6 +845,18 @@ Before this UI edit, read the relevant bundled Next 16 data-fetching and server-
 
 P1 makes the current renderer, scheduler, and publisher safe. Automatic delivery remains globally disabled (P0.16 switch) until P2 supplies an exact human acceptance.
 
+> **Status revision (2026-08-13, kinetic captions resequencing):** P1.4, P1.5, and P1.6
+> LANDED first, out of order, because the kinetic caption feature builds directly on them
+> (P1.5 collapses caption timeline remapping to one offset; P1.4 removes the token-merge
+> migration hazard; P1.6's own ordering rule requires re-keying before caption tooling).
+> P1.6 landed WIDENED: line identity is anchored to source-word ids plus a deterministic
+> hash (`captionLineId` in `caption-lines.ts`), and override-generated words carry
+> line-namespaced ids — covering word identity in the same re-key. P1.1, P1.2, P1.3, and
+> P1.7+ are DEFERRED, unchanged in scope, and should resume from P1.1 after the caption
+> work. The kinetic caption implementation itself is recorded in DECISIONS.md
+> (2026-08-13 entries) and shipped as: token merge → style model → font registry/measurers →
+> shared layout+animation → per-word ASS generator → preview stage/drag handle → style panel.
+
 ### P1.1 — Make the worker able to render a pinned edit version
 
 **Commit:** `feat(exports): render an explicitly pinned edit version`
@@ -1313,34 +1325,39 @@ Before this UI edit, read the relevant bundled Next 16 form, server-action, and 
 
 ### Objective
 
-Create one reusable, low-cost representation of the complete service. Use it for sermon detection, forbidden detection, candidate playback, and on-demand visual evidence.
+Create one reusable, low-cost representation of the complete service. Use cheap local evidence to select one conservative sermon corridor before any paid transcription. Send only that corridor to Scribe, then use the precise transcript for forbidden detection, candidate playback, and on-demand visual evidence.
 
 ### Recommended evidence pipeline
 
 ```text
 temporary original materialization
-→ original probe facts
-→ 16 kHz mono FLAC analysis audio
-→ Scribe v2 transcript with no-verbatim disabled
-→ deterministic silences, sentences, and paragraphs
-→ uncropped 480p H.264 source proxy
+→ original probe facts and free source metadata hints
+→ 16 kHz mono FLAC analysis audio and uncropped 480p H.264 source proxy
 → FFmpeg scene changes, black/freeze/motion facts
 → sparse WebP frames and perceptual hashes
 → person/face inference on cluster representatives
 → OCR only on likely static text frames
-→ local audio-event corroboration when needed
-→ transcript classification
-→ one paid visual escalation for unresolved ambiguity
+→ local speech, music, and audio-event corroboration when needed
+→ coarse source regions and one conservative continuous sermon corridor
+→ short local-ASR checks only at ambiguous corridor boundaries
+→ one paid visual escalation for unresolved boundary ambiguity
+→ still ambiguous: human exception; never a silent full-service Scribe fallback
+→ sermon-only 16 kHz mono FLAC with the exact source-time offset
+→ one base Scribe v2 request with no-verbatim disabled
+→ deterministic silences, sentences, and paragraphs
+→ transcript classification and precise forbidden-region refinement
 → MediaRegion rows keyed by SourceVideo
 ```
 
 ### Recommended metadata
 
-The transcript representation must include: every word and timestamp; word confidence when supplied (whisper.cpp already yields per-token probabilities — note these are sub-word tokens, not words); speaker label; audio-event label and interval; silence interval; sentence boundary; paragraph boundary; source provider and model version; capability status (native, derived, unavailable, user-supplied); provenance for every derived field.
+The transcript representation must include: every word and timestamp; the exact offset back to source time; the submitted audio duration and checksum; the provider request or transcription id; word confidence when supplied (whisper.cpp already yields per-token probabilities — note these are sub-word tokens, not words); speaker label; audio-event label and interval; silence interval; sentence boundary; paragraph boundary; source provider and model version; capability status (native, derived, unavailable, user-supplied); provenance for every derived field.
 
-The Media Region Index can contain overlapping facts: `SERMON`, `WORSHIP`, `ANNOUNCEMENT`, `PRAYER`, `BAPTISM`, `OTHER_SERVICE_CONTENT`, `PASTOR_VISIBLE`, `FULLSCREEN_SLIDE`, `AMBIGUOUS`.
+The Media Region Index can contain overlapping facts: `SERMON`, `WORSHIP`, `ANNOUNCEMENT`, `PRAYER`, `BAPTISM`, `ALTAR_CALL`, `OTHER_SERVICE_CONTENT`, `PASTOR_VISIBLE`, `FULLSCREEN_SLIDE`, `VERSE_SLIDESHOW`, `AMBIGUOUS`.
 
 Detector facts are not editorial policy. Store the facts and detector confidence. Keep allow, avoid, forbid, and salvage rules in versioned code.
+
+The pre-Scribe corridor is a cost-control boundary, not the final safety decision. Use one continuous request instead of one request per clip or fragment. After Scribe returns, refine all forbidden regions from its word-level transcript, diarization, and audio events. Worship, announcements, baptisms, prayers, verse slideshows, and altar calls remain forbidden for clip selection and export. If useful sermon speech continues over a verse slideshow, retain that audio in the transcript for future text features, but mark the visual interval as ineligible for video clips.
 
 ### Milestone work
 
@@ -1351,21 +1368,24 @@ Detector facts are not editorial policy. Store the facts and detector confidence
 5. Add one source lease so a project batch uses one materialization.
 6. Change PROBE into one coordinated derivative build.
 7. Keep original width and height authoritative. **Never write proxy dimensions into `SourceVideo.width/height`** — those columns drive the export crop rect (S13b); note they are nullable and export already hard-fails on null.
-8. Add Scribe v2 as the enriched provider. Keep `no_verbatim=false`. Benchmark against current whisper.cpp before making it the production default.
-9. Add scene, silence, black-frame, freeze, motion, waveform, and frame-hash facts.
-10. Evaluate commercially safe local person/face, OCR, and audio models before adding their weights (license check per CTO.md; weights via `/models` volume + SHA-256, never baked into the image).
-11. Run expensive local inference only on sparse cluster representatives.
-12. Persist source-level regions and detector versions. `FULLSCREEN_SLIDE` regions carry a subtype: `SCRIPTURE`, `SERMON_TITLE`, `MAIN_POINT`, `SUBPOINT`, `NUMBERED_POINT`, `SECTION_TRANSITION`, or `OTHER_PRESENTATION`, plus confidence and OCR evidence. This lets final QC report and test each forbidden slide class instead of collapsing all slides into one label.
-13. Implement `timeline_view` and `boundary_strip` from the shared 480p proxy. Register the proxy's storage key in retention/DerivedMediaArtifact (S13a — an unregistered key leaks forever; the P1.9 four-key inventory work is the cautionary precedent).
-14. Apply boundary salvage: move a start after a short edge slide or an end before it. Reject a necessary mid-clip slide.
-15. Permit one paid visual escalation per ambiguous service within budget (S16). Still ambiguous → exception; no background retry.
-16. Add direct browser-to-R2 multipart upload for the S3 provider. Keep the current relay only for local storage or explicit fallback.
-17. Prove PERC recording retrieval and deletion as a separate intake experiment (zero PERC code exists today).
-18. Create keyframe-padded original-quality range derivatives for every retained candidate while the source is local. Merge overlaps; configurable handles.
-19. Verify every range derivative by checksum, duration, range coverage, source dimensions, and visual-quality comparison. Prefer stream copy when safe; otherwise a visually lossless mezzanine.
-20. After range-derivative proof passes, delete the large original earlier than `last scheduled date + 14 days`. Until then, keep that date as the conservative fallback.
-21. Render final scheduled/promoted clips from range derivatives. A full-source fallback is explicit, metered, and exception-visible.
-22. Register every artifact, byte count, retention class, and cleanup path.
+8. Add scene, silence, black-frame, freeze, motion, waveform, and frame-hash facts.
+9. Evaluate commercially safe local person/face, OCR, speech/music, and audio-event models before adding their weights (license check per CTO.md; weights via `/models` volume + SHA-256, never baked into the image).
+10. Run expensive local inference only on sparse cluster representatives.
+11. Build coarse source-level regions from free metadata hints and local audio/visual facts. Select one conservative continuous sermon corridor with configurable handles.
+12. Use short local-ASR windows only when a corridor boundary remains ambiguous. Permit one paid visual escalation per ambiguous service within budget (S16). Still ambiguous → human exception; no background retry and no silent full-service Scribe fallback.
+13. Extract one sermon-only 16 kHz mono FLAC. Store its exact source-time offset, duration, checksum, detector version, and corridor confidence.
+14. Change the production Scribe path to submit that single sermon-only artifact. Keep base Scribe v2, `no_verbatim=false`, no keyterms by default, word timestamps, diarization, and audio events. Preserve the completed whisper.cpp-versus-Scribe benchmark as the provider decision evidence.
+15. Derive deterministic silences, sentences, and paragraphs. Use the Scribe result to refine precise `SERMON`, `WORSHIP`, `ANNOUNCEMENT`, `PRAYER`, `BAPTISM`, `ALTAR_CALL`, and other service-content regions in source time.
+16. Persist source-level regions and detector versions. `FULLSCREEN_SLIDE` regions carry a subtype: `SCRIPTURE`, `SERMON_TITLE`, `MAIN_POINT`, `SUBPOINT`, `NUMBERED_POINT`, `SECTION_TRANSITION`, or `OTHER_PRESENTATION`, plus confidence and OCR evidence. Consecutive scripture slides also form a `VERSE_SLIDESHOW` region. This lets final QC report and test each forbidden slide class instead of collapsing all slides into one label.
+17. Implement `timeline_view` and `boundary_strip` from the shared 480p proxy. Register the proxy's storage key in retention/DerivedMediaArtifact (S13a — an unregistered key leaks forever; the P1.9 four-key inventory work is the cautionary precedent).
+18. Apply boundary salvage: move a start after a short edge slide or an end before it. Reject a necessary mid-clip slide.
+19. Add direct browser-to-R2 multipart upload for the S3 provider. Keep the current relay only for local storage or explicit fallback.
+20. Prove PERC recording retrieval and deletion as a separate intake experiment (zero PERC code exists today).
+21. Create keyframe-padded original-quality range derivatives for every retained candidate while the source is local. Merge overlaps; configurable handles.
+22. Verify every range derivative by checksum, duration, range coverage, source dimensions, and visual-quality comparison. Prefer stream copy when safe; otherwise a visually lossless mezzanine.
+23. After range-derivative proof passes, delete the large original earlier than `last scheduled date + 14 days`. Until then, keep that date as the conservative fallback.
+24. Render final scheduled/promoted clips from range derivatives. A full-source fallback is explicit, metered, and exception-visible.
+25. Register every artifact, byte count, retention class, and cleanup path.
 
 ### First P4 commit sketch
 
@@ -1383,13 +1403,17 @@ Detector facts are not editorial policy. Store the facts and detector confidence
 
 - One remote source acquisition creates all normal derivatives.
 - Transcript analysis does not read video pixels.
+- Paid transcription receives one sermon-only corridor during the normal path, never the complete service.
+- Every cropped transcript maps back to source time by a stored, tested offset.
+- The normal path never silently falls back to full-service Scribe or many per-clip Scribe requests.
 - Candidate playback uses one uncropped 480p proxy.
 - No reserve candidate receives a separate final MP4.
 - Proxy dimensions never modify original source dimensions.
 - Every artifact has checksum, byte count, derivation version, retention class, and a tested deletion path.
 - Media regions survive project reanalysis.
 - Full-screen-slide recall is published per detector version; expected initial autonomy target ≥90% of labeled slide-seconds (S18).
-- Known forbidden-slide overlap in deliverable candidates is zero.
+- Known worship, announcement, baptism, prayer, altar-call, and verse-slideshow overlap in deliverable candidates is zero.
+- Useful sermon speech over a forbidden visual interval remains available for text features but is not video-eligible.
 - One unresolved escalation creates an exception.
 - Normal final rendering reads candidate-range media, not the full service.
 - The range path has no material visual loss versus the original.
@@ -1405,6 +1429,10 @@ Detector facts are not editorial policy. Store the facts and detector confidence
 - A face printed on a slide is mistaken for a live pastor.
 - A local model license is not suitable for a commercial SaaS.
 - Scribe quality does not beat the current provider on real church audio.
+- A coarse boundary cuts valid sermon speech before Scribe can classify it.
+- A wrong source-time offset misaligns every caption and region after the crop.
+- Many small corridor requests replace the intended single Scribe request and erase the cost savings.
+- Paid boundary escalation costs more than the Scribe audio it was meant to save.
 
 P0 telemetry must decide proxy bitrate, FLAC settings, sparse-frame cadence, scene threshold, cache size, candidate handles, range-mezzanine format, and exact local models.
 

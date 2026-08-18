@@ -564,7 +564,7 @@ Why: `\k` timing requires getting libass's SecondaryColour/PrimaryColour wipe-di
 
 Tradeoff: The "Karaoke" preset doesn't actually animate word-by-word like its name implies — it's a static styling variant for now. Revisit if a future pass wants true word-highlight timing; `CaptionLine.words` already carries per-word start/end timestamps, so the data needed is already there.
 
-Status: Active — deferred, not abandoned.
+Status: Superseded by the 2026-08-13 per-word kinetic caption decision.
 
 ## 2026-07-06 - Center/Face Crop Is Computed At Render Time, Not Read From Editor State
 
@@ -1682,3 +1682,58 @@ decision. Telemetry must not destroy customer work or cause repeated paid spend.
 belongs at the evidence gate, where an incomplete report must be rejected.
 
 Status: Active. Cost-truth report schema version 2 adds the recording block.
+## 2026-08-13 - Exports Render One Continuous Range (P1.4/P1.5 Landed)
+
+Decision: The editor no longer creates internal word cuts (word-delete and filler-delete controls removed), and the export pipeline renders exactly one continuous interval from `source.startMs` to `source.endMs` in a single ffmpeg pass. Legacy editor states that still carry `deletedWordIds` are rejected at the exports route and in `runExportJob` with `CONTINUOUS_RANGE_REQUIRED`; the editor offers an explicit, versioned "Restore all deleted words" conversion. `computeKeptRanges`/`mapToKeptTimeline` and the extract→concat→encode 3-pass renderer are retired.
+
+Why: A clip selects part of the sermon; it does not rewrite what was said (product-owner Decision 3, agentic editor plan P1.4/P1.5). This also collapsed the preview/export divergence (the preview's own deleted-word skip logic is gone), removed two of the three encode passes, and reduced caption timeline remapping to a single constant offset — the substrate the kinetic caption work builds on.
+
+Tradeoff: Word-level deletion as an editing feature is gone; unconverted legacy clips cannot export until their owner restores the deleted words. Retry semantics treat `CONTINUOUS_RANGE_REQUIRED` like any failure (up to 3 attempts) — deterministic, but rare enough not to warrant a non-retryable path.
+
+Status: Active.
+
+## 2026-08-13 - Per-Word Kinetic Captions Use One ASS Event Per Word State, Not \k
+
+Decision: Word-level caption highlighting (color swap + scale pop) is implemented with one absolutely-positioned ASS Dialogue event per word state (`\an5\pos(x,y)` with base-before/active/base-after time splits), animated via `\t(...\fscx\fscy)` transforms — never `\k` karaoke tags. Line layout is computed in our own shared module (`src/lib/editor/caption-layout.ts`) using measured text widths (fontkit on the worker, canvas 2D in the browser preview), and both the ASS generator and the DOM preview consume that one layout plus one pop curve (`src/lib/editor/caption-animation.ts`). Self-hosted OFL fonts (Inter, Source Serif 4) ship in `public/fonts`, are registered with fontconfig in the worker image, and are the only faces the registry (`src/lib/editor/fonts.ts`) exposes.
+
+Why: `\k` only wipes color — it cannot express the CapCut/Opus-style scale pop, per-word stroke, or future per-word transforms. And libass centers a shared event by its rendered width, so scaling one word inside a shared line shifts every other word (reflow); words positioned at their own centers scale about themselves and nothing else can move. Owning layout is what makes the browser preview frame-accurate: both renderers position words from identical numbers instead of two engines approximating each other. Fonts had to ship anyway — the worker image previously had no fonts at all, so every existing export silently rendered a fontconfig fallback face.
+
+Tradeoff: We own line layout now — fontkit/canvas advance widths differ from libass's HarfBuzz shaping by kerning-level amounts, so word spacing can differ from what libass would have chosen (mitigated with `\fsp0`, `\q2`, and measuring the exact shipped faces; error appears as static spacing, never jitter). Event count rises to ≤3 per word for animating presets (~750 events for a 90s clip; libass handles thousands, x264 dominates pass cost). Legacy presets are pinned to `highlightMode: "none"` so no existing clip gains an animation it never had; "Karaoke" and the new "Kinetic" preset opt in. Installing real fonts changes the typeface of existing exports — an intentional fix, stated here rather than smuggled in. Georgia was replaced with Source Serif 4 in "Bold Serif": Microsoft faces cannot be redistributed in the image.
+
+Status: Active.
+
+## 2026-08-13 - Whisper Tokens Merge Into Words Forward-Only, No Backfill
+
+Decision: `parseWhisperCppOutput` now merges whisper.cpp sub-word tokens into whole words via `src/lib/transcription/token-merge.ts` (leading-space boundary signal on raw token text, ≤200ms end-time attachment guard for late-stamped punctuation, geometric-mean confidence, CJK/length guards). Existing `TranscriptSegment.words` rows are NOT backfilled; only new transcriptions produce merged words. SRT interpolation switched from uniform slices to length+punctuation-weighted distribution (`src/lib/transcription/timing.ts`) with a 1200ms per-word cap.
+
+Why: Word-level highlighting exposes token granularity ("un"/"believable" highlighting separately) and uniform SRT slices as visible jerks. The old parser's per-token `.trim()` destroyed the leading-space boundary marker before anything could use it. A backfill was rejected because editor word ids are positional (`segmentId:index`, per the word-timestamps-as-JSONB decision): renumbering would silently repoint any legacy `deletedWordIds` at different words. Re-transcribe is the escape hatch for old projects that want merged words.
+
+Tradeoff: Transcripts created before this change highlight at sub-word granularity until re-transcribed. Merged-word confidence is a derived (geometric mean) value, not a raw whisper probability.
+
+Status: Active.
+
+## 2026-08-16 - Base Scribe v2 Is the Default Transcription Provider
+
+Decision: Use ElevenLabs base Scribe v2 as the primary transcription provider when
+`ELEVENLABS_API_KEY` is configured. Do not send paid keyterms by default. Keep opt-in project
+keyterms for known church-specific names. Keep whisper.cpp available as the local fallback when
+Scribe is not configured.
+
+Store one canonical full-sermon transcript with sentence segments, speaker labels, and normalized
+word timestamps. Every clip reuses ranges from that record. Do not transcribe each clip again.
+Keep the canonical sermon transcript available for later search and transcript-based features,
+including a future text-post generator.
+
+Why: On the same 47-minute sermon, base Scribe corrected all seven targeted church-language errors
+that whisper.cpp missed. It completed in 47.77 seconds and produced timing close to the separate
+forced-alignment result. The no-keyterm output was 99.42 percent similar to the keyterm output and
+correctly produced all seven targeted phrases, so the keyterm surcharge had no measured benefit.
+
+Tradeoff: Scribe sends sermon audio to an external provider and costs about $0.22 per audio hour.
+The automatic pre-transcription sermon-boundary stage is not implemented yet. Until that separate
+stage lands, a full-service source still reaches transcription as full-service audio. This provider
+change must not be represented as completing worship, announcement, baptism, prayer, or altar-call
+exclusion before paid transcription.
+
+Status: Active. Benchmark evidence is in
+`evaluation/asr-benchmark-whisper-cpp-vs-scribe-2026-08-16.md`.

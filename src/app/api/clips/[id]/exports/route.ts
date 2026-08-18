@@ -2,6 +2,8 @@ import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
 import { approvalExportBlockMessage, isClipApprovedForExport } from "@/lib/approval";
+import { hasInternalCuts } from "@/lib/editor/continuous-edit";
+import { editorStateSchema } from "@/lib/editor/types";
 import { buildDefaultExportFilename } from "@/lib/export/filename";
 import { enqueueExportJob } from "@/lib/exports/queue";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
@@ -50,6 +52,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     orderBy: { version: "desc" },
   });
   const editVersion = latestEdit?.version ?? 0;
+
+  // P1.5: deliverables render exactly one continuous range. Legacy documents that still carry
+  // internal word cuts must be converted in the editor first — the worker enforces the same
+  // rule, but rejecting here gives the user the message before a job is queued.
+  const latestState = latestEdit ? editorStateSchema.safeParse(latestEdit.editorState) : null;
+  if (latestState?.success && hasInternalCuts(latestState.data)) {
+    return apiError(
+      "CONTINUOUS_RANGE_REQUIRED",
+      "This clip still has word deletions from an older editor. Open it and restore the deleted words, then export.",
+      { status: 409 },
+    );
+  }
 
   const filename =
     parsed.data.filename ??

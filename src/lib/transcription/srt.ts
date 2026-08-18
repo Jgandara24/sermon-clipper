@@ -1,3 +1,4 @@
+import { distributeDurationByWeight } from "./timing";
 import type { TranscriptSegmentResult, TranscriptWord, TranscriptionResult } from "./types";
 
 export class SrtParseError extends Error {}
@@ -15,15 +16,12 @@ function timecodeToMs(timecode: string): number {
 
 function interpolateWords(text: string, startMs: number, endMs: number): TranscriptWord[] {
   const tokens = text.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return [];
-
-  const duration = Math.max(endMs - startMs, tokens.length);
-  const perWord = duration / tokens.length;
-
-  return tokens.map((word, idx) => ({
-    word,
-    startMs: Math.round(startMs + idx * perWord),
-    endMs: Math.round(startMs + (idx + 1) * perWord),
+  // Weighted (by word length + punctuation pauses) rather than uniform slices, so word-level
+  // caption highlighting paces naturally through interpolated cues instead of jerking.
+  return distributeDurationByWeight(tokens, startMs, endMs).map(({ token, startMs, endMs }) => ({
+    word: token,
+    startMs,
+    endMs,
     confidence: 1,
     isFiller: false,
     deleted: false,
@@ -77,5 +75,22 @@ export function parseSrt(srtText: string, language = "en"): TranscriptionResult 
     throw new SrtParseError("No valid cues found in SRT file.");
   }
 
-  return { language, segments };
+  // Some caption tools keep the prior cue visible after the next cue starts. Those display
+  // windows overlap even though the speech is sequential. For word timing, the next cue start
+  // is the only precise boundary present in the SRT, so do not spread the prior cue beyond it.
+  const speechSegments = segments.map((segment, index) => {
+    const nextStartMs = segments[index + 1]?.startMs;
+    const endMs =
+      nextStartMs !== undefined && nextStartMs > segment.startMs
+        ? Math.min(segment.endMs, nextStartMs)
+        : segment.endMs;
+    if (endMs === segment.endMs) return segment;
+    return {
+      ...segment,
+      endMs,
+      words: interpolateWords(segment.text, segment.startMs, endMs),
+    };
+  });
+
+  return { language, segments: speechSegments };
 }

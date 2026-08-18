@@ -18,7 +18,11 @@ import {
   storageTransferCostFact,
 } from "@/lib/storage";
 import { applyFillerDetection } from "@/lib/transcription/filler-detection";
-import { getTranscriptionProvider } from "@/lib/transcription";
+import {
+  getTranscriptionProvider,
+  readScribeKeyterms,
+  scribePricePerMinuteUsd,
+} from "@/lib/transcription";
 import { parseSrt, SrtParseError } from "@/lib/transcription/srt";
 import {
   TranscriptionProviderUnavailableError,
@@ -36,21 +40,23 @@ async function recordTranscriptionFact(params: {
   runtime: RuntimeMeasurement;
   outcome: ProcessingCostOutcome;
   source: "audio" | "srt_override";
+  keytermsCount?: number;
 }) {
+  const isScribe = params.provider === "elevenlabs_scribe_v2";
   await recordProcessingCostFactSafely(params.prisma, {
     stage: "transcription",
     quantity: params.durationS / 60,
     unit: "minute",
-    unitCostUsd: 0,
+    unitCostUsd: isScribe ? scribePricePerMinuteUsd((params.keytermsCount ?? 0) > 0) : 0,
     provider: params.provider,
-    model: params.provider,
+    model: isScribe ? "scribe_v2" : params.provider,
     providerProvenance: "runtime_provider_selection",
     cpuTimeMs: params.runtime.cpuTimeMs,
     wallTimeMs: params.runtime.wallTimeMs,
     cacheState: "miss",
     attempt: Math.max(1, params.attempt),
     outcome: params.outcome,
-    details: { source: params.source },
+    details: { source: params.source, keytermsCount: params.keytermsCount ?? 0 },
     workspaceId: params.workspaceId,
     projectId: params.projectId,
     jobId: params.jobId,
@@ -100,6 +106,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   }
 
   const storage = getStorageProvider();
+  const transcriptionKeyterms = readScribeKeyterms(project.processingConfig);
   let result: TranscriptionResult;
   let providerName: string;
 
@@ -198,6 +205,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         result = await provider.transcribe({
           audioPath,
           language: sourceVideo.language ?? undefined,
+          keyterms: transcriptionKeyterms,
         });
       } catch (error) {
         await recordTranscriptionFact({
@@ -211,6 +219,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
           runtime: provider.lastTelemetry ?? finishRuntimeMeasurement(transcriptionStartedAt),
           outcome: "failed",
           source: "audio",
+          keytermsCount: transcriptionKeyterms.length,
         });
         throw error;
       }
@@ -227,6 +236,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         runtime: provider.lastTelemetry ?? finishRuntimeMeasurement(transcriptionStartedAt),
         outcome: "succeeded",
         source: "audio",
+        keytermsCount: transcriptionKeyterms.length,
       });
     } catch (error) {
       if (!downloadSucceeded) {
@@ -279,6 +289,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
           startMs: segment.startMs,
           endMs: segment.endMs,
           text: segment.text,
+          speakerLabel: segment.speakerLabel,
           words: segment.words,
         },
       });

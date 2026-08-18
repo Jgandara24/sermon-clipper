@@ -30,7 +30,7 @@ export function BrandTemplatePanel({
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2">
-        <BadgeCheck size={18} className="text-teal-800" aria-hidden="true" />
+        <BadgeCheck size={18} className="text-red-700" aria-hidden="true" />
         <h2 className="font-semibold">Brand</h2>
       </div>
       {templates.length === 0 ? (
@@ -57,7 +57,7 @@ export function BrandTemplatePanel({
               onClick={() => onApply(template)}
               className={`rounded-md border px-3 py-2 text-left text-sm ${
                 selectedId === template.id
-                  ? "border-teal-700 bg-teal-50 text-teal-900"
+                  ? "border-red-600 bg-red-50 text-red-900"
                   : "border-stone-300 text-stone-600 hover:bg-stone-50"
               }`}
             >

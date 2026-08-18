@@ -165,13 +165,22 @@ function checkStripeEnv(env: EnvLike): ReadinessCheck[] {
 function checkGenerationProviderEnv(env: EnvLike): ReadinessCheck[] {
   if (env.NODE_ENV !== "production") return [];
 
+  const transcriptionProvider = env.ELEVENLABS_API_KEY
+    ? env.WHISPER_MODEL_PATH
+      ? "ElevenLabs Scribe is configured as primary; whisper.cpp is configured as fallback."
+      : "ElevenLabs Scribe is configured as the transcription provider."
+    : env.WHISPER_MODEL_PATH
+      ? "whisper.cpp is configured as the local transcription fallback."
+      : null;
+
   return [
-    env.WHISPER_MODEL_PATH
-      ? { name: "WHISPER_MODEL_PATH", status: "ok", message: "Whisper transcription model path is configured." }
+    transcriptionProvider
+      ? { name: "TRANSCRIPTION_PROVIDER", status: "ok", message: transcriptionProvider }
       : {
-          name: "WHISPER_MODEL_PATH",
+          name: "TRANSCRIPTION_PROVIDER",
           status: "fail",
-          message: "WHISPER_MODEL_PATH is required in production so workers can transcribe uploaded sermons.",
+          message:
+            "ELEVENLABS_API_KEY or a readable WHISPER_MODEL_PATH is required for production transcription.",
         },
     env.ANTHROPIC_API_KEY?.startsWith("sk-ant") || Boolean(env.GEMINI_API_KEY)
       ? {
