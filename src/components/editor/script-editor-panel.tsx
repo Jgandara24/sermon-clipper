@@ -5,14 +5,16 @@ import type { EditorWordWithDeletion } from "@/lib/editor/words";
 
 export function ScriptEditorPanel({
   words,
-  onToggleWord,
+  hasLegacyCuts,
+  onRestoreDeletedWords,
   onExtendBefore,
   onExtendAfter,
   canExtendBefore,
   canExtendAfter,
 }: {
   words: EditorWordWithDeletion[];
-  onToggleWord: (word: { id: string; isFiller: boolean }) => void;
+  hasLegacyCuts: boolean;
+  onRestoreDeletedWords: () => void;
   onExtendBefore: () => void;
   onExtendAfter: () => void;
   canExtendBefore: boolean;
@@ -45,17 +47,31 @@ export function ScriptEditorPanel({
         </div>
       </div>
       <p className="mt-2 text-xs text-stone-500">
-        Click a word to delete it. Filler words are shown as chips, but every spoken word stays in
-        the clip unless you delete it.
+        Every spoken word inside the clip window is kept. Move the trim handles to change what the
+        clip covers. Filler words are shown as chips for reference only.
       </p>
+      {hasLegacyCuts ? (
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+          <p className="text-xs text-amber-900">
+            This clip was made with an older editor that could delete words inside the clip. Exports
+            now render one continuous range, so the deleted words must be restored before you can
+            export.
+          </p>
+          <button
+            type="button"
+            onClick={onRestoreDeletedWords}
+            className="mt-2 rounded-md border border-amber-400 bg-white px-2 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
+          >
+            Restore all deleted words
+          </button>
+        </div>
+      ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-1 leading-relaxed">
         {words.map((word) =>
           word.isFiller ? (
-            <button
+            <span
               key={word.id}
-              type="button"
-              onClick={() => onToggleWord(word)}
-              title={word.effectiveDeleted ? "Click to keep" : "Filler tag — click to delete"}
+              title="Filler tag"
               className={`rounded-full border px-2 py-0.5 text-xs ${
                 word.effectiveDeleted
                   ? "border-stone-300 bg-stone-100 text-stone-400 line-through"
@@ -63,18 +79,16 @@ export function ScriptEditorPanel({
               }`}
             >
               {word.word}
-            </button>
+            </span>
           ) : (
-            <button
+            <span
               key={word.id}
-              type="button"
-              onClick={() => onToggleWord(word)}
               className={`rounded px-1 text-sm ${
-                word.effectiveDeleted ? "text-stone-300 line-through" : "text-stone-800 hover:bg-teal-50"
+                word.effectiveDeleted ? "text-stone-300 line-through" : "text-stone-800"
               }`}
             >
               {word.word}
-            </button>
+            </span>
           ),
         )}
         {words.length === 0 ? (

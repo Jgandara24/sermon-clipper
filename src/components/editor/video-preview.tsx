@@ -35,10 +35,10 @@ export function VideoPreview({
     onCurrentMsChange?.(ms);
   };
 
-  const activeWords = words.filter((word) => !word.effectiveDeleted);
+  // P1.5: the preview plays the clip's one continuous range, so every word inside it is shown.
   const captionLines = applyCaptionTextOverrides(
     buildCaptionLines(
-      activeWords.map((word) => ({
+      words.map((word) => ({
         id: word.id,
         word: word.word,
         startMs: word.startMs,
@@ -91,14 +91,6 @@ export function VideoPreview({
     if (ms >= state.source.endMs) {
       video.currentTime = state.source.startMs / 1000;
       setCurrentMs(state.source.startMs);
-      return;
-    }
-
-    const deletedWord = words.find(
-      (word) => word.effectiveDeleted && ms >= word.startMs && ms < word.endMs,
-    );
-    if (deletedWord) {
-      video.currentTime = deletedWord.endMs / 1000;
       return;
     }
 

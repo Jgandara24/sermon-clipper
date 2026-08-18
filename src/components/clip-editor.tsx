@@ -15,6 +15,7 @@ import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { VideoPreview } from "@/components/editor/video-preview";
 import { MIN_CLIP_MS } from "@/lib/editor/trim";
+import { convertToContinuous, hasInternalCuts } from "@/lib/editor/continuous-edit";
 import type { EditorState } from "@/lib/editor/types";
 import {
   applyEditorDeletions,
@@ -144,19 +145,11 @@ export function ClipEditor({
     save(stateRef.current, false);
   }
 
-  function toggleWord(word: { id: string; isFiller: boolean }) {
-    updateState((prev) => {
-      const deleted = prev.wordEdits.deletedWordIds.includes(word.id);
-      return {
-        ...prev,
-        wordEdits: {
-          ...prev.wordEdits,
-          deletedWordIds: deleted
-            ? prev.wordEdits.deletedWordIds.filter((id) => id !== word.id)
-            : [...prev.wordEdits.deletedWordIds, word.id],
-        },
-      };
-    });
+  // P1.4: new edits never create internal word cuts. Legacy documents that still carry them
+  // are converted here — an explicit, versioned edit the user asks for, never a silent
+  // migration (word ids are positional, so a background rewrite could repoint them).
+  function restoreDeletedWords() {
+    updateState((prev) => convertToContinuous(prev));
   }
 
   // Drag-to-trim writes the clip window directly; the timeline has already snapped and clamped,
@@ -271,7 +264,8 @@ export function ClipEditor({
           />
           <ScriptEditorPanel
             words={wordsInClip}
-            onToggleWord={toggleWord}
+            hasLegacyCuts={hasInternalCuts(state)}
+            onRestoreDeletedWords={restoreDeletedWords}
             onExtendBefore={() => handleExtend("before")}
             onExtendAfter={() => handleExtend("after")}
             canExtendBefore={state.source.startMs > 0}
