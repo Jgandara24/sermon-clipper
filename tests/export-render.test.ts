@@ -34,15 +34,27 @@ describe("buildExportFilterGraph", () => {
 });
 
 describe("buildAudioFilterGraph", () => {
-  it("applies the selected source volume after loudness normalization", () => {
+  // ffmpeg's loudnorm reconfigures its output link mid-stream, and `volume` cannot renegotiate
+  // it — "Cannot select channel layout ... Error reinitializing filters!" kills the render.
+  // An explicit aformat between them pins the link, so the chain survives the reconfigure.
+  it("pins the audio format between loudness normalization and the volume change", () => {
     expect(buildAudioFilterGraph(0.42)).toBe(
-      "loudnorm=I=-16:TP=-1.5:LRA=11,volume=0.42",
+      "loudnorm=I=-16:TP=-1.5:LRA=11," +
+        "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo," +
+        "volume=0.42",
     );
+  });
+
+  // Full volume is the default for every clip, so it must produce exactly the graph that
+  // shipped before the audio panel existed — no extra filters, nothing new to renegotiate.
+  it("emits only loudness normalization at full volume", () => {
+    expect(buildAudioFilterGraph()).toBe("loudnorm=I=-16:TP=-1.5:LRA=11");
+    expect(buildAudioFilterGraph(1)).toBe("loudnorm=I=-16:TP=-1.5:LRA=11");
+    expect(buildAudioFilterGraph(2)).toBe("loudnorm=I=-16:TP=-1.5:LRA=11");
   });
 
   it("clamps volume to the editor range", () => {
     expect(buildAudioFilterGraph(-1)).toContain("volume=0.00");
-    expect(buildAudioFilterGraph(2)).toContain("volume=1.00");
   });
 });
 

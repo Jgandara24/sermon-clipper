@@ -37,9 +37,26 @@ export function buildExportFilterGraph(
   );
 }
 
+const LOUDNESS_FILTER = "loudnorm=I=-16:TP=-1.5:LRA=11";
+
+/**
+ * Loudness normalization, plus the clip's source-volume change when it is not full.
+ *
+ * loudnorm reconfigures its own output link while it runs, and a bare `volume` after it cannot
+ * renegotiate that link — ffmpeg aborts the whole render with "Cannot select channel layout ...
+ * Error reinitializing filters!". An explicit aformat pins the link so the chain survives.
+ *
+ * Full volume emits the loudness filter alone: that is every clip's default, and it must stay
+ * byte-for-byte the graph that shipped before the audio panel existed.
+ */
 export function buildAudioFilterGraph(originalVolume = 1): string {
   const volume = Math.min(1, Math.max(0, originalVolume));
-  return `loudnorm=I=-16:TP=-1.5:LRA=11,volume=${volume.toFixed(2)}`;
+  if (volume >= 1) return LOUDNESS_FILTER;
+  return (
+    `${LOUDNESS_FILTER},` +
+    "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo," +
+    `volume=${volume.toFixed(2)}`
+  );
 }
 
 async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
