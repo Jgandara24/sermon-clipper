@@ -15,6 +15,10 @@ bucket.
   `/api/stripe/webhook`.
 - Resend notification email or Twilio SMS credentials for production approval notifications.
 - `ffmpeg`/`ffprobe` available on worker hosts, with libass enabled for caption burn-in.
+- Caption fonts registered with fontconfig on worker hosts (`Dockerfile.worker` copies
+  `public/fonts` to `/usr/share/fonts/truetype/custom` and runs `fc-cache`; `CAPTION_FONT_DIR`
+  points at that directory). Without them libass silently substitutes a fallback face and the
+  render no longer matches the editor preview.
 - `whisper-cli` plus a local ggml model on every worker host for sermon transcription.
 - API access for each provider in the active analysis routing policy.
 

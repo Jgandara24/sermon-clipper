@@ -142,6 +142,7 @@ const fieldSchemas = {
   RAILWAY_EGRESS_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   WHISPER_CPP_BINARY: optionalString,
   WHISPER_MODEL_PATH: optionalString,
+  CAPTION_FONT_DIR: optionalString,
 
   // AI analysis
   ANTHROPIC_API_KEY: optionalString,
@@ -262,6 +263,15 @@ export function ffprobePath(): string {
 
 export function ytDlpPath(): string {
   return env.YTDLP_PATH || "yt-dlp";
+}
+
+/**
+ * Directory holding the caption TTFs. In the worker image this is the fontconfig-registered
+ * copy (Dockerfile.worker sets it); in dev it falls back to the repo's public/fonts, the same
+ * files the browser loads — measurement and burn-in always use identical faces.
+ */
+export function captionFontDir(): string {
+  return env.CAPTION_FONT_DIR || `${process.cwd()}/public/fonts`;
 }
 
 /**
