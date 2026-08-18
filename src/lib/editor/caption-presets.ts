@@ -105,7 +105,7 @@ export function normalizeCaptionStyle(base: CaptionStyleBase): CaptionStyle {
 
 // Original names/styles per guide §13 — never reuse a competitor's preset names.
 // Legacy presets keep highlightMode "none": existing clips must not suddenly animate.
-export const CAPTION_PRESETS: CaptionPreset[] = [
+const READABLE_CAPTION_PRESETS: CaptionPreset[] = [
   {
     id: "clean",
     name: "Clean",
@@ -113,7 +113,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       fontFamily: "Poppins, system-ui, sans-serif",
       sizePx: 44,
       textColor: "#FFFFFF",
-      highlightColor: "#2DD4BF",
+      highlightColor: "#EFFF00",
       background: "none",
       position: "bottom",
       alignment: "center",
@@ -121,6 +121,8 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       strokeColor: "#000000",
       strokePx: 2,
       shadow: true,
+      anchor: "center",
+      safeAnchor: "bottom-safe",
     }),
   },
   {
@@ -205,8 +207,41 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       maxWordsPerLine: 4,
     }),
   },
+  {
+    id: "highlighter",
+    name: "Highlighter",
+    style: normalizeCaptionStyle({
+      fontFamily: "Poppins, system-ui, sans-serif",
+      sizePx: 52,
+      textColor: "#FFFFFF",
+      highlightColor: "#EFFF00",
+      background: "none",
+      position: "bottom",
+      alignment: "center",
+      uppercase: true,
+      strokeColor: "#000000",
+      strokePx: 6,
+      shadow: false,
+      highlightMode: "word",
+      highlightScale: 1.14,
+      fontWeight: 800,
+      outlineWidthPx: 6,
+      anchor: "center",
+      safeAnchor: "bottom-safe",
+      maxWordsPerLine: 4,
+    }),
+  },
 ];
 
+/** Only these styles are offered for new selections. Removed ids stay readable below. */
+export const CAPTION_PRESETS = READABLE_CAPTION_PRESETS.filter(
+  (preset) => preset.id === "clean" || preset.id === "highlighter",
+);
+
 export function getCaptionPreset(id: string): CaptionPreset {
-  return CAPTION_PRESETS.find((preset) => preset.id === id) ?? CAPTION_PRESETS[0];
+  return READABLE_CAPTION_PRESETS.find((preset) => preset.id === id) ?? CAPTION_PRESETS[0];
+}
+
+export function isKnownCaptionPresetId(id: string): boolean {
+  return READABLE_CAPTION_PRESETS.some((preset) => preset.id === id);
 }

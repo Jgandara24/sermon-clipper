@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildDefaultEditorState } from "@/lib/editor/types";
 import {
   applyEditorDeletions,
+  applyWordTextOverrides,
   flattenWords,
   wordsInRange,
   type TranscriptSegmentInput,
@@ -71,6 +72,29 @@ describe("wordsInRange", () => {
     const words = flattenWords(SEGMENTS);
     const inRange = wordsInRange(words, 0, 1000);
     expect(inRange.map((w) => w.word)).toEqual(["Peace", "um", "is"]);
+  });
+});
+
+describe("applyWordTextOverrides", () => {
+  it("changes transcript text without changing word timing or identity", () => {
+    const words = flattenWords(SEGMENTS);
+    const corrected = applyWordTextOverrides(words, [
+      { wordId: "seg-1:1", text: "still" },
+    ]);
+
+    expect(corrected.find((word) => word.id === "seg-1:1")).toMatchObject({
+      word: "still",
+      startMs: 400,
+      endMs: 600,
+    });
+    expect(words.find((word) => word.id === "seg-1:1")?.word).toBe("um");
+  });
+
+  it("ignores an empty stored correction", () => {
+    const words = flattenWords(SEGMENTS);
+    expect(
+      applyWordTextOverrides(words, [{ wordId: "seg-1:0", text: "   " }])[0].word,
+    ).toBe("Peace");
   });
 });
 

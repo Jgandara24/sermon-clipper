@@ -9,6 +9,7 @@ export const MIN_CLIP_MS = 3_000;
 // clip length within these bounds — a 30s clip gets 30s of padding each side, a 5s clip gets 15s.
 export const VIEWPORT_PAD_MIN_MS = 15_000;
 export const VIEWPORT_PAD_MAX_MS = 60_000;
+export const TIMELINE_MAX_ZOOM_SPAN_MS = 12_000;
 
 export type TrimViewport = { start: number; end: number };
 
@@ -30,6 +31,30 @@ export function computeTrimViewport(
   const end = Math.min(sourceDurationMs, endMs + pad);
   // Degenerate guard (zero-length media / bad bounds): keep a non-empty window.
   return end > start ? { start, end } : { start: 0, end: Math.max(1, sourceDurationMs) };
+}
+
+/**
+ * Visible source time for the multi-track timeline. Zero zoom keeps the existing padded trim view.
+ * Maximum zoom shows a twelve-second window centered on the requested time. The window always
+ * stays inside the real media bounds.
+ */
+export function computeTimelineViewport(
+  startMs: number,
+  endMs: number,
+  sourceDurationMs: number,
+  centerMs: number,
+  zoom: number,
+): TrimViewport {
+  const duration = Math.max(1, sourceDurationMs);
+  const base = computeTrimViewport(startMs, endMs, duration);
+  const baseSpan = base.end - base.start;
+  const normalizedZoom = clamp(zoom, 0, 1);
+  const minimumSpan = Math.min(baseSpan, TIMELINE_MAX_ZOOM_SPAN_MS);
+  const span = baseSpan - (baseSpan - minimumSpan) * normalizedZoom;
+  if (normalizedZoom === 0) return base;
+  const desiredStart = clamp(centerMs, 0, duration) - span / 2;
+  const start = clamp(desiredStart, 0, duration - span);
+  return { start: Math.round(start), end: Math.round(start + span) };
 }
 
 /**

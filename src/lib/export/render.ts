@@ -37,6 +37,11 @@ export function buildExportFilterGraph(
   );
 }
 
+export function buildAudioFilterGraph(originalVolume = 1): string {
+  const volume = Math.min(1, Math.max(0, originalVolume));
+  return `loudnorm=I=-16:TP=-1.5:LRA=11,volume=${volume.toFixed(2)}`;
+}
+
 async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
   try {
     await execFileWithTimeout(ffmpegPath, args, {
@@ -62,6 +67,7 @@ export type RenderClipExportParams = {
   outputPath: string;
   outputWidth: number;
   outputHeight: number;
+  originalVolume?: number;
 };
 
 /**
@@ -103,7 +109,7 @@ export async function renderClipExport(params: RenderClipExportParams): Promise<
         params.fontsDir,
       ),
       "-af",
-      "loudnorm=I=-16:TP=-1.5:LRA=11",
+      buildAudioFilterGraph(params.originalVolume),
       "-c:v",
       "libx264",
       "-preset",

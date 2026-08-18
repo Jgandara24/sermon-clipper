@@ -24,6 +24,8 @@ export type EditorWord = {
   isFiller: boolean;
 };
 
+export type WordTextOverride = { wordId: string; text: string };
+
 /** Flattens every segment's word list into one time-ordered list with stable editor word ids. */
 export function flattenWords(segments: TranscriptSegmentInput[]): EditorWord[] {
   const words: EditorWord[] = [];
@@ -60,6 +62,17 @@ export function flattenWords(segments: TranscriptSegmentInput[]): EditorWord[] {
 
 export function wordsInRange(words: EditorWord[], startMs: number, endMs: number): EditorWord[] {
   return words.filter((word) => word.startMs >= startMs && word.startMs < endMs);
+}
+
+export function applyWordTextOverrides(
+  words: EditorWord[],
+  overrides: readonly WordTextOverride[],
+): EditorWord[] {
+  const overrideMap = new Map(overrides.map((override) => [override.wordId, override.text]));
+  return words.map((word) => {
+    const text = overrideMap.get(word.id)?.trim();
+    return text ? { ...word, word: text } : word;
+  });
 }
 
 export type EditorWordWithDeletion = EditorWord & { effectiveDeleted: boolean };

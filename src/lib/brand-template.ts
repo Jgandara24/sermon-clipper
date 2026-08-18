@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CAPTION_PRESETS } from "@/lib/editor/caption-presets";
+import { isKnownCaptionPresetId } from "@/lib/editor/caption-presets";
 
 export const lowerThirdSchema = z.object({
   headline: z.string().trim().max(80).optional().default(""),
@@ -13,7 +13,7 @@ export const brandTemplateInputSchema = z.object({
   speakerName: z.string().trim().max(80).optional().or(z.literal("")),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  captionPresetId: z.string().refine((id) => CAPTION_PRESETS.some((preset) => preset.id === id)),
+  captionPresetId: z.string().refine(isKnownCaptionPresetId),
   lowerThirdHeadline: z.string().trim().max(80).optional().or(z.literal("")),
   lowerThirdSubhead: z.string().trim().max(120).optional().or(z.literal("")),
   isDefault: z.boolean().optional(),

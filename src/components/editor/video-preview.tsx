@@ -1,5 +1,6 @@
 "use client";
 
+import { Pause, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import {
@@ -14,8 +15,10 @@ import {
 } from "@/lib/editor/caption-transform";
 import { CAPTION_STYLE_LIMITS } from "@/lib/editor/caption-presets";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
+import { resolveCaptionFont } from "@/lib/editor/fonts";
 import { safeAreaBounds, UNIVERSAL_SOCIAL_SAFE_AREA } from "@/lib/editor/social-safe-area";
 import type { EditorState } from "@/lib/editor/types";
+import type { TitleBannerOverlay } from "@/lib/editor/title-banner";
 import type { EditorWordWithDeletion } from "@/lib/editor/words";
 import type { EditorBrandTemplate } from "@/components/editor/brand-template-panel";
 import { useTextMeasurer } from "@/components/editor/use-text-measurer";
@@ -44,6 +47,15 @@ export function VideoPreview({
   onCaptionSelectedChange,
   onCaptionPositionChange,
   onCaptionSizeChange,
+  titleBanner = null,
+  titleSelected = false,
+  onTitleSelectedChange,
+  onTitleBannerChange,
+  playbackRequest = null,
+  onPlaybackChange,
+  simpleMode = false,
+  playing = false,
+  onTransport,
   seek,
   fillHeight = false,
 }: {
@@ -60,6 +72,15 @@ export function VideoPreview({
   onCaptionPositionChange?: (placement: CaptionPlacement) => void;
   /** Corner-handle resize writes the caption font size into the editor state. */
   onCaptionSizeChange?: (sizePx: number) => void;
+  titleBanner?: TitleBannerOverlay | null;
+  titleSelected?: boolean;
+  onTitleSelectedChange?: (selected: boolean) => void;
+  onTitleBannerChange?: (banner: TitleBannerOverlay) => void;
+  playbackRequest?: { command: "toggle"; token: number } | null;
+  onPlaybackChange?: (playing: boolean) => void;
+  simpleMode?: boolean;
+  playing?: boolean;
+  onTransport?: (command: "toggle") => void;
   /** External seek request (from clicking/dragging the timeline). Bump `token` to re-seek. */
   seek?: { ms: number; token: number } | null;
   fillHeight?: boolean;
@@ -70,7 +91,15 @@ export function VideoPreview({
   const [stageScale, setStageScale] = useState(0.2);
   const [dragPlacement, setDragPlacement] = useState<CaptionPlacement | null>(null);
   const [resizeSizePx, setResizeSizePx] = useState<number | null>(null);
+  const [titleTransformDraft, setTitleTransformDraft] = useState<TitleBannerOverlay | null>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const titleDragOffsetRef = useRef({ x: 0, y: 0 });
+  const titleResizeRef = useRef<{
+    corner: CaptionResizeCorner;
+    startClientX: number;
+    startWidthPct: number;
+    startFontSizePx: number;
+  } | null>(null);
   const resizeRef = useRef<{
     corner: CaptionResizeCorner;
     centerX: number;
@@ -180,6 +209,24 @@ export function VideoPreview({
     onCurrentMsChange?.(seek.ms);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seek?.token]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !playbackRequest) return;
+    if (video.paused) {
+      void video.play().catch(() => onPlaybackChange?.(false));
+    } else {
+      video.pause();
+    }
+    // A token makes repeated presses of the same command observable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackRequest?.token]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = Math.min(1, Math.max(0, state.audio.originalVolume));
+  }, [state.audio.originalVolume]);
 
   // rAF playback clock: timeupdate fires at ~4-15Hz, far too coarse to animate a 90ms word
   // pop. While the video plays, sample currentTime every frame.
@@ -408,6 +455,132 @@ export function VideoPreview({
     );
   }
 
+  const displayedTitleBanner = titleTransformDraft ?? titleBanner;
+
+  function titlePositionFromPointer(clientX: number, clientY: number) {
+    const rect = stageWrapRef.current?.getBoundingClientRect();
+    if (!rect || !displayedTitleBanner) return null;
+    const halfWidth = displayedTitleBanner.widthPct / 2;
+    const positionX =
+      ((clientX - rect.left) / rect.width) * 100 - titleDragOffsetRef.current.x;
+    const positionY =
+      ((clientY - rect.top) / rect.height) * 100 - titleDragOffsetRef.current.y;
+    return {
+      positionX: Math.round(Math.min(100 - halfWidth, Math.max(halfWidth, positionX)) * 2) / 2,
+      positionY: Math.round(Math.min(96, Math.max(4, positionY)) * 2) / 2,
+    };
+  }
+
+  function handleTitleDragPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (!titleBanner || (event.target as HTMLElement).closest("[data-title-resize]")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    videoRef.current?.pause();
+    onCaptionSelectedChange?.(false);
+    onTitleSelectedChange?.(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const rect = stageWrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    titleDragOffsetRef.current = {
+      x: ((event.clientX - rect.left) / rect.width) * 100 - titleBanner.positionX,
+      y: ((event.clientY - rect.top) / rect.height) * 100 - titleBanner.positionY,
+    };
+    setTitleTransformDraft(titleBanner);
+  }
+
+  function handleTitleDragPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!titleTransformDraft || titleResizeRef.current) return;
+    const position = titlePositionFromPointer(event.clientX, event.clientY);
+    if (position) setTitleTransformDraft((banner) => (banner ? { ...banner, ...position } : banner));
+  }
+
+  function handleTitleDragPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (!titleTransformDraft || titleResizeRef.current) return;
+    const position = titlePositionFromPointer(event.clientX, event.clientY);
+    const next = position ? { ...titleTransformDraft, ...position } : titleTransformDraft;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    setTitleTransformDraft(null);
+    onTitleBannerChange?.(next);
+  }
+
+  function handleTitleDragKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!titleBanner || !event.key.startsWith("Arrow")) return;
+    const directions: Record<string, { x: number; y: number }> = {
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 },
+      ArrowUp: { x: 0, y: -1 },
+      ArrowDown: { x: 0, y: 1 },
+    };
+    const direction = directions[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    const step = event.shiftKey ? 5 : 1;
+    const halfWidth = titleBanner.widthPct / 2;
+    onTitleBannerChange?.({
+      ...titleBanner,
+      positionX: Math.min(
+        100 - halfWidth,
+        Math.max(halfWidth, titleBanner.positionX + direction.x * step),
+      ),
+      positionY: Math.min(96, Math.max(4, titleBanner.positionY + direction.y * step)),
+    });
+  }
+
+  function titleResizeFromPointer(clientX: number) {
+    const session = titleResizeRef.current;
+    const rect = stageWrapRef.current?.getBoundingClientRect();
+    if (!session || !rect || !titleTransformDraft) return null;
+    const horizontalDirection = session.corner.includes("left") ? -1 : 1;
+    const deltaPct = ((clientX - session.startClientX) / rect.width) * 200 * horizontalDirection;
+    const widthPct = Math.min(100, Math.max(30, session.startWidthPct + deltaPct));
+    const fontSizePx = Math.min(
+      120,
+      Math.max(16, Math.round(session.startFontSizePx * (widthPct / session.startWidthPct))),
+    );
+    const roundedWidthPct = Math.round(widthPct * 2) / 2;
+    const halfWidthPct = roundedWidthPct / 2;
+    return {
+      widthPct: roundedWidthPct,
+      fontSizePx,
+      positionX: Math.min(
+        100 - halfWidthPct,
+        Math.max(halfWidthPct, titleTransformDraft.positionX),
+      ),
+    };
+  }
+
+  function handleTitleResizePointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!titleBanner) return;
+    event.preventDefault();
+    event.stopPropagation();
+    videoRef.current?.pause();
+    onCaptionSelectedChange?.(false);
+    onTitleSelectedChange?.(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    titleResizeRef.current = {
+      corner: event.currentTarget.dataset.titleResize as CaptionResizeCorner,
+      startClientX: event.clientX,
+      startWidthPct: titleBanner.widthPct,
+      startFontSizePx: titleBanner.fontSizePx,
+    };
+    setTitleTransformDraft(titleBanner);
+  }
+
+  function handleTitleResizePointerMove(event: React.PointerEvent<HTMLButtonElement>) {
+    const resize = titleResizeFromPointer(event.clientX);
+    if (resize) setTitleTransformDraft((banner) => (banner ? { ...banner, ...resize } : banner));
+  }
+
+  function handleTitleResizePointerUp(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!titleResizeRef.current || !titleTransformDraft) return;
+    const resize = titleResizeFromPointer(event.clientX);
+    const next = resize ? { ...titleTransformDraft, ...resize } : titleTransformDraft;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    titleResizeRef.current = null;
+    setTitleTransformDraft(null);
+    onTitleBannerChange?.(next);
+  }
+
   return (
     <div
       className={`overflow-hidden rounded-lg border border-white/10 bg-black shadow-2xl ${
@@ -417,7 +590,10 @@ export function VideoPreview({
       <div
         ref={stageWrapRef}
         onPointerDown={(event) => {
-          if (event.target === event.currentTarget) onCaptionSelectedChange?.(false);
+          if (event.target === event.currentTarget) {
+            onCaptionSelectedChange?.(false);
+            onTitleSelectedChange?.(false);
+          }
         }}
         className={`relative aspect-[9/16] overflow-hidden bg-black ${
           fillHeight ? "h-full w-full" : "w-full"
@@ -427,7 +603,9 @@ export function VideoPreview({
           ref={videoRef}
           src={sourceVideoUrl}
           onTimeUpdate={handleTimeUpdate}
-          controls
+          onPlay={() => onPlaybackChange?.(true)}
+          onPause={() => onPlaybackChange?.(false)}
+          onEnded={() => onPlaybackChange?.(false)}
           playsInline
           className="absolute inset-0 h-full w-full object-cover"
           style={{
@@ -435,6 +613,94 @@ export function VideoPreview({
             transform: zoom !== 1 ? `scale(${zoom})` : undefined,
           }}
         />
+
+        {simpleMode && onTransport ? (
+          <div className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => onTransport("toggle")}
+              className="pointer-events-auto flex h-16 w-16 items-center justify-center rounded-full border border-white/25 bg-black/70 text-white shadow-2xl backdrop-blur-sm transition hover:scale-105 hover:bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              aria-label={playing ? "Pause clip preview" : "Preview clip"}
+            >
+              {playing ? (
+                <Pause size={26} fill="currentColor" aria-hidden="true" />
+              ) : (
+                <Play size={26} fill="currentColor" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        ) : null}
+
+        {displayedTitleBanner &&
+        displayedTitleBanner.text &&
+        currentMs >= displayedTitleBanner.startMs &&
+        currentMs < displayedTitleBanner.endMs ? (
+          <div
+            role="group"
+            aria-label="Title overlay transform controls"
+            tabIndex={0}
+            onPointerDown={handleTitleDragPointerDown}
+            onPointerMove={handleTitleDragPointerMove}
+            onPointerUp={handleTitleDragPointerUp}
+            onPointerCancel={handleTitleDragPointerUp}
+            onKeyDown={handleTitleDragKeyDown}
+            className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 cursor-move touch-none border focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
+              titleSelected || titleTransformDraft ? "border-white" : "border-transparent"
+            }`}
+            style={{
+              left: `${displayedTitleBanner.positionX}%`,
+              top: `${displayedTitleBanner.positionY}%`,
+              width: `${displayedTitleBanner.widthPct}%`,
+            }}
+          >
+            <div
+              className="pointer-events-none w-full"
+              style={{
+                backgroundColor: displayedTitleBanner.backgroundColor,
+                color: displayedTitleBanner.textColor,
+                borderRadius: displayedTitleBanner.borderRadiusPx * stageScale,
+                border:
+                  displayedTitleBanner.borderWidthPx > 0
+                    ? `${Math.max(1, displayedTitleBanner.borderWidthPx * stageScale)}px solid ${displayedTitleBanner.borderColor}`
+                    : undefined,
+                padding: `${Math.max(4, 12 * stageScale)}px ${Math.max(8, 24 * stageScale)}px`,
+                boxShadow:
+                  displayedTitleBanner.shadowDistancePx > 0
+                    ? `${displayedTitleBanner.shadowDistancePx * stageScale}px ${displayedTitleBanner.shadowDistancePx * stageScale}px ${displayedTitleBanner.shadowDistancePx * stageScale}px ${displayedTitleBanner.shadowColor}`
+                    : undefined,
+                fontFamily: resolveCaptionFont(displayedTitleBanner.fontFamily).cssFamily,
+                fontSize: Math.max(10, displayedTitleBanner.fontSizePx * stageScale),
+                fontWeight: displayedTitleBanner.fontWeight,
+                fontStyle: displayedTitleBanner.italic ? "italic" : "normal",
+                textDecoration: displayedTitleBanner.underline ? "underline" : "none",
+                textAlign: displayedTitleBanner.alignment,
+                lineHeight: 1.15,
+              }}
+            >
+              {displayedTitleBanner.text}
+            </div>
+            {titleSelected || titleTransformDraft
+              ? ([
+                  ["top-left", "left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize"],
+                  ["top-right", "right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize"],
+                  ["bottom-left", "bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize"],
+                  ["bottom-right", "bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize"],
+                ] as const).map(([corner, positionClass]) => (
+                  <button
+                    key={corner}
+                    type="button"
+                    data-title-resize={corner}
+                    aria-label={`Resize title from ${corner.replace("-", " ")}`}
+                    onPointerDown={handleTitleResizePointerDown}
+                    onPointerMove={handleTitleResizePointerMove}
+                    onPointerUp={handleTitleResizePointerUp}
+                    onPointerCancel={handleTitleResizePointerUp}
+                    className={`absolute h-3.5 w-3.5 touch-none rounded-full border-2 border-white bg-black shadow-[0_0_0_1px_rgba(0,0,0,0.5)] ${positionClass}`}
+                  />
+                ))
+              : null}
+          </div>
+        ) : null}
 
         {showSafeZones || captionSelected || dragPlacement ? (
           <div

@@ -75,10 +75,30 @@ export type GenerateAssSubtitlesParams = {
     startMs: number;
     endMs: number;
   } | null;
+  titleBanner?: {
+    text: string;
+    startMs: number;
+    endMs: number;
+    fontFamily?: string;
+    fontSizePx?: number;
+    fontWeight?: number;
+    textColor?: string;
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidthPx?: number;
+    shadowColor?: string;
+    shadowDistancePx?: number;
+    widthPct?: number;
+    positionX?: number;
+    positionY?: number;
+    alignment?: "left" | "center" | "right";
+    italic?: boolean;
+    underline?: boolean;
+  } | null;
 };
 
 export function generateAssSubtitles(params: GenerateAssSubtitlesParams): string {
-  const { lines, style, videoWidth, videoHeight, measure, lowerThird } = params;
+  const { lines, style, videoWidth, videoHeight, measure, lowerThird, titleBanner } = params;
 
   const fontName = assFontName(style.fontFamily, style.fontWeight);
   const bold = assBoldFlag(style.fontFamily, style.fontWeight) ? 1 : 0;
@@ -87,6 +107,12 @@ export function generateAssSubtitles(params: GenerateAssSubtitlesParams): string
   const outlineColor = hexToAssColor(style.outlineColor);
   // Under BorderStyle 1, libass draws the drop shadow in BackColour.
   const shadowColor = hexToAssColor(style.shadowColor);
+  const titleFontFamily = titleBanner?.fontFamily ?? style.fontFamily;
+  const titleFontWeight = titleBanner?.fontWeight ?? 700;
+  const titleFontName = assFontName(titleFontFamily, titleFontWeight);
+  const titleBold = assBoldFlag(titleFontFamily, titleFontWeight) ? 1 : 0;
+  const titleTextAlignment =
+    titleBanner?.alignment === "left" ? 4 : titleBanner?.alignment === "right" ? 6 : 5;
 
   const header = [
     "[Script Info]",
@@ -102,6 +128,8 @@ export function generateAssSubtitles(params: GenerateAssSubtitlesParams): string
     `Style: Caption,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${shadowColor},${bold},0,0,0,100,100,0,0,1,${style.outlineWidthPx},${style.shadowDistancePx},5,0,0,0,1`,
     "Style: CaptionBox,Arial,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1",
     `Style: LowerThird,${fontName},38,${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},1,0,0,0,100,100,0,0,3,8,1,1,70,70,400,1`,
+    `Style: TitleBanner,${titleFontName},${titleBanner?.fontSizePx ?? 40},${hexToAssColor(titleBanner?.textColor ?? "#000000")},${hexToAssColor(titleBanner?.textColor ?? "#000000")},${hexToAssColor(titleBanner?.borderColor ?? "#000000")},${hexToAssColor(titleBanner?.shadowColor ?? "#000000")},${titleBold},${titleBanner?.italic ? 1 : 0},${titleBanner?.underline ? 1 : 0},0,100,100,0,0,1,0,${titleBanner?.shadowDistancePx ?? 0},5,0,0,0,1`,
+    "Style: TitleBannerBox,Arial,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1",
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -182,6 +210,53 @@ export function generateAssSubtitles(params: GenerateAssSubtitlesParams): string
   const lowerThirdEvent = lowerThird
     ? `Dialogue: 1,${msToAssTime(lowerThird.startMs)},${msToAssTime(lowerThird.endMs)},LowerThird,,0,0,0,,${escapeAssText(`${lowerThird.headline}\\N${lowerThird.subhead}`)}`
     : "";
+  const titleBannerEvents: string[] = [];
+  if (titleBanner && titleBanner.text.trim() && titleBanner.endMs - titleBanner.startMs >= MIN_EVENT_MS) {
+    const start = msToAssTime(titleBanner.startMs);
+    const end = msToAssTime(titleBanner.endMs);
+    const width = Math.round(
+      videoWidth * (Math.min(100, Math.max(30, titleBanner.widthPct ?? 75)) / 100),
+    );
+    const height = Math.round((titleBanner.fontSizePx ?? 40) * 1.15 + 24);
+    const requestedCenterX =
+      videoWidth * (Math.min(95, Math.max(5, titleBanner.positionX ?? 50)) / 100);
+    const requestedCenterY =
+      videoHeight * (Math.min(95, Math.max(5, titleBanner.positionY ?? 12)) / 100);
+    const centerX = Math.min(videoWidth - width / 2, Math.max(width / 2, requestedCenterX));
+    const centerY = Math.min(videoHeight - height / 2, Math.max(height / 2, requestedCenterY));
+    const left = Math.round(centerX - width / 2);
+    const top = Math.round(centerY - height / 2);
+    const borderWidth = Math.min(20, Math.max(0, Math.round(titleBanner.borderWidthPx ?? 0)));
+    const box = (x: number, y: number, boxWidth: number, boxHeight: number, color: string, layer: number) =>
+      `Dialogue: ${layer},${start},${end},TitleBannerBox,,0,0,0,,{\\an7\\pos(0,0)\\1c${hexToAssColor(color)}\\bord0\\shad0\\p1}m ${x} ${y} l ${x + boxWidth} ${y} l ${x + boxWidth} ${y + boxHeight} l ${x} ${y + boxHeight}{\\p0}`;
 
-  return `${header}\n${events.join("\n")}${lowerThirdEvent ? `\n${lowerThirdEvent}` : ""}\n`;
+    if (borderWidth > 0) {
+      titleBannerEvents.push(
+        box(left, top, width, height, titleBanner.borderColor ?? "#000000", 2),
+      );
+    }
+    titleBannerEvents.push(
+      box(
+        left + borderWidth,
+        top + borderWidth,
+        Math.max(1, width - borderWidth * 2),
+        Math.max(1, height - borderWidth * 2),
+        titleBanner.backgroundColor ?? "#FFFFFF",
+        3,
+      ),
+    );
+
+    const textPadding = Math.max(12, Math.round((titleBanner.fontSizePx ?? 40) * 0.35));
+    const textX =
+      titleBanner.alignment === "left"
+        ? left + textPadding
+        : titleBanner.alignment === "right"
+          ? left + width - textPadding
+          : Math.round(centerX);
+    titleBannerEvents.push(
+      `Dialogue: 4,${start},${end},TitleBanner,,0,0,0,,{\\an${titleTextAlignment}\\pos(${Math.round(textX)},${Math.round(centerY)})\\q2}${escapeAssText(titleBanner.text.trim())}`,
+    );
+  }
+
+  return `${header}\n${events.join("\n")}${lowerThirdEvent ? `\n${lowerThirdEvent}` : ""}${titleBannerEvents.length ? `\n${titleBannerEvents.join("\n")}` : ""}\n`;
 }

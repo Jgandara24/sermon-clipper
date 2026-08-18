@@ -24,16 +24,23 @@ const FONT_WEIGHTS = [400, 600, 700, 800] as const;
  */
 export function CaptionStylePanel({
   captions,
+  simpleMode = false,
   onChange,
   onInteractionStart,
   onInteractionEnd,
 }: {
   captions: Captions;
+  simpleMode?: boolean;
   onChange: (next: Captions) => void;
   onInteractionStart?: () => void;
   onInteractionEnd?: () => void;
 }) {
   const style = resolveCaptionStyle(captions.presetId, captions.overrides);
+  const selectedPresetId = CAPTION_PRESETS.some((preset) => preset.id === captions.presetId)
+    ? captions.presetId
+    : style.highlightMode === "word"
+      ? "highlighter"
+      : "clean";
   const interactionProps = { onInteractionStart, onInteractionEnd };
 
   function setOverrides(patch: Partial<Overrides>) {
@@ -53,14 +60,20 @@ export function CaptionStylePanel({
         <h2 className="font-semibold">Captions</h2>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2">
         {CAPTION_PRESETS.map((preset) => (
           <button
             key={preset.id}
             type="button"
-            onClick={() => onChange({ ...captions, presetId: preset.id })}
+            onClick={() =>
+              onChange({
+                ...captions,
+                presetId: preset.id,
+                overrides: simpleMode ? {} : captions.overrides,
+              })
+            }
             className={`rounded-md border px-2 py-2 text-xs font-medium ${
-              captions.presetId === preset.id
+            selectedPresetId === preset.id
                 ? "border-red-600 bg-red-50 text-red-700"
                 : "border-stone-300 text-stone-600 hover:bg-stone-50"
             }`}
@@ -69,6 +82,53 @@ export function CaptionStylePanel({
           </button>
         ))}
       </div>
+
+      {simpleMode ? (
+        <div className="mt-4 grid gap-4 border-t border-stone-100 pt-4">
+          <StyleSlider
+            label="Size"
+            min={CAPTION_STYLE_LIMITS.sizePx.min}
+            max={CAPTION_STYLE_LIMITS.sizePx.max}
+            step={CAPTION_STYLE_LIMITS.sizePx.step}
+            value={style.sizePx}
+            unit="px"
+            onCommit={(sizePx) => setOverrides({ sizePx })}
+            {...interactionProps}
+          />
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-stone-600">Position</p>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-stone-100 p-1">
+              {([
+                ["top-safe", "Top"],
+                ["center", "Center"],
+                ["bottom-safe", "Bottom"],
+              ] as const).map(([safeAnchor, label]) => (
+                <button
+                  key={safeAnchor}
+                  type="button"
+                  onClick={() => setOverrides({ safeAnchor, positionX: 50, anchor: "center" })}
+                  className={`rounded-md px-2 py-2 text-[11px] font-semibold ${
+                    style.safeAnchor === safeAnchor
+                      ? "bg-red-600 text-white shadow-sm"
+                      : "text-stone-600 hover:bg-white"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <details open={!simpleMode} className="group/advanced">
+        <summary
+          className={`mt-4 cursor-pointer border-t border-stone-100 pt-4 text-sm font-medium text-stone-600 hover:text-stone-900 ${
+            simpleMode ? "block" : "hidden"
+          }`}
+        >
+          Advanced styling
+        </summary>
 
       <StyleGroup
         title="Typography"
@@ -106,16 +166,18 @@ export function CaptionStylePanel({
             ))}
           </select>
         </label>
-        <StyleSlider
-          label="Size"
-          min={CAPTION_STYLE_LIMITS.sizePx.min}
-          max={CAPTION_STYLE_LIMITS.sizePx.max}
-          step={CAPTION_STYLE_LIMITS.sizePx.step}
-          value={style.sizePx}
-          unit="px"
-          onCommit={(sizePx) => setOverrides({ sizePx })}
-          {...interactionProps}
-        />
+        {!simpleMode ? (
+          <StyleSlider
+            label="Size"
+            min={CAPTION_STYLE_LIMITS.sizePx.min}
+            max={CAPTION_STYLE_LIMITS.sizePx.max}
+            step={CAPTION_STYLE_LIMITS.sizePx.step}
+            value={style.sizePx}
+            unit="px"
+            onCommit={(sizePx) => setOverrides({ sizePx })}
+            {...interactionProps}
+          />
+        ) : null}
         <ColorField
           label="Text color"
           value={style.textColor}
@@ -221,7 +283,7 @@ export function CaptionStylePanel({
           resetKeys(["positionX", "positionY", "safeAnchor", "anchor", "position"])
         }
       >
-        <div className="sm:col-span-2">
+        {!simpleMode ? <div className="sm:col-span-2">
           <div className="grid grid-cols-3 gap-1 rounded-lg bg-stone-100 p-1">
             {([
               ["top-safe", "Top safe"],
@@ -244,7 +306,7 @@ export function CaptionStylePanel({
               </button>
             ))}
           </div>
-        </div>
+        </div> : null}
         <PositionNumber
           label="X position"
           value={style.positionX}
@@ -264,6 +326,7 @@ export function CaptionStylePanel({
           Click the captions on the video, then drag them anywhere. Unsafe placement shows a warning.
         </p>
       </StyleGroup>
+      </details>
     </div>
   );
 }

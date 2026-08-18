@@ -73,6 +73,7 @@ export default async function ClipEditorPage({ params }: { params: Promise<{ id:
   return (
     <ClipEditor
       clipId={clip.id}
+      clipProjectId={clip.projectId}
       clipTitle={clip.title}
       sourceVideoUrl={createSignedMediaUrl({
         key: sourceVideo.storageKey,

@@ -12,8 +12,9 @@ import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/capti
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import { hasInternalCuts } from "@/lib/editor/continuous-edit";
 import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
-import { flattenWords, wordsInRange } from "@/lib/editor/words";
+import { applyWordTextOverrides, flattenWords, wordsInRange } from "@/lib/editor/words";
 import { generateAssSubtitles } from "@/lib/export/ass-generator";
+import { readTitleBanner } from "@/lib/editor/title-banner";
 import { parseLowerThird } from "@/lib/brand-template";
 import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
 import { createFontkitMeasurer } from "@/lib/export/font-metrics";
@@ -184,7 +185,10 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   // Style before lines: it now decides line grouping (maxWordsPerLine) as well as looks.
   const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
 
-  const allWords = flattenWords(segments);
+  const allWords = applyWordTextOverrides(
+    flattenWords(segments),
+    state.captions.wordTextOverrides ?? [],
+  );
   const clipWords = wordsInRange(allWords, sourceStartMs, sourceEndMs);
   const captionLines = applyCaptionTextOverrides(
     buildCaptionLines(
@@ -219,6 +223,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       })
     : null;
   const lowerThird = brandTemplate ? parseLowerThird(brandTemplate.lowerThird) : null;
+  const titleBanner = readTitleBanner(state.overlays);
   const assContent = generateAssSubtitles({
     lines: captionLines,
     style,
@@ -235,6 +240,29 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
             accentColor: brandTemplate.accentColor,
             startMs: 0,
             endMs: Math.min(4000, Math.max(1000, state.source.endMs - state.source.startMs)),
+          }
+        : null,
+    titleBanner:
+      titleBanner && titleBanner.text && titleBanner.endMs > sourceStartMs && titleBanner.startMs < sourceEndMs
+        ? {
+            text: titleBanner.text,
+            startMs: Math.max(titleBanner.startMs, sourceStartMs) - sourceStartMs,
+            endMs: Math.min(titleBanner.endMs, sourceEndMs) - sourceStartMs,
+            fontFamily: titleBanner.fontFamily,
+            fontSizePx: titleBanner.fontSizePx,
+            fontWeight: titleBanner.fontWeight,
+            textColor: titleBanner.textColor,
+            backgroundColor: titleBanner.backgroundColor,
+            borderColor: titleBanner.borderColor,
+            borderWidthPx: titleBanner.borderWidthPx,
+            shadowColor: titleBanner.shadowColor,
+            shadowDistancePx: titleBanner.shadowDistancePx,
+            widthPct: titleBanner.widthPct,
+            positionX: titleBanner.positionX,
+            positionY: titleBanner.positionY,
+            alignment: titleBanner.alignment,
+            italic: titleBanner.italic,
+            underline: titleBanner.underline,
           }
         : null,
   });
@@ -289,6 +317,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         outputPath,
         outputWidth: OUTPUT_WIDTH,
         outputHeight: OUTPUT_HEIGHT,
+        originalVolume: state.audio.originalVolume,
       });
     } catch (error) {
       await recordRenderFact({

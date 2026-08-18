@@ -15,7 +15,7 @@ describe("normalizeCaptionStyle", () => {
       expect(s.positionY).toBeLessThanOrEqual(100);
       expect(s.positionX).toBe(50);
       expect(["center", "bottom"]).toContain(s.anchor);
-      expect(s.safeAnchor).toBe("custom");
+      expect(s.safeAnchor).toBe("bottom-safe");
       expect(s.outlineColor).toBe(s.strokeColor);
       expect(s.maxWordsPerLine).toBeGreaterThanOrEqual(2);
     }
@@ -49,33 +49,42 @@ describe("normalizeCaptionStyle", () => {
     });
   });
 
-  it("keeps legacy presets non-animating and derives shadow distance from the shadow flag", () => {
+  it("ships only Clean and Highlighter as selectable styles", () => {
+    expect(CAPTION_PRESETS.map((preset) => preset.id)).toEqual(["clean", "highlighter"]);
+  });
+
+  it("uses Bottom Safe and Neon Yellow for both selectable styles", () => {
+    for (const preset of CAPTION_PRESETS) {
+      expect(preset.style.safeAnchor).toBe("bottom-safe");
+      expect(preset.style.highlightColor).toBe("#EFFF00");
+    }
+  });
+
+  it("keeps Clean still and gives Highlighter a popping word highlight", () => {
     expect(getCaptionPreset("clean").style).toMatchObject({
       highlightMode: "none",
       highlightScale: 1,
-      shadowDistancePx: 2,
+      safeAnchor: "bottom-safe",
     });
-    expect(getCaptionPreset("quiet").style).toMatchObject({
-      highlightMode: "none",
-      shadowDistancePx: 0,
-    });
-  });
-
-  it("ships word-highlight presets for karaoke and kinetic", () => {
-    expect(getCaptionPreset("karaoke").style.highlightMode).toBe("word");
-    expect(getCaptionPreset("kinetic").style).toMatchObject({
+    expect(getCaptionPreset("highlighter").style).toMatchObject({
       highlightMode: "word",
-      fontWeight: 800,
-      uppercase: true,
+      highlightColor: "#EFFF00",
+      safeAnchor: "bottom-safe",
     });
-    expect(getCaptionPreset("kinetic").style.highlightScale).toBeGreaterThan(1);
+    expect(getCaptionPreset("highlighter").style.highlightScale).toBeGreaterThan(1);
   });
 
-  it("uses Poppins as the default sans-serif caption font", () => {
-    for (const presetId of ["clean", "karaoke", "quiet", "kinetic"]) {
+  it("uses Poppins for both selectable styles", () => {
+    for (const presetId of ["clean", "highlighter"]) {
       expect(getCaptionPreset(presetId).style.fontFamily).toContain("Poppins");
     }
-    expect(getCaptionPreset("bold-serif").style.fontFamily).toContain("Source Serif 4");
+  });
+
+  it("keeps removed preset ids readable for saved clips", () => {
+    expect(getCaptionPreset("bold-serif").id).toBe("bold-serif");
+    expect(getCaptionPreset("karaoke").id).toBe("karaoke");
+    expect(getCaptionPreset("quiet").id).toBe("quiet");
+    expect(getCaptionPreset("kinetic").id).toBe("kinetic");
   });
 });
 

@@ -79,6 +79,9 @@ export const editorStateSchema = z.object({
       safeAnchor: z.enum(["top-safe", "center", "bottom-safe", "custom"]).optional(),
     }),
     textOverrides: z.array(z.object({ segmentId: z.string(), text: z.string() })),
+    wordTextOverrides: z
+      .array(z.object({ wordId: z.string(), text: z.string().max(120) }))
+      .optional(),
   }),
   layout: z.object({
     mode: z.enum(["center", "face", "manual"]),
@@ -108,7 +111,7 @@ export function buildDefaultEditorState(params: {
     source: { videoId: params.sourceVideoId, startMs: params.startMs, endMs: params.endMs },
     wordEdits: { deletedWordIds: [], restoredFillerIds: [] },
     extensions: [],
-    captions: { presetId: "clean", overrides: {}, textOverrides: [] },
+    captions: { presetId: "clean", overrides: {}, textOverrides: [], wordTextOverrides: [] },
     layout: { mode: "center", crop: { x: 0, y: 0, w: 1, h: 1 }, aspect: "9:16" },
     overlays: [],
     brandTemplateId: null,

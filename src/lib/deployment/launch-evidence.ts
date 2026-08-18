@@ -48,7 +48,7 @@ export const launchEvidenceItems = [
     key: "workerProcess",
     label: "Worker process",
     proof:
-      "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, whisper-cli, readable WHISPER_MODEL_PATH, and recent worker_heartbeat.",
+      "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, configured ELEVENLABS_API_KEY, and recent worker_heartbeat.",
   },
   {
     key: "databaseMigrations",
@@ -71,7 +71,7 @@ export const launchEvidenceItems = [
   {
     key: "transcriptionProvider",
     label: "Transcription provider",
-    proof: "Production worker transcribed the sermon with whisper.cpp using the configured WHISPER_MODEL_PATH.",
+    proof: "Production worker transcribed the sermon with base ElevenLabs Scribe v2 and no keyterms.",
   },
   {
     key: "analysisProvider",
@@ -245,8 +245,7 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
       { label: "WORKER_ID", pattern: /\bWORKER_ID\b/ },
       { label: "ffmpeg", pattern: /\bffmpeg\b/i },
       { label: "ffprobe", pattern: /\bffprobe\b/i },
-      { label: "whisper-cli or whisper.cpp", pattern: /\b(?:whisper-cli|whisper\.cpp|whisper_cpp)\b/i },
-      { label: "WHISPER_MODEL_PATH", pattern: /\bWHISPER_MODEL_PATH\b/ },
+      { label: "ELEVENLABS_API_KEY", pattern: /\bELEVENLABS_API_KEY\b/ },
       { label: "worker_heartbeat", pattern: /\bworker_heartbeat\b/i },
     ];
     const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
@@ -256,11 +255,11 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
     return null;
   },
   transcriptionProvider: (proof) => {
-    if (!/\bwhisper(?:\.cpp|_cpp|-cpp)?\b/i.test(proof)) {
-      return "Transcription provider proof must mention whisper.cpp or whisper_cpp.";
+    if (!/\b(?:elevenlabs|scribe)\b/i.test(proof)) {
+      return "Transcription provider proof must mention ElevenLabs Scribe.";
     }
-    if (!/\bWHISPER_MODEL_PATH\b/.test(proof)) {
-      return "Transcription provider proof must mention the configured WHISPER_MODEL_PATH.";
+    if (!/\bscribe[_ -]?v2\b/i.test(proof)) {
+      return "Transcription provider proof must mention the scribe_v2 model.";
     }
     return null;
   },

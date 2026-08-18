@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildExportFilterGraph, RenderError, renderClipExport } from "@/lib/export/render";
+import {
+  buildAudioFilterGraph,
+  buildExportFilterGraph,
+  RenderError,
+  renderClipExport,
+} from "@/lib/export/render";
 
 describe("buildExportFilterGraph", () => {
   it("chains crop, scale-to-fill, re-crop, and subtitle burn in order", () => {
@@ -25,6 +30,19 @@ describe("buildExportFilterGraph", () => {
       "/usr/share/fonts/truetype/custom",
     );
     expect(graph).toContain(":fontsdir='/usr/share/fonts/truetype/custom'");
+  });
+});
+
+describe("buildAudioFilterGraph", () => {
+  it("applies the selected source volume after loudness normalization", () => {
+    expect(buildAudioFilterGraph(0.42)).toBe(
+      "loudnorm=I=-16:TP=-1.5:LRA=11,volume=0.42",
+    );
+  });
+
+  it("clamps volume to the editor range", () => {
+    expect(buildAudioFilterGraph(-1)).toContain("volume=0.00");
+    expect(buildAudioFilterGraph(2)).toContain("volume=1.00");
   });
 });
 

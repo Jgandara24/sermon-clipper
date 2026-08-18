@@ -1670,3 +1670,29 @@ Why: Word-level highlighting exposes token granularity ("un"/"believable" highli
 Tradeoff: Transcripts created before this change highlight at sub-word granularity until re-transcribed. Merged-word confidence is a derived (geometric mean) value, not a raw whisper probability.
 
 Status: Active.
+
+## 2026-08-16 - Base Scribe v2 Is the Default Transcription Provider
+
+Decision: Use ElevenLabs base Scribe v2 as the primary transcription provider when
+`ELEVENLABS_API_KEY` is configured. Do not send paid keyterms by default. Keep opt-in project
+keyterms for known church-specific names. Keep whisper.cpp available as the local fallback when
+Scribe is not configured.
+
+Store one canonical full-sermon transcript with sentence segments, speaker labels, and normalized
+word timestamps. Every clip reuses ranges from that record. Do not transcribe each clip again.
+Keep the canonical sermon transcript available for later search and transcript-based features,
+including a future text-post generator.
+
+Why: On the same 47-minute sermon, base Scribe corrected all seven targeted church-language errors
+that whisper.cpp missed. It completed in 47.77 seconds and produced timing close to the separate
+forced-alignment result. The no-keyterm output was 99.42 percent similar to the keyterm output and
+correctly produced all seven targeted phrases, so the keyterm surcharge had no measured benefit.
+
+Tradeoff: Scribe sends sermon audio to an external provider and costs about $0.22 per audio hour.
+The automatic pre-transcription sermon-boundary stage is not implemented yet. Until that separate
+stage lands, a full-service source still reaches transcription as full-service audio. This provider
+change must not be represented as completing worship, announcement, baptism, prayer, or altar-call
+exclusion before paid transcription.
+
+Status: Active. Benchmark evidence is in
+`evaluation/asr-benchmark-whisper-cpp-vs-scribe-2026-08-16.md`.

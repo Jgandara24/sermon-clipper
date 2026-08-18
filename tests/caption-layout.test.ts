@@ -172,6 +172,7 @@ describe("layoutCaptionLine", () => {
       position: "bottom",
       positionY: undefined as unknown as number,
       anchor: undefined as unknown as "center",
+      safeAnchor: undefined as unknown as "custom",
     });
     const layout = layoutCaptionLine({ words: words("hi") }, legacyBottom, FRAME, measure);
     expect(layout.blockTopY + layout.blockHeightPx).toBe(Math.round(1920 * 0.88));

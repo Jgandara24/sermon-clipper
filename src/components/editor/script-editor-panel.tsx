@@ -1,7 +1,7 @@
 "use client";
 
 import { Captions, Clock3, Flag, FlagTriangleRight, Scissors, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EditorWordWithDeletion } from "@/lib/editor/words";
 
 function formatRelativeTime(ms: number): string {
@@ -18,6 +18,7 @@ export function ScriptEditorPanel({
   activeWordId,
   selectedWordId,
   onWordSelect,
+  onWordTextChange,
   onSelectionClear,
   onOpenCaptions,
   onSetClipStart,
@@ -29,12 +30,15 @@ export function ScriptEditorPanel({
   hasLegacyCuts,
   onRestoreAllWords,
   dark = false,
+  hideExtensionControls = false,
+  hideSelectionTools = false,
 }: {
   words: EditorWordWithDeletion[];
   clipStartMs: number;
   activeWordId: string | null;
   selectedWordId: string | null;
   onWordSelect: (wordId: string) => void;
+  onWordTextChange: (wordId: string, text: string) => void;
   onSelectionClear: () => void;
   onOpenCaptions: () => void;
   onSetClipStart: (word: EditorWordWithDeletion) => void;
@@ -46,6 +50,8 @@ export function ScriptEditorPanel({
   hasLegacyCuts: boolean;
   onRestoreAllWords: () => void;
   dark?: boolean;
+  hideExtensionControls?: boolean;
+  hideSelectionTools?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedWord = words.find((word) => word.id === selectedWordId) ?? null;
@@ -75,7 +81,7 @@ export function ScriptEditorPanel({
               Select any word to seek and edit.
             </p>
           </div>
-          <div className="flex gap-1">
+          {!hideExtensionControls ? <div className="flex gap-1">
             <button
               type="button"
               onClick={onExtendBefore}
@@ -92,11 +98,11 @@ export function ScriptEditorPanel({
             >
               + After
             </button>
-          </div>
+          </div> : null}
         </div>
       </div>
 
-      {selectedWord ? (
+      {selectedWord && !hideSelectionTools ? (
         <div className={`shrink-0 border-b p-2 ${dark ? "border-white/10 bg-[#111111]" : "border-stone-200 bg-stone-50"}`}>
           <div className={`flex flex-wrap items-center gap-1 rounded-lg border p-1.5 shadow-xl ${dark ? "border-white/10 bg-[#242424]" : "border-stone-200 bg-white"}`}>
             <span className="rounded-md bg-red-600 px-2 py-1.5 text-xs font-bold text-white">
@@ -146,25 +152,33 @@ export function ScriptEditorPanel({
                     {formatRelativeTime(relativeMs)}
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  data-transcript-word-id={word.id}
-                  aria-pressed={selected}
-                  onClick={() => onWordSelect(word.id)}
-                  className={`mx-0.5 rounded px-0.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
-                    word.effectiveDeleted
-                      ? "text-stone-600 line-through"
-                      : selected
-                        ? "bg-red-600 text-white"
-                        : active
-                          ? "bg-red-500/20 text-red-300"
-                          : dark
-                            ? "text-stone-300 hover:bg-white/10 hover:text-white"
-                            : "text-stone-800 hover:bg-red-50 hover:text-red-800"
-                  }`}
-                >
-                  {word.word}
-                </button>{" "}
+                {selected && hideSelectionTools ? (
+                  <EditableTranscriptWord
+                    key={word.word}
+                    word={word}
+                    onCommit={(text) => onWordTextChange(word.id, text)}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    data-transcript-word-id={word.id}
+                    aria-pressed={selected}
+                    onClick={() => onWordSelect(word.id)}
+                    className={`mx-0.5 rounded px-0.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
+                      word.effectiveDeleted
+                        ? "text-stone-600 line-through"
+                        : selected
+                          ? "bg-red-600 text-white"
+                          : active
+                            ? "bg-red-500/20 text-red-300"
+                            : dark
+                              ? "text-stone-300 hover:bg-white/10 hover:text-white"
+                              : "text-stone-800 hover:bg-red-50 hover:text-red-800"
+                    }`}
+                  >
+                    {word.word}
+                  </button>
+                )}{" "}
               </span>
             );
           })}
@@ -178,5 +192,44 @@ export function ScriptEditorPanel({
         <span className="inline-flex items-center gap-1"><Scissors size={11} aria-hidden="true" /> Word clicks do not cut the sermon.</span>
       </div>
     </section>
+  );
+}
+
+function EditableTranscriptWord({
+  word,
+  onCommit,
+}: {
+  word: EditorWordWithDeletion;
+  onCommit: (text: string) => void;
+}) {
+  const [draft, setDraft] = useState(word.word);
+  const cancelRef = useRef(false);
+
+  return (
+    <input
+      autoFocus
+      data-transcript-word-id={word.id}
+      value={draft}
+      maxLength={120}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        if (cancelRef.current) {
+          cancelRef.current = false;
+          return;
+        }
+        onCommit(draft);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          cancelRef.current = true;
+          setDraft(word.word);
+          event.currentTarget.blur();
+        }
+      }}
+      aria-label={`Edit transcript word ${word.word}`}
+      className="mx-0.5 rounded bg-red-600 px-1 py-0.5 text-left text-white outline-none ring-2 ring-red-400"
+      style={{ width: `${Math.max(3, draft.length + 1)}ch` }}
+    />
   );
 }

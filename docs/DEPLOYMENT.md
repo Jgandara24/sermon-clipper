@@ -20,7 +20,8 @@ bucket.
   points at that directory). Without them libass silently substitutes a fallback face and the
   render no longer matches the editor preview; the worker readiness gate fails startup when
   the fonts are missing.
-- `whisper-cli` plus a local ggml model on every worker host for sermon transcription.
+- An ElevenLabs API key for primary base Scribe v2 transcription.
+- Optional `whisper-cli` plus a local ggml model for the local transcription fallback.
 - API access for each provider in the active analysis routing policy.
 
 ## Required Environment
@@ -62,8 +63,10 @@ WORKER_RECOVERY_INTERVAL_MS=60000
 ANTHROPIC_API_KEY=sk-ant-...
 # Set this when an active stage uses Google Gemini.
 GEMINI_API_KEY=...
-WHISPER_MODEL_PATH=/models/ggml-base.en.bin
-WHISPER_CPP_BINARY=whisper-cli
+ELEVENLABS_API_KEY=...
+# Optional local fallback:
+# WHISPER_MODEL_PATH=/models/ggml-base.en.bin
+# WHISPER_CPP_BINARY=whisper-cli
 ```
 
 Optional provider credentials:
@@ -96,17 +99,18 @@ The repo carries per-service config-as-code (Railway's schema has no multi-servi
 - **Web** — `railway.json`: Nixpacks build, `npm run start`, migrations applied once per release
   via `preDeployCommand: npm run db:migrate:deploy`, deploy-time healthcheck on `/api/health`
   (new deploys receive no traffic until it passes), restart on failure.
-- **Worker** — `railway.worker.json`: builds `Dockerfile.worker` (ffmpeg + whisper.cpp),
-  restart on failure. `requiredMountPath: /models` makes Railway refuse to deploy the worker
-  until a persistent volume is mounted at `/models` — without it the whisper model would
-  re-download on every deploy and the readiness gate would race the download.
+- **Worker** — `railway.worker.json`: builds `Dockerfile.worker` (ffmpeg + the optional
+  whisper.cpp fallback) and restarts on failure. The current Railway template keeps
+  `requiredMountPath: /models` so the local fallback stays ready and does not download its model
+  on every deploy.
 
 Human actions in the Railway dashboard (once per environment):
 
 1. Create two services from this repo. In each service's settings set **Config-as-code file
    path**: web → `railway.json`, worker → `railway.worker.json`.
-2. Attach a persistent volume to the worker service mounted at `/models`; set
-   `WHISPER_MODEL_PATH=/models/ggml-base.en.bin`. The image entrypoint downloads the model to the
+2. The current Railway template requires a persistent volume mounted at `/models` to keep the
+   optional local fallback ready. Set `WHISPER_MODEL_PATH=/models/ggml-base.en.bin` if you want that
+   fallback. The image entrypoint downloads the model to the
    volume on first boot (3 attempts with backoff), verifies its SHA-256 against the pinned
    upstream checksum, and re-verifies the on-disk copy on every boot — a corrupted volume copy is
    deleted and re-downloaded. When overriding `WHISPER_MODEL_URL`, also set
@@ -121,7 +125,7 @@ Which service consumes which variables:
 | Variables | Web | Worker |
 | --- | --- | --- |
 | `NODE_ENV`, `DATABASE_URL`, `STORAGE_PROVIDER` + `STORAGE_S3_*` | ✅ | ✅ |
-| `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (web readiness reporting only) | ✅ (worker job-time enforcement) |
+| `ELEVENLABS_API_KEY`, `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (web readiness reporting only) | ✅ (worker job-time enforcement) |
 | `ANALYSIS_ALLOW_HEURISTIC` (emergency only) | — | ✅ |
 | `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | ✅ | — |
 | `RESEND_API_KEY`, `AUTH_EMAIL_*`, `NOTIFICATIONS_*`, `TWILIO_*` | ✅ | — |
@@ -135,9 +139,8 @@ Which service consumes which variables:
 A worker processes **one job at a time** (throughput scales by adding worker services/replicas,
 each with its own stable `WORKER_ID`). Size each worker instance for the heaviest single job:
 
-- **CPU: 2 vCPU minimum, 4 recommended.** whisper.cpp transcription and the 3-pass ffmpeg export
-  render are both CPU-bound and scale with cores; on shared/undersized CPU a 45-minute sermon's
-  transcription can exceed the 15-minute stale-job timeout and get requeued mid-run.
+- **CPU: 2 vCPU minimum, 4 recommended.** Scribe transcription is remote, but ffmpeg extraction
+  and export remain CPU-bound. The optional whisper.cpp fallback also scales with worker cores.
 - **Memory: 4 GB minimum.** The base.en model is ~148 MB on disk plus whisper compute buffers;
   ffmpeg 1080×1920 x264 encoding runs alongside Node. 2 GB instances will OOM on long sources.
 - **Scratch disk: 15–20 GB.** Jobs download the full source video to `os.tmpdir()` (uploads are
@@ -390,12 +393,11 @@ collecting launch evidence.
   production readiness when the latest heartbeat is older than `WORKER_HEARTBEAT_MAX_AGE_MS`
   (defaults to `WORKER_STALE_JOB_TIMEOUT_MS`), so run at least one `worker:prod` process before
   final smoke or launch evidence collection.
-- Production workers also fail startup when `ffmpeg`, `ffprobe`, `WHISPER_CPP_BINARY`, or the
-  readable model file at `WHISPER_MODEL_PATH` are missing. Set `FFMPEG_PATH`,
-  `FFPROBE_PATH`, or `WHISPER_CPP_BINARY` if those binaries are not on `PATH`.
-- Install `whisper-cli` and mount the same model file path referenced by `WHISPER_MODEL_PATH` on
-  every worker. The readiness gate proves the path is configured; the launch workflow must still
-  prove a real sermon was transcribed by the deployed worker.
+- Set `ELEVENLABS_API_KEY` on production workers. Base Scribe v2 is then selected automatically.
+  Keyterms are not sent unless a project's processing configuration explicitly supplies them.
+- Production workers still require `ffmpeg` and `ffprobe`. `whisper-cli` and
+  `WHISPER_MODEL_PATH` are required only when Scribe is not configured. Keep them available when
+  the deployment needs a local privacy or outage fallback.
 - Configure `ANTHROPIC_API_KEY` on the production worker for clip scoring. The web readiness check
   reports its own environment only; it cannot prove that the worker has a valid credential.
 - Production ANALYZE jobs fail closed when the key is missing, rejected, or Claude fails. Local
@@ -484,7 +486,7 @@ After deploy:
    link after signing in as the invited email.
 4. Upload a short sermon video.
 5. Confirm `/app/settings/operations` shows upload and processing events.
-6. Confirm the worker completed transcription with whisper.cpp and clip scoring with Claude, then
+6. Confirm the worker completed transcription with base Scribe v2 and clip scoring with Claude, then
    generate clips, apply a brand template, and request approval with a real email or SMS recipient.
 7. Approve from the `/review/:token` link.
 8. Export and download the MP4.
@@ -684,8 +686,8 @@ notes.
 **Worker stalled / jobs stuck** (`worker_heartbeat` check failed, or QUEUED jobs not progressing)
 
 1. Check worker process status and logs on the platform (crash loops usually mean a failed
-   startup readiness gate: missing ffmpeg/whisper binary, unreadable `WHISPER_MODEL_PATH`, or
-   missing `WORKER_ID`).
+   startup readiness gate: missing ffmpeg/ffprobe, missing transcription provider configuration,
+   missing caption fonts, or missing `WORKER_ID`).
 2. A worker that died mid-job self-heals: another worker (or the restarted one) recovers stale
    `RUNNING` jobs after `WORKER_STALE_JOB_TIMEOUT_MS` (default 15 min) — watch for
    `stale_jobs_recovered` worker events in `/app/settings/operations`.

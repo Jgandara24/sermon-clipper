@@ -113,17 +113,15 @@ describe("applyCaptionTextOverrides", () => {
 });
 
 describe("caption presets", () => {
-  it("ships at least 3 original, distinctly-named presets", () => {
-    expect(CAPTION_PRESETS.length).toBeGreaterThanOrEqual(3);
-    const names = CAPTION_PRESETS.map((p) => p.name.toLowerCase());
-    expect(new Set(names).size).toBe(names.length);
+  it("ships only the two approved caption styles", () => {
+    expect(CAPTION_PRESETS.map((preset) => preset.name)).toEqual(["Clean", "Highlighter"]);
   });
 
   it("falls back to the first preset for an unknown id", () => {
     expect(getCaptionPreset("does-not-exist")).toEqual(CAPTION_PRESETS[0]);
   });
 
-  it("finds a preset by id", () => {
-    expect(getCaptionPreset("karaoke").name).toBe("Karaoke");
+  it("finds a selectable preset by id", () => {
+    expect(getCaptionPreset("highlighter").name).toBe("Highlighter");
   });
 });

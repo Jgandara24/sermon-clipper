@@ -142,6 +142,9 @@ const fieldSchemas = {
   RAILWAY_EGRESS_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   WHISPER_CPP_BINARY: optionalString,
   WHISPER_MODEL_PATH: optionalString,
+  ELEVENLABS_API_KEY: optionalString,
+  ELEVENLABS_SCRIBE_PRICE_PER_HOUR_USD: nonNegativeNumber(0.22),
+  ELEVENLABS_SCRIBE_KEYTERM_PRICE_PER_HOUR_USD: nonNegativeNumber(0.05),
   CAPTION_FONT_DIR: optionalString,
 
   // AI analysis

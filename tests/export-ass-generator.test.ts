@@ -16,7 +16,12 @@ const LINES = buildCaptionLines([
   ...words(["peace", 0, 600], ["is", 600, 800], ["not", 800, 1200]),
 ]);
 
-function generate(style: CaptionStyle, lines = LINES, lowerThird?: Parameters<typeof generateAssSubtitles>[0]["lowerThird"]) {
+function generate(
+  style: CaptionStyle,
+  lines = LINES,
+  lowerThird?: Parameters<typeof generateAssSubtitles>[0]["lowerThird"],
+  titleBanner?: Parameters<typeof generateAssSubtitles>[0]["titleBanner"],
+) {
   return generateAssSubtitles({
     lines,
     style,
@@ -24,6 +29,7 @@ function generate(style: CaptionStyle, lines = LINES, lowerThird?: Parameters<ty
     videoHeight: 1920,
     measure,
     lowerThird,
+    titleBanner,
   });
 }
 
@@ -156,5 +162,48 @@ describe("generateAssSubtitles", () => {
     expect(ass).toContain("Style: LowerThird");
     expect(ass).toContain("Dialogue: 1,0:00:00.00,0:00:04.00,LowerThird");
     expect(ass).toContain("First Baptist\\NSunday message");
+  });
+
+  it("emits an exported title banner at its selected time range", () => {
+    const ass = generate(getCaptionPreset("clean").style, LINES, undefined, {
+      text: "Name One Person",
+      startMs: 500,
+      endMs: 3_500,
+    });
+
+    expect(ass).toContain("Style: TitleBanner");
+    expect(ass).toContain("Dialogue: 3,0:00:00.50,0:00:03.50,TitleBannerBox");
+    expect(ass).toContain("Dialogue: 4,0:00:00.50,0:00:03.50,TitleBanner");
+    expect(ass).toContain("Name One Person");
+  });
+
+  it("uses the selected title overlay styling", () => {
+    const ass = generate(getCaptionPreset("clean").style, LINES, undefined, {
+      text: "Styled title",
+      startMs: 500,
+      endMs: 3_500,
+      fontFamily: "inter",
+      fontSizePx: 64,
+      fontWeight: 700,
+      textColor: "#FFFFFF",
+      backgroundColor: "#FF0000",
+      borderColor: "#FFFF00",
+      borderWidthPx: 6,
+      shadowColor: "#333333",
+      shadowDistancePx: 4,
+      widthPct: 60,
+      positionX: 65,
+      positionY: 25,
+      alignment: "right",
+      italic: true,
+      underline: true,
+    });
+
+    expect(ass).toContain(
+      "Style: TitleBanner,Inter,64,&H00FFFFFF,&H00FFFFFF,&H0000FFFF,&H00333333,1,1,1",
+    );
+    expect(ass).toContain("Dialogue: 2,0:00:00.50,0:00:03.50,TitleBannerBox");
+    expect(ass).toContain("\\1c&H0000FFFF");
+    expect(ass).toContain("{\\an6\\pos(1004,480)\\q2}Styled title");
   });
 });

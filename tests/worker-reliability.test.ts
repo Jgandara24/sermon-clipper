@@ -97,6 +97,25 @@ describe("worker reliability helpers", () => {
     );
   });
 
+  it("does not require local whisper assets when Scribe is configured", () => {
+    const checks = checkWorkerRuntimeEnvironment(
+      {
+        NODE_ENV: "production",
+        WORKER_ID: "worker-1",
+        ELEVENLABS_API_KEY: "scribe-test-key",
+      },
+      (command) => command !== "whisper-cli",
+      () => true,
+    );
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "WHISPER_CPP_BINARY", status: "ok" }),
+        expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "ok" }),
+      ]),
+    );
+  });
+
   it("requires readable caption fonts in production", () => {
     const probedPaths: string[] = [];
     const checks = checkWorkerRuntimeEnvironment(

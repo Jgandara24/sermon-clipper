@@ -1,6 +1,6 @@
 # Worker image: runs the job/export queue (npm run worker:prod).
 # Needs system binaries the web service doesn't: ffmpeg with libass (caption burn-in)
-# and whisper.cpp's whisper-cli (transcription). See docs/DEPLOYMENT.md.
+# and whisper.cpp's whisper-cli (optional local transcription fallback). See docs/DEPLOYMENT.md.
 
 FROM debian:bookworm-slim AS whisper-builder
 RUN apt-get update && apt-get install -y --no-install-recommends \

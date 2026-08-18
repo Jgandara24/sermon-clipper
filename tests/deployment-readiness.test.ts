@@ -7,6 +7,19 @@ import {
 } from "@/lib/deployment/readiness";
 
 describe("deployment readiness", () => {
+  it("accepts ElevenLabs Scribe as the production transcription provider", () => {
+    const checks = checkDeploymentEnvironment({
+      NODE_ENV: "production",
+      ELEVENLABS_API_KEY: "scribe-test-key",
+    });
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "TRANSCRIPTION_PROVIDER", status: "ok" }),
+      ]),
+    );
+  });
+
   it("reports the global publishing state without requiring it to be enabled", () => {
     for (const value of [undefined, "false", "TRUE", "malformed"]) {
       const checks = checkDeploymentEnvironment({ AUTOMATIC_PUBLISHING_ENABLED: value });
@@ -50,7 +63,7 @@ describe("deployment readiness", () => {
         expect.objectContaining({ name: "STRIPE_SECRET_KEY", status: "fail" }),
         expect.objectContaining({ name: "STRIPE_WEBHOOK_SECRET", status: "fail" }),
         expect.objectContaining({ name: "STRIPE_PRICE_PAID", status: "fail" }),
-        expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "fail" }),
+        expect.objectContaining({ name: "TRANSCRIPTION_PROVIDER", status: "fail" }),
         expect.objectContaining({ name: "ANALYSIS_PROVIDER_API_KEY", status: "fail" }),
         expect.objectContaining({ name: "STORAGE_PROVIDER", status: "fail" }),
       ]),
@@ -247,7 +260,7 @@ describe("deployment readiness", () => {
     expect(summarizeReadiness(checks)).toBe("fail");
     expect(checks).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "fail" }),
+        expect.objectContaining({ name: "TRANSCRIPTION_PROVIDER", status: "fail" }),
         expect.objectContaining({ name: "ANALYSIS_PROVIDER_API_KEY", status: "fail" }),
       ]),
     );

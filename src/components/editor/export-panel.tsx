@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, Loader2, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 type ExportState = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELED" | "WAITING" | "RETRYING" | "EXPIRED";
@@ -49,12 +50,16 @@ function StatusLine({ status }: { status: ExportStatus }) {
 
 export function ExportPanel({
   clipId,
+  projectId,
   canExport,
   blockedReason,
+  simpleMode = false,
 }: {
   clipId: string;
+  projectId: string;
   canExport: boolean;
   blockedReason: string | null;
+  simpleMode?: boolean;
 }) {
   const [status, setStatus] = useState<ExportStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -114,6 +119,29 @@ export function ExportPanel({
     pollJob(status.id);
   }
 
+  if (simpleMode && !canExport) {
+    return (
+      <div className="grid gap-3 rounded-lg border border-stone-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-stone-800">Export MP4</h2>
+        <p className="text-sm leading-6 text-stone-600">
+          This clip must be approved before export. Go back to the project page and click
+          {" “Send this clip for approval.”"}
+        </p>
+        {blockedReason ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            {blockedReason}
+          </p>
+        ) : null}
+        <Link
+          href={`/app/projects/${projectId}#clips`}
+          className="inline-flex w-full items-center justify-center rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-50"
+        >
+          Go to clip approval
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-3 rounded-lg border border-stone-200 p-4">
       <div className="flex items-center justify-between">
@@ -135,7 +163,11 @@ export function ExportPanel({
           type="button"
           onClick={handleExport}
           disabled={isStarting || !canExport}
-          className="inline-flex w-fit items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+            simpleMode
+              ? "w-full justify-center bg-emerald-700 hover:bg-emerald-800"
+              : "w-fit bg-red-600 hover:bg-red-700"
+          }`}
         >
           <Download size={14} aria-hidden="true" />
           Export 9:16 MP4
