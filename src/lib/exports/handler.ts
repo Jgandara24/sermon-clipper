@@ -17,7 +17,7 @@ import { generateAssSubtitles } from "@/lib/export/ass-generator";
 import { readTitleBanner } from "@/lib/editor/title-banner";
 import { parseLowerThird } from "@/lib/brand-template";
 import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
-import { createFontkitMeasurer } from "@/lib/export/font-metrics";
+import { createFontkitMeasurer, missingCaptionFontFiles } from "@/lib/export/font-metrics";
 import { renderClipExport } from "@/lib/export/render";
 import { probeVideoFile } from "@/lib/media/probe";
 import {
@@ -182,6 +182,19 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   const cropRect = resolveCropRect(state.layout, sourceVideo.width, sourceVideo.height);
   const cropPixels = cropRectToPixels(cropRect, sourceVideo.width, sourceVideo.height);
 
+  // Caption burn-in is the one job path the shipped fonts gate. The worker readiness gate only
+  // degrades on missing fonts so other job types keep running, so the refusal lives here —
+  // rendering with whatever face libass falls back to would deliver a wrong typeface silently.
+  const fontDir = captionFontDir();
+  const missingFonts = missingCaptionFontFiles(fontDir);
+  if (missingFonts.length > 0) {
+    throw new ExportFailureError(
+      "CAPTION_FONTS_MISSING",
+      "Export failed on our side — your clip is safe.",
+      { cause: new Error(`Caption fonts are missing from ${fontDir}: ${missingFonts.join(", ")}.`) },
+    );
+  }
+
   // Style before lines: it now decides line grouping (maxWordsPerLine) as well as looks.
   const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
 
@@ -230,7 +243,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     videoWidth: OUTPUT_WIDTH,
     videoHeight: OUTPUT_HEIGHT,
     // Measure with the same faces libass resolves via fontconfig — parity depends on it.
-    measure: createFontkitMeasurer(captionFontDir()),
+    measure: createFontkitMeasurer(fontDir),
     lowerThird:
       brandTemplate && lowerThird
         ? {
@@ -313,7 +326,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         sourceEndMs,
         cropPixels,
         assFileContent: assContent,
-        fontsDir: captionFontDir(),
+        fontsDir: fontDir,
         outputPath,
         outputWidth: OUTPUT_WIDTH,
         outputHeight: OUTPUT_HEIGHT,
