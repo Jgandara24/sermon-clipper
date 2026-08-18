@@ -269,9 +269,17 @@ export function ytDlpPath(): string {
  * Directory holding the caption TTFs. In the worker image this is the fontconfig-registered
  * copy (Dockerfile.worker sets it); in dev it falls back to the repo's public/fonts, the same
  * files the browser loads — measurement and burn-in always use identical faces.
+ *
+ * The worker readiness gate probes the same directory, so both resolve through this one
+ * helper: two independent defaults would let the gate prove a directory the renderer never
+ * reads.
  */
+export function resolveCaptionFontDir(configured: string | undefined): string {
+  return configured?.trim() || `${process.cwd()}/public/fonts`;
+}
+
 export function captionFontDir(): string {
-  return env.CAPTION_FONT_DIR || `${process.cwd()}/public/fonts`;
+  return resolveCaptionFontDir(env.CAPTION_FONT_DIR);
 }
 
 /**

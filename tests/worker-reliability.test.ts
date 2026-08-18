@@ -9,6 +9,7 @@ import {
   runIsolatedPeriodicBlocks,
   staleCutoff,
 } from "@/lib/worker/reliability";
+import { captionFontDir, resolveCaptionFontDir } from "@/lib/env";
 
 describe("worker reliability helpers", () => {
   it("continues to the next periodic block after one block fails", async () => {
@@ -97,6 +98,45 @@ describe("worker reliability helpers", () => {
     );
   });
 
+  // A caption asset must not gate every job type. Missing fonts stop caption burn-in only;
+  // a worker with no fonts must still transcribe, probe, analyze, and finalize.
+  it("reports missing caption fonts as degraded and still starts the worker", () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      WORKER_ID: "worker-1",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+      CAPTION_FONT_DIR: "/custom/fonts",
+    };
+    const noFonts = (filePath: string) => !filePath.startsWith("/custom/fonts");
+
+    const checks = checkWorkerRuntimeEnvironment(productionEnv, () => true, noFonts);
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "CAPTION_FONT_DIR", status: "degraded" }),
+      ]),
+    );
+    expect(() => assertWorkerRuntimeReady(productionEnv, () => true, noFonts)).not.toThrow();
+  });
+
+  // Two defaults that disagree mean the readiness gate probes a directory the renderer never
+  // reads. Both sides resolve the same helper so they cannot drift.
+  it("resolves the same caption font directory as the runtime helper", () => {
+    const probedPaths: string[] = [];
+    checkWorkerRuntimeEnvironment(
+      { NODE_ENV: "production", WORKER_ID: "worker-1" },
+      () => true,
+      (filePath) => {
+        probedPaths.push(filePath);
+        return true;
+      },
+    );
+
+    expect(probedPaths).toContain(`${captionFontDir()}/Inter-Regular.ttf`);
+    expect(resolveCaptionFontDir(undefined)).toBe(`${process.cwd()}/public/fonts`);
+    expect(resolveCaptionFontDir("  ")).toBe(`${process.cwd()}/public/fonts`);
+    expect(resolveCaptionFontDir("/x/fonts")).toBe("/x/fonts");
+  });
+
   it("requires readable caption fonts in production", () => {
     const probedPaths: string[] = [];
     const checks = checkWorkerRuntimeEnvironment(
@@ -110,7 +150,9 @@ describe("worker reliability helpers", () => {
 
     expect(probedPaths).toContain("/custom/fonts/Inter-Regular.ttf");
     expect(checks).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "CAPTION_FONT_DIR", status: "fail" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ name: "CAPTION_FONT_DIR", status: "degraded" }),
+      ]),
     );
   });
 

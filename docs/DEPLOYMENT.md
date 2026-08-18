@@ -18,7 +18,9 @@ bucket.
 - Caption fonts registered with fontconfig on worker hosts (`Dockerfile.worker` copies
   `public/fonts` to `/usr/share/fonts/truetype/custom` and runs `fc-cache`; `CAPTION_FONT_DIR`
   points at that directory). Without them libass silently substitutes a fallback face and the
-  render no longer matches the editor preview.
+  render no longer matches the editor preview. The worker readiness gate reports missing caption
+  fonts as `degraded`, never `fail`: a caption asset must not stop TRANSCRIBE, PROBE, ANALYZE,
+  and FINALIZE. Caption burn-in is the only job path that refuses to run.
 - `whisper-cli` plus a local ggml model on every worker host for sermon transcription.
 - API access for each provider in the active analysis routing policy.
 

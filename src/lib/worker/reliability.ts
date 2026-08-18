@@ -2,7 +2,7 @@ import os from "node:os";
 import { accessSync, constants } from "node:fs";
 import { spawnSync } from "node:child_process";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { env, isExactTrue } from "@/lib/env";
+import { env, isExactTrue, resolveCaptionFontDir } from "@/lib/env";
 
 export const PROCESSING_MAX_ATTEMPTS = 3;
 export const EXPORT_MAX_ATTEMPTS = 3;
@@ -10,7 +10,8 @@ const DEFAULT_RETRY_DELAYS_MS = [15_000, 60_000, 5 * 60_000];
 
 export type WorkerReadinessCheck = {
   name: string;
-  status: "ok" | "fail";
+  // "degraded" reports a capability the worker can start without. Only "fail" stops startup.
+  status: "ok" | "degraded" | "fail";
   message: string;
 };
 
@@ -84,7 +85,7 @@ export function checkWorkerRuntimeEnvironment(
   const ffprobePath = env.FFPROBE_PATH || "ffprobe";
   const ytDlpBinary = env.YTDLP_PATH || "yt-dlp";
   const whisperBinary = env.WHISPER_CPP_BINARY || "whisper-cli";
-  const captionFontDir = env.CAPTION_FONT_DIR || "/usr/share/fonts/truetype/custom";
+  const captionFontDir = resolveCaptionFontDir(env.CAPTION_FONT_DIR);
 
   const checks: WorkerReadinessCheck[] = [
     env.WORKER_ID?.trim()
@@ -132,9 +133,12 @@ export function checkWorkerRuntimeEnvironment(
     fileReadable(`${captionFontDir}/Inter-Regular.ttf`)
       ? { name: "CAPTION_FONT_DIR", status: "ok", message: `Caption fonts are readable at ${captionFontDir}.` }
       : {
+          // Degraded, never fail. Caption fonts are an export-path asset; a worker that cannot
+          // burn captions must still transcribe, probe, analyze, and finalize. The export path
+          // refuses the render itself, so a missing font surfaces on the job it actually breaks.
           name: "CAPTION_FONT_DIR",
-          status: "fail",
-          message: `Caption fonts are required on production workers so burned-in captions render the intended face. Checked: ${captionFontDir}/Inter-Regular.ttf.`,
+          status: "degraded",
+          message: `Caption fonts are missing, so caption burn-in will fail. Other job types are unaffected. Checked: ${captionFontDir}/Inter-Regular.ttf.`,
         },
   ];
 
