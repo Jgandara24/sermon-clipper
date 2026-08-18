@@ -1682,3 +1682,13 @@ decision. Telemetry must not destroy customer work or cause repeated paid spend.
 belongs at the evidence gate, where an incomplete report must be rejected.
 
 Status: Active. Cost-truth report schema version 2 adds the recording block.
+
+## 2026-08-13 - Whisper Tokens Merge Into Words Forward-Only, No Backfill
+
+Decision: `parseWhisperCppOutput` now merges whisper.cpp sub-word tokens into whole words via `src/lib/transcription/token-merge.ts` (leading-space boundary signal on raw token text, ≤200ms end-time attachment guard for late-stamped punctuation, geometric-mean confidence, CJK/length guards). Existing `TranscriptSegment.words` rows are NOT backfilled; only new transcriptions produce merged words. SRT interpolation switched from uniform slices to length+punctuation-weighted distribution (`src/lib/transcription/timing.ts`) with a 1200ms per-word cap.
+
+Why: Word-level highlighting exposes token granularity ("un"/"believable" highlighting separately) and uniform SRT slices as visible jerks. The old parser's per-token `.trim()` destroyed the leading-space boundary marker before anything could use it. A backfill was rejected because editor word ids are positional (`segmentId:index`, per the word-timestamps-as-JSONB decision): renumbering would silently repoint any legacy `deletedWordIds` at different words. Re-transcribe is the escape hatch for old projects that want merged words.
+
+Tradeoff: Transcripts created before this change highlight at sub-word granularity until re-transcribed. Merged-word confidence is a derived (geometric mean) value, not a raw whisper probability.
+
+Status: Active.
