@@ -91,6 +91,32 @@ body {
   color: var(--foreground);
 }
 
+.app-shell-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 48rem) {
+  .app-shell-grid {
+    grid-template-columns: 264px minmax(0, 1fr);
+    transition: grid-template-columns 180ms ease;
+  }
+
+  .app-shell-grid:has(#app-sidebar-collapse:checked) {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  #app-sidebar-collapse:checked ~ .app-shell-sidebar {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  #app-sidebar-collapse:checked ~ .app-shell-sidebar .sidebar-copy,
+  #app-sidebar-collapse:checked ~ .app-shell-sidebar .sidebar-label,
+  #app-sidebar-collapse:checked ~ .app-shell-sidebar .sidebar-workspace {
+    display: none;
+  }
+}
+
 button,
 input,
 select,

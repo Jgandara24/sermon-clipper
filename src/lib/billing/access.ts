@@ -20,11 +20,39 @@ export type WorkspaceAction =
   | "schedule_post"
   | "publish_post";
 
+export const WORKSPACE_ACCESS_STATES = ["trial_active", "trial_expired", "paid", "lapsed"] as const;
+
+export type WorkspaceAccessState = (typeof WORKSPACE_ACCESS_STATES)[number];
+
 export type WorkspaceAccessDecision = {
   allowed: boolean;
-  state: "trial_active" | "trial_expired" | "paid" | "lapsed";
+  state: WorkspaceAccessState;
   reason: "allowed" | "trial_expired_read_only" | "subscription_ended_read_only";
 };
+
+/**
+ * The badge the shell shows for a workspace's access state.
+ *
+ * An exhaustive switch, not a nested ternary: a textual merge can drop one branch of a ternary
+ * and still typecheck, which would silently remove a read-only state from the UI. Adding a
+ * state without a label here is a compile error.
+ */
+export function workspaceAccessLabel(state: WorkspaceAccessState): string {
+  switch (state) {
+    case "paid":
+      return "Paid";
+    case "trial_active":
+      return "Trial active";
+    case "lapsed":
+      return "Subscription ended · Read-only";
+    case "trial_expired":
+      return "Trial ended · Read-only";
+    default: {
+      const unhandled: never = state;
+      throw new Error(`Unhandled workspace access state: ${String(unhandled)}`);
+    }
+  }
+}
 
 export function workspaceAccessMessage(decision: WorkspaceAccessDecision): string {
   return decision.state === "lapsed"

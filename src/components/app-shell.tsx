@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Home,
   LogOut,
+  PanelLeftClose,
   Palette,
   Rss,
   Settings,
@@ -14,7 +15,7 @@ import {
 import Link from "next/link";
 import { logoutAction } from "@/app/actions/auth";
 import { hasWorkspacePermission, type WorkspacePermission } from "@/lib/authorization";
-import { decideWorkspaceAccess } from "@/lib/billing/access";
+import { decideWorkspaceAccess, workspaceAccessLabel } from "@/lib/billing/access";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -55,49 +56,58 @@ export function AppShell({ children, workspace, user, role }: AppShellProps) {
   const access = decideWorkspaceAccess(workspace, "read");
 
   return (
-    <div className="min-h-screen bg-[#f6f5f0] text-stone-950">
-      <div className="grid min-h-screen lg:grid-cols-[264px_1fr]">
-        <aside className="border-b border-stone-200 bg-white/90 px-4 py-4 lg:border-b-0 lg:border-r">
+    <div className="min-h-screen bg-[#f7f7f7] text-stone-950">
+      <div className="app-shell-grid grid min-h-screen">
+        <input
+          id="app-sidebar-collapse"
+          type="checkbox"
+          className="sr-only"
+          aria-label="Collapse main navigation"
+        />
+        <aside className="app-shell-sidebar border-b border-white/10 bg-black px-4 py-4 text-white lg:border-b-0 lg:border-r">
           <div className="flex items-center gap-3 px-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-700 text-white">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white">
               <FolderOpen size={20} aria-hidden="true" />
             </div>
-            <div>
+            <div className="sidebar-copy min-w-0">
               <p className="text-sm font-semibold tracking-wide">Sermon Clipper</p>
-              <p className="text-xs text-stone-500">Phase 1 foundation</p>
+              <p className="text-xs text-stone-500">Create with clarity</p>
             </div>
           </div>
 
-          <nav className="mt-8 grid gap-1" aria-label="Main navigation">
+          <label
+            htmlFor="app-sidebar-collapse"
+            className="mt-4 flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-sm font-medium text-stone-400 hover:bg-white/10 hover:text-white"
+            title="Toggle navigation"
+          >
+            <PanelLeftClose size={17} className="shrink-0" aria-hidden="true" />
+            <span className="sidebar-label">Collapse</span>
+          </label>
+
+          <nav className="mt-4 grid gap-1" aria-label="Main navigation">
             {visibleNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-950"
+                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-stone-400 hover:bg-white/10 hover:text-white"
               >
-                <item.icon size={17} aria-hidden="true" />
-                {item.label}
+                <item.icon size={17} className="shrink-0" aria-hidden="true" />
+                <span className="sidebar-label">{item.label}</span>
               </Link>
             ))}
           </nav>
 
-          <div className="mt-8 rounded-lg border border-stone-200 bg-stone-50 p-4">
+          <div className="sidebar-workspace mt-8 rounded-lg border border-white/10 bg-white/5 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Workspace</p>
             <p className="mt-2 text-sm font-semibold">{workspace.name}</p>
-            <p className="mt-3 text-sm font-semibold text-teal-800">
-              {access.state === "paid"
-                ? "Paid"
-                : access.state === "trial_active"
-                  ? "Trial active"
-                  : access.state === "lapsed"
-                    ? "Subscription ended · Read-only"
-                    : "Trial ended · Read-only"}
+            <p className="mt-3 text-sm font-semibold text-red-400">
+              {workspaceAccessLabel(access.state)}
             </p>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-col">
-          <header className="flex items-center justify-between border-b border-stone-200 bg-white px-5 py-4">
+          <header className="app-shell-account-bar flex items-center justify-between border-b border-stone-200 bg-white px-5 py-4">
             <div>
               <p className="text-sm font-medium text-stone-600">{user.name ?? user.email}</p>
               <p className="text-xs text-stone-500">{user.email}</p>
@@ -112,7 +122,7 @@ export function AppShell({ children, workspace, user, role }: AppShellProps) {
               </button>
             </form>
           </header>
-          <main className="flex-1 px-5 py-6 lg:px-8">{children}</main>
+          <main className="app-shell-main flex-1 px-5 py-6 lg:px-8">{children}</main>
         </div>
       </div>
     </div>
