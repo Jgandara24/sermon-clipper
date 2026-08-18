@@ -29,9 +29,9 @@ function completeEvidence(): LaunchEvidence {
     processing:
       "Operations events show FINALIZE, PROBE, TRANSCRIBE, and ANALYZE completed successfully for project prod_project_123.",
     workerProcess:
-      "Deployment platform shows worker-1 running with WORKER_ID=worker-1, ffmpeg, ffprobe, whisper-cli, readable WHISPER_MODEL_PATH /models/ggml-base.en.bin, and worker_heartbeat ok.",
+      "Deployment platform shows worker-1 running with WORKER_ID=worker-1, ffmpeg, ffprobe, configured ELEVENLABS_API_KEY, and worker_heartbeat ok.",
     transcriptionProvider:
-      "Operations metadata shows provider whisper_cpp, source audio, and configured WHISPER_MODEL_PATH /models/ggml-base.en.bin in production.",
+      "Operations metadata shows provider ElevenLabs Scribe, model scribe_v2, source audio, and zero keyterms in production.",
     analysisProvider:
       "Operations metadata shows provider claude-sonnet-5 with ANTHROPIC_API_KEY-backed scoring, not the heuristic fallback.",
     clipRanking:
@@ -303,7 +303,7 @@ describe("launch evidence validation", () => {
     );
   });
 
-  it("fails when transcription provider proof does not mention Whisper model configuration", () => {
+  it("fails when transcription provider proof does not mention Scribe v2", () => {
     const evidence = completeEvidence();
     evidence.items.transcriptionProvider = {
       status: "passed",
