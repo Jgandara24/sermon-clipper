@@ -407,7 +407,8 @@ collecting launch evidence.
   production readiness when the latest heartbeat is older than `WORKER_HEARTBEAT_MAX_AGE_MS`
   (defaults to `WORKER_STALE_JOB_TIMEOUT_MS`), so run at least one `worker:prod` process before
   final smoke or launch evidence collection.
-- Set `ELEVENLABS_API_KEY` on production workers. Base Scribe v2 is then selected automatically.
+- Set `ELEVENLABS_API_KEY` on production workers. Base Scribe v2 is then selected automatically,
+  and the worker startup gate stops requiring the local whisper binary and model.
   Keyterms are not sent unless a project's processing configuration explicitly supplies them.
 - Production workers still require `ffmpeg` and `ffprobe`. `whisper-cli` and
   `WHISPER_MODEL_PATH` are required only when Scribe is not configured. Keep them available when

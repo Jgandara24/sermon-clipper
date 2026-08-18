@@ -84,6 +84,7 @@ export function checkWorkerRuntimeEnvironment(
   const ffprobePath = env.FFPROBE_PATH || "ffprobe";
   const ytDlpBinary = env.YTDLP_PATH || "yt-dlp";
   const whisperBinary = env.WHISPER_CPP_BINARY || "whisper-cli";
+  const scribeConfigured = Boolean(env.ELEVENLABS_API_KEY);
 
   const checks: WorkerReadinessCheck[] = [
     env.WORKER_ID?.trim()
@@ -114,15 +115,27 @@ export function checkWorkerRuntimeEnvironment(
           status: "fail",
           message: `yt-dlp is required on production workers for URL imports. Checked: ${ytDlpBinary}.`,
         },
-    commandAvailable(whisperBinary)
-      ? { name: "WHISPER_CPP_BINARY", status: "ok", message: `Whisper binary is available at ${whisperBinary}.` }
+    scribeConfigured || commandAvailable(whisperBinary)
+      ? {
+          name: "WHISPER_CPP_BINARY",
+          status: "ok",
+          message: scribeConfigured
+            ? "ElevenLabs Scribe is configured; the local whisper.cpp binary is an optional fallback."
+            : `Whisper binary is available at ${whisperBinary}.`,
+        }
       : {
           name: "WHISPER_CPP_BINARY",
           status: "fail",
           message: `whisper.cpp binary is required on production workers. Checked: ${whisperBinary}.`,
         },
-    env.WHISPER_MODEL_PATH && fileReadable(env.WHISPER_MODEL_PATH)
-      ? { name: "WHISPER_MODEL_PATH", status: "ok", message: "Whisper model file is readable." }
+    scribeConfigured || (env.WHISPER_MODEL_PATH && fileReadable(env.WHISPER_MODEL_PATH))
+      ? {
+          name: "WHISPER_MODEL_PATH",
+          status: "ok",
+          message: scribeConfigured
+            ? "ElevenLabs Scribe is configured; a local whisper model is an optional fallback."
+            : "Whisper model file is readable.",
+        }
       : {
           name: "WHISPER_MODEL_PATH",
           status: "fail",
