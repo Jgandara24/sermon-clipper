@@ -3,6 +3,11 @@ import { accessSync, constants } from "node:fs";
 import { spawnSync } from "node:child_process";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { env, isExactTrue } from "@/lib/env";
+import {
+  resolveTranscriptionProviderPolicy,
+  type TranscriptionProviderName,
+  type TranscriptionProviderPolicy,
+} from "@/lib/transcription/policy";
 
 export const PROCESSING_MAX_ATTEMPTS = 3;
 export const EXPORT_MAX_ATTEMPTS = 3;
@@ -84,7 +89,19 @@ export function checkWorkerRuntimeEnvironment(
   const ffprobePath = env.FFPROBE_PATH || "ffprobe";
   const ytDlpBinary = env.YTDLP_PATH || "yt-dlp";
   const whisperBinary = env.WHISPER_CPP_BINARY || "whisper-cli";
-  const scribeConfigured = Boolean(env.ELEVENLABS_API_KEY);
+  // Which local assets the worker needs follows the NAMED provider policy, never which key
+  // happens to be present. A stray ELEVENLABS_API_KEY must not excuse a whisper deployment
+  // from carrying its model, and a whisper fallback must be provable even when Scribe leads.
+  let policy: TranscriptionProviderPolicy | null = null;
+  let policyError: string | null = null;
+  try {
+    policy = resolveTranscriptionProviderPolicy(env);
+  } catch (error) {
+    policyError = error instanceof Error ? error.message : "Transcription policy is invalid.";
+  }
+  const uses = (name: TranscriptionProviderName) =>
+    policy ? policy.primary === name || policy.fallback === name : true;
+  const needsWhisper = uses("whisper_cpp");
 
   const checks: WorkerReadinessCheck[] = [
     env.WORKER_ID?.trim()
@@ -115,31 +132,40 @@ export function checkWorkerRuntimeEnvironment(
           status: "fail",
           message: `yt-dlp is required on production workers for URL imports. Checked: ${ytDlpBinary}.`,
         },
-    scribeConfigured || commandAvailable(whisperBinary)
+    !needsWhisper || commandAvailable(whisperBinary)
       ? {
           name: "WHISPER_CPP_BINARY",
           status: "ok",
-          message: scribeConfigured
-            ? "ElevenLabs Scribe is configured; the local whisper.cpp binary is an optional fallback."
-            : `Whisper binary is available at ${whisperBinary}.`,
+          message: needsWhisper
+            ? `Whisper binary is available at ${whisperBinary}.`
+            : "The transcription policy does not name whisper.cpp; its binary is not required.",
         }
       : {
           name: "WHISPER_CPP_BINARY",
           status: "fail",
           message: `whisper.cpp binary is required on production workers. Checked: ${whisperBinary}.`,
         },
-    scribeConfigured || (env.WHISPER_MODEL_PATH && fileReadable(env.WHISPER_MODEL_PATH))
+    !needsWhisper || (env.WHISPER_MODEL_PATH && fileReadable(env.WHISPER_MODEL_PATH))
       ? {
           name: "WHISPER_MODEL_PATH",
           status: "ok",
-          message: scribeConfigured
-            ? "ElevenLabs Scribe is configured; a local whisper model is an optional fallback."
-            : "Whisper model file is readable.",
+          message: needsWhisper
+            ? "Whisper model file is readable."
+            : "The transcription policy does not name whisper.cpp; a local model is not required.",
         }
       : {
           name: "WHISPER_MODEL_PATH",
           status: "fail",
           message: "WHISPER_MODEL_PATH must point to a readable model file on production workers.",
+        },
+    policyError
+      ? { name: "TRANSCRIPTION_PROVIDER", status: "fail", message: policyError }
+      : {
+          name: "TRANSCRIPTION_PROVIDER",
+          status: "ok",
+          message: policy?.fallback
+            ? `Primary transcription provider is ${policy.primary}; fallback is ${policy.fallback}.`
+            : `Primary transcription provider is ${policy?.primary}; no fallback is configured.`,
         },
   ];
 

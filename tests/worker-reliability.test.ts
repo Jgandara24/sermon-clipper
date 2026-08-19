@@ -97,11 +97,15 @@ describe("worker reliability helpers", () => {
     );
   });
 
-  it("does not require local whisper assets when Scribe is configured", () => {
+  // The worker gate follows the named policy, not whichever key is present. A Scribe-only
+  // deployment must start without whisper assets; a whisper deployment must still require them
+  // even when an ElevenLabs key happens to be in the environment.
+  it("does not require local whisper assets when the policy names Scribe alone", () => {
     const checks = checkWorkerRuntimeEnvironment(
       {
         NODE_ENV: "production",
         WORKER_ID: "worker-1",
+        TRANSCRIPTION_PRIMARY_PROVIDER: "scribe",
         ELEVENLABS_API_KEY: "scribe-test-key",
       },
       (command) => command !== "whisper-cli",
@@ -112,6 +116,59 @@ describe("worker reliability helpers", () => {
       expect.arrayContaining([
         expect.objectContaining({ name: "WHISPER_CPP_BINARY", status: "ok" }),
         expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "ok" }),
+      ]),
+    );
+  });
+
+  it("still requires whisper assets when the policy names whisper.cpp, key present or not", () => {
+    const checks = checkWorkerRuntimeEnvironment(
+      {
+        NODE_ENV: "production",
+        WORKER_ID: "worker-1",
+        ELEVENLABS_API_KEY: "present-but-not-selected",
+      },
+      (command) => command !== "whisper-cli",
+      () => false,
+    );
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "WHISPER_CPP_BINARY", status: "fail" }),
+        expect.objectContaining({ name: "WHISPER_MODEL_PATH", status: "fail" }),
+      ]),
+    );
+  });
+
+  it("requires whisper assets when the policy names it only as the fallback", () => {
+    const checks = checkWorkerRuntimeEnvironment(
+      {
+        NODE_ENV: "production",
+        WORKER_ID: "worker-1",
+        TRANSCRIPTION_PRIMARY_PROVIDER: "scribe",
+        TRANSCRIPTION_FALLBACK_PROVIDER: "whisper_cpp",
+        ELEVENLABS_API_KEY: "scribe-test-key",
+      },
+      (command) => command !== "whisper-cli",
+      () => false,
+    );
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "WHISPER_CPP_BINARY", status: "fail" }),
+      ]),
+    );
+  });
+
+  it("fails an unparseable transcription policy at worker startup", () => {
+    const checks = checkWorkerRuntimeEnvironment(
+      { NODE_ENV: "production", WORKER_ID: "worker-1", TRANSCRIPTION_PRIMARY_PROVIDER: "deepgram" },
+      () => true,
+      () => true,
+    );
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "TRANSCRIPTION_PROVIDER", status: "fail" }),
       ]),
     );
   });

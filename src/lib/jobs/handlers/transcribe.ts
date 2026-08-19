@@ -18,14 +18,16 @@ import {
   storageTransferCostFact,
 } from "@/lib/storage";
 import { applyFillerDetection } from "@/lib/transcription/filler-detection";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import {
-  getTranscriptionProvider,
   readScribeKeyterms,
+  resolveTranscriptionProviders,
   scribePricePerMinuteUsd,
 } from "@/lib/transcription";
 import { parseSrt, SrtParseError } from "@/lib/transcription/srt";
 import {
   TranscriptionProviderUnavailableError,
+  type TranscriptionProvider,
   type TranscriptionResult,
 } from "@/lib/transcription/types";
 
@@ -181,12 +183,13 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
     if (!sourceVideo.audioKey) {
       throw new JobFailureError("STORAGE_UNAVAILABLE", "Storage hiccup — try again in a minute.");
     }
-    const provider = await getTranscriptionProvider();
+    const { policy, primary, fallback } = resolveTranscriptionProviders();
     const workDir = await mkdtemp(path.join(os.tmpdir(), "sermon-transcribe-"));
     const audioPath = path.join(workDir, "audio.wav");
     const audioBytes = await storage.size(sourceVideo.audioKey).catch(() => 0);
     const downloadStartedAt = Date.now();
     let downloadSucceeded = false;
+    let providerUsed: TranscriptionProvider | null = null;
     try {
       await storage.downloadToFile(sourceVideo.audioKey, audioPath);
       downloadSucceeded = true;
@@ -200,44 +203,89 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         wallTimeMs: Date.now() - downloadStartedAt,
         outcome: "succeeded",
       });
-      const transcriptionStartedAt = startRuntimeMeasurement();
-      try {
-        result = await provider.transcribe({
-          audioPath,
-          language: sourceVideo.language ?? undefined,
-          keyterms: transcriptionKeyterms,
-        });
-      } catch (error) {
-        await recordTranscriptionFact({
-          prisma,
+      // Every attempt records its own cost fact, successful or not, so a provider that failed
+      // after doing paid work still appears in the cost truth.
+      const transcribeWith = async (candidate: TranscriptionProvider) => {
+        const startedAt = startRuntimeMeasurement();
+        try {
+          const transcription = await candidate.transcribe({
+            audioPath,
+            language: sourceVideo.language ?? undefined,
+            keyterms: transcriptionKeyterms,
+          });
+          await recordTranscriptionFact({
+            prisma,
+            workspaceId: project.workspaceId,
+            projectId: project.id,
+            jobId: job.id,
+            attempt: job.attempt,
+            provider: candidate.name,
+            durationS:
+              sourceVideo.durationS?.toNumber() ??
+              Math.max(0, ...transcription.segments.map((segment) => segment.endMs / 1_000)),
+            runtime: candidate.lastTelemetry ?? finishRuntimeMeasurement(startedAt),
+            outcome: "succeeded",
+            source: "audio",
+            keytermsCount: transcriptionKeyterms.length,
+          });
+          return transcription;
+        } catch (error) {
+          await recordTranscriptionFact({
+            prisma,
+            workspaceId: project.workspaceId,
+            projectId: project.id,
+            jobId: job.id,
+            attempt: job.attempt,
+            provider: candidate.name,
+            durationS: sourceVideo.durationS?.toNumber() ?? 0,
+            runtime: candidate.lastTelemetry ?? finishRuntimeMeasurement(startedAt),
+            outcome: "failed",
+            source: "audio",
+            keytermsCount: transcriptionKeyterms.length,
+          });
+          throw error;
+        }
+      };
+
+      // The fallback exists for a primary that cannot serve — no credentials, or an outage
+      // mid-job. It is a visible, recorded downgrade, never a silent one: the church's clips
+      // would otherwise be captioned by a different provider with nothing to show for it.
+      const fallBackTo = async (reason: "unavailable" | "failed") => {
+        if (!fallback || !(await fallback.isAvailable())) return null;
+        await recordOperationalEventSafely(prisma, {
           workspaceId: project.workspaceId,
+          category: "transcription",
+          eventType: "transcription_provider_fallback",
+          severity: "warning",
+          message: `Transcription used the fallback provider because the primary was ${reason}.`,
           projectId: project.id,
           jobId: job.id,
-          attempt: job.attempt,
-          provider: provider.name,
-          durationS: sourceVideo.durationS?.toNumber() ?? 0,
-          runtime: provider.lastTelemetry ?? finishRuntimeMeasurement(transcriptionStartedAt),
-          outcome: "failed",
-          source: "audio",
-          keytermsCount: transcriptionKeyterms.length,
+          // Provider names only. No error text: this event is visible to the church.
+          metadata: { primary: policy.primary, fallback: policy.fallback, reason },
         });
-        throw error;
+        return fallback;
+      };
+
+      let provider = primary;
+      if (!(await primary.isAvailable())) {
+        const substitute = await fallBackTo("unavailable");
+        if (!substitute) {
+          throw new TranscriptionProviderUnavailableError(
+            `Primary transcription provider ${policy.primary} is not configured and no usable fallback is set.`,
+          );
+        }
+        provider = substitute;
       }
-      await recordTranscriptionFact({
-        prisma,
-        workspaceId: project.workspaceId,
-        projectId: project.id,
-        jobId: job.id,
-        attempt: job.attempt,
-        provider: provider.name,
-        durationS:
-          sourceVideo.durationS?.toNumber() ??
-          Math.max(0, ...result.segments.map((segment) => segment.endMs / 1_000)),
-        runtime: provider.lastTelemetry ?? finishRuntimeMeasurement(transcriptionStartedAt),
-        outcome: "succeeded",
-        source: "audio",
-        keytermsCount: transcriptionKeyterms.length,
-      });
+
+      try {
+        result = await transcribeWith(provider);
+      } catch (error) {
+        const substitute = provider === primary ? await fallBackTo("failed") : null;
+        if (!substitute) throw error;
+        provider = substitute;
+        result = await transcribeWith(provider);
+      }
+      providerUsed = provider;
     } catch (error) {
       if (!downloadSucceeded) {
         await recordStorageDownloadFact({
@@ -264,7 +312,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
     } finally {
       await rm(workDir, { recursive: true, force: true });
     }
-    providerName = provider.name;
+    providerName = providerUsed?.name ?? policy.primary;
   }
 
   const segments = applyFillerDetection(result.segments);

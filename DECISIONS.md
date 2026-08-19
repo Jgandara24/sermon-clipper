@@ -1683,28 +1683,51 @@ belongs at the evidence gate, where an incomplete report must be rejected.
 
 Status: Active. Cost-truth report schema version 2 adds the recording block.
 
-## 2026-08-16 - Base Scribe v2 Is the Default Transcription Provider
+## 2026-08-16 - Transcription Provider Selection Is Explicit Policy, Not Key Detection
 
-Decision: Use ElevenLabs base Scribe v2 as the primary transcription provider when
-`ELEVENLABS_API_KEY` is configured. Do not send paid keyterms by default. Keep opt-in project
-keyterms for known church-specific names. Keep whisper.cpp available as the local fallback when
-Scribe is not configured.
+Decision: The target provider policy is base ElevenLabs Scribe v2 primary and whisper.cpp
+secondary. The active pair is named by `TRANSCRIPTION_PRIMARY_PROVIDER` and
+`TRANSCRIPTION_FALLBACK_PROVIDER`. Selection never follows credential presence. The defaults are
+`whisper_cpp` with no fallback, which is today's production behavior, not the target one.
 
-Store one canonical full-sermon transcript with sentence segments, speaker labels, and normalized
-word timestamps. Every clip reuses ranges from that record. Do not transcribe each clip again.
-Keep the canonical sermon transcript available for later search and transcript-based features,
-including a future text-post generator.
+whisper.cpp keeps a second, separate role. The pre-Scribe sermon-boundary stage may run short
+local whisper.cpp samples at ambiguous corridor boundaries. That role does not make whisper.cpp
+the normal production caption provider.
 
-Why: On the same 47-minute sermon, base Scribe corrected all seven targeted church-language errors
-that whisper.cpp missed. It completed in 47.77 seconds and produced timing close to the separate
-forced-alignment result. The no-keyterm output was 99.42 percent similar to the keyterm output and
-correctly produced all seven targeted phrases, so the keyterm surcharge had no measured benefit.
+Sermon-boundary detection is two passes. Before Scribe, use source metadata, audio
+classification, scene evidence, and short local whisper.cpp boundary samples to select one
+conservative continuous sermon corridor. Send that corridor to Scribe once. After Scribe, use its
+transcript, diarization, and audio events to classify precise forbidden regions. A boundary that
+stays ambiguous raises a human exception. There is never a silent full-service Scribe fallback.
 
-Tradeoff: Scribe sends sermon audio to an external provider and costs about $0.22 per audio hour.
-The automatic pre-transcription sermon-boundary stage is not implemented yet. Until that separate
-stage lands, a full-service source still reaches transcription as full-service audio. This provider
-change must not be represented as completing worship, announcement, baptism, prayer, or altar-call
-exclusion before paid transcription.
+The fallback provider serves only when the primary cannot: no credential, or a failure mid-job.
+Every attempt records its own cost fact, and the downgrade writes a
+`transcription_provider_fallback` warning event carrying provider names only, never error text.
+
+Why: A key can exist in an environment for reasons unrelated to captioning production sermons — a
+boundary-detection sample, a staging copy, a rotation in progress. Under key detection, any of
+those silently redirects a church's sermon audio to a paid external provider. Naming the provider
+makes the switch an auditable act, and makes readiness able to report the provider a deployment
+actually chose rather than the one whose key it happens to hold.
+
+Tradeoff: Two more variables to set, and a deployment that forgets them keeps whisper.cpp instead
+of quietly upgrading. That is the intended failure direction.
+
+Activating `TRANSCRIPTION_PRIMARY_PROVIDER=scribe` for normal production traffic has three
+preconditions, all outside this code: the human-labelled 250-word accuracy check passes; the
+ElevenLabs retention review is complete, with customer terms and a deletion workflow; and the
+coarse pre-Scribe sermon-boundary stage is deployed. The 250-word check is a Scribe
+launch-quality gate. It is not a reason to prefer whisper.cpp on quality.
 
 Status: Active. Benchmark evidence is in
-`evaluation/asr-benchmark-whisper-cpp-vs-scribe-2026-08-16.md`.
+`evaluation/asr-benchmark-whisper-cpp-vs-scribe-2026-08-16.md`. Scribe corrected all seven
+targeted church-language errors that whisper.cpp missed, completed a 47-minute sermon in 47.77
+seconds, and produced timing close to the separate forced-alignment result. The no-keyterm output
+was 99.42 percent similar to the keyterm output and produced all seven targeted phrases, so the
+keyterm surcharge had no measured benefit and keyterms stay opt-in per project.
+
+Cost exposure while the boundary stage is missing: Scribe costs about $0.22 per audio hour, so a
+47-minute sermon costs about $0.17 and a 90-minute full service about $0.33. Until the corridor
+stage lands, a full-service source would be paid for as if worship, announcements, baptisms,
+prayer, and altar calls were sermon. This is the third activation precondition, not an accepted
+cost.

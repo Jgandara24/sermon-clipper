@@ -55,12 +55,78 @@ describe("deployment readiness", () => {
   it("accepts ElevenLabs Scribe as the production transcription provider", () => {
     const checks = checkDeploymentEnvironment({
       NODE_ENV: "production",
+      TRANSCRIPTION_PRIMARY_PROVIDER: "scribe",
       ELEVENLABS_API_KEY: "scribe-test-key",
     });
 
     expect(checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "TRANSCRIPTION_PROVIDER", status: "ok" }),
+      ]),
+    );
+  });
+
+  // Readiness must report the provider the deployment NAMED, not the one whose key happens to
+  // be present. Reporting by key presence would show "Scribe" on a deployment still captioning
+  // with whisper.cpp, and hide a primary that has no credentials at all.
+  it("reports the configured transcription policy, not whichever key is present", () => {
+    const base = {
+      NODE_ENV: "production",
+      ELEVENLABS_API_KEY: "present-but-not-selected",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+    };
+
+    const defaults = checkDeploymentEnvironment(base);
+    expect(defaults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "TRANSCRIPTION_PROVIDER",
+          status: "ok",
+          message: expect.stringContaining("whisper_cpp"),
+        }),
+      ]),
+    );
+    expect(
+      defaults.find((check) => check.name === "TRANSCRIPTION_PROVIDER")?.message,
+    ).not.toContain("scribe");
+
+    const scribeFirst = checkDeploymentEnvironment({
+      ...base,
+      TRANSCRIPTION_PRIMARY_PROVIDER: "scribe",
+      TRANSCRIPTION_FALLBACK_PROVIDER: "whisper_cpp",
+    });
+    expect(
+      scribeFirst.find((check) => check.name === "TRANSCRIPTION_PROVIDER")?.message,
+    ).toContain("scribe");
+  });
+
+  it("fails when the named primary provider has no credentials", () => {
+    const checks = checkDeploymentEnvironment({
+      NODE_ENV: "production",
+      TRANSCRIPTION_PRIMARY_PROVIDER: "scribe",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+    });
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "TRANSCRIPTION_PROVIDER",
+          status: "fail",
+          message: expect.stringContaining("ELEVENLABS_API_KEY"),
+        }),
+      ]),
+    );
+  });
+
+  it("fails an unparseable transcription policy instead of falling back to a guess", () => {
+    const checks = checkDeploymentEnvironment({
+      NODE_ENV: "production",
+      TRANSCRIPTION_PRIMARY_PROVIDER: "deepgram",
+    });
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "TRANSCRIPTION_PROVIDER", status: "fail" }),
       ]),
     );
   });

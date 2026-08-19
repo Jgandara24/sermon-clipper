@@ -15,8 +15,10 @@ bucket.
   `/api/stripe/webhook`.
 - Resend notification email or Twilio SMS credentials for production approval notifications.
 - `ffmpeg`/`ffprobe` available on worker hosts, with libass enabled for caption burn-in.
-- An ElevenLabs API key for primary base Scribe v2 transcription.
-- Optional `whisper-cli` plus a local ggml model for the local transcription fallback.
+- A named transcription provider policy (`TRANSCRIPTION_PRIMARY_PROVIDER`, optionally
+  `TRANSCRIPTION_FALLBACK_PROVIDER`) plus the credentials each named provider needs.
+- `whisper-cli` and a local ggml model whenever the policy names `whisper_cpp`, and for the
+  short local boundary samples the pre-Scribe sermon-corridor stage will take.
 - API access for each provider in the active analysis routing policy.
 
 ## Required Environment
@@ -58,10 +60,13 @@ WORKER_RECOVERY_INTERVAL_MS=60000
 ANTHROPIC_API_KEY=sk-ant-...
 # Set this when an active stage uses Google Gemini.
 GEMINI_API_KEY=...
-ELEVENLABS_API_KEY=...
-# Optional local fallback:
-# WHISPER_MODEL_PATH=/models/ggml-base.en.bin
-# WHISPER_CPP_BINARY=whisper-cli
+# Transcription provider policy. Defaults are whisper_cpp with no fallback.
+TRANSCRIPTION_PRIMARY_PROVIDER=whisper_cpp
+TRANSCRIPTION_FALLBACK_PROVIDER=none
+WHISPER_MODEL_PATH=/models/ggml-base.en.bin
+WHISPER_CPP_BINARY=whisper-cli
+# Needed only once the policy names scribe:
+# ELEVENLABS_API_KEY=...
 ```
 
 Optional provider credentials:
@@ -120,7 +125,7 @@ Which service consumes which variables:
 | Variables | Web | Worker |
 | --- | --- | --- |
 | `NODE_ENV`, `DATABASE_URL`, `STORAGE_PROVIDER` + `STORAGE_S3_*` | ✅ | ✅ |
-| `ELEVENLABS_API_KEY`, `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (web readiness reporting only) | ✅ (worker job-time enforcement) |
+| `TRANSCRIPTION_PRIMARY_PROVIDER`, `TRANSCRIPTION_FALLBACK_PROVIDER`, `ELEVENLABS_API_KEY`, `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (web readiness reporting only) | ✅ (worker job-time enforcement) |
 | `ANALYSIS_ALLOW_HEURISTIC` (emergency only) | — | ✅ |
 | `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | ✅ | — |
 | `RESEND_API_KEY`, `AUTH_EMAIL_*`, `NOTIFICATIONS_*`, `TWILIO_*` | ✅ | — |
@@ -407,12 +412,31 @@ collecting launch evidence.
   production readiness when the latest heartbeat is older than `WORKER_HEARTBEAT_MAX_AGE_MS`
   (defaults to `WORKER_STALE_JOB_TIMEOUT_MS`), so run at least one `worker:prod` process before
   final smoke or launch evidence collection.
-- Set `ELEVENLABS_API_KEY` on production workers. Base Scribe v2 is then selected automatically,
-  and the worker startup gate stops requiring the local whisper binary and model.
-  Keyterms are not sent unless a project's processing configuration explicitly supplies them.
+- Name the transcription provider policy on both services. Selection never follows credential
+  presence: a key that exists for a boundary sample or a staging copy must not redirect sermon
+  audio to a paid provider. The readiness gate and the worker startup gate both report the
+  named policy and fail when a named provider has no credential.
 - Production workers still require `ffmpeg` and `ffprobe`. `whisper-cli` and
-  `WHISPER_MODEL_PATH` are required only when Scribe is not configured. Keep them available when
-  the deployment needs a local privacy or outage fallback.
+  `WHISPER_MODEL_PATH` are required whenever the policy names `whisper_cpp` in either slot.
+- Keyterms are not sent unless a project's processing configuration explicitly supplies them.
+- The fallback provider serves only when the primary cannot — no credential, or an outage
+  mid-job. Each attempt records its own cost fact, and the downgrade writes a
+  `transcription_provider_fallback` warning event carrying provider names only.
+
+### Activating Scribe
+
+`TRANSCRIPTION_PRIMARY_PROVIDER=scribe` is the target policy, not the default. Do not set it for
+normal production traffic until all three preconditions hold:
+
+1. A person has labelled at least 250 words and the accuracy gates in
+   `evaluation/asr-benchmark-whisper-cpp-vs-scribe-2026-08-16.md` pass. This is a launch-quality
+   gate on Scribe, not a reason to prefer whisper.cpp.
+2. The ElevenLabs retention review is complete, with customer terms and a deletion workflow.
+   Logging is on by default and zero-retention mode is Enterprise-only.
+3. The coarse pre-Scribe sermon-boundary stage is deployed. Until it is, a full service reaches
+   Scribe as full-service audio: a 90-minute service costs about $0.33 instead of about $0.17
+   for a 47-minute sermon, and worship, announcements, baptisms, prayer, and altar calls are
+   paid for as if they were sermon.
 - Configure `ANTHROPIC_API_KEY` on the production worker for clip scoring. The web readiness check
   reports its own environment only; it cannot prove that the worker has a valid credential.
 - Production ANALYZE jobs fail closed when the key is missing, rejected, or Claude fails. Local

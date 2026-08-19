@@ -140,6 +140,10 @@ const fieldSchemas = {
   YTDLP_PROXY_URL: optionalString,
   YTDLP_PROXY_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   RAILWAY_EGRESS_PRICE_PER_GB_USD: optionalNonNegativeNumber,
+  // Provider selection is explicit policy, validated in src/lib/transcription/policy.ts so the
+  // readiness gate and the worker gate report the same error text.
+  TRANSCRIPTION_PRIMARY_PROVIDER: optionalString,
+  TRANSCRIPTION_FALLBACK_PROVIDER: optionalString,
   WHISPER_CPP_BINARY: optionalString,
   WHISPER_MODEL_PATH: optionalString,
   ELEVENLABS_API_KEY: optionalString,

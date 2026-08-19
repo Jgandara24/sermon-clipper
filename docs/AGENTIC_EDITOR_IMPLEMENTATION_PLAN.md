@@ -1315,6 +1315,26 @@ Before this UI edit, read the relevant bundled Next 16 form, server-action, and 
 
 Create one reusable, low-cost representation of the complete service. Use cheap local evidence to select one conservative sermon corridor before any paid transcription. Send only that corridor to Scribe, then use the precise transcript for forbidden detection, candidate playback, and on-demand visual evidence.
 
+### Sermon-boundary detection is two passes
+
+**Pass A, before Scribe (cheap and local).** Source metadata, audio classification, scene
+evidence, and short local whisper.cpp samples at ambiguous edges select ONE conservative
+continuous sermon corridor. Only that corridor is sent to Scribe, in one request.
+
+**Pass B, after Scribe (precise).** Scribe's transcript, diarization, and audio events classify
+the precise forbidden regions inside and around the corridor — worship, announcements, prayer,
+baptism, altar call, verse slideshows.
+
+Pass A is a cost-control boundary, not the safety decision; Pass B is where forbidden regions
+become precise. A boundary that stays ambiguous after Pass A raises a human exception. There is
+never a silent full-service Scribe fallback.
+
+The provider that serves production captions is named explicitly by
+`TRANSCRIPTION_PRIMARY_PROVIDER` / `TRANSCRIPTION_FALLBACK_PROVIDER`, never inferred from which
+credential is present (see the 2026-08-16 provider-selection decision). whisper.cpp's Pass A role
+does not make it the production caption provider, and holding an ElevenLabs key does not make
+Scribe the production caption provider.
+
 ### Recommended evidence pipeline
 
 ```text
@@ -1360,9 +1380,9 @@ The pre-Scribe corridor is a cost-control boundary, not the final safety decisio
 9. Evaluate commercially safe local person/face, OCR, speech/music, and audio-event models before adding their weights (license check per CTO.md; weights via `/models` volume + SHA-256, never baked into the image).
 10. Run expensive local inference only on sparse cluster representatives.
 11. Build coarse source-level regions from free metadata hints and local audio/visual facts. Select one conservative continuous sermon corridor with configurable handles.
-12. Use short local-ASR windows only when a corridor boundary remains ambiguous. Permit one paid visual escalation per ambiguous service within budget (S16). Still ambiguous → human exception; no background retry and no silent full-service Scribe fallback.
+12. Use short local whisper.cpp windows only when a corridor boundary remains ambiguous. This is whisper.cpp's second role — a cheap local boundary sampler — and it is separate from whichever provider `TRANSCRIPTION_PRIMARY_PROVIDER` names for production captions. Permit one paid visual escalation per ambiguous service within budget (S16). Still ambiguous → human exception; no background retry and no silent full-service Scribe fallback.
 13. Extract one sermon-only 16 kHz mono FLAC. Store its exact source-time offset, duration, checksum, detector version, and corridor confidence.
-14. Change the production Scribe path to submit that single sermon-only artifact. Keep base Scribe v2, `no_verbatim=false`, no keyterms by default, word timestamps, diarization, and audio events. Preserve the completed whisper.cpp-versus-Scribe benchmark as the provider decision evidence.
+14. Change the production Scribe path to submit that single sermon-only artifact. Keep base Scribe v2, `no_verbatim=false`, no keyterms by default, word timestamps, diarization, and audio events. Preserve the completed whisper.cpp-versus-Scribe benchmark as the provider decision evidence. This step is the third precondition for setting `TRANSCRIPTION_PRIMARY_PROVIDER=scribe` on normal production traffic.
 15. Derive deterministic silences, sentences, and paragraphs. Use the Scribe result to refine precise `SERMON`, `WORSHIP`, `ANNOUNCEMENT`, `PRAYER`, `BAPTISM`, `ALTAR_CALL`, and other service-content regions in source time.
 16. Persist source-level regions and detector versions. `FULLSCREEN_SLIDE` regions carry a subtype: `SCRIPTURE`, `SERMON_TITLE`, `MAIN_POINT`, `SUBPOINT`, `NUMBERED_POINT`, `SECTION_TRANSITION`, or `OTHER_PRESENTATION`, plus confidence and OCR evidence. Consecutive scripture slides also form a `VERSE_SLIDESHOW` region. This lets final QC report and test each forbidden slide class instead of collapsing all slides into one label.
 17. Implement `timeline_view` and `boundary_strip` from the shared 480p proxy. Register the proxy's storage key in retention/DerivedMediaArtifact (S13a — an unregistered key leaks forever; the P1.9 four-key inventory work is the cautionary precedent).

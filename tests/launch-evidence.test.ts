@@ -29,9 +29,9 @@ function completeEvidence(): LaunchEvidence {
     processing:
       "Operations events show FINALIZE, PROBE, TRANSCRIBE, and ANALYZE completed successfully for project prod_project_123.",
     workerProcess:
-      "Deployment platform shows worker-1 running with WORKER_ID=worker-1, ffmpeg, ffprobe, configured ELEVENLABS_API_KEY, and worker_heartbeat ok.",
+      "Deployment platform shows worker-1 running with WORKER_ID=worker-1, ffmpeg, ffprobe, TRANSCRIPTION_PRIMARY_PROVIDER=whisper_cpp with its credential, and worker_heartbeat ok.",
     transcriptionProvider:
-      "Operations metadata shows provider ElevenLabs Scribe, model scribe_v2, source audio, and zero keyterms in production.",
+      "Operations metadata shows TRANSCRIPTION_PRIMARY_PROVIDER=whisper_cpp, provider whisper.cpp, and source audio in production.",
     analysisProvider:
       "Operations metadata shows provider claude-sonnet-5 with ANTHROPIC_API_KEY-backed scoring, not the heuristic fallback.",
     clipRanking:
@@ -303,7 +303,24 @@ describe("launch evidence validation", () => {
     );
   });
 
-  it("fails when transcription provider proof does not mention Scribe v2", () => {
+  it("accepts either configured provider, so the gate does not assert an unapproved migration", () => {
+    const evidence = completeEvidence();
+    evidence.items.transcriptionProvider = {
+      status: "passed",
+      evidence:
+        "Operations metadata shows TRANSCRIPTION_PRIMARY_PROVIDER=scribe, provider ElevenLabs scribe_v2, and zero keyterms.",
+    };
+
+    const result = validateLaunchEvidence(evidence);
+
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "transcriptionProvider", status: "ok" }),
+      ]),
+    );
+  });
+
+  it("fails when transcription provider proof does not name the configured provider", () => {
     const evidence = completeEvidence();
     evidence.items.transcriptionProvider = {
       status: "passed",

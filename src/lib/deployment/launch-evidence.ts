@@ -48,7 +48,7 @@ export const launchEvidenceItems = [
     key: "workerProcess",
     label: "Worker process",
     proof:
-      "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, configured ELEVENLABS_API_KEY, and recent worker_heartbeat.",
+      "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, the configured TRANSCRIPTION_PRIMARY_PROVIDER and its credential, and recent worker_heartbeat.",
   },
   {
     key: "databaseMigrations",
@@ -71,7 +71,8 @@ export const launchEvidenceItems = [
   {
     key: "transcriptionProvider",
     label: "Transcription provider",
-    proof: "Production worker transcribed the sermon with base ElevenLabs Scribe v2 and no keyterms.",
+    proof:
+      "Production worker transcribed the sermon with the provider named by TRANSCRIPTION_PRIMARY_PROVIDER, and the operations metadata names that same provider.",
   },
   {
     key: "analysisProvider",
@@ -245,7 +246,7 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
       { label: "WORKER_ID", pattern: /\bWORKER_ID\b/ },
       { label: "ffmpeg", pattern: /\bffmpeg\b/i },
       { label: "ffprobe", pattern: /\bffprobe\b/i },
-      { label: "ELEVENLABS_API_KEY", pattern: /\bELEVENLABS_API_KEY\b/ },
+      { label: "TRANSCRIPTION_PRIMARY_PROVIDER", pattern: /\bTRANSCRIPTION_PRIMARY_PROVIDER\b/ },
       { label: "worker_heartbeat", pattern: /\bworker_heartbeat\b/i },
     ];
     const missing = required.filter((item) => !item.pattern.test(proof)).map((item) => item.label);
@@ -254,12 +255,18 @@ const providerEvidenceChecks: Partial<Record<LaunchEvidenceItemKey, (proof: stri
     }
     return null;
   },
+  // Policy-neutral on purpose. Which provider is correct is a deployment decision
+  // (TRANSCRIPTION_PRIMARY_PROVIDER), so the gate proves the evidence NAMES the provider that
+  // ran rather than hard-coding one — otherwise the gate silently asserts a migration that the
+  // accuracy, retention, and sermon-boundary preconditions have not yet allowed.
   transcriptionProvider: (proof) => {
-    if (!/\b(?:elevenlabs|scribe)\b/i.test(proof)) {
-      return "Transcription provider proof must mention ElevenLabs Scribe.";
+    if (!/\bTRANSCRIPTION_PRIMARY_PROVIDER\b/.test(proof)) {
+      return "Transcription provider proof must name TRANSCRIPTION_PRIMARY_PROVIDER.";
     }
-    if (!/\bscribe[_ -]?v2\b/i.test(proof)) {
-      return "Transcription provider proof must mention the scribe_v2 model.";
+    const namesScribe = /\bscribe[_ -]?v2\b/i.test(proof);
+    const namesWhisper = /\bwhisper(?:\.cpp|_cpp|-cpp)?\b/i.test(proof);
+    if (!namesScribe && !namesWhisper) {
+      return "Transcription provider proof must name the provider that ran: scribe_v2 or whisper.cpp.";
     }
     return null;
   },
