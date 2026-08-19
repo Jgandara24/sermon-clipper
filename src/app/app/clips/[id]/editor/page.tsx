@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { ClipEditor } from "@/components/clip-editor";
-import { approvalExportBlockMessage, isClipApprovedForExport } from "@/lib/approval";
+import { isClipApprovedForPublish, publishApprovalBlockMessage } from "@/lib/approval";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { parseLowerThird } from "@/lib/brand-template";
 import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
@@ -106,11 +106,10 @@ export default async function ClipEditorPage({ params }: { params: Promise<{ id:
         captionPresetId: template.captionPresetId,
         lowerThird: parseLowerThird(template.lowerThird),
       }))}
-      canExport={isClipApprovedForExport(latestApproval?.state)}
-      exportBlockedReason={
-        isClipApprovedForExport(latestApproval?.state)
+      publishBlockedReason={
+        isClipApprovedForPublish(latestApproval?.state)
           ? null
-          : approvalExportBlockMessage(latestApproval?.state)
+          : publishApprovalBlockMessage(latestApproval?.state)
       }
     />
   );

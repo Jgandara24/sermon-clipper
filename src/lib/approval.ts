@@ -43,20 +43,54 @@ export function reviewLinkUnavailableReason(
   return null;
 }
 
-export function isClipApprovedForExport(approvalState: ClipApprovalState | string | null | undefined): boolean {
+/**
+ * Editorial approval gates delivery to an audience — publishing and scheduling — not a manual
+ * download from the member's own editor.
+ *
+ * A manual MP4 export hands a file to the person who is already inside the workspace and already
+ * carries the EXPORT_CLIP permission. It delivers nothing to a congregation, so requiring
+ * approval for it only taught people to approve clips they had no intention of posting, which
+ * devalues the approval itself.
+ *
+ * This is a deliberate relocation of the gate, not its removal. See DECISIONS.md
+ * (2026-08-18) and P1.11/P2.4 in docs/AGENTIC_EDITOR_IMPLEMENTATION_PLAN.md.
+ *
+ * Access, billing, and role enforcement are separate and unchanged: requireApiWorkspace still
+ * checks EXPORT_CLIP and still refuses a trial-expired or lapsed read-only workspace.
+ */
+export function isManualExportAllowedWithoutApproval(
+  approvalState: ClipApprovalState | string | null | undefined,
+): boolean {
+  // The state is accepted and deliberately ignored: callers pass it so the relocation is
+  // visible at every call site, and so a future policy change has one place to land.
+  void approvalState;
+  return true;
+}
+
+/** The one authority for "may this clip reach an audience?". Publishers and schedulers call it. */
+export function isClipApprovedForPublish(
+  approvalState: ClipApprovalState | string | null | undefined,
+): boolean {
   return approvalState === ClipApprovalState.APPROVED;
 }
 
-export function approvalExportBlockMessage(approvalState: ClipApprovalState | string | null | undefined): string {
+export function publishApprovalBlockMessage(
+  approvalState: ClipApprovalState | string | null | undefined,
+): string {
   if (approvalState === ClipApprovalState.CHANGES_REQUESTED) {
-    return "Changes were requested. Update the clip and send it for approval again before exporting.";
+    return "Changes were requested. Update the clip and send it for approval again before publishing or scheduling.";
   }
   if (approvalState === ClipApprovalState.IN_REVIEW) {
-    return "This clip is still in review. Export unlocks after approval.";
+    return "This clip is still in review. Publishing and scheduling unlock after approval.";
   }
-  return "Send this clip for approval before exporting.";
+  return "Send this clip for approval before publishing or scheduling it.";
 }
 
+/**
+ * An editor save invalidates an existing approval: the reviewer approved a specific cut, and
+ * the clip is no longer that cut. Unchanged by the export-gate relocation — it protects the
+ * publish gate, which still stands.
+ */
 export function approvalStateAfterEditorSave(
   approvalState: ClipApprovalState | string | null | undefined,
 ): ClipApprovalState | null {
