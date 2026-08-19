@@ -62,28 +62,99 @@ export async function openTranscriptionFallbackHold(
 }
 
 /**
- * Clears the hold once the configured primary provider serves the same project again.
+ * The name each provider writes into `Transcript.provider`.
  *
- * The clips are rebuilt from the new transcript, so the cause is genuinely gone. Leaving the hold
- * open would be a stuck state nobody could reason about a month later, and a hold that never
- * clears is one people learn to ignore.
+ * A separate map rather than importing the provider classes, which would make this module drag
+ * the whole provider layer into the analyze handler. A test asserts the two agree, so renaming a
+ * provider cannot silently stop auto-resolution.
  */
-export async function resolveTranscriptionFallbackHold(
-  client: ExceptionClient,
-  params: { projectId: string; primaryProvider: TranscriptionProviderName },
-): Promise<void> {
-  await client.editorialException.updateMany({
+export function transcriptProviderNameFor(name: TranscriptionProviderName): string {
+  return name === "scribe" ? "elevenlabs_scribe_v2" : "whisper_cpp";
+}
+
+export type FallbackHoldOutcome =
+  | { settled: "no_hold" }
+  | { settled: "resolved" }
+  | {
+      settled: "kept_open";
+      reason: "transcript_not_from_primary" | "human_work_needs_reconciliation";
+    };
+
+type SettleClient = ExceptionClient &
+  Pick<Prisma.TransactionClient, "clipEdit" | "clipApproval" | "exportJob">;
+
+/**
+ * Decides what happens to an open hold at the moment the clips are rebuilt.
+ *
+ * Three things must all be true before a machine closes it:
+ *
+ *  1. the transcript now stored came from the configured primary provider;
+ *  2. the clips rebuilt successfully — which is why this runs inside the rebuild transaction,
+ *     so a rebuild that throws resolves nothing;
+ *  3. nobody edited, approved, or exported a clip built on the fallback transcript.
+ *
+ * Condition 3 is the one that needs care. The rebuild deletes the project's clips, and
+ * ClipEdit, ClipApproval, and ExportJob all cascade from them — so a person's work on the
+ * fallback clips is destroyed by the very transaction that would declare it reconciled. The
+ * count therefore happens here, before the delete, and any such work keeps the hold open for a
+ * person to reconcile by hand. Only work created at or after the hold opened counts; edits from
+ * an earlier, healthy transcript are not the fallback's business.
+ */
+export async function settleTranscriptionFallbackHold(
+  client: SettleClient,
+  params: {
+    projectId: string;
+    /** The provider recorded on the transcript that the rebuild is reading. */
+    transcriptProvider: string;
+    primaryProvider: TranscriptionProviderName;
+  },
+): Promise<FallbackHoldOutcome> {
+  const hold = await client.editorialException.findFirst({
     where: {
       projectId: params.projectId,
       exceptionType: TRANSCRIPTION_FALLBACK_EXCEPTION_TYPE,
       state: "OPEN",
     },
+    select: { id: true, createdAt: true },
+  });
+  if (!hold) return { settled: "no_hold" };
+
+  if (params.transcriptProvider !== transcriptProviderNameFor(params.primaryProvider)) {
+    return { settled: "kept_open", reason: "transcript_not_from_primary" };
+  }
+
+  const since = { gte: hold.createdAt };
+  const clipScope = { clip: { projectId: params.projectId } };
+  const [edits, approvals, exports] = await Promise.all([
+    client.clipEdit.count({ where: { ...clipScope, createdAt: since } }),
+    client.clipApproval.count({ where: { ...clipScope, createdAt: since } }),
+    client.exportJob.count({ where: { ...clipScope, createdAt: since } }),
+  ]);
+
+  if (edits + approvals + exports > 0) {
+    await client.editorialException.update({
+      where: { id: hold.id },
+      data: {
+        metadata: {
+          manualReconciliationRequired: true,
+          fallbackClipEdits: edits,
+          fallbackClipApprovals: approvals,
+          fallbackClipExports: exports,
+        },
+      },
+    });
+    return { settled: "kept_open", reason: "human_work_needs_reconciliation" };
+  }
+
+  await client.editorialException.update({
+    where: { id: hold.id },
     data: {
       state: "RESOLVED",
       resolvedAt: new Date(),
-      resolutionReason: `Re-transcribed by the configured primary provider ${params.primaryProvider}.`,
+      resolutionReason: `Re-transcribed by the configured primary provider ${params.primaryProvider} and the clips were rebuilt from it. No edits, approvals, or exports had been made from the fallback transcript.`,
     },
   });
+  return { settled: "resolved" };
 }
 
 /** The subset of the given projects currently held. Used by the publish gate. */

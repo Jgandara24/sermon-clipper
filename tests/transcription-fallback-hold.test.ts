@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  ScribeTranscriptionProvider,
+  WhisperCppTranscriptionProvider,
+} from "@/lib/transcription";
+import {
   TRANSCRIPTION_FALLBACK_EXCEPTION_TYPE,
   openTranscriptionFallbackHold,
   projectsHeldForTranscriptionFallback,
-  resolveTranscriptionFallbackHold,
+  settleTranscriptionFallbackHold,
+  transcriptProviderNameFor,
 } from "@/lib/transcription/fallback-hold";
 
 function fakeClient() {
@@ -86,30 +91,6 @@ describe("openTranscriptionFallbackHold", () => {
   });
 });
 
-// A later transcription that the configured primary actually served removes the cause, and the
-// clips are rebuilt from that transcript. Leaving the hold open forever would be a stuck state
-// nobody could reason about later.
-describe("resolveTranscriptionFallbackHold", () => {
-  it("resolves an open hold when the primary provider serves the project again", async () => {
-    const client = fakeClient();
-
-    await resolveTranscriptionFallbackHold(client as never, {
-      projectId: "proj-1",
-      primaryProvider: "scribe",
-    });
-
-    expect(client.editorialException.updateMany).toHaveBeenCalledTimes(1);
-    const call = client.editorialException.updateMany.mock.calls[0][0];
-    expect(call.where).toMatchObject({
-      projectId: "proj-1",
-      exceptionType: TRANSCRIPTION_FALLBACK_EXCEPTION_TYPE,
-      state: "OPEN",
-    });
-    expect(call.data.state).toBe("RESOLVED");
-    expect(call.data.resolutionReason).toContain("scribe");
-  });
-});
-
 describe("projectsHeldForTranscriptionFallback", () => {
   it("returns the set of projects with an open transcription hold", async () => {
     const client = fakeClient();
@@ -137,5 +118,137 @@ describe("projectsHeldForTranscriptionFallback", () => {
 
     expect(held.size).toBe(0);
     expect(client.editorialException.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("settleTranscriptionFallbackHold", () => {
+  const hold = { id: "exc-1", createdAt: new Date("2026-08-19T10:00:00Z") };
+
+  function client(options: {
+    hold?: { id: string; createdAt: Date } | null;
+    edits?: number;
+    approvals?: number;
+    exports?: number;
+  }) {
+    const updates: Array<Record<string, unknown>> = [];
+    return {
+      updates,
+      tx: {
+        editorialException: {
+          findFirst: vi.fn().mockResolvedValue(options.hold === undefined ? hold : options.hold),
+          update: vi.fn().mockImplementation(async (args: Record<string, unknown>) => {
+            updates.push(args);
+            return {};
+          }),
+        },
+        clipEdit: { count: vi.fn().mockResolvedValue(options.edits ?? 0) },
+        clipApproval: { count: vi.fn().mockResolvedValue(options.approvals ?? 0) },
+        exportJob: { count: vi.fn().mockResolvedValue(options.exports ?? 0) },
+      },
+    };
+  }
+
+  it("does nothing when the project carries no open hold", async () => {
+    const { tx, updates } = client({ hold: null });
+
+    const outcome = await settleTranscriptionFallbackHold(tx as never, {
+      projectId: "proj-1",
+      transcriptProvider: "elevenlabs_scribe_v2",
+      primaryProvider: "scribe",
+    });
+
+    expect(outcome).toEqual({ settled: "no_hold" });
+    expect(updates).toHaveLength(0);
+  });
+
+  // Condition 1: the rebuild must be from the primary. A whisper.cpp or SRT-override transcript
+  // is not the primary re-serving, so the cause of the hold has not gone away.
+  it("keeps the hold open when the transcript did not come from the primary", async () => {
+    for (const provider of ["whisper_cpp", "srt_upload"]) {
+      const { tx, updates } = client({});
+
+      const outcome = await settleTranscriptionFallbackHold(tx as never, {
+        projectId: "proj-1",
+        transcriptProvider: provider,
+        primaryProvider: "scribe",
+      });
+
+      expect(outcome).toEqual({ settled: "kept_open", reason: "transcript_not_from_primary" });
+      expect(updates).toHaveLength(0);
+    }
+  });
+
+  // Condition 3: a person edited, approved, or exported a clip built on the fallback transcript.
+  // The rebuild throws that work away, so a machine must not quietly declare it reconciled.
+  it.each([
+    ["edits", { edits: 1 }],
+    ["approvals", { approvals: 1 }],
+    ["exports", { exports: 1 }],
+  ])("keeps the hold open when human %s exist from the fallback transcript", async (_label, counts) => {
+    const { tx, updates } = client(counts);
+
+    const outcome = await settleTranscriptionFallbackHold(tx as never, {
+      projectId: "proj-1",
+      transcriptProvider: "elevenlabs_scribe_v2",
+      primaryProvider: "scribe",
+    });
+
+    expect(outcome).toEqual({
+      settled: "kept_open",
+      reason: "human_work_needs_reconciliation",
+    });
+    expect(updates).toHaveLength(1);
+    const data = updates[0].data as Record<string, unknown>;
+    expect(data.state).toBeUndefined();
+    expect(data.metadata).toMatchObject({ manualReconciliationRequired: true });
+  });
+
+  // Only work done while the hold was open counts. Edits made before the fallback belong to an
+  // earlier transcript and must not block resolution forever.
+  it("counts only human work created at or after the hold opened", async () => {
+    const { tx } = client({});
+
+    await settleTranscriptionFallbackHold(tx as never, {
+      projectId: "proj-1",
+      transcriptProvider: "elevenlabs_scribe_v2",
+      primaryProvider: "scribe",
+    });
+
+    for (const counter of [tx.clipEdit.count, tx.clipApproval.count, tx.exportJob.count]) {
+      expect(counter).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ createdAt: { gte: hold.createdAt } }),
+        }),
+      );
+    }
+  });
+
+  it("resolves only when the primary served and no human work needs reconciling", async () => {
+    const { tx, updates } = client({});
+
+    const outcome = await settleTranscriptionFallbackHold(tx as never, {
+      projectId: "proj-1",
+      transcriptProvider: "elevenlabs_scribe_v2",
+      primaryProvider: "scribe",
+    });
+
+    expect(outcome).toEqual({ settled: "resolved" });
+    expect(updates).toHaveLength(1);
+    const data = updates[0].data as Record<string, unknown>;
+    expect(data.state).toBe("RESOLVED");
+    expect(data.resolvedAt).toBeInstanceOf(Date);
+    expect(String(data.resolutionReason)).toContain("scribe");
+    expect(String(data.resolutionReason)).toContain("rebuilt");
+  });
+});
+
+describe("transcriptProviderNameFor", () => {
+  // The map exists because Transcript.provider stores the provider class's own name string. If
+  // a class is renamed and this map is not, auto-resolution silently stops working.
+  it("matches the name each provider class actually reports", () => {
+    expect(transcriptProviderNameFor("scribe")).toBe(new ScribeTranscriptionProvider({}).name);
+    expect(transcriptProviderNameFor("whisper_cpp")).toBe(
+      new WhisperCppTranscriptionProvider().name,
+    );
   });
 });

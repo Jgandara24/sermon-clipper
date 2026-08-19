@@ -455,11 +455,22 @@ the clips:
 
 Clips from a fallback transcript stay visible and fully editable. What they cannot do is leave
 automatically: `publishDueScheduledPosts` skips a post whose project carries an open hold and
-records `facebook_publish_skipped_transcription_hold`. A later transcription that the configured
-primary actually serves resolves the hold, because the clips are rebuilt from that transcript.
+records `facebook_publish_skipped_transcription_hold`.
 
-Resolve a hold once a person has checked the clips. A hold that never clears is one people learn
-to ignore.
+**How a hold clears.** ANALYZE settles it inside the clip rebuild transaction, and clears it only
+when all three are true:
+
+1. the stored transcript came from the configured primary provider;
+2. the clips rebuilt successfully (a rebuild that throws clears nothing);
+3. nobody edited, approved, or exported a clip built on the fallback transcript.
+
+Failing 1 or 3 keeps the hold OPEN and emits `transcription_fallback_hold_kept_open` with the
+reason. When human work is waiting, the exception's metadata carries the counts
+(`fallbackClipEdits`, `fallbackClipApprovals`, `fallbackClipExports`) so whoever reconciles knows
+what was lost to the rebuild. A clean clear emits `transcription_fallback_hold_resolved` and
+records its reason on the exception.
+
+Resolve a stuck hold by hand once a person has checked the clips.
 - Configure `ANTHROPIC_API_KEY` on the production worker for clip scoring. The web readiness check
   reports its own environment only; it cannot prove that the worker has a valid credential.
 - Production ANALYZE jobs fail closed when the key is missing, rejected, or Claude fails. Local

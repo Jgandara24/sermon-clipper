@@ -25,10 +25,7 @@ import {
   resolveTranscriptionProviders,
   scribePricePerMinuteUsd,
 } from "@/lib/transcription";
-import {
-  openTranscriptionFallbackHold,
-  resolveTranscriptionFallbackHold,
-} from "@/lib/transcription/fallback-hold";
+import { openTranscriptionFallbackHold } from "@/lib/transcription/fallback-hold";
 import {
   offsetTranscriptionResult,
   resolveSubmittedSermonRange,
@@ -350,14 +347,9 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         provider = substitute;
         result = await transcribeWith(provider);
       }
-      // The configured primary served this project, so any hold it left behind has no cause
-      // left. The clips are rebuilt from this transcript.
-      if (provider === primary) {
-        await resolveTranscriptionFallbackHold(prisma, {
-          projectId: project.id,
-          primaryProvider: policy.primary,
-        });
-      }
+      // A hold is NOT settled here. A successful primary transcription is only the first of the
+      // three conditions; the clips have not been rebuilt yet, and the work a person did on the
+      // fallback clips is still standing. ANALYZE settles it inside the rebuild transaction.
       providerUsed = provider;
     } catch (error) {
       if (!downloadSucceeded) {

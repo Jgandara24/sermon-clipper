@@ -1757,9 +1757,21 @@ If Scribe cannot serve — no credential, or a failure mid-job — whisper.cpp m
 transcript. That downgrade is recorded three ways: a `transcription_provider_fallback` warning
 event, the transcript's own provider column, and an OPEN `EditorialException` on the project. The
 exception holds the resulting clips: they stay visible and fully editable, but the automatic
-publisher refuses them until a person reviews them. A later transcription that the configured
-primary actually serves resolves the hold, because the clips are rebuilt from that transcript and
-the cause is gone.
+publisher refuses them until a person reviews them.
+
+A hold clears automatically only when all three of these hold, checked together inside the clip
+rebuild transaction so a failed rebuild clears nothing:
+
+1. the stored transcript came from the configured primary provider;
+2. the clips rebuilt successfully;
+3. nobody edited, approved, or exported a clip built on the fallback transcript.
+
+If any human work exists from the fallback transcript, the hold stays OPEN for manual
+reconciliation and records how much work is waiting. The count runs before the rebuild deletes the
+project's clips, because `ClipEdit`, `ClipApproval`, and `ExportJob` all cascade from
+`GeneratedClip` — the same transaction that would declare the work reconciled is the one that
+destroys it. Only work created at or after the hold opened counts; edits from an earlier, healthy
+transcript are not the fallback's business. Every outcome writes its reason, resolved or not.
 
 Why: Scribe corrected all seven targeted church-language errors whisper.cpp missed, produced word
 timing close to forced alignment, and finished a 47-minute sermon in about 47 seconds. Quality
