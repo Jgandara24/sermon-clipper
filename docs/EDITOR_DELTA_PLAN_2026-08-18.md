@@ -243,9 +243,11 @@ transcript with deliberately overlapping source intervals; slider and number fie
 
 **Note on word timing:** "word timing must match the spoken word precisely" is bounded by transcript
 quality, not by this editor. Native whisper.cpp word starts differ from forced alignment by a median
-of about 203 ms; Scribe's medians sit around 15 ms against the same reference. If Jake judges the
-timing still imprecise after this slice, the remedy is the transcription provider (PR #39 and its
-activation preconditions), not more editor work.
+of about 203 ms; Scribe's medians sit around 15 ms against the same reference. Scribe is now the
+active primary provider (PR #39), so sermons transcribed from here on carry the better timing —
+but clips built on an older whisper.cpp transcript keep theirs until the sermon is re-transcribed.
+If timing still reads as imprecise after this slice, check which provider produced that
+transcript before changing any editor code.
 
 ---
 
@@ -381,8 +383,11 @@ Slice 12 export parity and final QA       ── needs everything
   pinned edit version) is the one with a known defect site: the export handler resolves the latest
   edit version rather than the pinned one, while `ExportJob.editVersion` already exists in the
   schema. Jake asked that no P1 implementation start until the editor work settles.
-- **Transcription provider activation.** PR #39 adds Scribe behind an explicit policy whose default
-  keeps today's behavior. Its three activation preconditions are recorded there and in
-  `DECISIONS.md`.
-- **The P4 sermon-boundary corridor**, which is what stops a full service reaching paid
-  transcription as full-service audio.
+- **Transcription provider activation.** Settled: PR #39 makes Scribe v2 the active primary
+  provider in every environment, with whisper.cpp secondary. One consequence reaches the editor —
+  a sermon that fell back to whisper.cpp puts an editorial hold on its project, so those clips
+  stay fully editable but the automatic publisher will not send them until a person clears the
+  hold. Nothing in slices 1–12 changes that.
+- **The P4 sermon-boundary corridor**, now an efficiency improvement rather than a gate. Until it
+  lands, a full service reaches paid transcription as full-service audio, and every run records
+  the submitted duration so that cost stays measured.
