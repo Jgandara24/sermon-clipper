@@ -106,6 +106,7 @@ describe("worker reliability helpers", () => {
         NODE_ENV: "production",
         WORKER_ID: "worker-1",
         TRANSCRIPTION_PRIMARY_PROVIDER: "scribe",
+        TRANSCRIPTION_FALLBACK_PROVIDER: "none",
         ELEVENLABS_API_KEY: "scribe-test-key",
       },
       (command) => command !== "whisper-cli",
@@ -125,6 +126,7 @@ describe("worker reliability helpers", () => {
       {
         NODE_ENV: "production",
         WORKER_ID: "worker-1",
+        TRANSCRIPTION_PRIMARY_PROVIDER: "whisper_cpp",
         ELEVENLABS_API_KEY: "present-but-not-selected",
       },
       (command) => command !== "whisper-cli",

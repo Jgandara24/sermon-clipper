@@ -17,6 +17,7 @@ import {
   storageProviderKind,
   storageTransferCostFact,
 } from "@/lib/storage";
+import { extractAudioRange } from "@/lib/media/probe";
 import { applyFillerDetection } from "@/lib/transcription/filler-detection";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import {
@@ -24,6 +25,14 @@ import {
   resolveTranscriptionProviders,
   scribePricePerMinuteUsd,
 } from "@/lib/transcription";
+import {
+  openTranscriptionFallbackHold,
+  resolveTranscriptionFallbackHold,
+} from "@/lib/transcription/fallback-hold";
+import {
+  offsetTranscriptionResult,
+  resolveSubmittedSermonRange,
+} from "@/lib/transcription/submitted-range";
 import { parseSrt, SrtParseError } from "@/lib/transcription/srt";
 import {
   TranscriptionProviderUnavailableError,
@@ -43,6 +52,8 @@ async function recordTranscriptionFact(params: {
   outcome: ProcessingCostOutcome;
   source: "audio" | "srt_override";
   keytermsCount?: number;
+  /** The window actually sent to the provider — what the invoice is for. */
+  submittedScope?: "full_service" | "sermon_range";
 }) {
   const isScribe = params.provider === "elevenlabs_scribe_v2";
   await recordProcessingCostFactSafely(params.prisma, {
@@ -58,7 +69,15 @@ async function recordTranscriptionFact(params: {
     cacheState: "miss",
     attempt: Math.max(1, params.attempt),
     outcome: params.outcome,
-    details: { source: params.source, keytermsCount: params.keytermsCount ?? 0 },
+    details: {
+      source: params.source,
+      keytermsCount: params.keytermsCount ?? 0,
+      // Paid transcription is priced per audio hour, so the submitted duration IS the invoice
+      // line. Recording it separately from the source duration is what makes the missing
+      // sermon-boundary stage measurable rather than an assumption.
+      submittedDurationS: Math.round(params.durationS),
+      submittedScope: params.submittedScope ?? "full_service",
+    },
     workspaceId: params.workspaceId,
     projectId: params.projectId,
     jobId: params.jobId,
@@ -203,13 +222,43 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         wallTimeMs: Date.now() - downloadStartedAt,
         outcome: "succeeded",
       });
+      // Send the narrowest sermon window already known. Until the coarse sermon-boundary stage
+      // exists that is normally the complete service, which is temporarily allowed — but the
+      // submitted duration is recorded either way, so the cost of the missing stage is a
+      // measured number rather than an assumption.
+      const sourceDurationMs = (sourceVideo.durationS?.toNumber() ?? 0) * 1_000;
+      const submitted = resolveSubmittedSermonRange(project.processingConfig, sourceDurationMs);
+      const submittedDurationS = (submitted.endMs - submitted.startMs) / 1_000;
+      let submittedAudioPath = audioPath;
+      if (submitted.scope === "sermon_range") {
+        submittedAudioPath = path.join(workDir, "sermon.wav");
+        await extractAudioRange(audioPath, submittedAudioPath, submitted.startMs, submitted.endMs);
+      }
+      await recordOperationalEventSafely(prisma, {
+        workspaceId: project.workspaceId,
+        category: "transcription",
+        eventType: "transcription_audio_submitted",
+        severity: "info",
+        message:
+          submitted.scope === "sermon_range"
+            ? "Transcription received the known sermon range."
+            : "Transcription received the complete service because no sermon range is known yet.",
+        projectId: project.id,
+        jobId: job.id,
+        metadata: {
+          scope: submitted.scope,
+          submittedDurationS: Math.round(submittedDurationS),
+          sourceDurationS: Math.round(sourceDurationMs / 1_000),
+        },
+      });
+
       // Every attempt records its own cost fact, successful or not, so a provider that failed
       // after doing paid work still appears in the cost truth.
       const transcribeWith = async (candidate: TranscriptionProvider) => {
         const startedAt = startRuntimeMeasurement();
         try {
           const transcription = await candidate.transcribe({
-            audioPath,
+            audioPath: submittedAudioPath,
             language: sourceVideo.language ?? undefined,
             keyterms: transcriptionKeyterms,
           });
@@ -220,15 +269,19 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
             jobId: job.id,
             attempt: job.attempt,
             provider: candidate.name,
+            // The submitted window, not the source duration: this is the quantity the provider
+            // priced. They differ the moment a sermon range is known.
             durationS:
-              sourceVideo.durationS?.toNumber() ??
+              submittedDurationS ||
               Math.max(0, ...transcription.segments.map((segment) => segment.endMs / 1_000)),
             runtime: candidate.lastTelemetry ?? finishRuntimeMeasurement(startedAt),
             outcome: "succeeded",
             source: "audio",
             keytermsCount: transcriptionKeyterms.length,
+            submittedScope: submitted.scope,
           });
-          return transcription;
+          // Stored timestamps always live on the source timeline.
+          return offsetTranscriptionResult(transcription, submitted.startMs);
         } catch (error) {
           await recordTranscriptionFact({
             prisma,
@@ -237,11 +290,12 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
             jobId: job.id,
             attempt: job.attempt,
             provider: candidate.name,
-            durationS: sourceVideo.durationS?.toNumber() ?? 0,
+            durationS: submittedDurationS,
             runtime: candidate.lastTelemetry ?? finishRuntimeMeasurement(startedAt),
             outcome: "failed",
             source: "audio",
             keytermsCount: transcriptionKeyterms.length,
+            submittedScope: submitted.scope,
           });
           throw error;
         }
@@ -251,17 +305,28 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
       // mid-job. It is a visible, recorded downgrade, never a silent one: the church's clips
       // would otherwise be captioned by a different provider with nothing to show for it.
       const fallBackTo = async (reason: "unavailable" | "failed") => {
-        if (!fallback || !(await fallback.isAvailable())) return null;
+        if (!fallback || !policy.fallback || !(await fallback.isAvailable())) return null;
         await recordOperationalEventSafely(prisma, {
           workspaceId: project.workspaceId,
           category: "transcription",
           eventType: "transcription_provider_fallback",
           severity: "warning",
-          message: `Transcription used the fallback provider because the primary was ${reason}.`,
+          message: `Transcription used the fallback provider because the primary was ${reason}. Check the clips before publishing them.`,
           projectId: project.id,
           jobId: job.id,
           // Provider names only. No error text: this event is visible to the church.
           metadata: { primary: policy.primary, fallback: policy.fallback, reason },
+        });
+        // The warning tells a person. The hold is what actually stops delivery — a warning
+        // nobody happens to read must not be the only thing between a degraded transcript and
+        // a published clip.
+        await openTranscriptionFallbackHold(prisma, {
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+          jobId: job.id,
+          primaryProvider: policy.primary,
+          usedProvider: policy.fallback,
+          reason,
         });
         return fallback;
       };
@@ -284,6 +349,14 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         if (!substitute) throw error;
         provider = substitute;
         result = await transcribeWith(provider);
+      }
+      // The configured primary served this project, so any hold it left behind has no cause
+      // left. The clips are rebuilt from this transcript.
+      if (provider === primary) {
+        await resolveTranscriptionFallbackHold(prisma, {
+          projectId: project.id,
+          primaryProvider: policy.primary,
+        });
       }
       providerUsed = provider;
     } catch (error) {

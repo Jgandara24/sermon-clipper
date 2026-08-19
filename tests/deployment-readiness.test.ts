@@ -52,10 +52,47 @@ function routingClient(options: {
 }
 
 describe("deployment readiness", () => {
-  it("accepts ElevenLabs Scribe as the production transcription provider", () => {
+  it("accepts the default production policy: Scribe primary, whisper.cpp secondary", () => {
     const checks = checkDeploymentEnvironment({
       NODE_ENV: "production",
-      TRANSCRIPTION_PRIMARY_PROVIDER: "scribe",
+      ELEVENLABS_API_KEY: "scribe-test-key",
+      WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
+    });
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "TRANSCRIPTION_PROVIDER",
+          status: "ok",
+          message: expect.stringContaining("fallback is whisper_cpp"),
+        }),
+      ]),
+    );
+  });
+
+  // A named fallback with no credential is not a fallback. The point of naming one is that it
+  // exists when the primary fails; discovering it does not exist mid-outage is too late.
+  it("fails when the named fallback provider has no credentials", () => {
+    const checks = checkDeploymentEnvironment({
+      NODE_ENV: "production",
+      ELEVENLABS_API_KEY: "scribe-test-key",
+    });
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "TRANSCRIPTION_PROVIDER",
+          status: "fail",
+          message: expect.stringContaining("WHISPER_MODEL_PATH"),
+        }),
+      ]),
+    );
+  });
+
+  it("accepts Scribe with the fallback explicitly declined", () => {
+    const checks = checkDeploymentEnvironment({
+      NODE_ENV: "production",
+      TRANSCRIPTION_FALLBACK_PROVIDER: "none",
       ELEVENLABS_API_KEY: "scribe-test-key",
     });
 
@@ -76,8 +113,12 @@ describe("deployment readiness", () => {
       WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
     };
 
-    const defaults = checkDeploymentEnvironment(base);
-    expect(defaults).toEqual(
+    const whisperFirst = checkDeploymentEnvironment({
+      ...base,
+      TRANSCRIPTION_PRIMARY_PROVIDER: "whisper_cpp",
+      TRANSCRIPTION_FALLBACK_PROVIDER: "none",
+    });
+    expect(whisperFirst).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: "TRANSCRIPTION_PROVIDER",
@@ -86,17 +127,14 @@ describe("deployment readiness", () => {
         }),
       ]),
     );
+    // The ElevenLabs key is present and still does not appear in the reported policy.
     expect(
-      defaults.find((check) => check.name === "TRANSCRIPTION_PROVIDER")?.message,
+      whisperFirst.find((check) => check.name === "TRANSCRIPTION_PROVIDER")?.message,
     ).not.toContain("scribe");
 
-    const scribeFirst = checkDeploymentEnvironment({
-      ...base,
-      TRANSCRIPTION_PRIMARY_PROVIDER: "scribe",
-      TRANSCRIPTION_FALLBACK_PROVIDER: "whisper_cpp",
-    });
+    const defaults = checkDeploymentEnvironment(base);
     expect(
-      scribeFirst.find((check) => check.name === "TRANSCRIPTION_PROVIDER")?.message,
+      defaults.find((check) => check.name === "TRANSCRIPTION_PROVIDER")?.message,
     ).toContain("scribe");
   });
 
@@ -193,6 +231,7 @@ describe("deployment readiness", () => {
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_PAID: "price_starter_123",
+      ELEVENLABS_API_KEY: "scribe-test-key",
       WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
       ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
@@ -226,6 +265,7 @@ describe("deployment readiness", () => {
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_PAID: "price_starter_123",
+      ELEVENLABS_API_KEY: "scribe-test-key",
       WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
       ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
@@ -254,6 +294,7 @@ describe("deployment readiness", () => {
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_PAID: "price_starter_123",
+      ELEVENLABS_API_KEY: "scribe-test-key",
       WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
       ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
@@ -279,6 +320,7 @@ describe("deployment readiness", () => {
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_PAID: "price_starter_123",
+      ELEVENLABS_API_KEY: "scribe-test-key",
       WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
       ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",
@@ -306,6 +348,7 @@ describe("deployment readiness", () => {
       STRIPE_SECRET_KEY: "sk_test_123",
       STRIPE_WEBHOOK_SECRET: "whsec_123",
       STRIPE_PRICE_PAID: "price_starter_123",
+      ELEVENLABS_API_KEY: "scribe-test-key",
       WHISPER_MODEL_PATH: "/models/ggml-base.en.bin",
       ANTHROPIC_API_KEY: "sk-ant-123",
       STORAGE_PROVIDER: "s3",

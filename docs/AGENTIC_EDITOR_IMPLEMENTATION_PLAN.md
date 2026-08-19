@@ -1335,6 +1335,11 @@ credential is present (see the 2026-08-16 provider-selection decision). whisper.
 does not make it the production caption provider, and holding an ElevenLabs key does not make
 Scribe the production caption provider.
 
+Since the 2026-08-19 decision the active pair is `scribe` primary, `whisper_cpp` secondary, in
+every environment. Pass A is therefore an efficiency improvement rather than an activation gate:
+Scribe is already serving, on the narrowest range currently known, which is usually the complete
+service. Building Pass A narrows what is paid for; it does not unblock anything.
+
 ### Recommended evidence pipeline
 
 ```text
@@ -1382,7 +1387,7 @@ The pre-Scribe corridor is a cost-control boundary, not the final safety decisio
 11. Build coarse source-level regions from free metadata hints and local audio/visual facts. Select one conservative continuous sermon corridor with configurable handles.
 12. Use short local whisper.cpp windows only when a corridor boundary remains ambiguous. This is whisper.cpp's second role — a cheap local boundary sampler — and it is separate from whichever provider `TRANSCRIPTION_PRIMARY_PROVIDER` names for production captions. Permit one paid visual escalation per ambiguous service within budget (S16). Still ambiguous → human exception; no background retry and no silent full-service Scribe fallback.
 13. Extract one sermon-only 16 kHz mono FLAC. Store its exact source-time offset, duration, checksum, detector version, and corridor confidence.
-14. Change the production Scribe path to submit that single sermon-only artifact. Keep base Scribe v2, `no_verbatim=false`, no keyterms by default, word timestamps, diarization, and audio events. Preserve the completed whisper.cpp-versus-Scribe benchmark as the provider decision evidence. This step is the third precondition for setting `TRANSCRIPTION_PRIMARY_PROVIDER=scribe` on normal production traffic.
+14. Change the production Scribe path to submit that single sermon-only artifact. Keep base Scribe v2, `no_verbatim=false`, no keyterms by default, word timestamps, diarization, and audio events. Preserve the completed whisper.cpp-versus-Scribe benchmark as the provider decision evidence. **This step does not gate Scribe activation** (2026-08-19 decision — Scribe is already active): it is a cost and processing efficiency improvement. Until it lands, transcription submits the narrowest sermon range already known and records `submittedDurationS` and `submittedScope`, so what the missing stage costs stays measured.
 15. Derive deterministic silences, sentences, and paragraphs. Use the Scribe result to refine precise `SERMON`, `WORSHIP`, `ANNOUNCEMENT`, `PRAYER`, `BAPTISM`, `ALTAR_CALL`, and other service-content regions in source time.
 16. Persist source-level regions and detector versions. `FULLSCREEN_SLIDE` regions carry a subtype: `SCRIPTURE`, `SERMON_TITLE`, `MAIN_POINT`, `SUBPOINT`, `NUMBERED_POINT`, `SECTION_TRANSITION`, or `OTHER_PRESENTATION`, plus confidence and OCR evidence. Consecutive scripture slides also form a `VERSE_SLIDESHOW` region. This lets final QC report and test each forbidden slide class instead of collapsing all slides into one label.
 17. Implement `timeline_view` and `boundary_strip` from the shared 480p proxy. Register the proxy's storage key in retention/DerivedMediaArtifact (S13a — an unregistered key leaks forever; the P1.9 four-key inventory work is the cautionary precedent).

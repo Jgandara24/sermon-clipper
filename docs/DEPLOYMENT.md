@@ -60,13 +60,15 @@ WORKER_RECOVERY_INTERVAL_MS=60000
 ANTHROPIC_API_KEY=sk-ant-...
 # Set this when an active stage uses Google Gemini.
 GEMINI_API_KEY=...
-# Transcription provider policy. Defaults are whisper_cpp with no fallback.
-TRANSCRIPTION_PRIMARY_PROVIDER=whisper_cpp
-TRANSCRIPTION_FALLBACK_PROVIDER=none
+# Transcription provider policy. These are also the code defaults; set them anyway, because a
+# default is a decision nobody had to read.
+TRANSCRIPTION_PRIMARY_PROVIDER=scribe
+TRANSCRIPTION_FALLBACK_PROVIDER=whisper_cpp
+ELEVENLABS_API_KEY=...
+# Required whenever the policy names whisper_cpp in either slot, and for the pre-Scribe
+# sermon-boundary samples.
 WHISPER_MODEL_PATH=/models/ggml-base.en.bin
 WHISPER_CPP_BINARY=whisper-cli
-# Needed only once the policy names scribe:
-# ELEVENLABS_API_KEY=...
 ```
 
 Optional provider credentials:
@@ -415,7 +417,8 @@ collecting launch evidence.
 - Name the transcription provider policy on both services. Selection never follows credential
   presence: a key that exists for a boundary sample or a staging copy must not redirect sermon
   audio to a paid provider. The readiness gate and the worker startup gate both report the
-  named policy and fail when a named provider has no credential.
+  named policy and fail when **either** named provider has no credential — a fallback that does
+  not exist is not a fallback, and mid-outage is too late to find out.
 - Production workers still require `ffmpeg` and `ffprobe`. `whisper-cli` and
   `WHISPER_MODEL_PATH` are required whenever the policy names `whisper_cpp` in either slot.
 - Keyterms are not sent unless a project's processing configuration explicitly supplies them.
@@ -423,20 +426,40 @@ collecting launch evidence.
   mid-job. Each attempt records its own cost fact, and the downgrade writes a
   `transcription_provider_fallback` warning event carrying provider names only.
 
-### Activating Scribe
+### Scribe is active
 
-`TRANSCRIPTION_PRIMARY_PROVIDER=scribe` is the target policy, not the default. Do not set it for
-normal production traffic until all three preconditions hold:
+`TRANSCRIPTION_PRIMARY_PROVIDER=scribe` is the active policy in every environment. The
+human-labelled 250-word quality comparison is complete and satisfied. The ElevenLabs retention
+review continues as separate work; it is not an activation gate. Logging is on by default and
+zero-retention mode is Enterprise-only, so the review still matters — it just does not block use.
 
-1. A person has labelled at least 250 words and the accuracy gates in
-   `evaluation/asr-benchmark-whisper-cpp-vs-scribe-2026-08-16.md` pass. This is a launch-quality
-   gate on Scribe, not a reason to prefer whisper.cpp.
-2. The ElevenLabs retention review is complete, with customer terms and a deletion workflow.
-   Logging is on by default and zero-retention mode is Enterprise-only.
-3. The coarse pre-Scribe sermon-boundary stage is deployed. Until it is, a full service reaches
-   Scribe as full-service audio: a 90-minute service costs about $0.33 instead of about $0.17
-   for a 47-minute sermon, and worship, announcements, baptisms, prayer, and altar calls are
-   paid for as if they were sermon.
+**What the submitted audio window costs while the boundary stage is missing.** Transcription sends
+the narrowest sermon range already known for the source, read from
+`Project.processingConfig.sermonRange`. Nothing writes that key yet, so in practice the complete
+service is submitted, which is temporarily allowed. Scribe costs about $0.22 per audio hour: about
+$0.33 for a 90-minute service against about $0.17 for a 47-minute sermon, with worship,
+announcements, baptisms, prayer, and altar calls paid for as if they were sermon.
+
+Every run records `submittedDurationS` and `submittedScope` on its transcription cost fact and
+emits a `transcription_audio_submitted` event, so that gap is a measured number. The coarse
+sermon-boundary stage remains required for long-term cost and processing efficiency.
+
+### When Scribe cannot serve
+
+whisper.cpp produces the transcript instead. The downgrade is recorded three ways, and it holds
+the clips:
+
+- a `transcription_provider_fallback` warning event, carrying provider names and the reason only;
+- the transcript's own provider column;
+- an OPEN `EditorialException` of type `transcription_provider_fallback` on the project.
+
+Clips from a fallback transcript stay visible and fully editable. What they cannot do is leave
+automatically: `publishDueScheduledPosts` skips a post whose project carries an open hold and
+records `facebook_publish_skipped_transcription_hold`. A later transcription that the configured
+primary actually serves resolves the hold, because the clips are rebuilt from that transcript.
+
+Resolve a hold once a person has checked the clips. A hold that never clears is one people learn
+to ignore.
 - Configure `ANTHROPIC_API_KEY` on the production worker for clip scoring. The web readiness check
   reports its own environment only; it cannot prove that the worker has a valid credential.
 - Production ANALYZE jobs fail closed when the key is missing, rejected, or Claude fails. Local

@@ -92,6 +92,42 @@ export async function extractThumbnail(
   );
 }
 
+/**
+ * Extracts one continuous window of audio in the same 16 kHz mono form the providers expect.
+ *
+ * Used to submit only the sermon to a paid transcription provider once a narrower window is
+ * known. The caller shifts the returned timestamps back by `startMs`, so nothing downstream ever
+ * sees window time.
+ */
+export async function extractAudioRange(
+  filePath: string,
+  outPath: string,
+  startMs: number,
+  endMs: number,
+): Promise<void> {
+  const ffmpegPath = resolveFfmpegPath();
+  await mkdir(path.dirname(outPath), { recursive: true });
+  await execFileWithTimeout(
+    ffmpegPath,
+    [
+      "-y",
+      "-ss",
+      (Math.max(0, startMs) / 1000).toFixed(3),
+      "-i",
+      filePath,
+      "-t",
+      (Math.max(0, endMs - startMs) / 1000).toFixed(3),
+      "-vn",
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      outPath,
+    ],
+    { timeoutMs: envTimeoutMs("FFMPEG_AUDIO_EXTRACT_TIMEOUT_MS", 600_000) },
+  );
+}
+
 export async function extractAudio(filePath: string, outPath: string): Promise<void> {
   const ffmpegPath = resolveFfmpegPath();
   await mkdir(path.dirname(outPath), { recursive: true });

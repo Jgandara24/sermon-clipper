@@ -23,12 +23,16 @@ export class TranscriptionProviderConfigError extends Error {}
 type EnvLike = Record<string, string | undefined>;
 
 /**
- * The default is today's production behavior, not the target one. Activating Scribe has
- * preconditions outside this code — the human accuracy gate, the provider retention review,
- * and the pre-Scribe sermon-boundary stage — so the default must never be the thing those
- * preconditions guard.
+ * Scribe v2 is the primary provider in every environment, with whisper.cpp as the secondary.
+ * The defaults match that policy so an environment that names nothing still gets the intended
+ * one; naming it explicitly is still the documented practice, because a default is a decision
+ * nobody had to read.
+ *
+ * whisper.cpp keeps a second, separate job: short local samples for the pre-Scribe
+ * sermon-boundary pass. That role is unrelated to which provider captions production sermons.
  */
-const DEFAULT_PRIMARY: TranscriptionProviderName = "whisper_cpp";
+const DEFAULT_PRIMARY: TranscriptionProviderName = "scribe";
+const DEFAULT_FALLBACK: TranscriptionProviderName = "whisper_cpp";
 
 function parseName(
   raw: string | undefined,
@@ -63,7 +67,7 @@ export function resolveTranscriptionProviderPolicy(env: EnvLike): TranscriptionP
   const fallback = parseName(
     env.TRANSCRIPTION_FALLBACK_PROVIDER,
     "TRANSCRIPTION_FALLBACK_PROVIDER",
-    null,
+    DEFAULT_FALLBACK === primary ? null : DEFAULT_FALLBACK,
     true,
   );
   if (fallback && fallback === primary) {

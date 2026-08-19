@@ -30,15 +30,29 @@ describe("resolveTranscriptionProviderPolicy", () => {
     expect(policy.fallback).toBe("whisper_cpp");
   });
 
-  it("defaults to whisper.cpp with no fallback, so a deploy never activates Scribe by accident", () => {
+  it("defaults to Scribe primary with whisper.cpp secondary", () => {
     const policy = resolveTranscriptionProviderPolicy({});
+
+    expect(policy.primary).toBe("scribe");
+    expect(policy.fallback).toBe("whisper_cpp");
+  });
+
+  // Naming whisper.cpp as primary must not silently leave whisper.cpp as its own fallback.
+  it("drops the default fallback when it would repeat the named primary", () => {
+    const policy = resolveTranscriptionProviderPolicy({
+      TRANSCRIPTION_PRIMARY_PROVIDER: "whisper_cpp",
+    });
 
     expect(policy.primary).toBe("whisper_cpp");
     expect(policy.fallback).toBeNull();
   });
 
   it("ignores a present ELEVENLABS_API_KEY when the policy does not name Scribe", () => {
-    const policy = resolveTranscriptionProviderPolicy({ ELEVENLABS_API_KEY: "present" });
+    const policy = resolveTranscriptionProviderPolicy({
+      TRANSCRIPTION_PRIMARY_PROVIDER: "whisper_cpp",
+      TRANSCRIPTION_FALLBACK_PROVIDER: "none",
+      ELEVENLABS_API_KEY: "present",
+    });
 
     expect(policy.primary).toBe("whisper_cpp");
     expect(policy.fallback).toBeNull();
@@ -83,6 +97,7 @@ describe("getTranscriptionProvider", () => {
     const { modelPath, cleanup } = await readableModelPath();
     try {
       const provider = await getTranscriptionProvider({
+        TRANSCRIPTION_PRIMARY_PROVIDER: "whisper_cpp",
         ELEVENLABS_API_KEY: "test-key",
         WHISPER_MODEL_PATH: modelPath,
       });

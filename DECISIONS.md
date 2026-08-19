@@ -1687,8 +1687,8 @@ Status: Active. Cost-truth report schema version 2 adds the recording block.
 
 Decision: The target provider policy is base ElevenLabs Scribe v2 primary and whisper.cpp
 secondary. The active pair is named by `TRANSCRIPTION_PRIMARY_PROVIDER` and
-`TRANSCRIPTION_FALLBACK_PROVIDER`. Selection never follows credential presence. The defaults are
-`whisper_cpp` with no fallback, which is today's production behavior, not the target one.
+`TRANSCRIPTION_FALLBACK_PROVIDER`. Selection never follows credential presence. (The defaults now match the target pair — see the
+2026-08-19 decision.)
 
 whisper.cpp keeps a second, separate role. The pre-Scribe sermon-boundary stage may run short
 local whisper.cpp samples at ambiguous corridor boundaries. That role does not make whisper.cpp
@@ -1713,11 +1713,9 @@ actually chose rather than the one whose key it happens to hold.
 Tradeoff: Two more variables to set, and a deployment that forgets them keeps whisper.cpp instead
 of quietly upgrading. That is the intended failure direction.
 
-Activating `TRANSCRIPTION_PRIMARY_PROVIDER=scribe` for normal production traffic has three
-preconditions, all outside this code: the human-labelled 250-word accuracy check passes; the
-ElevenLabs retention review is complete, with customer terms and a deletion workflow; and the
-coarse pre-Scribe sermon-boundary stage is deployed. The 250-word check is a Scribe
-launch-quality gate. It is not a reason to prefer whisper.cpp on quality.
+Activation preconditions: superseded by the 2026-08-19 decision. Scribe is active. The 250-word
+check is satisfied, the retention review is separate work rather than a gate, and the boundary
+stage is an efficiency improvement.
 
 Status: Active. Benchmark evidence is in
 `evaluation/asr-benchmark-whisper-cpp-vs-scribe-2026-08-16.md`. Scribe corrected all seven
@@ -1728,6 +1726,54 @@ keyterm surcharge had no measured benefit and keyterms stay opt-in per project.
 
 Cost exposure while the boundary stage is missing: Scribe costs about $0.22 per audio hour, so a
 47-minute sermon costs about $0.17 and a 90-minute full service about $0.33. Until the corridor
-stage lands, a full-service source would be paid for as if worship, announcements, baptisms,
-prayer, and altar calls were sermon. This is the third activation precondition, not an accepted
-cost.
+stage lands, a full-service source is paid for as if worship, announcements, baptisms, prayer, and
+altar calls were sermon. Transcription submits the narrowest range already known and records the
+submitted duration and scope on every run, so this cost is measured while it lasts.
+
+## 2026-08-19 - Scribe v2 Is the Active Primary Provider; whisper.cpp Is the Secondary
+
+Decision: Base ElevenLabs Scribe v2 is the primary transcription provider in every environment,
+including production. whisper.cpp is the secondary fallback, and separately the local sampler the
+pre-Scribe sermon-boundary pass uses. Scribe is activated now.
+
+The active pair is named by `TRANSCRIPTION_PRIMARY_PROVIDER` and `TRANSCRIPTION_FALLBACK_PROVIDER`
+(`scribe` and `whisper_cpp`), and the code defaults match. Selection never follows credential
+presence: a key can exist for a boundary sample, a staging copy, or a rotation in progress, and
+none of those should redirect sermon audio on their own.
+
+The 250-word human quality comparison is complete. The product owner ran it, Scribe was clearly
+better, and the gate is satisfied. The provider retention review is NOT an activation requirement;
+it continues as separate work.
+
+Until coarse sermon-boundary detection exists, transcription submits the narrowest sermon range
+already known for the source, read from `Project.processingConfig.sermonRange`. When only the
+complete service is available, Scribe may temporarily process the complete service. Every
+transcription records the submitted duration, the submitted scope, and the resulting cost, so the
+price of the missing stage is a measured number rather than an assumption. The boundary stage
+remains required for long-term cost and processing efficiency; it is an efficiency improvement,
+not an activation gate.
+
+If Scribe cannot serve — no credential, or a failure mid-job — whisper.cpp may produce the
+transcript. That downgrade is recorded three ways: a `transcription_provider_fallback` warning
+event, the transcript's own provider column, and an OPEN `EditorialException` on the project. The
+exception holds the resulting clips: they stay visible and fully editable, but the automatic
+publisher refuses them until a person reviews them. A later transcription that the configured
+primary actually serves resolves the hold, because the clips are rebuilt from that transcript and
+the cause is gone.
+
+Why: Scribe corrected all seven targeted church-language errors whisper.cpp missed, produced word
+timing close to forced alignment, and finished a 47-minute sermon in about 47 seconds. Quality
+first is the stated priority, and the manual comparison settled it. Holding fallback clips rather
+than blocking transcription keeps a provider outage from stopping a church's Sunday, while keeping
+a lower-quality transcript from reaching an audience unreviewed.
+
+Tradeoff: Sermon audio leaves our infrastructure for an external vendor at about $0.22 per audio
+hour, and until the boundary stage lands a full service costs about $0.33 against about $0.17 for
+the sermon alone. A named fallback with no credential now fails readiness, because discovering
+mid-outage that the fallback does not exist is too late.
+
+Billing, access, editorial review, and publishing safeguards are unchanged by this decision. The
+publish hold is added to them; nothing is removed.
+
+Status: Active. Supersedes the activation preconditions in the 2026-08-16 provider-selection
+decision. The two-pass boundary sequencing in that decision still stands.
