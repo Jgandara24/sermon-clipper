@@ -7,7 +7,16 @@ This plan describes behavior, not line numbers, so it survives the rebase of the
 It is a **delta** against the prototype recorded on branch `p1/kinetic-captions-and-editor`, whose
 final commit is labelled `PROTOTYPE, NOT ACCEPTED`.
 
-**Status: awaiting Jake's approval. No editor code changes until then.**
+**Status (2026-08-20): awaiting two answers, not approval of the whole plan.** Slices 1–6, 8, 9 and
+11 are ready to start. Slice 7 needs decision **D1** and slice 10 needs decision **D2** (§3), and
+neither is an implementation detail — each changes what gets built.
+
+Ahead of the slices, two pieces of the surrounding work have landed in production and are no
+longer pending: the export-policy step (§2) and the Scribe provider activation (§7).
+
+The prototype branch `p1/kinetic-captions-and-editor` is still unmerged, and its final commit is
+still labelled `PROTOTYPE, NOT ACCEPTED`. It has not been reviewed and should not be, until this
+plan is settled — the slices below are what turn it into something worth reviewing.
 
 ---
 
@@ -28,11 +37,11 @@ the model layer and only need wiring or correction.
 | A title-banner overlay model with defaults, upsert, remove, and dismiss | `title-banner.ts` |
 | Manual export no longer requires editorial approval, with billing and access untouched | landed — see §2 |
 
-## 2. Handoff step 3 (export policy) is already done
+## 2. Handoff step 3 (export policy) is done and live
 
 The handoff's third step — "remove only the editorial approval prerequisite from manual export,
-preserve billing/access restrictions" — is **complete and open for review as PR #40**, on branch
-`feat/export-without-editorial-approval`, off `main`, independent of the editor prototype.
+preserve billing/access restrictions" — **merged as `b0e8000` and is running in production**
+(PR #40).
 
 - `POST /api/clips/:id/exports` no longer refuses with `APPROVAL_REQUIRED`.
 - `isClipApprovedForPublish` / `publishApprovalBlockMessage` are the surviving publish-side authority.
@@ -43,6 +52,10 @@ preserve billing/access restrictions" — is **complete and open for review as P
 
 Gate 11 is therefore unblocked before any editor work begins, which is what the handoff wanted from
 putting export policy early.
+
+The publish-side half — composing `isClipApprovedForPublish` into delivery eligibility — stays
+scheduled for P1.11. Automatic publishing is still globally disabled, so nothing can reach an
+audience in the meantime regardless.
 
 ## 3. Two decisions Jake must make before the slices that depend on them
 
@@ -379,15 +392,27 @@ Slice 12 export parity and final QA       ── needs everything
 
 ## 7. What this plan does not cover
 
-- **P1.1, P1.2, P1.3** remain outstanding and unblocked-but-deferred. P1.1 (render an explicitly
-  pinned edit version) is the one with a known defect site: the export handler resolves the latest
-  edit version rather than the pinned one, while `ExportJob.editVersion` already exists in the
-  schema. Jake asked that no P1 implementation start until the editor work settles.
-- **Transcription provider activation.** Settled: PR #39 makes Scribe v2 the active primary
-  provider in every environment, with whisper.cpp secondary. One consequence reaches the editor —
-  a sermon that fell back to whisper.cpp puts an editorial hold on its project, so those clips
-  stay fully editable but the automatic publisher will not send them until a person clears the
-  hold. Nothing in slices 1–12 changes that.
+- **P1.1, P1.2, P1.3** remain outstanding. P1.1 (render an explicitly pinned edit version) is two
+  changes, not one, and both are still missing on `main`:
+
+  - **Nothing writes the version.** `ExportJob.editVersion` exists in the schema, but the exports
+    route computes the version only to build the idempotency key
+    (`export:<clip>:v<version>:<filename>`) and never stores it on the row.
+  - **Nothing reads it.** `runExportJob` resolves the newest `ClipEdit` by `version desc` and
+    makes no reference to `job.editVersion` at all.
+
+  Removing the export approval gate made this more pressing, not less. Approval used to be an
+  accidental brake: an editor save demoted an approved clip to DRAFT, which blocked the next
+  export until someone re-approved, so the window in which a queued job could be rendered from a
+  newer edit was small. Now a member can edit and export immediately, and the render takes
+  whichever edit is newest when the worker picks the job up. Nothing is corrupted — the output is
+  a real saved edit — but it can be a different edit than the one the export was asked for, and
+  the idempotency key will still claim it was the older version.
+- **Transcription provider activation.** Done and live (PR #39, merged `c278b39`): Scribe v2 is
+  the primary provider in production with whisper.cpp secondary. One consequence reaches the
+  editor — a sermon that fell back to whisper.cpp puts an editorial hold on its project, so those
+  clips stay fully editable but the automatic publisher will not send them until a person clears
+  the hold. Nothing in slices 1–12 changes that.
 - **The P4 sermon-boundary corridor**, now an efficiency improvement rather than a gate. Until it
   lands, a full service reaches paid transcription as full-service audio, and every run records
   the submitted duration so that cost stays measured.
