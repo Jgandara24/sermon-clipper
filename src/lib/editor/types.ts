@@ -14,6 +14,12 @@ export const editorStateSchema = z.object({
   wordEdits: z.object({
     deletedWordIds: z.array(z.string()),
     restoredFillerIds: z.array(z.string()),
+    // Corrections to what a word says, keyed by the same stable word id everything else uses. A
+    // correction changes the text and nothing else — never the word's id, never its timestamps,
+    // and never the clip's range. Defaulted so documents written before Slice 5 still parse.
+    textOverrides: z
+      .array(z.object({ wordId: z.string(), text: z.string() }))
+      .default([]),
   }),
   extensions: z.array(
     z.object({
@@ -61,7 +67,7 @@ export function buildDefaultEditorState(params: {
   return {
     version: 0,
     source: { videoId: params.sourceVideoId, startMs: params.startMs, endMs: params.endMs },
-    wordEdits: { deletedWordIds: [], restoredFillerIds: [] },
+    wordEdits: { deletedWordIds: [], restoredFillerIds: [], textOverrides: [] },
     extensions: [],
     captions: { presetId: "clean", overrides: {}, textOverrides: [] },
     layout: { mode: "center", crop: { x: 0, y: 0, w: 1, h: 1 }, aspect: "9:16" },
