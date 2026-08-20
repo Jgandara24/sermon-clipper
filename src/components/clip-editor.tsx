@@ -15,6 +15,13 @@ import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { VideoPreview } from "@/components/editor/video-preview";
 import { MIN_CLIP_MS } from "@/lib/editor/trim";
+import {
+  type CommitMode,
+  createSaveScheduler,
+  type SaveOutcome,
+  type SavePhase,
+  type SaveScheduler,
+} from "@/lib/editor/save-scheduler";
 import type { EditorState } from "@/lib/editor/types";
 import {
   applyEditorDeletions,
@@ -23,10 +30,7 @@ import {
   type TranscriptSegmentInput,
 } from "@/lib/editor/words";
 
-const AUTOSAVE_DEBOUNCE_MS = 2000;
 const EXTEND_STEP_MS = 15_000;
-
-type SaveStatus = "idle" | "saving" | "saved" | "error" | "conflict";
 
 export function ClipEditor({
   clipId,
@@ -52,16 +56,13 @@ export function ClipEditor({
   const [state, setState] = useState<EditorState>(initialState);
   const [version, setVersion] = useState(initialVersion);
   const [savedState, setSavedState] = useState<EditorState>(initialState);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [savePhase, setSavePhase] = useState<SavePhase>("idle");
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [publishReason, setPublishReason] = useState(publishBlockedReason);
   // Playback position (from the preview) and outgoing seek requests (from the trim timeline).
   const [currentMs, setCurrentMs] = useState(initialState.source.startMs);
   const [seek, setSeek] = useState<{ ms: number; token: number } | null>(null);
   const stateRef = useRef(initialState);
-  const clientRevisionRef = useRef(0);
-  const versionRef = useRef(initialVersion);
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const allWords = useMemo(() => flattenWords(segments), [segments]);
   // Snap targets for the trim handles: every word's start and end, de-duplicated and sorted.
@@ -76,74 +77,73 @@ export function ClipEditor({
   const selectedBrandTemplate =
     brandTemplates.find((template) => template.id === state.brandTemplateId) ?? null;
 
-  const save = useCallback(
-    async (nextState: EditorState, isAutosave: boolean) => {
-      setSaveStatus("saving");
-      const revisionAtRequest = clientRevisionRef.current;
-      try {
-        const res = await fetch(`/api/clips/${clipId}/edit-state`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ baseVersion: versionRef.current, state: nextState, isAutosave }),
-        });
-        if (res.status === 409) {
-          setSaveStatus("conflict");
-          return;
-        }
-        const json = await res.json();
-        if (!res.ok) {
-          setSaveStatus("error");
-          return;
-        }
-        versionRef.current = json.data.version;
-        setVersion(json.data.version);
-        setSavedState(json.data.state);
-        if (clientRevisionRef.current === revisionAtRequest) {
-          stateRef.current = json.data.state;
-          setState(json.data.state);
-        }
-        // An editor save invalidates an existing approval, so publishing needs a fresh one.
-        // Export is unaffected: the member can still download what they just edited.
-        if (json.data.approvalState) {
-          setPublishReason(
-            json.data.approvalBlockReason ??
-              "Send this clip for approval before publishing or scheduling it.",
-          );
-        }
-        setSaveStatus("saved");
-      } catch {
-        setSaveStatus("error");
-      }
-    },
-    [clipId],
-  );
+  // Persistence only. Nothing here sits between an input and what the preview renders: the
+  // preview draws from `state`, which every control updates on its own input event.
+  const [scheduler] = useState<SaveScheduler<EditorState>>(() => {
+    // The optimistic-concurrency base, owned by the scheduler. Only a confirmed, still-current
+    // save advances it, so a superseded response can never move it backwards into a 409 loop.
+    let baseVersion = initialVersion;
+    const created = createSaveScheduler<EditorState>({
+      save: async (doc) => {
+        const result = await putEditState(clipId, baseVersion, doc);
+        if (result.approvalBlockReason !== null) setPublishReason(result.approvalBlockReason);
+        return result.outcome;
+      },
+      onPhase: setSavePhase,
+    });
+    created.onSaved(({ version: nextVersion, state: nextState, superseded }) => {
+      // The version advances on every successful write, superseded or not: it describes the
+      // backend's row, and the next save needs it as its base.
+      baseVersion = Math.max(baseVersion, nextVersion);
+      setVersion(nextVersion);
+      if (superseded) return;
 
+      // Still current, so the stored copy is what the user is looking at. Adopting it keeps the
+      // local document identical to the backend's, which is what lets the status label trust its
+      // own comparison. Nothing is pending here, so no edit in progress can be clobbered.
+      setSavedState(nextState);
+      setState(nextState);
+    });
+    return created;
+  });
+
+  /**
+   * The preview updates from `setState` on this call — synchronously, with nothing between the
+   * input event and the render. `mode` only tells the scheduler when to write: `immediate` for
+   * an interaction's natural commit point (pointer release, Enter, blur, a discrete choice), and
+   * `idle` for a keystroke or a mid-drag frame.
+   */
   const updateState = useCallback(
-    (updater: (prev: EditorState) => EditorState) => {
-      setState((prev) => {
-        const next = updater(prev);
-        clientRevisionRef.current += 1;
-        stateRef.current = next;
-        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-        autosaveTimerRef.current = setTimeout(() => {
-          save(next, true);
-        }, AUTOSAVE_DEBOUNCE_MS);
-        return next;
-      });
+    (updater: (prev: EditorState) => EditorState, mode: CommitMode = "immediate") => {
+      const prev = stateRef.current;
+      const next = updater(prev);
+      if (next === prev) return;
+      stateRef.current = next;
+      setState(next);
+      scheduler.markDirty(next, mode);
     },
-    [save],
+    [scheduler],
   );
 
+  // Mirrors the rendered document into the ref the event handlers read from, including the copy
+  // adopted from a confirmed save.
   useEffect(() => {
-    return () => {
-      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    };
-  }, []);
+    stateRef.current = state;
+  }, [state]);
+
+  // Strict Mode runs this cleanup once right after mounting, so the scheduler must be revivable:
+  // a remount resumes it, and only a real unmount leaves it disposed.
+  useEffect(() => {
+    scheduler.resume();
+    return () => scheduler.dispose();
+  }, [scheduler]);
 
   function handleSaveNow() {
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    save(stateRef.current, false);
+    scheduler.markDirty(stateRef.current, "immediate");
   }
+
+  /** A gesture ended. Writes what is pending; sends nothing when nothing changed. */
+  const commitNow = useCallback(() => scheduler.flush(), [scheduler]);
 
   function toggleWord(word: { id: string; isFiller: boolean }) {
     updateState((prev) => {
@@ -167,7 +167,7 @@ export function ClipEditor({
     updateState((prev) => {
       if (prev.source.startMs === nextStartMs && prev.source.endMs === nextEndMs) return prev;
       return { ...prev, source: { ...prev.source, startMs: nextStartMs, endMs: nextEndMs } };
-    });
+    }, "idle");
   }
 
   function requestSeek(ms: number) {
@@ -217,11 +217,11 @@ export function ClipEditor({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <SaveStatusLabel status={saveStatus} hasUnsavedChanges={hasUnsavedChanges} />
+          <SaveStatusLabel phase={savePhase} hasUnsavedChanges={hasUnsavedChanges} />
           <button
             type="button"
             onClick={handleSaveNow}
-            disabled={saveStatus === "saving"}
+            disabled={savePhase === "saving"}
             className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
           >
             Save
@@ -229,7 +229,7 @@ export function ClipEditor({
         </div>
       </div>
 
-      {saveStatus === "conflict" ? (
+      {savePhase === "conflict" ? (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           This clip changed elsewhere. Reload the page to see the latest edit before saving again.
         </p>
@@ -268,6 +268,7 @@ export function ClipEditor({
             currentMs={currentMs}
             wordBoundaries={wordBoundaries}
             onTrim={handleTrim}
+            onCommitTrim={commitNow}
             onScrub={requestSeek}
           />
           <ScriptEditorPanel
@@ -280,7 +281,8 @@ export function ClipEditor({
           />
           <CaptionStylePanel
             captions={state.captions}
-            onChange={(captions) => updateState((prev) => ({ ...prev, captions }))}
+            onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
+            onCommit={commitNow}
           />
           <BrandTemplatePanel
             templates={brandTemplates}
@@ -291,7 +293,8 @@ export function ClipEditor({
           />
           <LayoutPanel
             layout={state.layout}
-            onChange={(layout) => updateState((prev) => ({ ...prev, layout }))}
+            onChange={(layout, mode) => updateState((prev) => ({ ...prev, layout }), mode)}
+            onCommit={commitNow}
           />
           <ExportPanel clipId={clipId} publishBlockedReason={publishReason} />
         </div>
@@ -300,18 +303,56 @@ export function ClipEditor({
   );
 }
 
+/**
+ * One PUT of the editor document. Returns a scheduler outcome plus any approval consequence:
+ * an editor save invalidates an existing approval, so publishing needs a fresh one. Export is
+ * unaffected — the member can still download what they just edited.
+ */
+async function putEditState(
+  clipId: string,
+  baseVersion: number,
+  next: EditorState,
+): Promise<{ outcome: SaveOutcome<EditorState>; approvalBlockReason: string | null }> {
+  try {
+    const res = await fetch(`/api/clips/${clipId}/edit-state`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseVersion, state: next, isAutosave: true }),
+    });
+    if (res.status === 409) return { outcome: { kind: "conflict" }, approvalBlockReason: null };
+
+    const json = await res.json();
+    if (!res.ok) return { outcome: { kind: "error" }, approvalBlockReason: null };
+
+    return {
+      outcome: { kind: "saved", version: json.data.version, state: json.data.state },
+      approvalBlockReason: json.data.approvalState
+        ? (json.data.approvalBlockReason ??
+          "Send this clip for approval before publishing or scheduling it.")
+        : null,
+    };
+  } catch {
+    return { outcome: { kind: "error" }, approvalBlockReason: null };
+  }
+}
+
+/**
+ * `Saved` is the last thing this reports, never the first. It requires both a settled scheduler
+ * and a local document identical to the one the backend confirmed, so a superseded response can
+ * never leave the label claiming stale content is safe.
+ */
 function SaveStatusLabel({
-  status,
+  phase,
   hasUnsavedChanges,
 }: {
-  status: SaveStatus;
+  phase: SavePhase;
   hasUnsavedChanges: boolean;
 }) {
-  if (status === "saving") return <span className="text-xs text-stone-500">Saving…</span>;
-  if (status === "error") {
+  if (phase === "saving") return <span className="text-xs text-stone-500">Saving…</span>;
+  if (phase === "error") {
     return <span className="text-xs text-red-600">Couldn&apos;t save — try again</span>;
   }
-  if (status === "conflict") return <span className="text-xs text-amber-700">Conflict — reload</span>;
+  if (phase === "conflict") return <span className="text-xs text-amber-700">Conflict — reload</span>;
   if (hasUnsavedChanges) return <span className="text-xs text-stone-500">Unsaved changes</span>;
   return <span className="text-xs text-emerald-700">Saved</span>;
 }

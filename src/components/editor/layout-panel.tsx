@@ -1,6 +1,7 @@
 "use client";
 
 import { LayoutTemplate } from "lucide-react";
+import type { CommitMode } from "@/lib/editor/save-scheduler";
 import type { EditorState } from "@/lib/editor/types";
 
 type Layout = EditorState["layout"];
@@ -14,13 +15,19 @@ const MODES: Array<{ value: Layout["mode"]; label: string; description: string }
 export function LayoutPanel({
   layout,
   onChange,
+  onCommit,
 }: {
   layout: Layout;
-  onChange: (next: Layout) => void;
+  onChange: (next: Layout, mode: CommitMode) => void;
+  /** Writes whatever is pending. Sends nothing when nothing changed. */
+  onCommit: () => void;
 }) {
+  // Dragging a slider repaints the preview on every frame but writes nothing until the pointer
+  // is released, so one drag is one save.
   function updateCrop(partial: Partial<Layout["crop"]>) {
-    onChange({ ...layout, crop: { ...layout.crop, ...partial } });
+    onChange({ ...layout, crop: { ...layout.crop, ...partial } }, "idle");
   }
+
 
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
@@ -34,7 +41,7 @@ export function LayoutPanel({
           <button
             key={mode.value}
             type="button"
-            onClick={() => onChange({ ...layout, mode: mode.value })}
+            onClick={() => onChange({ ...layout, mode: mode.value }, "immediate")}
             title={mode.description}
             className={`rounded-md border px-2 py-2 text-xs font-medium ${
               layout.mode === mode.value
@@ -58,6 +65,9 @@ export function LayoutPanel({
               step={0.01}
               value={layout.crop.x}
               onChange={(event) => updateCrop({ x: Number(event.target.value) })}
+              onPointerUp={onCommit}
+              onKeyUp={onCommit}
+              onBlur={onCommit}
               className="mt-1 w-full"
             />
           </label>
@@ -70,6 +80,9 @@ export function LayoutPanel({
               step={0.01}
               value={layout.crop.y}
               onChange={(event) => updateCrop({ y: Number(event.target.value) })}
+              onPointerUp={onCommit}
+              onKeyUp={onCommit}
+              onBlur={onCommit}
               className="mt-1 w-full"
             />
           </label>
@@ -82,6 +95,9 @@ export function LayoutPanel({
               step={0.01}
               value={layout.crop.w}
               onChange={(event) => updateCrop({ w: Number(event.target.value) })}
+              onPointerUp={onCommit}
+              onKeyUp={onCommit}
+              onBlur={onCommit}
               className="mt-1 w-full"
             />
           </label>
@@ -94,6 +110,9 @@ export function LayoutPanel({
               step={0.01}
               value={layout.crop.h}
               onChange={(event) => updateCrop({ h: Number(event.target.value) })}
+              onPointerUp={onCommit}
+              onKeyUp={onCommit}
+              onBlur={onCommit}
               className="mt-1 w-full"
             />
           </label>
