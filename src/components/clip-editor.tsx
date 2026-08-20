@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Redo2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptionStylePanel } from "@/components/editor/caption-style-panel";
@@ -14,6 +14,18 @@ import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { VideoPreview } from "@/components/editor/video-preview";
+import {
+  applyConfirmedSave,
+  canRedo,
+  canUndo,
+  closeInteraction,
+  createHistory,
+  historyShortcut,
+  isTextEntryTarget,
+  recordEdit,
+  redo,
+  undo,
+} from "@/lib/editor/history";
 import { MIN_CLIP_MS } from "@/lib/editor/trim";
 import {
   type CommitMode,
@@ -53,7 +65,9 @@ export function ClipEditor({
   brandTemplates: EditorBrandTemplate[];
   publishBlockedReason: string | null;
 }) {
-  const [state, setState] = useState<EditorState>(initialState);
+  // History owns the working document: `history.present` is what the editor renders.
+  const [history, setHistory] = useState(() => createHistory<EditorState>(initialState));
+  const state = history.present;
   const [version, setVersion] = useState(initialVersion);
   const [savedState, setSavedState] = useState<EditorState>(initialState);
   const [savePhase, setSavePhase] = useState<SavePhase>("idle");
@@ -101,8 +115,10 @@ export function ClipEditor({
       // Still current, so the stored copy is what the user is looking at. Adopting it keeps the
       // local document identical to the backend's, which is what lets the status label trust its
       // own comparison. Nothing is pending here, so no edit in progress can be clobbered.
+      //
+      // It is an acknowledgement, not an edit: no history entry, and the redo stack survives.
       setSavedState(nextState);
-      setState(nextState);
+      setHistory((current) => applyConfirmedSave(current, nextState));
     });
     return created;
   });
@@ -119,11 +135,47 @@ export function ClipEditor({
       const next = updater(prev);
       if (next === prev) return;
       stateRef.current = next;
-      setState(next);
+      setHistory((current) => recordEdit(current, next, mode));
       scheduler.markDirty(next, mode);
     },
     [scheduler],
   );
+
+  /**
+   * Undo and redo are edits as far as persistence is concerned — the document changed, so it is
+   * written — but they must not themselves become history entries, which is why they move the
+   * stack directly instead of going through updateState.
+   */
+  const stepHistory = useCallback(
+    (direction: "undo" | "redo") => {
+      const next = direction === "undo" ? undo(history) : redo(history);
+      if (next === history) return;
+      stateRef.current = next.present;
+      setHistory(next);
+      // Persisting happens outside the state updater: React invokes updaters twice under Strict
+      // Mode, and a write is not something to do twice.
+      scheduler.markDirty(next.present, "immediate");
+    },
+    [history, scheduler],
+  );
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const action = historyShortcut(event);
+      if (!action) return;
+      // A focused text field owns its own undo stack; reverting the whole document under the
+      // user's cursor would be the wrong answer to Command+Z there.
+      const target = event.target as HTMLElement | null;
+      if (isTextEntryTarget(target ? { tagName: target.tagName, isContentEditable: target.isContentEditable } : null)) {
+        return;
+      }
+      event.preventDefault();
+      stepHistory(action);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [stepHistory]);
 
   // Mirrors the rendered document into the ref the event handlers read from, including the copy
   // adopted from a confirmed save.
@@ -142,8 +194,14 @@ export function ClipEditor({
     scheduler.markDirty(stateRef.current, "immediate");
   }
 
-  /** A gesture ended. Writes what is pending; sends nothing when nothing changed. */
-  const commitNow = useCallback(() => scheduler.flush(), [scheduler]);
+  /**
+   * A gesture ended: write what is pending and close the history entry it built, so the next
+   * gesture is a separate undo step.
+   */
+  const commitNow = useCallback(() => {
+    scheduler.flush();
+    setHistory(closeInteraction);
+  }, [scheduler]);
 
   function toggleWord(word: { id: string; isFiller: boolean }) {
     updateState((prev) => {
@@ -203,6 +261,8 @@ export function ClipEditor({
   // forever after every save (the client's working copy never carries the new version number).
   const hasUnsavedChanges =
     JSON.stringify({ ...state, version: 0 }) !== JSON.stringify({ ...savedState, version: 0 });
+  const undoAvailable = canUndo(history);
+  const redoAvailable = canRedo(history);
 
   return (
     <div className="grid gap-6">
@@ -217,6 +277,28 @@ export function ClipEditor({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => stepHistory("undo")}
+              disabled={!undoAvailable}
+              aria-label="Undo"
+              title="Undo (⌘Z / Ctrl+Z)"
+              className="rounded-md border border-stone-300 p-2 text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Undo2 size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => stepHistory("redo")}
+              disabled={!redoAvailable}
+              aria-label="Redo"
+              title="Redo (⇧⌘Z / Ctrl+Y)"
+              className="rounded-md border border-stone-300 p-2 text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Redo2 size={16} aria-hidden="true" />
+            </button>
+          </div>
           <SaveStatusLabel phase={savePhase} hasUnsavedChanges={hasUnsavedChanges} />
           <button
             type="button"
