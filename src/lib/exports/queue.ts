@@ -1,16 +1,28 @@
 import { type ExportJob, Prisma, ProcessingJobState, type PrismaClient } from "@prisma/client";
 import { EXPORT_MAX_ATTEMPTS, retryRunAfter, staleCutoff, workerId } from "@/lib/worker/reliability";
+import { buildExportIdempotencyKey } from "./edit-version";
 
 const MAX_ATTEMPTS = EXPORT_MAX_ATTEMPTS; // initial attempt + 2 retries, per guide §15 step 6
 
-/** Idempotent by idempotencyKey — a retried POST for the same clip/version/filename reuses the same job. */
+/**
+ * Idempotent by idempotencyKey — a retried POST for the same clip/version/filename reuses the
+ * same job.
+ *
+ * The caller passes the edit version it selected rather than a prebuilt key: the stored
+ * editVersion and the version inside the key are derived from that one number here, so the job
+ * the worker renders can never disagree with the job the key claims to represent (P1.1).
+ */
 export async function enqueueExportJob(
   client: PrismaClient,
-  params: { clipId: string; workspaceId: string; filename: string; idempotencyKey: string },
+  params: { clipId: string; workspaceId: string; filename: string; editVersion: number },
 ): Promise<ExportJob> {
-  const existing = await client.exportJob.findUnique({
-    where: { idempotencyKey: params.idempotencyKey },
+  const idempotencyKey = buildExportIdempotencyKey({
+    clipId: params.clipId,
+    editVersion: params.editVersion,
+    filename: params.filename,
   });
+
+  const existing = await client.exportJob.findUnique({ where: { idempotencyKey } });
   if (existing) {
     return existing;
   }
@@ -21,7 +33,8 @@ export async function enqueueExportJob(
         clipId: params.clipId,
         workspaceId: params.workspaceId,
         filename: params.filename,
-        idempotencyKey: params.idempotencyKey,
+        idempotencyKey,
+        editVersion: params.editVersion,
         state: ProcessingJobState.QUEUED,
       },
     });
@@ -29,9 +42,7 @@ export async function enqueueExportJob(
     // Same race-safe contract as enqueueJob: the loser of a concurrent enqueue returns
     // the winner's row instead of surfacing the unique-constraint violation.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return client.exportJob.findUniqueOrThrow({
-        where: { idempotencyKey: params.idempotencyKey },
-      });
+      return client.exportJob.findUniqueOrThrow({ where: { idempotencyKey } });
     }
     throw error;
   }
@@ -107,13 +118,16 @@ export type ExportJobFailureOutcome = "RETRYING" | "FAILED" | "SKIPPED";
  * Requeues the job (up to MAX_ATTEMPTS total) rather than failing it outright, per guide §15
  * step 6 ("retry x2; then failed"). Once attempts are exhausted, marks it FAILED with the
  * user-facing reason.
+ *
+ * A terminal error skips retrying entirely: the same job run again would fail identically, so
+ * spending the remaining attempts on it only delays the failure the user needs to see.
  */
 export async function markExportJobFailedOrRetry(
   client: PrismaClient,
   job: ExportJob,
-  error: { code: string; message: string },
+  error: { code: string; message: string; terminal?: boolean },
 ): Promise<ExportJobFailureOutcome> {
-  if (job.attempt < MAX_ATTEMPTS) {
+  if (!error.terminal && job.attempt < MAX_ATTEMPTS) {
     const result = await client.exportJob.updateMany({
       where: { id: job.id, state: ProcessingJobState.RUNNING },
       data: {

@@ -305,6 +305,8 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
         state: ProcessingJobState.RUNNING,
         filename: "workflow-export.mp4",
         idempotencyKey: uniqueKey("workflow-export"),
+        // The clip's only saved edit; the render is pinned to it (P1.1).
+        editVersion: 1,
         attempt: 1,
         startedAt: new Date(),
       },
@@ -408,6 +410,8 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
         state: ProcessingJobState.RUNNING,
         filename: "filler-preservation.mp4",
         idempotencyKey: uniqueKey("filler-preservation"),
+        // Never edited: version 0 renders the default editor state.
+        editVersion: 0,
         attempt: 1,
       },
     });

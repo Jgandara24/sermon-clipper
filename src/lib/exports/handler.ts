@@ -10,7 +10,7 @@ import type { ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
-import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
+import type { EditorState } from "@/lib/editor/types";
 import { applyEditorDeletions, flattenWords, wordsInRange } from "@/lib/editor/words";
 import { generateAssSubtitles } from "@/lib/export/ass-generator";
 import { parseLowerThird } from "@/lib/brand-template";
@@ -23,20 +23,11 @@ import {
   storageProviderKind,
   storageTransferCostFact,
 } from "@/lib/storage";
+import { loadPinnedEditorState } from "./edit-version";
+import { ExportFailureError } from "./errors";
 
-export class ExportFailureError extends Error {
-  code: string;
-  userMessage: string;
-
-  constructor(code: string, userMessage: string, options?: { cause?: unknown }) {
-    super(userMessage);
-    this.code = code;
-    this.userMessage = userMessage;
-    if (options?.cause) {
-      this.cause = options.cause;
-    }
-  }
-}
+// Re-exported so existing importers (worker runner, tests) keep a single failure type.
+export { ExportFailureError };
 
 const OUTPUT_WIDTH = 1080;
 const OUTPUT_HEIGHT = 1920;
@@ -112,8 +103,8 @@ function hashFile(filePath: string): Promise<string> {
 }
 
 /**
- * Renders one clip export end to end (guide §15 step 3): loads the clip's latest editor state
- * and transcript, derives kept sub-ranges + crop + captions exactly like the editor preview does
+ * Renders one clip export end to end (guide §15 step 3): loads the exact editor state the job
+ * was enqueued against (ExportJob.editVersion) plus the transcript, derives kept sub-ranges + crop + captions exactly like the editor preview does
  * (same pure helpers), renders via ffmpeg, then records the resulting file. Returns the new
  * ExportedFile id.
  */
@@ -134,13 +125,13 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     throw new ExportFailureError("RENDER_FAILED", "Export failed on our side — your clip is safe.");
   }
 
-  const latestEdit = await prisma.clipEdit.findFirst({
-    where: { clipId: job.clipId },
-    orderBy: { version: "desc" },
+  // Pinned, not latest: the job renders the version the user asked for, even if newer edits
+  // were saved between the request and this run (P1.1).
+  const state: EditorState = await loadPinnedEditorState(prisma, {
+    clipId: job.clipId,
+    editVersion: job.editVersion,
+    defaults: { sourceVideoId: sourceVideo.id, startMs: clip.startMs, endMs: clip.endMs },
   });
-  const state: EditorState = latestEdit
-    ? (latestEdit.editorState as unknown as EditorState)
-    : buildDefaultEditorState({ sourceVideoId: sourceVideo.id, startMs: clip.startMs, endMs: clip.endMs });
 
   const segments = (sourceVideo.transcript?.segments ?? []).map((segment) => ({
     id: segment.id,
