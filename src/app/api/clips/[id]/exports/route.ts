@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
 import { buildDefaultExportFilename } from "@/lib/export/filename";
+import { buildExportIdempotencyKey, DEFAULT_EDIT_VERSION } from "@/lib/exports/edit-version";
 import { enqueueExportJob } from "@/lib/exports/queue";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
@@ -37,11 +38,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return apiError("INVALID_REQUEST", "That export request couldn't be read.");
   }
 
+  // The newest saved version is what the requester is looking at in the editor. It is selected
+  // once here and then pinned onto the job, so a save that lands before the worker starts cannot
+  // change what this export renders (P1.1).
   const latestEdit = await prisma.clipEdit.findFirst({
     where: { clipId: id },
     orderBy: { version: "desc" },
   });
-  const editVersion = latestEdit?.version ?? 0;
+  const editVersion = latestEdit?.version ?? DEFAULT_EDIT_VERSION;
 
   const filename =
     parsed.data.filename ??
@@ -50,7 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       clipTitle: clip.title,
       date: new Date(),
     });
-  const idempotencyKey = `export:${clip.id}:v${editVersion}:${filename}`;
+  const idempotencyKey = buildExportIdempotencyKey({ clipId: clip.id, editVersion, filename });
 
   // Idempotent re-requests of an existing job bypass rate limits — they create no new render.
   // Only genuinely new jobs (including filename variations, the unlimited-render loophole)
@@ -77,7 +81,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     clipId: clip.id,
     workspaceId: auth.workspace.id,
     filename,
-    idempotencyKey,
+    editVersion,
   });
 
   return apiData({ exportJobId: job.id });

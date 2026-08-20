@@ -78,7 +78,7 @@ describe("enqueueExportJob idempotency race", () => {
       clipId: "clip-1",
       workspaceId: "ws-1",
       filename: "clip.mp4",
-      idempotencyKey: "export:clip-1",
+      editVersion: 1,
     });
 
     expect(result).toBe(existingJob);

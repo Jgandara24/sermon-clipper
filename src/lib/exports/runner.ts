@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { HeartbeatLostError, withHeartbeat } from "@/lib/worker/reliability";
-import { ExportFailureError, runExportJob } from "./handler";
+import { ExportFailureError } from "./errors";
+import { runExportJob } from "./handler";
 import {
   claimNextExportJob,
   heartbeatExportJob,
@@ -38,7 +39,13 @@ export async function runOnePendingExportJob(): Promise<boolean> {
       eventType: "export_job_succeeded",
       message: "Export job succeeded.",
       exportJobId: job.id,
-      metadata: { clipId: job.clipId, outputFileId, filename: job.filename, attempt: job.attempt },
+      metadata: {
+        clipId: job.clipId,
+        outputFileId,
+        filename: job.filename,
+        attempt: job.attempt,
+        editVersion: job.editVersion,
+      },
     });
   } catch (error) {
     if (error instanceof HeartbeatLostError) {
@@ -47,10 +54,16 @@ export async function runOnePendingExportJob(): Promise<boolean> {
       return true;
     }
 
+    // A terminal failure (e.g. the pinned edit version is gone) cannot be fixed by rendering
+    // again, so it is never retried. Anything unrecognised stays retryable.
     const failure =
       error instanceof ExportFailureError
-        ? { code: error.code, message: error.userMessage }
-        : { code: "RENDER_FAILED", message: "Export failed on our side — your clip is safe." };
+        ? { code: error.code, message: error.userMessage, terminal: error.terminal }
+        : {
+            code: "RENDER_FAILED",
+            message: "Export failed on our side — your clip is safe.",
+            terminal: false,
+          };
 
     if (!(error instanceof ExportFailureError)) {
       console.error(`[worker] export job ${job.id} failed unexpectedly`, error);
@@ -72,7 +85,9 @@ export async function runOnePendingExportJob(): Promise<boolean> {
         clipId: job.clipId,
         filename: job.filename,
         attempt: job.attempt,
+        editVersion: job.editVersion,
         errorCode: failure.code,
+        terminal: failure.terminal,
       },
     });
   }
