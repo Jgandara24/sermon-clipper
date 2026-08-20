@@ -11,6 +11,7 @@ import { env } from "@/lib/env";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
+import { applyWordTextOverrides } from "@/lib/editor/transcript";
 import { applyEditorDeletions, flattenWords, wordsInRange } from "@/lib/editor/words";
 import { generateAssSubtitles } from "@/lib/export/ass-generator";
 import { parseLowerThird } from "@/lib/brand-template";
@@ -148,8 +149,10 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   }));
 
   const allWords = flattenWords(segments);
-  const wordsInClip = applyEditorDeletions(
-    wordsInRange(allWords, state.source.startMs, state.source.endMs),
+  // Corrections are applied here too, so the caption the member approved in the preview is the
+  // caption the rendered file burns in.
+  const wordsInClip = applyWordTextOverrides(
+    applyEditorDeletions(wordsInRange(allWords, state.source.startMs, state.source.endMs), state),
     state,
   );
 
