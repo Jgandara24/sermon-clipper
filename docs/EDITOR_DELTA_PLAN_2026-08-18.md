@@ -169,7 +169,7 @@ exist once "one drag" is a distinct thing.
 ### Slice 3 — A shared text-case model
 
 **Why here, not later:** the handoff asks for the same five case options in the caption controls
-(Slice 6) and the title controls (Slice 7), and the current model has only a boolean `uppercase` on
+(Slice 7) and the title controls (Slice 9), and the current model has only a boolean `uppercase` on
 captions and no case field at all on the title. Building it twice, or building it inside one of
 those slices and retrofitting the other, is how the two drift apart. It is small and pure, so it
 goes in early on its own.

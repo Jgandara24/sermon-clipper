@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TEXT_CASES } from "./text-case";
 
 // Editor state is one versioned JSON document per clip (guide §12). `version` is duplicated
 // inside the document (matching the guide's own example) for client convenience, but
@@ -26,6 +27,9 @@ export const editorStateSchema = z.object({
     overrides: z.object({
       sizePx: z.number().int().min(16).max(160).optional(),
       position: z.enum(["top", "middle", "bottom"]).optional(),
+      textCase: z.enum(TEXT_CASES).optional(),
+      // Legacy: documents written before the shared case model carry only this. Still parsed so
+      // those clips keep rendering what they always rendered.
       uppercase: z.boolean().optional(),
       highlightColor: z.string().optional(),
     }),

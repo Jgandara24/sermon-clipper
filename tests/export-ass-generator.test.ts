@@ -22,7 +22,7 @@ describe("generateAssSubtitles", () => {
     expect(dialogueLines[1]).toContain("0:00:01.20,0:00:02.40");
   });
 
-  it("uppercases text for presets with uppercase: true", () => {
+  it("uppercases text for a preset whose case is Uppercase", () => {
     const ass = generateAssSubtitles(LINES, getCaptionPreset("karaoke").style, 1080, 1920);
     expect(ass).toContain("PEACE IS NOT THE ABSENCE");
     expect(ass).not.toContain("peace is not the absence");
