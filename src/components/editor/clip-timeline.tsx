@@ -47,6 +47,7 @@ export function ClipTimeline({
   currentMs,
   wordBoundaries,
   onTrim,
+  onCommitTrim,
   onScrub,
 }: {
   sourceDurationMs: number;
@@ -55,6 +56,8 @@ export function ClipTimeline({
   currentMs: number;
   wordBoundaries: number[];
   onTrim: (startMs: number, endMs: number) => void;
+  /** The drag or nudge is over: write what it produced. */
+  onCommitTrim: () => void;
   onScrub: (ms: number) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -123,6 +126,8 @@ export function ClipTimeline({
     trackRef.current?.releasePointerCapture?.(event.pointerId);
     dragRef.current = null;
     setFrozenView(null);
+    // One drag, one save: the moves above only repainted.
+    onCommitTrim();
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -141,6 +146,9 @@ export function ClipTimeline({
       onScrub(next);
     }
   };
+
+  /** Arrow-key nudges commit when the key is released, so a held key is still one save. */
+  const handleKeyUp = () => onCommitTrim();
 
   const startPct = msToPct(startMs);
   const endPct = msToPct(endMs);
@@ -206,6 +214,7 @@ export function ClipTimeline({
           valueMax={sourceDurationMs}
           valueLabel={formatClock(startMs)}
           onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
         />
         <TrimHandle
           kind="end"
@@ -214,6 +223,7 @@ export function ClipTimeline({
           valueMax={sourceDurationMs}
           valueLabel={formatClock(endMs)}
           onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
         />
       </div>
 
@@ -232,6 +242,7 @@ function TrimHandle({
   valueMax,
   valueLabel,
   onKeyDown,
+  onKeyUp,
 }: {
   kind: "start" | "end";
   pct: number;
@@ -239,11 +250,13 @@ function TrimHandle({
   valueMax: number;
   valueLabel: string;
   onKeyDown: (event: React.KeyboardEvent) => void;
+  onKeyUp: () => void;
 }) {
   return (
     <div
       data-trim={kind}
       onKeyDown={onKeyDown}
+      onKeyUp={onKeyUp}
       role="slider"
       tabIndex={0}
       aria-label={kind === "start" ? "Clip start" : "Clip end"}

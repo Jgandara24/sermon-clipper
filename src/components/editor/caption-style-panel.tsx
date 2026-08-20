@@ -2,6 +2,7 @@
 
 import { Type } from "lucide-react";
 import { CAPTION_PRESETS } from "@/lib/editor/caption-presets";
+import type { CommitMode } from "@/lib/editor/save-scheduler";
 import type { EditorState } from "@/lib/editor/types";
 
 type Captions = EditorState["captions"];
@@ -9,10 +10,17 @@ type Captions = EditorState["captions"];
 export function CaptionStylePanel({
   captions,
   onChange,
+  onCommit,
 }: {
   captions: Captions;
-  onChange: (next: Captions) => void;
+  onChange: (next: Captions, mode: CommitMode) => void;
+  /** Writes whatever is pending. Sends nothing when nothing changed. */
+  onCommit: () => void;
 }) {
+  /** Enter is a commit point for a text field, exactly like leaving it. */
+  function commitOnEnter(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") onCommit();
+  }
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2">
@@ -25,7 +33,7 @@ export function CaptionStylePanel({
           <button
             key={preset.id}
             type="button"
-            onClick={() => onChange({ ...captions, presetId: preset.id })}
+            onClick={() => onChange({ ...captions, presetId: preset.id }, "immediate")}
             className={`rounded-md border px-2 py-2 text-xs font-medium ${
               captions.presetId === preset.id
                 ? "border-teal-700 bg-teal-50 text-teal-800"
@@ -51,8 +59,10 @@ export function CaptionStylePanel({
                     ? (event.target.value as "top" | "middle" | "bottom")
                     : undefined,
                 },
-              })
-            }
+              },
+              "immediate",
+            )
+          }
             className="mt-1 w-full rounded-md border border-stone-300 px-2 py-1.5"
           >
             <option value="">Preset default</option>
@@ -77,8 +87,12 @@ export function CaptionStylePanel({
                   ...captions.overrides,
                   sizePx: event.target.value ? Number(event.target.value) : undefined,
                 },
-              })
-            }
+              },
+              "idle",
+            )
+          }
+            onKeyDown={commitOnEnter}
+            onBlur={onCommit}
             className="mt-1 w-full rounded-md border border-stone-300 px-2 py-1.5"
           />
         </label>
@@ -91,8 +105,10 @@ export function CaptionStylePanel({
               onChange({
                 ...captions,
                 overrides: { ...captions.overrides, uppercase: event.target.checked },
-              })
-            }
+              },
+              "immediate",
+            )
+          }
           />
           Uppercase
         </label>
@@ -106,8 +122,11 @@ export function CaptionStylePanel({
               onChange({
                 ...captions,
                 overrides: { ...captions.overrides, highlightColor: event.target.value },
-              })
-            }
+              },
+              "idle",
+            )
+          }
+            onBlur={onCommit}
             className="mt-1 h-8 w-full rounded-md border border-stone-300"
           />
         </label>
