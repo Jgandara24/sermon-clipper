@@ -229,6 +229,8 @@ test.describe("Editor undo and redo", () => {
     const before = await startHandle.getAttribute("aria-valuenow");
 
     // A drag with several intermediate moves: the editor must record one entry, not one per move.
+    // Scroll first — a box measured off screen sends the pointer events outside the page.
+    await startHandle.scrollIntoViewIfNeeded();
     const box = (await startHandle.boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();

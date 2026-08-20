@@ -1,5 +1,6 @@
 "use client";
 
+import { positionFromPointer } from "@/lib/editor/playback";
 import { Scissors } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -18,7 +19,10 @@ const SNAP_FRACTION = 0.02;
 const NUDGE_MS = 200;
 const NUDGE_LARGE_MS = 1_000;
 
-type DragKind = "start" | "end" | "region";
+type DragKind = "start" | "end" | "region" | "playhead";
+
+/** Pointer travel below this is a click, not a drag. */
+const CLICK_SLOP_PX = 3;
 
 function formatClock(ms: number): string {
   const totalS = Math.max(0, Math.round(ms / 1000));
@@ -28,7 +32,9 @@ function formatClock(ms: number): string {
 function readKind(target: EventTarget | null): DragKind | null {
   const el = (target as HTMLElement | null)?.closest?.("[data-trim]");
   const kind = el?.getAttribute("data-trim");
-  return kind === "start" || kind === "end" || kind === "region" ? kind : null;
+  return kind === "start" || kind === "end" || kind === "region" || kind === "playhead"
+    ? kind
+    : null;
 }
 
 /**
@@ -61,7 +67,13 @@ export function ClipTimeline({
   onScrub: (ms: number) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ kind: DragKind; grabOffsetMs: number } | null>(null);
+  const dragRef = useRef<{
+    kind: DragKind;
+    grabOffsetMs: number;
+    /** Where the gesture began, so a click can be told from a drag. */
+    originClientX: number;
+    moved: boolean;
+  } | null>(null);
   // The viewport is derived from the clip each render, EXCEPT while dragging, when it's held to
   // the value captured at pointer-down (in `frozenView`) — so the pixel↔time scale doesn't shift
   // under the pointer as the clip edges move mid-gesture.
@@ -77,11 +89,16 @@ export function ClipTimeline({
   const clientXToMs = useCallback(
     (clientX: number) => {
       const rect = trackRef.current?.getBoundingClientRect();
-      if (!rect || rect.width === 0) return view.start;
-      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-      return view.start + ratio * span;
+      if (!rect) return view.start;
+      return positionFromPointer(clientX, rect, view.start, view.start + span);
     },
     [view.start, span],
+  );
+
+  /** The playhead lives inside the clip: scrubbing never leaves the trimmed window. */
+  const clampPlayhead = useCallback(
+    (ms: number) => Math.min(endMs, Math.max(startMs, ms)),
+    [startMs, endMs],
   );
 
   const snap = useCallback(
@@ -98,7 +115,18 @@ export function ClipTimeline({
     }
     event.preventDefault();
     const ms = clientXToMs(event.clientX);
-    dragRef.current = { kind, grabOffsetMs: kind === "region" ? ms - startMs : 0 };
+    if (kind === "playhead") {
+      dragRef.current = { kind, grabOffsetMs: 0, originClientX: event.clientX, moved: false };
+      trackRef.current?.setPointerCapture(event.pointerId);
+      onScrub(Math.round(clampPlayhead(ms)));
+      return;
+    }
+    dragRef.current = {
+      kind,
+      grabOffsetMs: kind === "region" ? ms - startMs : 0,
+      originClientX: event.clientX,
+      moved: false,
+    };
     setFrozenView(computeTrimViewport(startMs, endMs, sourceDurationMs));
     trackRef.current?.setPointerCapture(event.pointerId);
   };
@@ -106,7 +134,12 @@ export function ClipTimeline({
   const handlePointerMove = (event: React.PointerEvent) => {
     const drag = dragRef.current;
     if (!drag) return;
+    if (Math.abs(event.clientX - drag.originClientX) > CLICK_SLOP_PX) drag.moved = true;
     const ms = clientXToMs(event.clientX);
+    if (drag.kind === "playhead") {
+      onScrub(Math.round(clampPlayhead(ms)));
+      return;
+    }
     if (drag.kind === "start") {
       const next = clampStart(snap(ms), endMs);
       onTrim(next, endMs);
@@ -122,12 +155,23 @@ export function ClipTimeline({
   };
 
   const endDrag = (event: React.PointerEvent) => {
-    if (!dragRef.current) return;
+    const drag = dragRef.current;
+    if (!drag) return;
     trackRef.current?.releasePointerCapture?.(event.pointerId);
     dragRef.current = null;
     setFrozenView(null);
-    // One drag, one save: the moves above only repainted.
-    onCommitTrim();
+
+    // A click inside the clip window is a request to preview that moment, not a nudge of the
+    // clip. The selection overlay covers the whole window, so without this the only clickable
+    // part of the track is the dimmed material the clip excludes.
+    if (drag.kind === "region" && !drag.moved) {
+      onScrub(Math.round(clampPlayhead(clientXToMs(event.clientX))));
+      return;
+    }
+
+    // Moving the playhead changes no document state, so it must not write a version — only a
+    // trim gesture commits.
+    if (drag.kind !== "playhead") onCommitTrim();
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -149,6 +193,14 @@ export function ClipTimeline({
 
   /** Arrow-key nudges commit when the key is released, so a held key is still one save. */
   const handleKeyUp = () => onCommitTrim();
+
+  const handlePlayheadKeyDown = (event: React.KeyboardEvent) => {
+    const dir = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+    if (dir === 0) return;
+    event.preventDefault();
+    const delta = dir * (event.shiftKey ? NUDGE_LARGE_MS : NUDGE_MS);
+    onScrub(Math.round(clampPlayhead(currentMs + delta)));
+  };
 
   const startPct = msToPct(startMs);
   const endPct = msToPct(endMs);
@@ -199,12 +251,28 @@ export function ClipTimeline({
           aria-hidden="true"
         />
 
-        {/* Playhead. */}
+        {/*
+          Playhead: draggable, with a grab target wider than the hairline it draws. It sits below
+          the trim handles deliberately — the two coincide whenever the playhead is parked at an
+          edge of the clip, and trimming is this component's primary control.
+        */}
         {playheadVisible ? (
           <div
-            className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-red-500"
+            data-trim="playhead"
+            role="slider"
+            tabIndex={0}
+            aria-label="Playhead"
+            aria-valuemin={Math.round(startMs)}
+            aria-valuemax={Math.round(endMs)}
+            aria-valuenow={Math.round(currentMs)}
+            aria-valuetext={formatClock(currentMs)}
+            onKeyDown={handlePlayheadKeyDown}
+            className="absolute inset-y-0 z-10 -ml-2 w-4 cursor-ew-resize touch-none"
             style={{ left: `${msToPct(currentMs)}%` }}
-          />
+          >
+            <div className="pointer-events-none absolute inset-y-0 left-2 w-0.5 bg-red-500" />
+            <div className="pointer-events-none absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-red-500" />
+          </div>
         ) : null}
 
         <TrimHandle
@@ -264,7 +332,7 @@ function TrimHandle({
       aria-valuemax={Math.round(valueMax)}
       aria-valuenow={Math.round(valueNow)}
       aria-valuetext={valueLabel}
-      className="absolute inset-y-0 z-10 flex w-4 -translate-x-1/2 cursor-ew-resize touch-none items-center justify-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+      className="absolute inset-y-0 z-20 flex w-4 -translate-x-1/2 cursor-ew-resize touch-none items-center justify-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
       style={{ left: `${pct}%` }}
     >
       <div className="pointer-events-none h-full w-1.5 rounded bg-teal-700 shadow" />
