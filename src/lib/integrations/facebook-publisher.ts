@@ -10,6 +10,7 @@ import {
 } from "@/lib/integrations/facebook";
 import { createSignedMediaUrl } from "@/lib/media/signed-url";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
+import { projectsHeldForTranscriptionFallback } from "@/lib/transcription/fallback-hold";
 
 /**
  * Tier 3 publish poller (docs/BUSINESS_OVERVIEW.md, worker-side).
@@ -229,6 +230,7 @@ export async function publishDueScheduledPosts(
       },
       clip: {
         select: {
+          projectId: true,
           title: true,
           hookText: true,
           exportJobs: {
@@ -243,6 +245,14 @@ export async function publishDueScheduledPosts(
   });
 
   summary.postsScanned = duePosts.length;
+
+  // A transcript the configured primary provider did not produce degrades exactly what a
+  // published clip shows: caption text and word timing. Those clips stay visible and editable,
+  // but only a person decides whether they leave for an audience. One query for the whole batch.
+  const heldProjectIds = await projectsHeldForTranscriptionFallback(
+    client,
+    duePosts.map((post) => post.clip?.projectId).filter((id): id is string => Boolean(id)),
+  );
 
   const appUrl = resolvePublicAppUrl();
   if (!appUrl) {
@@ -278,6 +288,21 @@ export async function publishDueScheduledPosts(
       // The due query filters clipId NOT NULL; this narrows the type and defends in depth.
       const clip = post.clip;
       if (!clip) {
+        continue;
+      }
+
+      if (clip.projectId && heldProjectIds.has(clip.projectId)) {
+        summary.postsSkippedNotEligible++;
+        await recordOperationalEventSafely(client, {
+          workspaceId: post.workspaceId,
+          category: "facebook_publish",
+          eventType: "facebook_publish_skipped_transcription_hold",
+          severity: "warning",
+          message:
+            "This clip was not published automatically: its sermon was transcribed by the backup provider, so it is waiting for a person to check it.",
+          projectId: clip.projectId,
+          metadata: { scheduledPostId: post.id },
+        });
         continue;
       }
 

@@ -20,6 +20,8 @@ import {
   findScheduledPostCollision,
   scheduledDateForRank,
 } from "@/lib/scheduling";
+import { settleTranscriptionFallbackHold } from "@/lib/transcription/fallback-hold";
+import { resolveTranscriptionProviderPolicy } from "@/lib/transcription/policy";
 
 const MIN_CANDIDATE_MS = 20_000;
 const MAX_CANDIDATE_MS = 90_000;
@@ -299,6 +301,15 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       workspaceId: project.workspaceId,
       projectId: project.id,
     });
+    // Before the clips go. ClipEdit, ClipApproval, and ExportJob all cascade from GeneratedClip,
+    // so this delete destroys the very evidence of human work the hold needs to weigh. Settling
+    // inside this transaction also means a rebuild that throws resolves nothing.
+    const holdOutcome = await settleTranscriptionFallbackHold(tx, {
+      projectId: project.id,
+      transcriptProvider: transcript.provider,
+      primaryProvider: resolveTranscriptionProviderPolicy(process.env).primary,
+    });
+
     await tx.generatedClip.deleteMany({ where: { projectId: project.id } });
 
     for (const [idx, clip] of kept.entries()) {
@@ -387,6 +398,30 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
           });
         }
       }
+    }
+
+    if (holdOutcome.settled !== "no_hold") {
+      await recordOperationalEvent(tx, {
+        workspaceId: project.workspaceId,
+        category: "transcription",
+        eventType:
+          holdOutcome.settled === "resolved"
+            ? "transcription_fallback_hold_resolved"
+            : "transcription_fallback_hold_kept_open",
+        severity: holdOutcome.settled === "resolved" ? "info" : "warning",
+        message:
+          holdOutcome.settled === "resolved"
+            ? "The backup-transcript hold cleared: the sermon was re-transcribed by the usual provider and the clips were rebuilt."
+            : holdOutcome.reason === "human_work_needs_reconciliation"
+              ? "The backup-transcript hold stays open: clips made from the backup transcript were edited, approved, or exported, so someone needs to check them."
+              : "The backup-transcript hold stays open: this transcript did not come from the usual provider.",
+        projectId: project.id,
+        jobId: job.id,
+        metadata:
+          holdOutcome.settled === "kept_open"
+            ? { reason: holdOutcome.reason }
+            : { reason: "primary_rebuilt_clean" },
+      });
     }
 
     await tx.project.update({ where: { id: project.id }, data: { status: ProjectStatus.READY } });
