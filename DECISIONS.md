@@ -1877,3 +1877,33 @@ Tradeoff: extraction stays browser-dependent and spends the viewer's bandwidth a
 sermon. That cost is accepted until P4 supplies the shared proxy.
 
 Status: Active.
+
+## 2026-08-20 - An Export Renders Its Requested Edit Version or It Fails
+
+Decision: `ExportJob.editVersion` is authoritative for what a render contains. The export route
+selects the version once, `enqueueExportJob` stores it and derives the idempotency key from that
+same number, and the worker loads exactly that `ClipEdit`. There is no newest-edit fallback.
+
+Version `0` means the clip was never edited and renders the default editor state. A job whose
+version is null, not a non-negative integer, names a `ClipEdit` that no longer exists, or stores a
+document that is not an object fails closed with a stable code:
+
+- `EXPORT_EDIT_VERSION_MISSING`
+- `EXPORT_EDIT_VERSION_NOT_FOUND`
+- `EXPORT_EDIT_VERSION_UNREADABLE`
+
+Each of these is terminal. The worker fails the job outright instead of spending its remaining
+attempts on a failure that cannot change. A manual retry reuses the same row, so it stays pinned to
+the version originally requested.
+
+Why: the previous code computed the version for the idempotency key and then discarded it, so the
+worker rendered whatever was newest when it started. A user could request version 1, save version 2
+before the worker picked the job up, and download version 2 under a key that claimed version 1.
+Removing the manual-export approval gate (PR #40) made that one click away, and a wrong render that
+looks plausible is worse than a refused one: a church can publish it without noticing.
+
+Tradeoff: export jobs written before this change carry a null `editVersion` and now fail instead of
+rendering. That is the intended direction — a legacy job cannot prove what it was meant to contain,
+and the user can export again from the editor in one click.
+
+Status: Active.
