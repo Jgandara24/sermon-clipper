@@ -1,3 +1,4 @@
+import { applyTextCase } from "@/lib/editor/text-case";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
 import type { CaptionLine } from "@/lib/editor/caption-lines";
 
@@ -88,7 +89,7 @@ export function generateAssSubtitles(
 
   const events = lines
     .map((line) => {
-      const text = style.uppercase ? line.text.toUpperCase() : line.text;
+      const text = applyTextCase(line.text, style.textCase);
       return `Dialogue: 0,${msToAssTime(line.startMs)},${msToAssTime(line.endMs)},Default,,0,0,0,,${escapeAssText(text)}`;
     })
     .join("\n");

@@ -1,3 +1,5 @@
+import type { TextCase } from "./text-case";
+
 export type CaptionStyle = {
   fontFamily: string;
   sizePx: number;
@@ -6,7 +8,7 @@ export type CaptionStyle = {
   background: "none" | "pill";
   position: "top" | "middle" | "bottom";
   alignment: "left" | "center" | "right";
-  uppercase: boolean;
+  textCase: TextCase;
   strokeColor: string;
   strokePx: number;
   shadow: boolean;
@@ -31,7 +33,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       background: "none",
       position: "bottom",
       alignment: "center",
-      uppercase: false,
+      textCase: "original",
       strokeColor: "#000000",
       strokePx: 2,
       shadow: true,
@@ -48,7 +50,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       background: "none",
       position: "bottom",
       alignment: "center",
-      uppercase: false,
+      textCase: "original",
       strokeColor: "#1A1A1A",
       strokePx: 3,
       shadow: true,
@@ -65,7 +67,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       background: "pill",
       position: "middle",
       alignment: "center",
-      uppercase: true,
+      textCase: "uppercase",
       strokeColor: "#000000",
       strokePx: 0,
       shadow: false,
@@ -82,7 +84,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       background: "none",
       position: "bottom",
       alignment: "center",
-      uppercase: false,
+      textCase: "original",
       strokeColor: "#000000",
       strokePx: 1,
       shadow: false,

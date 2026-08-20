@@ -1,5 +1,6 @@
 "use client";
 
+import { applyTextCase } from "@/lib/editor/text-case";
 import { useEffect, useRef, useState } from "react";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
@@ -144,14 +145,15 @@ export function VideoPreview({
                 fontFamily: style.fontFamily,
                 fontSize: `${style.sizePx * 0.4}px`,
                 color: style.textColor,
-                textTransform: style.uppercase ? "uppercase" : "none",
+                // No text-transform: the preview lays out the same string the burn-in does, so
+                // the two cannot disagree — and CSS cannot express Sentence case or Title Case.
                 backgroundColor: style.background === "pill" ? "rgba(0,0,0,0.55)" : "transparent",
                 textShadow: style.shadow ? "0 2px 4px rgba(0,0,0,0.8)" : undefined,
                 WebkitTextStroke:
                   style.strokePx > 0 ? `${style.strokePx * 0.3}px ${style.strokeColor}` : undefined,
               }}
             >
-              {currentLine.text}
+              {applyTextCase(currentLine.text, style.textCase)}
             </span>
           </div>
         ) : null}

@@ -1,4 +1,5 @@
 import { getCaptionPreset, type CaptionStyle } from "./caption-presets";
+import { resolveTextCase } from "./text-case";
 import type { EditorState } from "./types";
 
 /**
@@ -14,7 +15,14 @@ export function resolveCaptionStyle(
   const style: CaptionStyle = { ...preset.style };
   if (overrides.sizePx !== undefined) style.sizePx = overrides.sizePx;
   if (overrides.position !== undefined) style.position = overrides.position;
-  if (overrides.uppercase !== undefined) style.uppercase = overrides.uppercase;
+  // One case model, and one place that decides which case a stored document means. A clip saved
+  // before the model existed carries only the old boolean, and it keeps rendering exactly as it
+  // did: true was upper-cased, false was untouched.
+  style.textCase = resolveTextCase({
+    textCase: overrides.textCase,
+    legacyUppercase: overrides.uppercase,
+    fallback: preset.style.textCase,
+  });
   if (overrides.highlightColor !== undefined) style.highlightColor = overrides.highlightColor;
   return style;
 }
