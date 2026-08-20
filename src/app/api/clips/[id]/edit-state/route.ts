@@ -2,7 +2,7 @@ import { ClipApprovalState, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
-import { approvalExportBlockMessage, approvalStateAfterEditorSave } from "@/lib/approval";
+import { approvalStateAfterEditorSave, publishApprovalBlockMessage } from "@/lib/approval";
 import { buildDefaultEditorState, editorStateSchema } from "@/lib/editor/types";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
@@ -161,6 +161,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     version: created.version,
     state: created.editorState,
     approvalState: nextApprovalState,
-    approvalBlockReason: nextApprovalState ? approvalExportBlockMessage(nextApprovalState) : null,
+    approvalBlockReason: nextApprovalState ? publishApprovalBlockMessage(nextApprovalState) : null,
   });
 }

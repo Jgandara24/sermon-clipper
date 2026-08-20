@@ -1730,6 +1730,39 @@ stage lands, a full-service source is paid for as if worship, announcements, bap
 altar calls were sermon. Transcription submits the narrowest range already known and records the
 submitted duration and scope on every run, so this cost is measured while it lasts.
 
+## 2026-08-18 - Editorial Approval Gates Publishing and Scheduling, Not Manual Export
+
+Decision: A manual MP4 export from the clip editor no longer requires editorial approval.
+Publishing and scheduling still do. `isClipApprovedForPublish` and `publishApprovalBlockMessage`
+are the one authority for "may this clip reach an audience?", and the route-level
+`APPROVAL_REQUIRED` refusal on `POST /api/clips/:id/exports` is removed.
+
+Billing, access, and role enforcement are unchanged. `requireApiWorkspace("EXPORT_CLIP")` still
+checks the role permission and still refuses a trial-expired or lapsed read-only workspace with
+402. Relocating an editorial gate must not, and does not, weaken an access gate.
+
+An editor save still demotes an APPROVED clip to DRAFT. That rule protects the publish gate,
+which still stands: the reviewer approved a specific cut, and the clip is no longer that cut.
+
+Why: A downloaded MP4 reaches no audience by itself. It goes to a member who is already inside
+the workspace and already holds EXPORT_CLIP. Requiring approval for it taught people to route
+clips through review that they never intended to post, which devalues the approval that guards
+real delivery. The old arrangement was also incoherent: the publisher never checked approval at
+all, while a saved edit demoted APPROVED to DRAFT and left the earlier SUCCEEDED export
+publishable.
+
+Tradeoff: A church that used the export gate as an informal "nobody touches this without the
+pastor" control loses it for downloads. The editor still shows why publishing is blocked, so the
+review path stays visible; the control now applies where delivery actually happens.
+
+Sequencing: This relocation was scheduled for P1.11/P2.4 in
+`docs/AGENTIC_EDITOR_IMPLEMENTATION_PLAN.md`. The export half is now done and the plan is
+updated to say so, so P1.11 implements only the publish-side composition and does not
+re-implement or re-retain an export gate. P2.4's "only a scheduled or reserve-selected clip can
+receive a final export" rule now stands alone rather than beside an approval gate.
+
+Status: Active.
+
 ## 2026-08-19 - Scribe v2 Is the Active Primary Provider; whisper.cpp Is the Secondary
 
 Decision: Base ElevenLabs Scribe v2 is the primary transcription provider in every environment,

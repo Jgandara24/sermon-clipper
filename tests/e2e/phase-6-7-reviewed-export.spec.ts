@@ -266,7 +266,13 @@ test.describe("Phase 6/7 browser workflow", () => {
     await page.getByRole("button", { name: /Sunday Sermon/ }).click();
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
-    await expect(page.getByText(/Send this clip for approval before exporting/i)).toBeVisible();
+    // Editorial approval gates publishing and scheduling, not a manual download. The banner
+    // must say so, and the export button must already be usable with no approval at all.
+    await expect(
+      page.getByText(/Send this clip for approval before publishing or scheduling it/i),
+    ).toBeVisible();
+    await expect(page.getByText(/before exporting/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Export 9:16 MP4" })).toBeEnabled();
 
     await page.goto(`/app/projects/${fixture.projectId}`);
     await page.getByLabel("Send this clip for approval").click();

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ClipApprovalState } from "@prisma/client";
 import {
-  approvalExportBlockMessage,
   approvalStateAfterEditorSave,
   createReviewToken,
   createReviewTokenExpiresAt,
-  isClipApprovedForExport,
+  isClipApprovedForPublish,
+  isManualExportAllowedWithoutApproval,
   isReviewLinkActive,
+  publishApprovalBlockMessage,
   reviewLinkUnavailableReason,
 } from "@/lib/approval";
 
@@ -23,18 +24,42 @@ describe("createReviewToken", () => {
   });
 });
 
-describe("approval export policy", () => {
-  it("allows export only after approval", () => {
-    expect(isClipApprovedForExport(ClipApprovalState.APPROVED)).toBe(true);
-    expect(isClipApprovedForExport(ClipApprovalState.IN_REVIEW)).toBe(false);
-    expect(isClipApprovedForExport(ClipApprovalState.CHANGES_REQUESTED)).toBe(false);
-    expect(isClipApprovedForExport(null)).toBe(false);
+describe("approval policy", () => {
+  // Editorial approval gates what leaves the church's own hands — publishing and scheduling —
+  // not what a member downloads from their own editor. Downloading an MP4 delivers nothing to
+  // an audience, so gating it only taught people to approve clips they had no intent to post.
+  it("never blocks a manual editor export, in any approval state", () => {
+    for (const state of [
+      ClipApprovalState.APPROVED,
+      ClipApprovalState.IN_REVIEW,
+      ClipApprovalState.CHANGES_REQUESTED,
+      ClipApprovalState.DRAFT,
+      null,
+    ]) {
+      expect(isManualExportAllowedWithoutApproval(state)).toBe(true);
+    }
   });
 
-  it("explains why export is blocked", () => {
-    expect(approvalExportBlockMessage(ClipApprovalState.IN_REVIEW)).toMatch(/still in review/i);
-    expect(approvalExportBlockMessage(ClipApprovalState.CHANGES_REQUESTED)).toMatch(/changes were requested/i);
-    expect(approvalExportBlockMessage(null)).toMatch(/send this clip for approval/i);
+  it("allows publishing and scheduling only after approval", () => {
+    expect(isClipApprovedForPublish(ClipApprovalState.APPROVED)).toBe(true);
+    expect(isClipApprovedForPublish(ClipApprovalState.IN_REVIEW)).toBe(false);
+    expect(isClipApprovedForPublish(ClipApprovalState.CHANGES_REQUESTED)).toBe(false);
+    expect(isClipApprovedForPublish(ClipApprovalState.DRAFT)).toBe(false);
+    expect(isClipApprovedForPublish(null)).toBe(false);
+  });
+
+  it("explains why publishing is blocked, and never mentions export", () => {
+    const messages = [
+      publishApprovalBlockMessage(ClipApprovalState.IN_REVIEW),
+      publishApprovalBlockMessage(ClipApprovalState.CHANGES_REQUESTED),
+      publishApprovalBlockMessage(null),
+    ];
+    expect(messages[0]).toMatch(/still in review/i);
+    expect(messages[1]).toMatch(/changes were requested/i);
+    expect(messages[2]).toMatch(/send this clip for approval/i);
+    for (const message of messages) {
+      expect(message).not.toMatch(/export/i);
+    }
   });
 
   it("invalidates approved clips after editor saves", () => {
