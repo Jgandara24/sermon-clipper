@@ -91,12 +91,18 @@ export function ClipEditor({
       },
       onPhase: setSavePhase,
     });
-    // Only a confirmed, still-current save reaches this: superseded responses are dropped by
-    // the scheduler, so `Saved` can never describe content the user has already replaced.
-    created.onSaved(({ version: nextVersion, state: nextState }) => {
-      baseVersion = nextVersion;
+    created.onSaved(({ version: nextVersion, state: nextState, superseded }) => {
+      // The version advances on every successful write, superseded or not: it describes the
+      // backend's row, and the next save needs it as its base.
+      baseVersion = Math.max(baseVersion, nextVersion);
       setVersion(nextVersion);
+      if (superseded) return;
+
+      // Still current, so the stored copy is what the user is looking at. Adopting it keeps the
+      // local document identical to the backend's, which is what lets the status label trust its
+      // own comparison. Nothing is pending here, so no edit in progress can be clobbered.
       setSavedState(nextState);
+      setState(nextState);
     });
     return created;
   });
@@ -119,7 +125,18 @@ export function ClipEditor({
     [scheduler],
   );
 
-  useEffect(() => () => scheduler.dispose(), [scheduler]);
+  // Mirrors the rendered document into the ref the event handlers read from, including the copy
+  // adopted from a confirmed save.
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  // Strict Mode runs this cleanup once right after mounting, so the scheduler must be revivable:
+  // a remount resumes it, and only a real unmount leaves it disposed.
+  useEffect(() => {
+    scheduler.resume();
+    return () => scheduler.dispose();
+  }, [scheduler]);
 
   function handleSaveNow() {
     scheduler.markDirty(stateRef.current, "immediate");

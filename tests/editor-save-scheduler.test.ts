@@ -142,7 +142,7 @@ describe("one interaction produces one save", () => {
 });
 
 describe("Saved is never reported for content the user has moved past", () => {
-  it("ignores a superseded response", async () => {
+  it("makes no claim from a superseded response", async () => {
     const { scheduler, calls, phases } = harness();
 
     scheduler.markDirty({ text: "first" }, "immediate");
@@ -156,10 +156,8 @@ describe("Saved is never reported for content the user has moved past", () => {
     expect(scheduler.phase()).toBe("saving");
   });
 
-  it("reports saved once the latest response lands", async () => {
+  it("reports saved exactly once, when the latest response lands", async () => {
     const { scheduler, calls, phases } = harness();
-    const confirmed: Array<{ version: number; state: Doc }> = [];
-    scheduler.onSaved((result) => confirmed.push(result));
 
     scheduler.markDirty({ text: "first" }, "immediate");
     scheduler.markDirty({ text: "second" }, "immediate");
@@ -170,22 +168,42 @@ describe("Saved is never reported for content the user has moved past", () => {
 
     expect(scheduler.phase()).toBe("saved");
     expect(phases.filter((phase) => phase === "saved")).toHaveLength(1);
-    expect(confirmed).toEqual([{ version: 3, state: { text: "second" } }]);
   });
 
-  it("never confirms a version from a superseded response", async () => {
+  it("marks a superseded confirmation as such, and the current one as current", async () => {
     const { scheduler, calls } = harness();
-    const confirmed: number[] = [];
-    scheduler.onSaved((result) => confirmed.push(result.version));
+    const confirmed: Array<{ version: number; superseded: boolean }> = [];
+    scheduler.onSaved(({ version, superseded }) => confirmed.push({ version, superseded }));
 
     scheduler.markDirty({ text: "first" }, "immediate");
     scheduler.markDirty({ text: "second" }, "immediate");
-    calls[0].resolve(saved(9, "first"));
+    calls[0].resolve(saved(2, "first"));
     await vi.advanceTimersByTimeAsync(0);
     calls[1].resolve(saved(3, "second"));
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(confirmed).toEqual([3]);
+    expect(confirmed).toEqual([
+      { version: 2, superseded: true },
+      { version: 3, superseded: false },
+    ]);
+  });
+
+  /**
+   * The regression an end-to-end run caught: dropping a superseded response whole also dropped
+   * the version it confirmed, so the queued write reused a stale base and the backend rejected it
+   * as a conflict with the row its own predecessor had just created.
+   */
+  it("reports the version from a superseded response so the queued save has the right base", async () => {
+    const { scheduler, calls } = harness();
+    const versions: number[] = [];
+    scheduler.onSaved(({ version }) => versions.push(version));
+
+    scheduler.markDirty({ text: "first" }, "immediate");
+    scheduler.markDirty({ text: "second" }, "immediate");
+    calls[0].resolve(saved(2, "first"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(versions).toEqual([2]);
   });
 
   it("returns to pending, not saved, when an edit arrives while the save is open", async () => {
@@ -288,5 +306,30 @@ describe("disposal", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(phases).not.toContain("saved");
+  });
+});
+
+describe("Strict Mode remounts", () => {
+  it("saves again after a cleanup that was not a real unmount", async () => {
+    const { scheduler, save } = harness();
+
+    // React Strict Mode: mount, immediate cleanup, remount.
+    scheduler.dispose();
+    scheduler.resume();
+
+    scheduler.markDirty({ text: "a" }, "idle");
+    await vi.advanceTimersByTimeAsync(DEFAULT_IDLE_SAVE_MS);
+
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("still writes nothing after a real unmount", async () => {
+    const { scheduler, save } = harness();
+
+    scheduler.dispose();
+    scheduler.markDirty({ text: "a" }, "immediate");
+    await vi.advanceTimersByTimeAsync(DEFAULT_IDLE_SAVE_MS * 2);
+
+    expect(save).not.toHaveBeenCalled();
   });
 });

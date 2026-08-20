@@ -10,8 +10,13 @@
  * 1. One interaction is one save. A drag emits a frame per pointer move; only the last one is
  *    worth a request, and edits made while a request is open coalesce into a single follow-up.
  * 2. `Saved` describes the document the user is looking at, or it is not shown. A response whose
- *    request has been superseded is dropped entirely — it cannot report success, a version, or a
- *    failure, because all three would describe content the user has already moved past.
+ *    request has been superseded cannot claim the editor is saved, because it describes content
+ *    the user has already moved past.
+ *
+ * The version is the exception to rule 2, and the distinction matters: it describes the backend's
+ * row, not the user's document. It advances monotonically whatever the user does next, and the
+ * following save needs it as its optimistic-concurrency base. Discarding it alongside the stale
+ * document makes the next save collide with the row its own predecessor created.
  */
 
 /** Typing pauses for this long before the document is written. */
@@ -30,7 +35,12 @@ export type SaveOutcome<T> =
   | { kind: "conflict" }
   | { kind: "error" };
 
-export type SaveConfirmation<T> = { version: number; state: T };
+export type SaveConfirmation<T> = {
+  version: number;
+  state: T;
+  /** True when a newer edit landed while this request was open. */
+  superseded: boolean;
+};
 
 export type SaveScheduler<T> = {
   /** Records an edit and schedules the write its commit mode calls for. */
@@ -39,10 +49,19 @@ export type SaveScheduler<T> = {
   flush(): void;
   /** Current phase, for the status label. */
   phase(): SavePhase;
-  /** Called only for a confirmed, still-current save. */
+  /**
+   * Called for every successful write. `superseded` says whether the document it confirms is
+   * still what the user is looking at; the version is authoritative either way.
+   */
   onSaved(listener: (confirmation: SaveConfirmation<T>) => void): void;
   /** Cancels pending work and ignores every response still in flight. */
   dispose(): void;
+  /**
+   * Re-enables a scheduler that was disposed by a remount rather than a real unmount. React
+   * Strict Mode runs an effect's cleanup once immediately after mounting, so a scheduler that
+   * treated that cleanup as final would stop saving for the life of the page in development.
+   */
+  resume(): void;
 };
 
 export function createSaveScheduler<T>(options: {
@@ -102,19 +121,26 @@ export function createSaveScheduler<T>(options: {
       if (disposed || requestId !== inFlight) return;
       inFlight = 0;
 
-      // Superseded: an edit landed while this request was open, so the response describes
-      // content the user has already replaced. Believing any part of it — the success, the
-      // version, or the failure — would report on the wrong document. Drop it whole and let the
-      // queued write produce the authoritative answer.
-      if (pending) {
+      // Superseded: an edit landed while this request was open, so the document it confirms is
+      // already behind what the user sees.
+      const superseded = pending !== null;
+
+      if (outcome.kind === "saved") {
+        // The version is reported either way. It belongs to the backend's row rather than to the
+        // user's document, and the queued write needs it as its base — withholding it would make
+        // that write collide with the row this one just created.
+        for (const listener of savedListeners) {
+          listener({ version: outcome.version, state: outcome.state, superseded });
+        }
+      }
+
+      if (superseded) {
+        // No phase claim: the queued write produces the authoritative answer.
         scheduleQueued();
         return;
       }
 
       if (outcome.kind === "saved") {
-        for (const listener of savedListeners) {
-          listener({ version: outcome.version, state: outcome.state });
-        }
         setPhase("saved");
       } else {
         setPhase(outcome.kind === "conflict" ? "conflict" : "error");
@@ -169,6 +195,10 @@ export function createSaveScheduler<T>(options: {
       disposed = true;
       clearTimer();
       pending = null;
+    },
+
+    resume() {
+      disposed = false;
     },
   };
 }
