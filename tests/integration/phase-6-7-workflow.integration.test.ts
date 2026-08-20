@@ -17,7 +17,7 @@ import {
   WorkspaceRole,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { approvalStateAfterEditorSave, isClipApprovedForExport } from "@/lib/approval";
+import { approvalStateAfterEditorSave, isClipApprovedForPublish } from "@/lib/approval";
 import { buildDefaultEditorState, wordId } from "@/lib/editor/types";
 import { probeVideoFile } from "@/lib/media/probe";
 import { markExportJobSucceeded } from "@/lib/exports/queue";
@@ -295,7 +295,7 @@ afterAll(async () => {
 describe("Phase 6/7 reviewed branded export workflow", () => {
   it("renders an approved, branded, transcript-edited vertical MP4", async () => {
     const approval = await prisma.clipApproval.findUniqueOrThrow({ where: { clipId } });
-    expect(isClipApprovedForExport(approval.state)).toBe(true);
+    expect(isClipApprovedForPublish(approval.state)).toBe(true);
 
     const job = await prisma.exportJob.create({
       data: {

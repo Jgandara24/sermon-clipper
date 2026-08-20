@@ -63,7 +63,7 @@ The draft's architecture, phase structure, and economics survive intact. This re
 - **P1.12** now explicitly deletes the publisher's latest-SUCCEEDED-export lookup (`src/lib/integrations/facebook-publisher.ts:199-205`) — the single most important consumer change, previously in no commit's stated outcome.
 - **P0.15** (was P0.13) is a combined preflight: schedule-date collisions *plus* a historical-export census.
 - **P0.18** (was P0.15) also fixes the worker tick loop's single try/catch (one throwing periodic block currently starves all later blocks in the same tick).
-- The customer-approval relocation (export-gate → publish-gate) is now an explicit, decision-logged change in **P1.11/P2.4**.
+- The customer-approval relocation (export-gate → publish-gate) **has landed early and out of order** (2026-08-18 decision). The route-level export gate is removed; approval now guards publishing and scheduling only. P1.11 no longer has to retain or reason about an export gate — see the status revision on P1.11.
 - The Addendum S2 free-egress storage check moves from P4 into **Gate A / P0.19**.
 - P3 is now a complete nine-commit candidate/operator experience phase. The former P3 reserve transaction and priority claim work moved to P2.7.
 
@@ -979,11 +979,11 @@ Before this UI edit, read the relevant bundled Next 16 form, route-handler, and 
 **Commit:** `feat(delivery): centralize fail-closed publish eligibility`
 
 - **Outcome:** Return structured reasons for eligibility. Check the slot, selected clip, superseded state, **the slot's bound `exportJobId` (fail closed on null — never resolve "latest export")**, pinned edit version, checksum, basic QC, editorial review, optional customer approval, pilot hold, platform connection, and the global kill switch (absorbing P0.16 as one input).
-  **Customer-approval relocation (explicit decision):** today `ClipApproval` gates *export* at the route (`APPROVAL_REQUIRED`), the publisher never checks it, and saving an edit demotes APPROVED→DRAFT while the prior SUCCEEDED export stays publishable — a broken chain. After this commit, approval composes into *publish* eligibility (Decision D: delivery = editorial ACCEPT AND, when enabled, ClipApproval APPROVED — checked at publish time against the bound export's edit version). The route-level export gate is **retained** for the customer-facing manual-export flow (unchanged customer experience), while the P2.4 coordinator path legitimately bypasses it — stated, tested, and decision-logged rather than left implicit.
+  **Customer-approval relocation — the export half is DONE (2026-08-18), do not implement it again.** The route-level export gate is already removed: `isManualExportAllowedWithoutApproval` replaces the old `APPROVAL_REQUIRED` refusal in `POST /api/clips/:id/exports`, and `isClipApprovedForPublish` / `publishApprovalBlockMessage` are the surviving publish-side authority. What remains for this commit is only the publish half: compose `isClipApprovedForPublish` into delivery eligibility (Decision D: delivery = editorial ACCEPT AND, when enabled, ClipApproval APPROVED — checked at publish time against the bound export's edit version). The earlier note that the export gate would be "retained for the customer-facing manual-export flow" no longer holds, and the P2.4 coordinator no longer needs a stated bypass of it, because there is nothing left to bypass.
 - **Files:** New `src/lib/delivery/eligibility.ts`; new `src/lib/delivery/settings.ts`; new `src/lib/delivery/query.ts`; `src/lib/facebook-connection.ts`; `src/lib/env.ts`; `.env.example`; new `tests/delivery-eligibility.test.ts`; `tests/workspace-settings.test.ts`; `DECISIONS.md`.
 - **Migration:** Uses Wave 1 facts. Wave 2 later supplies `ClipReview`.
 - **Tests:** Full truth table; null bound export fails closed; exact export mismatch; edit mismatch; checksum mismatch; QC fail; superseded clip; blocked/unfilled/missed slot; customer approval off/on; **approval demoted after edit → ineligible even though an old SUCCEEDED export exists**; pilot hold; kill switch dominance.
-- **Decision log:** One authoritative delivery rule; the customer-approval relocation; kill-switch precedence.
+- **Decision log:** One authoritative delivery rule; kill-switch precedence. The customer-approval relocation is already logged (2026-08-18); this commit records only the publish-side composition.
 - **Rollback:** Keep global delivery disabled. Never fall back to "latest successful export."
 - **Trace:** Rev2 §4.1 and §8; Addendum Decision D and S1.
 
@@ -1065,7 +1065,7 @@ Feedback actionability is table-driven (S15): `CONTENT` → replace-only; mid-cl
 
 **Commit:** `feat(review): enqueue exact renders for scheduled slots`
 
-- **Outcome:** Add one final-render eligibility rule: only the clip currently attached to a scheduled slot, or a reserve selected by the atomic replacement/fill command, can receive a final export. Apply it to both automatic and manual export paths; an unscheduled reserve remains source-preview-only. Add an idempotent coordinator used both after analysis and by a periodic reconciliation sweep. For every eligible unbound scheduled slot, enqueue a pinned default export and write its exact job id into `ScheduledPost.exportJobId`. This catches slots created while the switch was false; enabling later cannot strand them. This change removes today's accidental safety barrier: the publisher currently skips clips without a SUCCEEDED manual export, and Tier 3 never creates exports automatically. Therefore P0.16 and P1.11 must both be deployed before this commit. The coordinator and sweep require `AUTOMATIC_PUBLISHING_ENABLED=true`; while the switch is false they record no export work. Prepare the sandbox proof with one explicit manual exact render of a scheduled clip. After that render passes QC, exact human acceptance, and every eligibility input except the switch, temporarily enable the switch for the controlled sandbox call. Automatic review rendering begins only after that call succeeds. Unapproved scheduled renders remain publication-ineligible through P1.11/P2.8.
+- **Outcome:** Add one final-render eligibility rule: only the clip currently attached to a scheduled slot, or a reserve selected by the atomic replacement/fill command, can receive a final export. Apply it to both automatic and manual export paths; an unscheduled reserve remains source-preview-only. Add an idempotent coordinator used both after analysis and by a periodic reconciliation sweep. For every eligible unbound scheduled slot, enqueue a pinned default export and write its exact job id into `ScheduledPost.exportJobId`. This catches slots created while the switch was false; enabling later cannot strand them. This change removes today's accidental safety barrier: the publisher currently skips clips without a SUCCEEDED manual export, and Tier 3 never creates exports automatically. Therefore P0.16 and P1.11 must both be deployed before this commit. The coordinator and sweep require `AUTOMATIC_PUBLISHING_ENABLED=true`; while the switch is false they record no export work. Prepare the sandbox proof with one explicit manual exact render of a scheduled clip. After that render passes QC, exact human acceptance, and every eligibility input except the switch, temporarily enable the switch for the controlled sandbox call. Automatic review rendering begins only after that call succeeds. Unapproved scheduled renders remain publication-ineligible through P1.11/P2.8. Note that manual editor export is no longer gated on approval (2026-08-18), so P2.4's rule that "only a scheduled or reserve-selected clip can receive a final export" is now the only export-side eligibility rule — it must be applied on its own merits, not as a companion to an approval gate that no longer exists.
 - **Files:** New `src/lib/review/final-render-eligibility.ts`; new `src/lib/review/render-coordinator.ts`; `src/lib/jobs/handlers/analyze.ts`; `src/worker/run-jobs.ts`; `src/lib/exports/queue.ts`; `src/app/api/clips/[id]/exports/route.ts`; `src/lib/env.ts`; `docs/DEPLOYMENT.md`; `tests/review-render-coordinator.test.ts`; worker-isolation test; `tests/integration/route-authorization.integration.test.ts`; `tests/integration/analyze-job.integration.test.ts`; `tests/integration/phase-6-7-workflow.integration.test.ts`.
 - **Migration:** Uses Wave 1 `editVersion` and `ScheduledPost.exportJobId`.
 - **Tests:** Switch false or missing → analysis caller and reconciliation sweep enqueue nothing and write no binding; scheduled clip can still use the explicit manual sandbox-render path; manual or automatic export of an unscheduled reserve is refused; switch true + one service → six; switch true + two-service project → three; a pre-existing eligible unbound slot is caught after enablement exactly once; reserve ranks enqueue none; thin pool; blocked/unfilled/missed slot skipped; retry/concurrent sweep idempotency; exact version 0 or latest explicit version; `exportJobId` written; one failing sweep item does not block later items; unapproved-but-scheduled clip can render after enablement but remains publish-ineligible.
@@ -1313,34 +1313,64 @@ Before this UI edit, read the relevant bundled Next 16 form, server-action, and 
 
 ### Objective
 
-Create one reusable, low-cost representation of the complete service. Use it for sermon detection, forbidden detection, candidate playback, and on-demand visual evidence.
+Create one reusable, low-cost representation of the complete service. Use cheap local evidence to select one conservative sermon corridor before any paid transcription. Send only that corridor to Scribe, then use the precise transcript for forbidden detection, candidate playback, and on-demand visual evidence.
+
+### Sermon-boundary detection is two passes
+
+**Pass A, before Scribe (cheap and local).** Source metadata, audio classification, scene
+evidence, and short local whisper.cpp samples at ambiguous edges select ONE conservative
+continuous sermon corridor. Only that corridor is sent to Scribe, in one request.
+
+**Pass B, after Scribe (precise).** Scribe's transcript, diarization, and audio events classify
+the precise forbidden regions inside and around the corridor — worship, announcements, prayer,
+baptism, altar call, verse slideshows.
+
+Pass A is a cost-control boundary, not the safety decision; Pass B is where forbidden regions
+become precise. A boundary that stays ambiguous after Pass A raises a human exception. There is
+never a silent full-service Scribe fallback.
+
+The provider that serves production captions is named explicitly by
+`TRANSCRIPTION_PRIMARY_PROVIDER` / `TRANSCRIPTION_FALLBACK_PROVIDER`, never inferred from which
+credential is present (see the 2026-08-16 provider-selection decision). whisper.cpp's Pass A role
+does not make it the production caption provider, and holding an ElevenLabs key does not make
+Scribe the production caption provider.
+
+Since the 2026-08-19 decision the active pair is `scribe` primary, `whisper_cpp` secondary, in
+every environment. Pass A is therefore an efficiency improvement rather than an activation gate:
+Scribe is already serving, on the narrowest range currently known, which is usually the complete
+service. Building Pass A narrows what is paid for; it does not unblock anything.
 
 ### Recommended evidence pipeline
 
 ```text
 temporary original materialization
-→ original probe facts
-→ 16 kHz mono FLAC analysis audio
-→ Scribe v2 transcript with no-verbatim disabled
-→ deterministic silences, sentences, and paragraphs
-→ uncropped 480p H.264 source proxy
+→ original probe facts and free source metadata hints
+→ 16 kHz mono FLAC analysis audio and uncropped 480p H.264 source proxy
 → FFmpeg scene changes, black/freeze/motion facts
 → sparse WebP frames and perceptual hashes
 → person/face inference on cluster representatives
 → OCR only on likely static text frames
-→ local audio-event corroboration when needed
-→ transcript classification
-→ one paid visual escalation for unresolved ambiguity
+→ local speech, music, and audio-event corroboration when needed
+→ coarse source regions and one conservative continuous sermon corridor
+→ short local-ASR checks only at ambiguous corridor boundaries
+→ one paid visual escalation for unresolved boundary ambiguity
+→ still ambiguous: human exception; never a silent full-service Scribe fallback
+→ sermon-only 16 kHz mono FLAC with the exact source-time offset
+→ one base Scribe v2 request with no-verbatim disabled
+→ deterministic silences, sentences, and paragraphs
+→ transcript classification and precise forbidden-region refinement
 → MediaRegion rows keyed by SourceVideo
 ```
 
 ### Recommended metadata
 
-The transcript representation must include: every word and timestamp; word confidence when supplied (whisper.cpp already yields per-token probabilities — note these are sub-word tokens, not words); speaker label; audio-event label and interval; silence interval; sentence boundary; paragraph boundary; source provider and model version; capability status (native, derived, unavailable, user-supplied); provenance for every derived field.
+The transcript representation must include: every word and timestamp; the exact offset back to source time; the submitted audio duration and checksum; the provider request or transcription id; word confidence when supplied (whisper.cpp already yields per-token probabilities — note these are sub-word tokens, not words); speaker label; audio-event label and interval; silence interval; sentence boundary; paragraph boundary; source provider and model version; capability status (native, derived, unavailable, user-supplied); provenance for every derived field.
 
-The Media Region Index can contain overlapping facts: `SERMON`, `WORSHIP`, `ANNOUNCEMENT`, `PRAYER`, `BAPTISM`, `OTHER_SERVICE_CONTENT`, `PASTOR_VISIBLE`, `FULLSCREEN_SLIDE`, `AMBIGUOUS`.
+The Media Region Index can contain overlapping facts: `SERMON`, `WORSHIP`, `ANNOUNCEMENT`, `PRAYER`, `BAPTISM`, `ALTAR_CALL`, `OTHER_SERVICE_CONTENT`, `PASTOR_VISIBLE`, `FULLSCREEN_SLIDE`, `VERSE_SLIDESHOW`, `AMBIGUOUS`.
 
 Detector facts are not editorial policy. Store the facts and detector confidence. Keep allow, avoid, forbid, and salvage rules in versioned code.
+
+The pre-Scribe corridor is a cost-control boundary, not the final safety decision. Use one continuous request instead of one request per clip or fragment. After Scribe returns, refine all forbidden regions from its word-level transcript, diarization, and audio events. Worship, announcements, baptisms, prayers, verse slideshows, and altar calls remain forbidden for clip selection and export. If useful sermon speech continues over a verse slideshow, retain that audio in the transcript for future text features, but mark the visual interval as ineligible for video clips.
 
 ### Milestone work
 
@@ -1351,21 +1381,24 @@ Detector facts are not editorial policy. Store the facts and detector confidence
 5. Add one source lease so a project batch uses one materialization.
 6. Change PROBE into one coordinated derivative build.
 7. Keep original width and height authoritative. **Never write proxy dimensions into `SourceVideo.width/height`** — those columns drive the export crop rect (S13b); note they are nullable and export already hard-fails on null.
-8. Add Scribe v2 as the enriched provider. Keep `no_verbatim=false`. Benchmark against current whisper.cpp before making it the production default.
-9. Add scene, silence, black-frame, freeze, motion, waveform, and frame-hash facts.
-10. Evaluate commercially safe local person/face, OCR, and audio models before adding their weights (license check per CTO.md; weights via `/models` volume + SHA-256, never baked into the image).
-11. Run expensive local inference only on sparse cluster representatives.
-12. Persist source-level regions and detector versions. `FULLSCREEN_SLIDE` regions carry a subtype: `SCRIPTURE`, `SERMON_TITLE`, `MAIN_POINT`, `SUBPOINT`, `NUMBERED_POINT`, `SECTION_TRANSITION`, or `OTHER_PRESENTATION`, plus confidence and OCR evidence. This lets final QC report and test each forbidden slide class instead of collapsing all slides into one label.
-13. Implement `timeline_view` and `boundary_strip` from the shared 480p proxy. Register the proxy's storage key in retention/DerivedMediaArtifact (S13a — an unregistered key leaks forever; the P1.9 four-key inventory work is the cautionary precedent).
-14. Apply boundary salvage: move a start after a short edge slide or an end before it. Reject a necessary mid-clip slide.
-15. Permit one paid visual escalation per ambiguous service within budget (S16). Still ambiguous → exception; no background retry.
-16. Add direct browser-to-R2 multipart upload for the S3 provider. Keep the current relay only for local storage or explicit fallback.
-17. Prove PERC recording retrieval and deletion as a separate intake experiment (zero PERC code exists today).
-18. Create keyframe-padded original-quality range derivatives for every retained candidate while the source is local. Merge overlaps; configurable handles.
-19. Verify every range derivative by checksum, duration, range coverage, source dimensions, and visual-quality comparison. Prefer stream copy when safe; otherwise a visually lossless mezzanine.
-20. After range-derivative proof passes, delete the large original earlier than `last scheduled date + 14 days`. Until then, keep that date as the conservative fallback.
-21. Render final scheduled/promoted clips from range derivatives. A full-source fallback is explicit, metered, and exception-visible.
-22. Register every artifact, byte count, retention class, and cleanup path.
+8. Add scene, silence, black-frame, freeze, motion, waveform, and frame-hash facts.
+9. Evaluate commercially safe local person/face, OCR, speech/music, and audio-event models before adding their weights (license check per CTO.md; weights via `/models` volume + SHA-256, never baked into the image).
+10. Run expensive local inference only on sparse cluster representatives.
+11. Build coarse source-level regions from free metadata hints and local audio/visual facts. Select one conservative continuous sermon corridor with configurable handles.
+12. Use short local whisper.cpp windows only when a corridor boundary remains ambiguous. This is whisper.cpp's second role — a cheap local boundary sampler — and it is separate from whichever provider `TRANSCRIPTION_PRIMARY_PROVIDER` names for production captions. Permit one paid visual escalation per ambiguous service within budget (S16). Still ambiguous → human exception; no background retry and no silent full-service Scribe fallback.
+13. Extract one sermon-only 16 kHz mono FLAC. Store its exact source-time offset, duration, checksum, detector version, and corridor confidence.
+14. Change the production Scribe path to submit that single sermon-only artifact. Keep base Scribe v2, `no_verbatim=false`, no keyterms by default, word timestamps, diarization, and audio events. Preserve the completed whisper.cpp-versus-Scribe benchmark as the provider decision evidence. **This step does not gate Scribe activation** (2026-08-19 decision — Scribe is already active): it is a cost and processing efficiency improvement. Until it lands, transcription submits the narrowest sermon range already known and records `submittedDurationS` and `submittedScope`, so what the missing stage costs stays measured.
+15. Derive deterministic silences, sentences, and paragraphs. Use the Scribe result to refine precise `SERMON`, `WORSHIP`, `ANNOUNCEMENT`, `PRAYER`, `BAPTISM`, `ALTAR_CALL`, and other service-content regions in source time.
+16. Persist source-level regions and detector versions. `FULLSCREEN_SLIDE` regions carry a subtype: `SCRIPTURE`, `SERMON_TITLE`, `MAIN_POINT`, `SUBPOINT`, `NUMBERED_POINT`, `SECTION_TRANSITION`, or `OTHER_PRESENTATION`, plus confidence and OCR evidence. Consecutive scripture slides also form a `VERSE_SLIDESHOW` region. This lets final QC report and test each forbidden slide class instead of collapsing all slides into one label.
+17. Implement `timeline_view` and `boundary_strip` from the shared 480p proxy. Register the proxy's storage key in retention/DerivedMediaArtifact (S13a — an unregistered key leaks forever; the P1.9 four-key inventory work is the cautionary precedent).
+18. Apply boundary salvage: move a start after a short edge slide or an end before it. Reject a necessary mid-clip slide.
+19. Add direct browser-to-R2 multipart upload for the S3 provider. Keep the current relay only for local storage or explicit fallback.
+20. Prove PERC recording retrieval and deletion as a separate intake experiment (zero PERC code exists today).
+21. Create keyframe-padded original-quality range derivatives for every retained candidate while the source is local. Merge overlaps; configurable handles.
+22. Verify every range derivative by checksum, duration, range coverage, source dimensions, and visual-quality comparison. Prefer stream copy when safe; otherwise a visually lossless mezzanine.
+23. After range-derivative proof passes, delete the large original earlier than `last scheduled date + 14 days`. Until then, keep that date as the conservative fallback.
+24. Render final scheduled/promoted clips from range derivatives. A full-source fallback is explicit, metered, and exception-visible.
+25. Register every artifact, byte count, retention class, and cleanup path.
 
 ### First P4 commit sketch
 
@@ -1383,13 +1416,17 @@ Detector facts are not editorial policy. Store the facts and detector confidence
 
 - One remote source acquisition creates all normal derivatives.
 - Transcript analysis does not read video pixels.
+- Paid transcription receives one sermon-only corridor during the normal path, never the complete service.
+- Every cropped transcript maps back to source time by a stored, tested offset.
+- The normal path never silently falls back to full-service Scribe or many per-clip Scribe requests.
 - Candidate playback uses one uncropped 480p proxy.
 - No reserve candidate receives a separate final MP4.
 - Proxy dimensions never modify original source dimensions.
 - Every artifact has checksum, byte count, derivation version, retention class, and a tested deletion path.
 - Media regions survive project reanalysis.
 - Full-screen-slide recall is published per detector version; expected initial autonomy target ≥90% of labeled slide-seconds (S18).
-- Known forbidden-slide overlap in deliverable candidates is zero.
+- Known worship, announcement, baptism, prayer, altar-call, and verse-slideshow overlap in deliverable candidates is zero.
+- Useful sermon speech over a forbidden visual interval remains available for text features but is not video-eligible.
 - One unresolved escalation creates an exception.
 - Normal final rendering reads candidate-range media, not the full service.
 - The range path has no material visual loss versus the original.
@@ -1405,6 +1442,10 @@ Detector facts are not editorial policy. Store the facts and detector confidence
 - A face printed on a slide is mistaken for a live pastor.
 - A local model license is not suitable for a commercial SaaS.
 - Scribe quality does not beat the current provider on real church audio.
+- A coarse boundary cuts valid sermon speech before Scribe can classify it.
+- A wrong source-time offset misaligns every caption and region after the crop.
+- Many small corridor requests replace the intended single Scribe request and erase the cost savings.
+- Paid boundary escalation costs more than the Scribe audio it was meant to save.
 
 P0 telemetry must decide proxy bitrate, FLAC settings, sparse-frame cadence, scene threshold, cache size, candidate handles, range-mezzanine format, and exact local models.
 

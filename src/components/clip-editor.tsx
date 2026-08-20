@@ -37,8 +37,7 @@ export function ClipEditor({
   initialVersion,
   initialState,
   brandTemplates,
-  canExport,
-  exportBlockedReason,
+  publishBlockedReason,
 }: {
   clipId: string;
   clipTitle: string;
@@ -48,16 +47,14 @@ export function ClipEditor({
   initialVersion: number;
   initialState: EditorState;
   brandTemplates: EditorBrandTemplate[];
-  canExport: boolean;
-  exportBlockedReason: string | null;
+  publishBlockedReason: string | null;
 }) {
   const [state, setState] = useState<EditorState>(initialState);
   const [version, setVersion] = useState(initialVersion);
   const [savedState, setSavedState] = useState<EditorState>(initialState);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [showSafeZones, setShowSafeZones] = useState(false);
-  const [exportAllowed, setExportAllowed] = useState(canExport);
-  const [exportReason, setExportReason] = useState(exportBlockedReason);
+  const [publishReason, setPublishReason] = useState(publishBlockedReason);
   // Playback position (from the preview) and outgoing seek requests (from the trim timeline).
   const [currentMs, setCurrentMs] = useState(initialState.source.startMs);
   const [seek, setSeek] = useState<{ ms: number; token: number } | null>(null);
@@ -105,9 +102,13 @@ export function ClipEditor({
           stateRef.current = json.data.state;
           setState(json.data.state);
         }
+        // An editor save invalidates an existing approval, so publishing needs a fresh one.
+        // Export is unaffected: the member can still download what they just edited.
         if (json.data.approvalState) {
-          setExportAllowed(false);
-          setExportReason(json.data.approvalBlockReason ?? "Send this clip for approval before exporting.");
+          setPublishReason(
+            json.data.approvalBlockReason ??
+              "Send this clip for approval before publishing or scheduling it.",
+          );
         }
         setSaveStatus("saved");
       } catch {
@@ -292,11 +293,7 @@ export function ClipEditor({
             layout={state.layout}
             onChange={(layout) => updateState((prev) => ({ ...prev, layout }))}
           />
-          <ExportPanel
-            clipId={clipId}
-            canExport={exportAllowed}
-            blockedReason={exportReason}
-          />
+          <ExportPanel clipId={clipId} publishBlockedReason={publishReason} />
         </div>
       </div>
     </div>

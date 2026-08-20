@@ -49,12 +49,14 @@ function StatusLine({ status }: { status: ExportStatus }) {
 
 export function ExportPanel({
   clipId,
-  canExport,
-  blockedReason,
+  publishBlockedReason,
 }: {
   clipId: string;
-  canExport: boolean;
-  blockedReason: string | null;
+  /**
+   * Informational only. Editorial approval gates publishing and scheduling, never a manual
+   * export — a downloaded MP4 reaches no audience by itself.
+   */
+  publishBlockedReason: string | null;
 }) {
   const [status, setStatus] = useState<ExportStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -81,10 +83,6 @@ export function ExportPanel({
   }
 
   async function handleExport() {
-    if (!canExport) {
-      setStartError(blockedReason ?? "This clip is not ready to export.");
-      return;
-    }
     setIsStarting(true);
     setStartError(null);
     try {
@@ -134,7 +132,7 @@ export function ExportPanel({
         <button
           type="button"
           onClick={handleExport}
-          disabled={isStarting || !canExport}
+          disabled={isStarting}
           className="inline-flex w-fit items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
         >
           <Download size={14} aria-hidden="true" />
@@ -144,16 +142,22 @@ export function ExportPanel({
         <StatusLine status={status} />
       )}
 
-      {startError || (!canExport && blockedReason) ? (
+      {startError ? (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-          {startError ?? blockedReason}
+          {startError}
         </p>
       ) : null}
 
       <p className="text-xs text-stone-500">
-        Renders your approved saved edit — crop, captions, lower-third, and word cuts — into a
-        downloadable MP4.
+        Renders your saved edit — crop, captions, lower-third, and word cuts — into a downloadable
+        MP4. Approval is not needed to download.
       </p>
+
+      {publishBlockedReason ? (
+        <p className="rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700">
+          {publishBlockedReason}
+        </p>
+      ) : null}
     </div>
   );
 }
