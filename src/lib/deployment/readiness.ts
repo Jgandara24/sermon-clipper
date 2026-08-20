@@ -2,6 +2,12 @@ import type { PrismaClient } from "@prisma/client";
 import { auditActiveAnalysisRouting } from "@/lib/analysis/routing-store";
 import { MIN_MEDIA_URL_SECRET_LENGTH } from "@/lib/media/signed-url";
 import { getStorageProvider } from "@/lib/storage";
+import {
+  resolveTranscriptionProviderPolicy,
+  transcriptionProviderRequirement,
+  type TranscriptionProviderName,
+  type TranscriptionProviderPolicy,
+} from "@/lib/transcription/policy";
 import { staleJobTimeoutMs } from "@/lib/worker/reliability";
 
 export type ReadinessStatus = "ok" | "warning" | "fail";
@@ -162,17 +168,56 @@ function checkStripeEnv(env: EnvLike): ReadinessCheck[] {
   ];
 }
 
+/**
+ * Reports the provider policy the deployment NAMED, and whether each named provider has its
+ * credential. Reporting by key presence instead would show "Scribe" on a deployment still
+ * captioning with whisper.cpp, and would hide a named primary that cannot serve at all.
+ */
+function checkTranscriptionPolicy(env: EnvLike): ReadinessCheck {
+  let policy: TranscriptionProviderPolicy;
+  try {
+    policy = resolveTranscriptionProviderPolicy(env);
+  } catch (error) {
+    return {
+      name: "TRANSCRIPTION_PROVIDER",
+      status: "fail",
+      message: error instanceof Error ? error.message : "Transcription provider policy is invalid.",
+    };
+  }
+
+  const configured = (name: TranscriptionProviderName) =>
+    name === "scribe" ? Boolean(env.ELEVENLABS_API_KEY) : Boolean(env.WHISPER_MODEL_PATH);
+
+  if (!configured(policy.primary)) {
+    return {
+      name: "TRANSCRIPTION_PROVIDER",
+      status: "fail",
+      message: `Primary transcription provider ${policy.primary} is selected but ${transcriptionProviderRequirement(policy.primary)} is not configured.`,
+    };
+  }
+
+  if (policy.fallback && !configured(policy.fallback)) {
+    return {
+      name: "TRANSCRIPTION_PROVIDER",
+      status: "fail",
+      message: `Fallback transcription provider ${policy.fallback} is selected but ${transcriptionProviderRequirement(policy.fallback)} is not configured.`,
+    };
+  }
+
+  return {
+    name: "TRANSCRIPTION_PROVIDER",
+    status: "ok",
+    message: policy.fallback
+      ? `Primary transcription provider is ${policy.primary}; fallback is ${policy.fallback}.`
+      : `Primary transcription provider is ${policy.primary}; no fallback is configured.`,
+  };
+}
+
 function checkGenerationProviderEnv(env: EnvLike): ReadinessCheck[] {
   if (env.NODE_ENV !== "production") return [];
 
   return [
-    env.WHISPER_MODEL_PATH
-      ? { name: "WHISPER_MODEL_PATH", status: "ok", message: "Whisper transcription model path is configured." }
-      : {
-          name: "WHISPER_MODEL_PATH",
-          status: "fail",
-          message: "WHISPER_MODEL_PATH is required in production so workers can transcribe uploaded sermons.",
-        },
+    checkTranscriptionPolicy(env),
     env.ANTHROPIC_API_KEY?.startsWith("sk-ant") || Boolean(env.GEMINI_API_KEY)
       ? {
           name: "ANALYSIS_PROVIDER_API_KEY",

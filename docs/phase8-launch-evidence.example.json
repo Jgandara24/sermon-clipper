@@ -18,7 +18,7 @@
     },
     "workerProcess": {
       "status": "failed",
-      "evidence": "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, whisper-cli, readable WHISPER_MODEL_PATH, and recent worker_heartbeat."
+      "evidence": "Deployment platform shows at least one worker process running with stable WORKER_ID, ffmpeg/ffprobe, configured ELEVENLABS_API_KEY, and recent worker_heartbeat."
     },
     "databaseMigrations": {
       "status": "failed",
@@ -46,7 +46,7 @@
     },
     "transcriptionProvider": {
       "status": "failed",
-      "evidence": "Production worker transcribed the sermon with whisper.cpp using the configured WHISPER_MODEL_PATH."
+      "evidence": "Production worker transcribed the sermon with base ElevenLabs Scribe v2 and no keyterms."
     },
     "analysisProvider": {
       "status": "failed",
