@@ -35,22 +35,33 @@ export function isTextCase(value: unknown): value is TextCase {
 /** A letter directly after one of these starts a new word for Title Case. */
 const TITLE_WORD_BOUNDARY = /(^|[\s\-—–/([{"])(\p{L})/gu;
 /**
- * A letter after a sentence terminator (and its closing quote or bracket) starts a sentence. The
- * first alternative allows leading whitespace, so an indented line still gets its capital.
+ * Whitespace and opening punctuation that can sit in front of a sentence's first letter — an
+ * opening quote, a bracket, a dash. A caption line often begins with one.
  */
-const SENTENCE_START = /(^\s*|[.!?]["')\]]?\s+)(\p{L})/gu;
+const SENTENCE_OPENERS = '[\\s"\'\u201c\u2018(\\[{\u00ab\u00bf\u00a1\\-\u2013\u2014]';
+/**
+ * The first letter of the string (after any openers), or the first letter after a sentence
+ * terminator, its closing quote or bracket, and the space that follows.
+ */
+const SENTENCE_START = new RegExp(
+  `(^${SENTENCE_OPENERS}*|[.!?]+["'\u201d\u2019)\\]}\u00bb]*\\s+${SENTENCE_OPENERS}*)(\\p{L})`,
+  "gu",
+);
 
 /**
- * Standard Sentence case: flatten, then capitalise each sentence's first letter.
+ * Sentence case capitalises the first letter of each sentence and changes nothing else.
  *
- * This does lowercase proper nouns — "God" becomes "god" — because nothing here can tell a name
- * from any other word. That is inherent to the option rather than a defect, and it is why
- * Uppercase, not Sentence case, is the default.
+ * It deliberately does not lowercase the rest of the line. Flattening is what a naive
+ * implementation does, and in a sermon it is destructive: "God", "Jesus", "the Holy Spirit",
+ * "Bible", and every acronym would come back lowercased, and a church would have to fix each one
+ * by hand. Preserving the transcript's own capitalisation costs nothing and is what a reader
+ * expects to see.
  */
 function toSentenceCase(text: string): string {
-  return text
-    .toLocaleLowerCase()
-    .replace(SENTENCE_START, (_match, prefix: string, letter: string) => prefix + letter.toLocaleUpperCase());
+  return text.replace(
+    SENTENCE_START,
+    (_match, prefix: string, letter: string) => prefix + letter.toLocaleUpperCase(),
+  );
 }
 
 function toTitleCase(text: string): string {

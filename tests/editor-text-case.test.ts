@@ -55,24 +55,72 @@ describe("applyTextCase", () => {
     );
   });
 
-  /**
-   * Documented, not hidden: Sentence case flattens proper nouns, because nothing here can tell a
-   * name from any other word. Churches who care keep Uppercase, which is the default, or Original.
-   */
-  it("lowercases proper nouns, which is inherent to the option", () => {
-    expect(applyTextCase("the peace of God is with John.", "sentence")).toBe(
-      "The peace of god is with john.",
+  it("preserves God", () => {
+    expect(applyTextCase("the peace of God is with us.", "sentence")).toBe(
+      "The peace of God is with us.",
     );
+  });
+
+  it("preserves Jesus", () => {
+    expect(applyTextCase("we follow Jesus together.", "sentence")).toBe(
+      "We follow Jesus together.",
+    );
+  });
+
+  it("preserves the Holy Spirit", () => {
+    expect(applyTextCase("the Holy Spirit comforts the church.", "sentence")).toBe(
+      "The Holy Spirit comforts the church.",
+    );
+  });
+
+  it("preserves Bible", () => {
+    expect(applyTextCase("open your Bible with me.", "sentence")).toBe(
+      "Open your Bible with me.",
+    );
+  });
+
+  it("preserves a product name like Pulpit Engine", () => {
+    expect(applyTextCase("we built Pulpit Engine for churches.", "sentence")).toBe(
+      "We built Pulpit Engine for churches.",
+    );
+  });
+
+  it("preserves acronyms, wherever they sit in the sentence", () => {
+    expect(applyTextCase("the NIV and the ESV agree here.", "sentence")).toBe(
+      "The NIV and the ESV agree here.",
+    );
+    expect(applyTextCase("NASA is not in the text. ESV is.", "sentence")).toBe(
+      "NASA is not in the text. ESV is.",
+    );
+  });
+
+  it("capitalises every sentence across a multi-sentence line", () => {
+    expect(
+      applyTextCase("first thought. second thought! third thought? fourth.", "sentence"),
+    ).toBe("First thought. Second thought! Third thought? Fourth.");
+  });
+
+  it("capitalises the first word even behind opening punctuation", () => {
+    expect(applyTextCase('"peace be with you," he said.', "sentence")).toBe(
+      '"Peace be with you," he said.',
+    );
+    expect(applyTextCase("(peace is here.)", "sentence")).toBe("(Peace is here.)");
+    expect(applyTextCase("— peace is here.", "sentence")).toBe("— Peace is here.");
+    expect(applyTextCase("\u201cpeace,\u201d he said. \u201cstay.\u201d", "sentence")).toBe(
+      "\u201cPeace,\u201d he said. \u201cStay.\u201d",
+    );
+  });
+
+  it("changes nothing in a line that is already capitalised", () => {
+    // It capitalises; it never flattens. A shouted line stays shouted.
+    expect(applyTextCase("PEACE IS HERE. STAY.", "sentence")).toBe("PEACE IS HERE. STAY.");
+    expect(applyTextCase("Peace is here.", "sentence")).toBe("Peace is here.");
   });
 
   it("capitalises after every sentence terminator", () => {
     expect(applyTextCase("who is this? he is risen! truly.", "sentence")).toBe(
       "Who is this? He is risen! Truly.",
     );
-  });
-
-  it("normalises a shouted line back to Sentence case", () => {
-    expect(applyTextCase("PEACE IS HERE. STAY.", "sentence")).toBe("Peace is here. Stay.");
   });
 
   it("capitalises each word for Title Case", () => {
@@ -102,7 +150,8 @@ describe("applyTextCase", () => {
 
   it("handles accented characters", () => {
     expect(applyTextCase("l'église est ouverte", "uppercase")).toBe("L'ÉGLISE EST OUVERTE");
-    expect(applyTextCase("ÉGLISE", "sentence")).toBe("Église");
+    expect(applyTextCase("ÉGLISE", "sentence")).toBe("ÉGLISE");
+    expect(applyTextCase("église ouverte.", "sentence")).toBe("Église ouverte.");
   });
 
   it("leaves digits and punctuation-only text unchanged in shape", () => {
