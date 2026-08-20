@@ -1822,3 +1822,58 @@ publish hold is added to them; nothing is removed.
 
 Status: Active. Supersedes the activation preconditions in the 2026-08-16 provider-selection
 decision. The two-pass boundary sequencing in that decision still stands.
+
+## 2026-08-20 - Neighbouring Words Move Aside for the Active Word, Then Return
+
+Decision: Caption words are laid out at normal spacing. When a word becomes active and pops, its
+immediate neighbours move slightly aside for the duration of the pop and return to rest
+afterwards. Spacing is never permanently widened, and popped words never overlap their
+neighbours' ink.
+
+This amends the 2026-08-13 kinetic caption decision. That decision positioned every word at its
+own centre specifically so that "nothing else can move", making reflow impossible by
+construction. Motion is now deliberate, bounded, and identical in both renderers — but it is
+motion, and the earlier absolute claim no longer holds.
+
+The two rejected alternatives: permanent clearance in every gap (what shipped in the prototype and
+what the product owner rejected — a line reads as spaced-out even when nothing is animating), and
+bounded overlap at rest spacing (cheapest, but it trades a spacing artefact for a collision
+artefact rather than removing both).
+
+Implementation constraint that shapes the work: libass `\t` cannot animate `\pos`. Position is
+animated only by `\move`, which is one linear motion per Dialogue event with no acceleration
+parameter. A neighbour that moves out and back therefore needs to be split across events rather
+than expressed as one transform, and its motion is linear while the active word's scale stays
+accelerated. The browser preview must interpolate neighbour offsets linearly to match, even though
+it interpolates the pop itself on the shared accelerated curve.
+
+Tradeoff: event count per word rises from at most three to roughly seven to nine, because every
+word is a neighbour twice as well as being active once. libass handles thousands of events and
+x264 dominates render cost, so this is expected to be affordable — but "expected" is not "proven",
+which is why this ships as its own slice with a real render test rather than as part of the
+caption control cleanup.
+
+Status: Active. Preview and export must be proven to agree frame for frame before the slice lands;
+if the real render shows the split-event motion is not smooth, the fallback is a stepped shift
+(neighbour jumps aside for the pop and back afterwards, no interpolation), recorded here so the
+retreat is a decision rather than a surprise.
+
+## 2026-08-20 - Timeline Thumbnails Stay Browser-Side Until P4
+
+Decision: The timeline's video row keeps extracting frames in the browser, hardened: wait for a
+decoded frame rather than assuming a seek is complete, retry a failed seek, and show a neutral
+placeholder when extraction fails. A frame that cannot be produced must never render as a
+plausible-looking wrong image.
+
+Worker-generated filmstrips remain the P4 plan's `timeline_view` work, where the derived-artifact
+storage key and its retention class are already accounted for.
+
+Why: the defect the product owner saw — a blue strip instead of recognisable frames — is a
+missing-decoded-frame bug, not evidence that browser extraction cannot work. Pulling the worker
+filmstrip forward would drag a storage-retention decision into a UI slice, and an unregistered
+storage key leaks forever.
+
+Tradeoff: extraction stays browser-dependent and spends the viewer's bandwidth and CPU on a full
+sermon. That cost is accepted until P4 supplies the shared proxy.
+
+Status: Active.

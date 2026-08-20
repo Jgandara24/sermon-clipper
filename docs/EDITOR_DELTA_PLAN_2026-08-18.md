@@ -7,9 +7,9 @@ This plan describes behavior, not line numbers, so it survives the rebase of the
 It is a **delta** against the prototype recorded on branch `p1/kinetic-captions-and-editor`, whose
 final commit is labelled `PROTOTYPE, NOT ACCEPTED`.
 
-**Status (2026-08-20): awaiting two answers, not approval of the whole plan.** Slices 1–6, 8, 9 and
-11 are ready to start. Slice 7 needs decision **D1** and slice 10 needs decision **D2** (§3), and
-neither is an implementation detail — each changes what gets built.
+**Status (2026-08-20): both decisions resolved. Nothing is blocked.** D1 resolved to neighbour
+micro-shift, which becomes its own slice with a real render test; D2 resolved to hardened browser
+extraction. Both are recorded in `DECISIONS.md`, so the reasoning survives this document.
 
 Ahead of the slices, two pieces of the surrounding work have landed in production and are no
 longer pending: the export-policy step (§2) and the Scribe provider activation (§7).
@@ -57,9 +57,10 @@ The publish-side half — composing `isClipApprovedForPublish` into delivery eli
 scheduled for P1.11. Automatic publishing is still globally disabled, so nothing can reach an
 audience in the meantime regardless.
 
-## 3. Two decisions Jake must make before the slices that depend on them
+## 3. Both decisions are resolved (2026-08-20)
 
-These are not implementation details. Each one changes what gets built.
+Each changed what gets built, so both are recorded in `DECISIONS.md` rather than left in this
+plan alone.
 
 ### D1 — How pop clearance and collision-freedom coexist
 
@@ -78,10 +79,21 @@ all.
 | **B — Neighbour micro-shift** | Neighbours of the active word slide outward and back, expressed as additional `\t(...\pos)` transforms so libass and the preview animate identically. Spacing is normal whenever nothing is active. | Exactly the requested behavior. Cost: roughly triples caption event count, and re-introduces controlled motion that the original design deliberately removed. Needs a real render to confirm libass keeps it smooth. |
 | **C — Per-gap clearance** | Reserve clearance only in the gaps either side of each word, sized from that word's own width instead of the row maximum. Spacing is still static but much tighter and no longer uniform. | Middle cost. Does not fully satisfy "completed words return to normal spacing"; it narrows the gap rather than removing it. |
 
-**Recommendation: A, with C as the fallback if a real render shows collisions.** B is the only
-option that literally matches the wording, and it is the one that can destabilise the parity
-property the whole caption pipeline rests on. If Jake wants B, it should be its own slice with its
-own render proof, not folded into the caption-control cleanup.
+**Resolved: B — neighbour micro-shift.** The active word gets space sized to its current pop, its
+neighbours move slightly aside and return, and spacing is never permanently widened. It ships as
+its own slice (slice 8) with preview/export parity and one real render test, exactly because it
+is the option that can destabilise the parity property the caption pipeline rests on.
+
+One constraint discovered while writing this up, which shapes the slice: **libass `\t` cannot
+animate `\pos`.** Position animates only through `\move`, which is a single linear motion per
+Dialogue event with no acceleration parameter. So a neighbour moving out and back cannot be one
+transform — it has to be split across events, and its motion is linear while the active word's
+scale stays accelerated. The preview must therefore interpolate neighbour offsets linearly while
+interpolating the pop itself on the shared curve. Event count per word rises from at most three to
+roughly seven to nine, since every word is a neighbour twice as well as active once.
+
+If the real render shows the split-event motion is not smooth, the recorded fallback is a stepped
+shift — neighbour jumps aside for the pop and back afterwards, no interpolation.
 
 ### D2 — Where timeline video thumbnails come from
 
@@ -94,9 +106,10 @@ frames when seeks land before a decodable frame, and which cannot be made reliab
 | **A — Worker-generated filmstrip** | The worker produces a sprite sheet for the source once, registers it as a retained derived artifact, and the timeline just displays it. | Reliable. This is `timeline_view` from the P4 milestone, so it borrows scope from a later phase and needs a storage key registered in retention (an unregistered key leaks forever). |
 | **B — Harden the client extraction** | Wait for `seeked` plus a decoded frame, retry, fall back to a neutral placeholder rather than a blue field. | Cheap, no new storage, no retention question. Still browser-dependent and still costs the viewer bandwidth and CPU on a full sermon. |
 
-**Recommendation: B now, A when P4 lands.** B removes the defect Jake actually saw without pulling
-a storage-retention decision into a UI slice. If Jake would rather do A once, this becomes a
-cross-phase slice and the plan grows a dependency on the P4 derived-artifact work.
+**Resolved: B — hardened browser extraction now.** Wait for a decoded frame, retry a failed seek,
+and show a neutral placeholder when extraction fails; a frame that cannot be produced must never
+render as a plausible-looking wrong image. Worker-generated filmstrips stay P4 work, where the
+storage key and its retention class are already accounted for.
 
 ## 4. Slice order
 
@@ -236,8 +249,7 @@ and pan leave the persisted document byte-identical.
 
 ### Slice 7 — Caption control cleanup and highlight correctness
 
-**Depends on:** Slice 3 (case model), Slice 6 (direct manipulation replaces the X/Y inputs), and
-decision **D1**.
+**Depends on:** Slice 3 (case model), Slice 6 (direct manipulation replaces the X/Y inputs).
 
 **Behavior**
 
@@ -248,11 +260,14 @@ decision **D1**.
 - Every numeric slider also accepts direct number input, and the two stay synchronised.
 - Case selection appears, defaulting to Uppercase.
 - Exactly one word is highlighted at every timestamp — never two.
-- Pop clearance behaves per decision D1. Whatever D1 selects, the acceptance test is the same:
-  a line with no active word must not be spaced for the maximum pop value.
+- Words are laid out at **rest spacing**: the permanent maximum-pop clearance is removed here.
+  Until slice 8 lands, an active word will overlap slightly at large sizes. That is a deliberate,
+  short-lived intermediate state — the alternative is holding the whole control cleanup behind the
+  motion work.
 
-**Coverage:** active-only pop spacing; exactly one highlighted word at every timestamp across a
-transcript with deliberately overlapping source intervals; slider and number field stay in sync.
+**Coverage:** a line with no active word is spaced at rest, never at the maximum pop value;
+exactly one highlighted word at every timestamp across a transcript with deliberately overlapping
+source intervals; slider and number field stay in sync.
 
 **Note on word timing:** "word timing must match the spoken word precisely" is bounded by transcript
 quality, not by this editor. Native whisper.cpp word starts differ from forced alignment by a median
@@ -264,7 +279,45 @@ transcript before changing any editor code.
 
 ---
 
-### Slice 8 — Title overlay defaults and live preview
+### Slice 8 — Active-word neighbour micro-shift
+
+**Depends on:** Slice 7. Its own slice by decision (D1), because it is the one change that can
+destabilise preview/export parity, and it must not be able to take the control cleanup down with
+it.
+
+**Behavior**
+
+- When a word becomes active, its immediate neighbours move slightly aside for the duration of the
+  pop and return to rest afterwards.
+- Spacing at rest is never widened. A line with nothing active looks exactly as it did after
+  slice 7.
+- Popped words never overlap their neighbours' ink.
+- The browser preview and the burned-in render produce the same motion at the same times.
+
+**The constraint that shapes this slice.** libass `\t` cannot animate `\pos`; position animates
+only through `\move`, one linear motion per Dialogue event, with no acceleration parameter. So a
+neighbour moving out and back is not one transform — it is split across events, and its motion is
+linear while the active word's scale stays on the accelerated pop curve. The preview must
+interpolate neighbour offsets linearly to match, while still interpolating the pop itself on the
+shared curve. Expect event count per word to rise from at most three to roughly seven to nine,
+because every word is a neighbour twice as well as being active once.
+
+**Fallback, decided in advance:** if the real render shows the split-event motion is not smooth,
+retreat to a stepped shift — the neighbour jumps aside for the pop and back afterwards, with no
+interpolation. Recorded so the retreat is a decision rather than a surprise.
+
+**Coverage**
+
+- Rest spacing is unchanged from slice 7 — the micro-shift adds no permanent width.
+- No two rendered words overlap at any sampled frame across a pop.
+- Preview and ASS agree on every neighbour offset at sampled timestamps.
+- **One real ffmpeg render**, not a unit test: burn a Highlighter line, sample frames across a
+  pop, and confirm the motion is smooth and collision-free. This is the acceptance gate.
+- Event count for a representative line stays within the budget the render proves affordable.
+
+---
+
+### Slice 9 — Title overlay defaults and live preview
 
 **Depends on:** Slice 3 (case), Slice 6 (drag, resize, snapping), Slice 1 (no debounce).
 
@@ -285,9 +338,9 @@ transcript before changing any editor code.
 
 ---
 
-### Slice 9 — Timeline layout
+### Slice 10 — Timeline layout
 
-**Split from Slice 10 deliberately** — the handoff requires timeline media generation to be separate
+**Split from Slice 11 deliberately** — the handoff requires timeline media generation to be separate
 from timeline layout.
 
 **Behavior**
@@ -304,9 +357,9 @@ from timeline layout.
 
 ---
 
-### Slice 10 — Timeline media evidence
+### Slice 11 — Timeline media evidence
 
-**Depends on:** decision **D2**.
+**Depends on:** Slice 10. Resolved by D2: hardened browser extraction now, worker filmstrips at P4.
 
 **Behavior**
 
@@ -320,7 +373,7 @@ extraction produces a placeholder rather than a misleading solid colour.
 
 ---
 
-### Slice 11 — Shell and header polish
+### Slice 12 — Shell and header polish
 
 **Why last among the build slices:** purely presentational, and it touches the file with the
 protected billing block. Doing it last keeps that risk away from every functional slice.
@@ -343,7 +396,7 @@ compile error; do not reintroduce an inline conditional there.
 
 ---
 
-### Slice 12 — Export parity and final QA
+### Slice 13 — Export parity and final QA
 
 **Behavior**
 
@@ -370,12 +423,13 @@ Slice 3  shared case model                ── independent, pulled early
 Slice 4  playback and playhead            ── independent
 Slice 5  transcript                       ── needs 1, 4
 Slice 6  direct-manipulation canvas       ── needs 1, 2
-Slice 7  caption controls + highlighting  ── needs 3, 6, decision D1
-Slice 8  title defaults and live preview  ── needs 1, 3, 6
-Slice 9  timeline layout                  ── needs 4
-Slice 10 timeline media                   ── needs 9, decision D2
-Slice 11 shell and header polish          ── last; touches the protected file's neighbourhood
-Slice 12 export parity and final QA       ── needs everything
+Slice 7  caption controls + highlighting  ── needs 3, 6
+Slice 8  neighbour micro-shift            ── needs 7; own slice; real render is the gate
+Slice 9  title defaults and live preview  ── needs 1, 3, 6
+Slice 10 timeline layout                  ── needs 4
+Slice 11 timeline media                   ── needs 10
+Slice 12 shell and header polish          ── last; touches the protected file's neighbourhood
+Slice 13 export parity and final QA       ── needs everything
 ```
 
 ## 6. Rules that hold across every slice
@@ -412,7 +466,7 @@ Slice 12 export parity and final QA       ── needs everything
   the primary provider in production with whisper.cpp secondary. One consequence reaches the
   editor — a sermon that fell back to whisper.cpp puts an editorial hold on its project, so those
   clips stay fully editable but the automatic publisher will not send them until a person clears
-  the hold. Nothing in slices 1–12 changes that.
+  the hold. Nothing in slices 1–13 changes that.
 - **The P4 sermon-boundary corridor**, now an efficiency improvement rather than a gate. Until it
   lands, a full service reaches paid transcription as full-service audio, and every run records
   the submitted duration so that cost stays measured.
