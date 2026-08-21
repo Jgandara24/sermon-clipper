@@ -254,7 +254,12 @@ beforeAll(async () => {
         ...editorState,
         version: 1,
         brandTemplateId: template.id,
-        wordEdits: { ...editorState.wordEdits, deletedWordIds: [wordId(segment.id, 2)] },
+        // A transcript edit is a correction now: "says" is rendered as "said". The editor can no
+        // longer cut a word out of the middle, and an export that did would be refused.
+        wordEdits: {
+          ...editorState.wordEdits,
+          textOverrides: [{ wordId: wordId(segment.id, 2), text: "said" }],
+        },
         captions: {
           ...editorState.captions,
           presetId: template.captionPresetId,

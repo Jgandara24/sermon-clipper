@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
+import type { EditorState } from "@/lib/editor/types";
 import { buildDefaultExportFilename } from "@/lib/export/filename";
+import {
+  clipRendersContinuousRange,
+  CONTINUOUS_RANGE_MESSAGE,
+  CONTINUOUS_RANGE_REQUIRED,
+} from "@/lib/exports/continuous-range";
 import { buildExportIdempotencyKey, DEFAULT_EDIT_VERSION } from "@/lib/exports/edit-version";
 import { enqueueExportJob } from "@/lib/exports/queue";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
@@ -46,6 +52,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     orderBy: { version: "desc" },
   });
   const editVersion = latestEdit?.version ?? DEFAULT_EDIT_VERSION;
+
+  // Immediate feedback: a document that still cuts words out of the middle would render a
+  // shortened video, so the user is told now rather than after watching a job fail. This runs
+  // before the idempotency lookup, so re-requesting an already-queued cut export is refused too.
+  //
+  // It is the convenience, not the guarantee — the worker checks the pinned document again, and
+  // that check is what actually protects delivery.
+  const continuous = clip.project.sourceVideoId
+    ? await clipRendersContinuousRange(prisma, {
+        sourceVideoId: clip.project.sourceVideoId,
+        state: latestEdit?.editorState as EditorState | undefined,
+      })
+    : // No source video means no transcript to judge against. The worker fails this job on its
+      // own terms; refusing here would report the wrong reason.
+      true;
+  if (!continuous) {
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: auth.workspace.id,
+      category: "export",
+      eventType: "export_rejected_continuous_range",
+      severity: "warning",
+      message: "Export request rejected: the clip still cuts words out of the middle.",
+      metadata: { clipId: clip.id, editVersion },
+    });
+    return apiError(CONTINUOUS_RANGE_REQUIRED, CONTINUOUS_RANGE_MESSAGE, { status: 409 });
+  }
 
   const filename =
     parsed.data.filename ??

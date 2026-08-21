@@ -24,6 +24,7 @@ import {
   storageProviderKind,
   storageTransferCostFact,
 } from "@/lib/storage";
+import { assertContinuousRange } from "./continuous-range";
 import { loadPinnedEditorState } from "./edit-version";
 import { ExportFailureError } from "./errors";
 
@@ -147,6 +148,13 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       deleted: boolean;
     }>,
   }));
+
+  // The delivery gate, checked against the pinned document rather than whatever the clip looks
+  // like now. It sits above every piece of work this function does — no source download, no probe,
+  // no ffmpeg — so a refused export costs nothing and produces nothing. The route checks too, but
+  // this is the check that binds: it catches a job queued before the rule existed, a retry of one,
+  // and any other path that reaches the worker.
+  assertContinuousRange(state, segments);
 
   const allWords = flattenWords(segments);
   // Corrections are applied here too, so the caption the member approved in the preview is the

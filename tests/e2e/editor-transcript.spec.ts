@@ -14,7 +14,7 @@ import {
 import { prisma } from "../../src/lib/prisma";
 import { DEV_SESSION_COOKIE } from "../../src/lib/auth";
 import { getStorageProvider } from "../../src/lib/storage";
-import type { EditorState } from "../../src/lib/editor/types";
+import { buildDefaultEditorState, wordId, type EditorState } from "../../src/lib/editor/types";
 
 const execFileAsync = promisify(execFile);
 
@@ -147,6 +147,12 @@ const word = (page: Page, text: string) =>
   transcript(page).getByRole("button", { name: text, exact: true });
 const editing = (page: Page, original: string) =>
   transcript(page).getByRole("textbox", { name: `Correct the word ${original}` });
+const restoreButton = (page: Page) =>
+  page.getByRole("button", { name: "Restore all deleted words" });
+const exportButton = (page: Page) => page.getByRole("button", { name: "Export 9:16 MP4" });
+/** The export refusal. Matched on the clause the restore button's own label does not contain. */
+const exportRefusal = (page: Page) =>
+  page.getByText(/still has words cut out of the middle/);
 const playhead = (page: Page) => page.getByRole("slider", { name: "Playhead" });
 const startHandle = (page: Page) => page.getByRole("slider", { name: "Clip start" });
 const endHandle = (page: Page) => page.getByRole("slider", { name: "Clip end" });
@@ -155,6 +161,30 @@ async function openEditor(page: Page, clipId: string) {
   await page.goto(`/app/clips/${clipId}/editor`);
   await expect(page.getByRole("heading", { name: "Grace Abounds Toward Us" })).toBeVisible();
   await expect(word(page, "Grace")).toBeVisible();
+}
+
+/**
+ * Saves the kind of document the editor could write before word cuts were removed: "abounds" is
+ * cut out of the middle of the clip, so a render would splice two pieces together.
+ */
+async function seedLegacyCut(fixture: Fixture) {
+  const base = buildDefaultEditorState({
+    sourceVideoId: "unused-by-the-editor-page",
+    startMs: CLIP_START_MS,
+    endMs: CLIP_END_MS,
+  });
+  await prisma.clipEdit.create({
+    data: {
+      clipId: fixture.clipId,
+      version: 1,
+      savedBy: fixture.userId,
+      editorState: {
+        ...base,
+        version: 1,
+        wordEdits: { ...base.wordEdits, deletedWordIds: [wordId(fixture.segmentId, 2)] },
+      } as never,
+    },
+  });
 }
 
 /** The stored document, which is the only place a trim or a cut could actually have happened. */
@@ -446,5 +476,81 @@ test.describe("Editor transcript behaviour", () => {
 
     await expect(editing(page, "After")).toBeFocused();
     await expect(playhead(page)).toHaveAttribute("aria-valuenow", "9000");
+  });
+  test("a clip with no cuts offers nothing to restore", async ({ page }) => {
+    await openEditor(page, fixture.clipId);
+
+    await expect(restoreButton(page)).toHaveCount(0);
+    await expect(page.getByText(/cut words out of the middle/i)).toHaveCount(0);
+  });
+
+  test("a clip with legacy cuts offers to restore them", async ({ page }) => {
+    await seedLegacyCut(fixture);
+    await openEditor(page, fixture.clipId);
+
+    await expect(restoreButton(page)).toBeVisible();
+    // The cut word stays visible and struck through, so the clip reads honestly.
+    await expect(transcript(page).getByText("abounds")).toHaveClass(/line-through/);
+    await expect(word(page, "abounds")).toHaveCount(0);
+  });
+
+  test("a clip with legacy cuts cannot be exported", async ({ page }) => {
+    await seedLegacyCut(fixture);
+    await openEditor(page, fixture.clipId);
+
+    await exportButton(page).click();
+
+    await expect(exportRefusal(page)).toBeVisible();
+    // The refusal names the way out, which is the control sitting above it.
+    await expect(exportRefusal(page)).toContainText("Restore all deleted words");
+    // Refused outright: nothing was queued for any worker to render.
+    expect(await prisma.exportJob.count({ where: { clipId: fixture.clipId } })).toBe(0);
+  });
+
+  test("restoring the words is saved, and is one undo step", async ({ page }) => {
+    await seedLegacyCut(fixture);
+    await openEditor(page, fixture.clipId);
+
+    await restoreButton(page).click();
+
+    // Autosaved through the same scheduler every other edit uses.
+    await expect
+      .poll(async () => (await storedState(fixture.clipId))?.wordEdits.deletedWordIds.length ?? -1, {
+        timeout: 15_000,
+      })
+      .toBe(0);
+    await expect(word(page, "abounds")).toBeVisible();
+    await expect(restoreButton(page)).toHaveCount(0);
+
+    // One entry: a single undo puts the cut back, and a single redo takes it away again.
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(restoreButton(page)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Undo" })).toBeDisabled();
+
+    await page.getByRole("button", { name: "Redo" }).click();
+    await expect(restoreButton(page)).toHaveCount(0);
+    await expect(word(page, "abounds")).toBeVisible();
+  });
+
+  test("the export is accepted once the words are restored", async ({ page }) => {
+    await seedLegacyCut(fixture);
+    await openEditor(page, fixture.clipId);
+
+    await exportButton(page).click();
+    await expect(exportRefusal(page)).toBeVisible();
+
+    await restoreButton(page).click();
+    await expect
+      .poll(async () => (await storedState(fixture.clipId))?.wordEdits.deletedWordIds.length ?? -1, {
+        timeout: 15_000,
+      })
+      .toBe(0);
+
+    await exportButton(page).click();
+
+    // Accepted this time: the panel moves on to the queued state and the refusal is gone.
+    await expect(page.getByText("Queued for export…")).toBeVisible();
+    await expect(exportRefusal(page)).toHaveCount(0);
+    expect(await prisma.exportJob.count({ where: { clipId: fixture.clipId } })).toBe(1);
   });
 });

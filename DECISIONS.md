@@ -1944,3 +1944,43 @@ lives unmerged on `p1/kinetic-captions-and-editor`; a legacy document's existing
 until that lands or the user restores them.
 
 Status: Active. Implements Slice 5 of `docs/EDITOR_DELTA_PLAN_2026-08-18.md`.
+
+## 2026-08-20 - The P1.4 Continuous-Range Export Gate Landed Early, With Slice 5
+
+Decision: the export-side continuous-range gate is implemented and active now, in the same change
+that removed the word-delete control. **P1.4 must not implement it a second time.** What remains of
+P1.4 when it is picked up is the prototype branch's other work, not this gate.
+
+What landed:
+
+- `CONTINUOUS_RANGE_REQUIRED`, a stable code in `src/lib/exports/continuous-range.ts`, alongside the
+  `EXPORT_EDIT_VERSION_*` codes it sits beside.
+- The **worker** validates the *pinned* editor state — the same document P1.1 pins onto the job —
+  before it downloads the source, probes it, or starts ffmpeg. This is the check that binds. It
+  catches a job queued before the rule existed, a retry of one, and any other path that reaches the
+  worker. The failure is terminal, so a refusal never spends the attempt budget.
+- The **route** answers the same question at request time so the user gets an immediate 409 instead
+  of watching a job fail. It runs before the idempotency lookup, so re-requesting an already-queued
+  cut export is refused too. This is convenience, not the guarantee.
+- Refusal is decided against the kept ranges the renderer itself derives, not against the presence
+  of a deleted word id. A cut outside the clip's range removes nothing from the render, and refusing
+  that export would be a refusal the user could do nothing about.
+- A document with nothing deleted answers without reading the transcript, which is every clip made
+  since the delete control was removed.
+
+Why now rather than in P1.4: removing the delete control without the gate would have left existing
+cuts unreachable in the editor while they still shortened the export — the user could see the
+strike-through, could no longer act on it through the old control, and would still receive a
+shortened video. The restore control and the gate are the same guarantee from two sides, so they
+ship together.
+
+Nothing is repaired automatically. A refused export leaves the stored document exactly as it was;
+only the user's own "Restore all deleted words" clears the cuts, and that is a versioned edit that
+goes through the ordinary autosave and undo history. Word ids are positional, so a silent rewrite
+could repoint them at different words.
+
+This supersedes one sentence of the 2026-08-20 entry "A Transcript Correction Changes What A Word
+Says, Never What The Clip Contains" — the sentence stating that the change "does not implement
+P1.4's export-side `CONTINUOUS_RANGE_REQUIRED` gate". It does. The rest of that entry stands.
+
+Status: Active.
