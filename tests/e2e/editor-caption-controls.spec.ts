@@ -37,6 +37,10 @@ const FIXTURE_WORDS = [
 async function chooseHighlighter(page: Page) {
   await page.getByRole("button", { name: "Highlighter" }).click();
   await expect(captionWords(page).first()).toBeVisible();
+  // The caption is drawn in a bundled face that arrives over the network, and its metrics differ
+  // from the fallback's — measured at 234.77px against 258.44px on the fixture's line. Anything
+  // that measures the caption has to wait for it, or it is measuring a font swap.
+  await page.evaluate(() => document.fonts.ready);
 }
 
 async function waitForSaved(page: Page) {
@@ -203,13 +207,19 @@ test.describe("Caption controls", () => {
     // the caption in a font the burn-in will not use.
     const loaded = await page.evaluate(async () => {
       await document.fonts.ready;
-      return {
-        sans: document.fonts.check('16px "DejaVu Sans"'),
-        families: [...document.fonts].map((face) => face.family),
-      };
+      return [...document.fonts].map((face) => ({
+        family: face.family,
+        weight: face.weight,
+        status: face.status,
+      }));
     });
-    expect(loaded.sans, "the bundled Sans face is not loaded").toBe(true);
-    expect(loaded.families).toContain("DejaVu Sans");
+    // Declared at all, and actually fetched — a face the page never loaded would leave the
+    // preview drawing a substitute while the burn-in draws the bundled file.
+    expect(loaded.map((f) => f.family), JSON.stringify(loaded)).toContain("DejaVu Sans");
+    expect(
+      loaded.some((f) => f.family === "DejaVu Sans" && f.status === "loaded"),
+      JSON.stringify(loaded),
+    ).toBe(true);
 
     // And the caption is actually asking for it.
     await expect(page.getByTestId("caption-line")).toHaveCSS(

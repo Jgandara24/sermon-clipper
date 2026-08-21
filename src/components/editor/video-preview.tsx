@@ -470,17 +470,20 @@ export function VideoPreview({
                         <span
                           data-testid="caption-word"
                           data-active={word.id === activeWord?.id ? "true" : "false"}
-                          style={
-                            word.id === activeWord?.id
+                          style={{
+                            // Every word is inline-block, not just the active one: a span that
+                            // changes display changes the line's layout, and rest spacing has to
+                            // be identical whether or not anything is active. A transform does
+                            // not affect layout, so the pop moves nothing.
+                            display: "inline-block",
+                            ...(word.id === activeWord?.id
                               ? {
                                   color: style.highlightColor,
                                   // Same curve the burn-in evaluates, from the same module.
-                                  // `display` because a span cannot be scaled while inline.
-                                  display: "inline-block",
                                   transform: `scale(${popScaleAt(currentMs - word.startMs)})`,
                                 }
-                              : undefined
-                          }
+                              : null),
+                          }}
                         >
                           {applyTextCase(word.word, style.textCase)}
                         </span>
