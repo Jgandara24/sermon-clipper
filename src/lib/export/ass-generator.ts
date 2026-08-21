@@ -1,12 +1,17 @@
+import { highlightSlices } from "@/lib/editor/active-word";
 import { applyTextCase } from "@/lib/editor/text-case";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
-import type { CaptionLine } from "@/lib/editor/caption-lines";
+import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
 
 /**
  * Renders one ASS (Advanced SubStation Alpha) subtitle file per clip export, burned in via
- * ffmpeg's `subtitles=` filter (libass). No per-word karaoke wipe (\k tags) at MVP — every
- * preset renders at the line level, still matching its distinct color/position/box styling.
- * See DECISIONS.md for why karaoke word-highlight timing was deferred.
+ * ffmpeg's `subtitles=` filter (libass).
+ *
+ * A line that carries its words is cut into one subtitle event per highlight stretch, with the
+ * active word coloured. The stretches come from the same resolver the preview calls, so the word
+ * lit on screen and the word lit in the file are the same word at every instant. A line without
+ * words, or one the member has retyped, renders as a single event with nothing highlighted —
+ * there is no word list to align a highlight to.
  */
 
 function hexToAssColor(hex: string): string {
@@ -47,8 +52,14 @@ function escapeAssText(text: string): string {
   return text.replace(/\n/g, "\\N").replace(/\{/g, "(").replace(/\}/g, ")");
 }
 
+/** A caption line to render. `words` is optional: without it the line renders unhighlighted. */
+export type AssCaptionLine = Pick<CaptionLine, "startMs" | "endMs" | "text"> & {
+  id?: string;
+  words?: CaptionWord[];
+};
+
 export function generateAssSubtitles(
-  lines: Array<Pick<CaptionLine, "startMs" | "endMs" | "text">>,
+  lines: AssCaptionLine[],
   style: CaptionStyle,
   videoWidth: number,
   videoHeight: number,
@@ -80,7 +91,7 @@ export function generateAssSubtitles(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},0,0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
+    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${style.weight >= 600 ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
     `Style: LowerThird,${fontName},38,${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},1,0,0,0,100,100,0,0,3,8,1,1,70,70,400,1`,
     "",
     "[Events]",
@@ -94,10 +105,43 @@ export function generateAssSubtitles(
     ? `{\\an5\\pos(${Math.round(style.box.xPct * videoWidth)},${Math.round(style.box.yPct * videoHeight)})}`
     : "";
 
+  const highlightTag = `{\\c${hexToAssColor(style.highlightColor)}}`;
+  const restoreTag = `{\\c${primaryColor}}`;
+
+  function dialogue(startMs: number, endMs: number, body: string): string {
+    return `Dialogue: 0,${msToAssTime(startMs)},${msToAssTime(endMs)},Default,,0,0,0,,${positionTag}${body}`;
+  }
+
   const events = lines
-    .map((line) => {
-      const text = applyTextCase(line.text, style.textCase);
-      return `Dialogue: 0,${msToAssTime(line.startMs)},${msToAssTime(line.endMs)},Default,,0,0,0,,${positionTag}${escapeAssText(text)}`;
+    .flatMap((line) => {
+      const words = line.words ?? [];
+      // A retyped line no longer corresponds to its words, so there is nothing to align a
+      // highlight to. It renders whole, exactly as it reads.
+      const retyped = words.map((word) => word.word).join(" ") !== line.text;
+      if (words.length === 0 || retyped) {
+        return [dialogue(line.startMs, line.endMs, escapeAssText(applyTextCase(line.text, style.textCase)))];
+      }
+
+      return highlightSlices({
+        id: line.id ?? "line",
+        startMs: line.startMs,
+        endMs: line.endMs,
+        words,
+        text: line.text,
+      }).map((slice) =>
+        dialogue(
+          slice.startMs,
+          slice.endMs,
+          words
+            .map((word) => {
+              const cased = escapeAssText(applyTextCase(word.word, style.textCase));
+              return word.id === slice.activeWordId
+                ? `${highlightTag}${cased}${restoreTag}`
+                : cased;
+            })
+            .join(" "),
+        ),
+      );
     })
     .join("\n");
   const lowerThirdEvent = lowerThird

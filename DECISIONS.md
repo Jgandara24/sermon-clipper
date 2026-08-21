@@ -2098,3 +2098,47 @@ per run and never leaves the process tree, so a media URL captured from one run 
 the next.
 
 Status: Active.
+
+## 2026-08-21 - One Resolver Decides The Highlighted Word, And Retired Presets Keep Rendering
+
+Decision: exactly one word is highlighted at any timestamp, and the same function decides which one
+in the browser preview and in the burned-in render. `src/lib/editor/active-word.ts` is that
+function. The preview asks it per frame; the export asks it once per stretch, through
+`highlightSlices`, and emits one subtitle event per stretch with the active word coloured.
+
+Source word intervals overlap — forced alignment and ASR both emit spans that run into each other —
+so "which word is active" needs a total rule, not a `find`. Among the words covering an instant,
+the one that started most recently wins; ties break on the shorter interval and then on position.
+Those tie-breaks are arbitrary but fixed. What matters is that the answer is single and stable: a
+caption that lights one word on screen and a different word in the file is worse than one that
+lights neither.
+
+**The picker offers Clean and Highlighter. Nothing else is removed.** `bold-serif`, `karaoke` and
+`quiet` keep their exact styles and still resolve by id, so a clip a church already approved
+renders as it always did. Retiring a preset from the picker is not a reason to change delivered
+work. Highlighter is new: Neon Yellow (`#CCFF00`) on the bottom safe band, uppercase, weight 800.
+
+**Uppercase is the default for new content only.** It lands in `buildDefaultEditorState`, not in a
+preset, so a stored document that carries no case still falls back to its preset's case and does
+not change. The one edge this leaves: a clip created before today, never edited, and exported for
+the first time after today renders uppercase, because a version-0 export builds the default state
+at render time. That clip has no saved appearance to preserve, and the alternative — putting the
+default on the Clean preset — would change every existing Clean clip instead.
+
+X and Y position fields are gone; the canvas from Slice 6 is the position control. Font moves into
+the main Captions section. Every numeric control is a slider paired with a number field, both
+writing through one handler so they cannot drift; `src/lib/editor/numeric-field.ts` owns what a
+typed value means, including that an emptied field is "no override" rather than zero.
+
+Words are laid out at rest spacing. The highlight is a colour change and nothing else — no
+reserved clearance, no scale, no shift — so a line with no active word is laid out exactly like a
+line with one. Moving a word's neighbours is Slice 8's work and is deliberately absent here; the
+export test asserts that by refusing every ASS animation and scaling tag.
+
+Tradeoff: per-word highlighting multiplies subtitle events — one per stretch instead of one per
+line — which makes the ASS file larger and slightly slows libass. A line the member has retyped
+no longer corresponds to its words, so it renders whole and unhighlighted rather than guessing an
+alignment. Font weight has no direct equivalent in ASS, which knows only bold or not, so 600 and
+above renders bold and everything below renders regular; the browser shows the true weight.
+
+Status: Active. Implements Slice 7 of `docs/EDITOR_DELTA_PLAN_2026-08-18.md`.

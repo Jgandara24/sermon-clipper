@@ -26,5 +26,10 @@ export function resolveCaptionStyle(
     fallback: preset.style.textCase,
   });
   if (overrides.highlightColor !== undefined) style.highlightColor = overrides.highlightColor;
+  if (overrides.weight !== undefined) style.weight = overrides.weight;
+  if (overrides.strokePx !== undefined) style.strokePx = overrides.strokePx;
+  if (overrides.shadow !== undefined) style.shadow = overrides.shadow;
+  if (overrides.background !== undefined) style.background = overrides.background;
+  if (overrides.fontFamily !== undefined) style.fontFamily = overrides.fontFamily;
   return style;
 }

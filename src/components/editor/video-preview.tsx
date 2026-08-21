@@ -9,7 +9,7 @@ import {
   RotateCcw,
   RotateCw,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   CANVAS_VIEWPORT_RESET,
   canvasTransform,
@@ -30,6 +30,7 @@ import {
   seekByMs,
   SKIP_STEP_MS,
 } from "@/lib/editor/playback";
+import { resolveActiveWord } from "@/lib/editor/active-word";
 import { applyTextCase } from "@/lib/editor/text-case";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
@@ -118,6 +119,12 @@ export function VideoPreview({
     (line) => currentMs >= line.startMs && currentMs < line.endMs,
   );
   const captionPoint = style.box ?? defaultCaptionPoint(style.position);
+  // One resolver, shared with the burn-in: the word lit here is the word lit in the file.
+  const activeWord = currentLine ? resolveActiveWord(currentLine.words, currentMs) : null;
+  // A retyped line no longer corresponds to its words, so there is nothing to highlight.
+  const captionIsRetyped =
+    currentLine !== undefined &&
+    currentLine.words.map((word) => word.word).join(" ") !== currentLine.text;
 
   useEffect(() => {
     seekedRef.current = false;
@@ -410,10 +417,12 @@ export function VideoPreview({
               }}
             >
               <span
+                data-testid="caption-line"
                 className="block whitespace-nowrap rounded px-2 py-1 text-center"
                 style={{
                   fontFamily: style.fontFamily,
                   fontSize: `${style.sizePx * 0.4}px`,
+                  fontWeight: style.weight,
                   color: style.textColor,
                   // No text-transform: the preview lays out the same string the burn-in does, so
                   // the two cannot disagree — and CSS cannot express Sentence case or Title Case.
@@ -423,7 +432,29 @@ export function VideoPreview({
                     style.strokePx > 0 ? `${style.strokePx * 0.3}px ${style.strokeColor}` : undefined,
                 }}
               >
-                {applyTextCase(currentLine.text, style.textCase)}
+                {/*
+                  Rest spacing. The active word is coloured and nothing else about it changes — no
+                  reserved clearance, no scale — so a line with no active word is laid out exactly
+                  as a line with one. Making the highlight move its neighbours is Slice 8's work.
+                */}
+                {captionIsRetyped
+                  ? applyTextCase(currentLine.text, style.textCase)
+                  : currentLine.words.map((word, index) => (
+                      <Fragment key={word.id}>
+                        {/* The separator sits outside the word, so the highlight covers the
+                            word and not the space in front of it. */}
+                        {index > 0 ? " " : ""}
+                        <span
+                          data-testid="caption-word"
+                          data-active={word.id === activeWord?.id ? "true" : "false"}
+                          style={{
+                            color: word.id === activeWord?.id ? style.highlightColor : undefined,
+                          }}
+                        >
+                          {applyTextCase(word.word, style.textCase)}
+                        </span>
+                      </Fragment>
+                    ))}
               </span>
             </CanvasObject>
           ) : null}

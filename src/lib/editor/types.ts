@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TEXT_CASES } from "./text-case";
+import { DEFAULT_TEXT_CASE, TEXT_CASES } from "./text-case";
 
 // Editor state is one versioned JSON document per clip (guide §12). `version` is duplicated
 // inside the document (matching the guide's own example) for client convenience, but
@@ -44,6 +44,11 @@ export const editorStateSchema = z.object({
       // those clips keep rendering what they always rendered.
       uppercase: z.boolean().optional(),
       highlightColor: z.string().optional(),
+      fontFamily: z.string().min(1).max(200).optional(),
+      weight: z.number().int().min(100).max(900).optional(),
+      strokePx: z.number().min(0).max(20).optional(),
+      shadow: z.boolean().optional(),
+      background: z.enum(["none", "pill"]).optional(),
     }),
     textOverrides: z.array(z.object({ segmentId: z.string(), text: z.string() })),
   }),
@@ -75,7 +80,13 @@ export function buildDefaultEditorState(params: {
     source: { videoId: params.sourceVideoId, startMs: params.startMs, endMs: params.endMs },
     wordEdits: { deletedWordIds: [], restoredFillerIds: [], textOverrides: [] },
     extensions: [],
-    captions: { presetId: "clean", overrides: {}, textOverrides: [] },
+    // Uppercase is the default for new content only. A stored document that carries no case
+    // keeps falling back to its preset's, so nothing already made changes appearance.
+    captions: {
+      presetId: "clean",
+      overrides: { textCase: DEFAULT_TEXT_CASE },
+      textOverrides: [],
+    },
     layout: { mode: "center", crop: { x: 0, y: 0, w: 1, h: 1 }, aspect: "9:16" },
     overlays: [],
     brandTemplateId: null,
