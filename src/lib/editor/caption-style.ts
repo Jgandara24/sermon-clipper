@@ -15,6 +15,8 @@ export function resolveCaptionStyle(
   const style: CaptionStyle = { ...preset.style };
   if (overrides.sizePx !== undefined) style.sizePx = overrides.sizePx;
   if (overrides.position !== undefined) style.position = overrides.position;
+  // A dragged position wins over the discrete one, in the preview and in the burn-in alike.
+  style.box = overrides.box ?? null;
   // One case model, and one place that decides which case a stored document means. A clip saved
   // before the model existed carries only the old boolean, and it keeps rendering exactly as it
   // did: true was upper-cased, false was untouched.

@@ -75,4 +75,74 @@ describe("generateAssSubtitles", () => {
     expect(ass).toContain("Dialogue: 1,0:00:00.00,0:00:04.00,LowerThird");
     expect(ass).toContain("First Baptist\\NSunday message");
   });
+  describe("a caption the member dragged", () => {
+    const dragged = { ...getCaptionPreset("clean").style, box: { xPct: 0.25, yPct: 0.4 } };
+
+    it("burns in at the exact point it was dropped", () => {
+      const ass = generateAssSubtitles(LINES, dragged, 1080, 1920);
+      // 0.25 * 1080 = 270, 0.4 * 1920 = 768.
+      expect(ass).toContain("\\pos(270,768)");
+    });
+
+    it("centres the text on that point, so the preview and the render agree", () => {
+      const ass = generateAssSubtitles(LINES, dragged, 1080, 1920);
+      expect(ass).toContain("{\\an5\\pos(270,768)}");
+    });
+
+    it("positions every caption line, not just the first", () => {
+      const ass = generateAssSubtitles(LINES, dragged, 1080, 1920);
+      const positioned = ass
+        .split("\n")
+        .filter((line) => line.startsWith("Dialogue: 0") && line.includes("\\pos("));
+      expect(positioned).toHaveLength(2);
+    });
+
+    it("still renders the words themselves", () => {
+      const ass = generateAssSubtitles(LINES, dragged, 1080, 1920);
+      expect(ass).toContain("peace is not the absence");
+    });
+
+    it("emits no position tag at all when nothing was dragged", () => {
+      const ass = generateAssSubtitles(LINES, getCaptionPreset("clean").style, 1080, 1920);
+      // Every clip made before direct manipulation must render exactly as it always did.
+      expect(ass).not.toContain("\\pos(");
+      expect(ass).not.toContain("\\an5");
+    });
+
+    it("treats an explicitly absent box the same as no box", () => {
+      const ass = generateAssSubtitles(
+        LINES,
+        { ...getCaptionPreset("clean").style, box: null },
+        1080,
+        1920,
+      );
+      expect(ass).not.toContain("\\pos(");
+    });
+  });
+
+  describe("editing guides never reach a render", () => {
+    it("carries no safe-zone, centre-guide, or selection markup", () => {
+      const ass = generateAssSubtitles(
+        LINES,
+        { ...getCaptionPreset("clean").style, box: { xPct: 0.5, yPct: 0.8 } },
+        1080,
+        1920,
+      );
+      // The guides and handles are DOM in the editor and have no representation here at all.
+      for (const marker of ["safe-zone", "safe zone", "centre-guide", "canvas-handle", "ALL CAPTIONS"]) {
+        expect(ass).not.toContain(marker);
+      }
+    });
+
+    it("emits only caption dialogue events", () => {
+      const ass = generateAssSubtitles(
+        LINES,
+        { ...getCaptionPreset("clean").style, box: { xPct: 0.5, yPct: 0.8 } },
+        1080,
+        1920,
+      );
+      const events = ass.split("\n").filter((line) => line.startsWith("Dialogue:"));
+      expect(events).toHaveLength(LINES.length);
+    });
+  });
 });

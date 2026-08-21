@@ -15,6 +15,14 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      // Mobile specs describe touch gestures a desktop pointer cannot produce.
+      testIgnore: /.*\.mobile\.spec\.ts/,
+    },
+    {
+      // Chromium under the hood, so CI's existing `playwright install chromium` covers it.
+      name: "mobile",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /.*\.mobile\.spec\.ts/,
     },
   ],
   webServer: {
