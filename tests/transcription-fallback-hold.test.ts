@@ -141,7 +141,16 @@ describe("settleTranscriptionFallbackHold", () => {
             return {};
           }),
         },
-        clipEdit: { count: vi.fn().mockResolvedValue(options.edits ?? 0) },
+        // Edits are fetched, not counted: the machine's own initial document has to be told
+        // apart from a person's by what the document says, and a JSON filter for "not that" is a
+        // NOT over a comparison that is NULL for every row without the key.
+        clipEdit: {
+          findMany: vi
+            .fn()
+            .mockResolvedValue(
+              Array.from({ length: options.edits ?? 0 }, () => ({ editorState: {} })),
+            ),
+        },
         clipApproval: { count: vi.fn().mockResolvedValue(options.approvals ?? 0) },
         exportJob: { count: vi.fn().mockResolvedValue(options.exports ?? 0) },
       },
@@ -214,7 +223,7 @@ describe("settleTranscriptionFallbackHold", () => {
       primaryProvider: "scribe",
     });
 
-    for (const counter of [tx.clipEdit.count, tx.clipApproval.count, tx.exportJob.count]) {
+    for (const counter of [tx.clipEdit.findMany, tx.clipApproval.count, tx.exportJob.count]) {
       expect(counter).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ createdAt: { gte: hold.createdAt } }),

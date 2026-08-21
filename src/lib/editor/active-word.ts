@@ -10,6 +10,7 @@
 // words can look active at the same instant depending on who is asking. The rule here is total and
 // deterministic: at any timestamp there is exactly one active word, or none.
 
+import { popClock } from "./caption-animation";
 import type { CaptionLine, CaptionWord } from "./caption-lines";
 
 /**
@@ -90,6 +91,26 @@ export function highlightSlices(line: CaptionLine): HighlightSlice[] {
 }
 
 /**
+ * The stretches, on the grid a subtitle timestamp can actually state.
+ *
+ * Both renderers select from these. Selecting from raw boundaries in the browser and from rounded
+ * ones in the file makes the two disagree about which word is active either side of a boundary —
+ * a slice ending at 203ms is written as ending at 200ms, and the three milliseconds between belong
+ * to different words depending on who is asked.
+ *
+ * A stretch too short to survive rounding disappears; the neighbour that follows it starts where it
+ * would have ended, so the line stays covered.
+ */
+export function quantisedHighlightSlices(line: CaptionLine): HighlightSlice[] {
+  return highlightSlices(line)
+    .map((slice) => {
+      const clock = popClock(slice);
+      return { ...slice, startMs: clock.startMs, endMs: clock.startMs + clock.durationMs };
+    })
+    .filter((slice) => slice.endMs > slice.startMs);
+}
+
+/**
  * The stretch covering `ms`, or null.
  *
  * The activation is the clock both renderers measure the pop from, so the preview needs the slice
@@ -97,5 +118,5 @@ export function highlightSlices(line: CaptionLine): HighlightSlice[] {
  * each time, and its own `startMs` cannot say that.
  */
 export function activeSliceAt(line: CaptionLine, ms: number): HighlightSlice | null {
-  return highlightSlices(line).find((slice) => ms >= slice.startMs && ms < slice.endMs) ?? null;
+  return quantisedHighlightSlices(line).find((slice) => ms >= slice.startMs && ms < slice.endMs) ?? null;
 }

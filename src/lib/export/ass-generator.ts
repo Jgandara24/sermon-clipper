@@ -1,4 +1,4 @@
-import { highlightSlices } from "@/lib/editor/active-word";
+import { quantisedHighlightSlices } from "@/lib/editor/active-word";
 import { popPhases, popPhaseTags, popResetTags } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
@@ -136,7 +136,7 @@ export function generateAssSubtitles(
         return [dialogue(line.startMs, line.endMs, escapeAssText(applyTextCase(line.text, style.textCase)))];
       }
 
-      return highlightSlices({
+      return quantisedHighlightSlices({
         id: line.id ?? "line",
         startMs: line.startMs,
         endMs: line.endMs,
@@ -154,6 +154,7 @@ export function generateAssSubtitles(
             })
             .join(" ");
 
+        // The slices are already on the timestamp grid, so these times need no further rounding.
         if (slice.activeWordId === null) {
           return [dialogue(slice.startMs, slice.endMs, line_(null))];
         }

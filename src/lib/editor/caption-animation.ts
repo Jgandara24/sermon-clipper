@@ -17,6 +17,46 @@
 // than the active one, and nothing here reserves permanent room.
 
 /**
+ * The resolution both renderers work at.
+ *
+ * An ASS timestamp is centiseconds and an ASS scale is whole percent. The preview has neither
+ * limit, so agreement is only real if it agrees to the file's resolution first: an activation from
+ * 3ms to 503ms is written as 0ms to 500ms, and a partial phase reaching 1.1234 is written as 112.
+ * Quantising in one place, before either renderer draws, is what makes the two the same curve
+ * rather than two curves that round differently.
+ */
+export const POP_TIME_STEP_MS = 10;
+export const POP_SCALE_STEP = 0.01;
+
+/** The nearest centisecond, the way `msToAssTime` rounds. */
+export function quantisePopTime(ms: number): number {
+  if (!Number.isFinite(ms)) return 0;
+  return Math.round(ms / POP_TIME_STEP_MS) * POP_TIME_STEP_MS;
+}
+
+/** The nearest whole percent, which is all `\fscx` carries. */
+export function quantisePopScale(scale: number): number {
+  if (!Number.isFinite(scale)) return 1;
+  return Math.round(scale * 100) / 100;
+}
+
+/**
+ * The clock one activation is drawn on, shared by both renderers.
+ *
+ * A slice's own boundaries come from transcript word times and land anywhere; the file can only
+ * state centiseconds. Quantising the origin once, here, is what stops the preview starting a curve
+ * at 3ms while the file starts the same curve at 0ms.
+ */
+export function popClock(slice: { startMs: number; endMs: number }): {
+  startMs: number;
+  durationMs: number;
+} {
+  const startMs = quantisePopTime(slice.startMs);
+  const endMs = quantisePopTime(slice.endMs);
+  return { startMs, durationMs: Math.max(0, endMs - startMs) };
+}
+
+/**
  * Shape of the pop. Provisional, for the manual visual pass — in one place so that pass can move
  * them once. Parity between the renderers does not depend on the values.
  */
@@ -50,20 +90,25 @@ export type PopPhase = {
  * whatever the activation has, and the rise and settle take what is left.
  */
 export function popPhases(activeDurationMs: number): PopPhase[] {
-  const duration = Number.isFinite(activeDurationMs) ? Math.max(0, activeDurationMs) : 0;
+  const duration = quantisePopTime(Number.isFinite(activeDurationMs) ? Math.max(0, activeDurationMs) : 0);
   if (duration <= 0) return [];
 
-  const returnMs = Math.min(POP.returnMs, duration);
+  const returnMs = quantisePopTime(Math.min(POP.returnMs, duration));
   const beforeReturn = duration - returnMs;
-  const riseMs = Math.min(POP.riseMs, beforeReturn);
-  const settleMs = Math.min(POP.settleMs, beforeReturn - riseMs);
+  const riseMs = quantisePopTime(Math.min(POP.riseMs, beforeReturn));
+  const settleMs = quantisePopTime(Math.min(POP.settleMs, beforeReturn - riseMs));
 
   // Where the return begins from depends on how much of the curve had room to happen.
-  const afterRise = riseMs === POP.riseMs ? POP.peakScale : scaleAfterPartial(1, POP.peakScale, riseMs, POP.riseMs, POP.riseAccel);
-  const afterSettle =
+  const afterRise = quantisePopScale(
+    riseMs >= POP.riseMs
+      ? POP.peakScale
+      : scaleAfterPartial(1, POP.peakScale, riseMs, POP.riseMs, POP.riseAccel),
+  );
+  const afterSettle = quantisePopScale(
     settleMs <= 0
       ? afterRise
-      : scaleAfterPartial(afterRise, POP.heldScale, settleMs, POP.settleMs, POP.settleAccel);
+      : scaleAfterPartial(afterRise, POP.heldScale, settleMs, POP.settleMs, POP.settleAccel),
+  );
 
   const phases: PopPhase[] = [];
   if (riseMs > 0) {
@@ -89,13 +134,15 @@ export function popPhases(activeDurationMs: number): PopPhase[] {
       accel: 1,
     });
   }
-  phases.push({
-    startMs: returnStart,
-    endMs: duration,
-    fromScale: afterSettle,
-    toScale: 1,
-    accel: POP.returnAccel,
-  });
+  if (duration > returnStart) {
+    phases.push({
+      startMs: returnStart,
+      endMs: duration,
+      fromScale: afterSettle,
+      toScale: 1,
+      accel: POP.returnAccel,
+    });
+  }
 
   return phases;
 }

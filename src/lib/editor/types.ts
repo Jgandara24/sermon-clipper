@@ -8,6 +8,15 @@ export const INITIAL_EDIT_VERSION = 1;
 // inside the document (matching the guide's own example) for client convenience, but
 // ClipEdit.version in the database is authoritative for optimistic concurrency.
 export const editorStateSchema = z.object({
+  /**
+   * Set only by ANALYZE, on the document it writes when it creates a clip. It is the durable way
+   * to tell the machine's row from a person's: `ClipEdit.savedBy` is ON DELETE SET NULL, so a real
+   * first edit becomes unsigned at version 1 the moment its author's account is removed — exactly
+   * the shape the machine's row has. A stored document is not touched by that deletion.
+   *
+   * The save route strips it, so a save made by a person can never carry it.
+   */
+  systemInitial: z.literal(true).optional(),
   version: z.number().int().min(0),
   source: z.object({
     videoId: z.string(),
@@ -129,6 +138,23 @@ export function buildInitialEditorState(params: {
     // row is a document nobody can reason about — the save route already keeps the two in step,
     // and so must the one the machine writes.
     version: INITIAL_EDIT_VERSION,
+    // Durable provenance. See the schema field for why savedBy cannot carry this.
+    systemInitial: true,
     captions: { ...state.captions, overrides: { ...state.captions.overrides, textCase: DEFAULT_TEXT_CASE } },
   };
+}
+
+/**
+ * True for the document ANALYZE writes when it creates a clip.
+ *
+ * Read from the stored document rather than from `ClipEdit.savedBy`, which is ON DELETE SET NULL:
+ * a person's first edit becomes unsigned at version 1 the moment their account is removed, which
+ * is indistinguishable from the machine's row. A document is not touched by that deletion.
+ */
+export function isSystemInitialDocument(editorState: unknown): boolean {
+  return (
+    typeof editorState === "object" &&
+    editorState !== null &&
+    (editorState as { systemInitial?: unknown }).systemInitial === true
+  );
 }

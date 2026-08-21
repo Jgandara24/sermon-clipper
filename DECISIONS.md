@@ -2278,3 +2278,47 @@ misdiagnosis before it was written down.
 
 Status: Active. Supersedes the two entries above it on uppercase defaults, retyped-caption timing,
 and the pop curve; confirms them on exclusive line spans and bundled fonts.
+
+## 2026-08-21 - Provenance Belongs In The Document, And Parity Belongs At The File's Resolution
+
+Decision: two narrow corrections to the entry above it. Everything else there stands.
+
+**A system-created document says so in the document.** That entry says the fallback hold excludes
+"an unsigned row at the initial version, which is exactly the shape the machine writes and never
+the shape a person's save takes". The second half was wrong. `ClipEdit.savedBy` is ON DELETE SET
+NULL, so a person's first edit on a clip that predates the initial document becomes unsigned at
+version 1 the moment their account is removed — indistinguishable from the machine's row, and their
+work would have stopped counting exactly when they left.
+
+The document carries `systemInitial: true`, written only by `buildInitialEditorState` and stripped
+by the save route so a client cannot forge it onto a person's edit. Deleting a user does not reach
+inside a stored document, so the distinction survives what `savedBy` does not.
+
+The count also moved out of SQL. A JSON filter for "not the machine's document" is a NOT over a
+comparison that is NULL for every row without the key, and in SQL that excludes the rows it was
+meant to find — every human edit. The rows are fetched and filtered in code, which says what is
+meant and is what the tests actually exercise.
+
+**Parity holds at the resolution the file has, not at the resolution the browser has.** An ASS
+timestamp is centiseconds and an ASS scale is whole percent. The preview has neither limit, so a
+curve agreed "exactly" still came apart: an activation running 3ms to 203ms is written as 0ms to
+200ms, and at 201ms the browser was still drawing one word while the file had moved to the next.
+Partial phases had the same problem in the other axis — a rise that only half happens reaches
+1.0329 in the browser and is written as 103.
+
+So the quantisation happens once, before either renderer draws: `quantisePopTime` to the
+centisecond, `quantisePopScale` to whole percent, and `quantisedHighlightSlices` as the single set
+of stretches both renderers select from. Within a phase both then evaluate the same endpoints over
+the same span with the same exponent, so they agree at every millisecond rather than nearly.
+
+Choosing whole percent rather than decimal `\fscx` is deliberate: decimal scale syntax would have
+needed proving against the worker's own libass build before it could be relied on, and rounding
+both sides to what every renderer certainly accepts needs no such proof.
+
+Tradeoff: an activation shorter than a centisecond disappears from the highlight rather than
+flickering for a frame, and every pop boundary is now up to 5ms from where the transcript put it.
+Both are below what anyone can see, and both are the price of the preview and the file agreeing
+about which word is lit.
+
+Status: Active. Corrects the entry above it on how a system document is recognised and on what
+"the same curve" means.

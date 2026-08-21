@@ -6,7 +6,7 @@ import {
   TRANSCRIPTION_FALLBACK_EXCEPTION_TYPE,
   transcriptProviderNameFor,
 } from "@/lib/transcription/fallback-hold";
-import { buildInitialEditorState } from "@/lib/editor/types";
+import { buildDefaultEditorState, buildInitialEditorState } from "@/lib/editor/types";
 import { INITIAL_EDIT_VERSION } from "@/lib/exports/edit-version";
 import { prisma } from "@/lib/prisma";
 
@@ -80,6 +80,17 @@ async function seedHeldProject() {
   return { userId: user.id, workspaceId: workspace.id, projectId: project.id, clipId: clip.id };
 }
 
+/** A member who is not the workspace owner, so deleting them does not take the workspace with it. */
+async function addAuthor(workspaceId: string) {
+  const author = await prisma.user.create({
+    data: { email: `${unique("author")}@example.test`, authProvider: AuthProvider.DEV },
+  });
+  await prisma.workspaceMember.create({
+    data: { userId: author.id, workspaceId, role: WorkspaceRole.EDITOR },
+  });
+  return author.id;
+}
+
 async function writeSystemInitialEdit(clipId: string, sourceVideoId = "v") {
   return prisma.clipEdit.create({
     data: {
@@ -146,12 +157,13 @@ describe("the fallback hold and system-created documents", () => {
   it("still keeps the hold open when a person edited a clip", async () => {
     const fixture = await seedHeldProject();
     await writeSystemInitialEdit(fixture.clipId);
-    // A real save: signed, and a version above the initial one.
+    // A real save: signed, a version above the initial one, and a document carrying no system
+    // marker — which is what the save route writes.
     await prisma.clipEdit.create({
       data: {
         clipId: fixture.clipId,
         version: INITIAL_EDIT_VERSION + 1,
-        editorState: buildInitialEditorState({
+        editorState: buildDefaultEditorState({
           sourceVideoId: "v",
           startMs: 0,
           endMs: 4000,
@@ -178,5 +190,49 @@ describe("the initial document's version", () => {
 
     expect(row.version).toBe(INITIAL_EDIT_VERSION);
     expect(state.version, "the document disagrees with its own row").toBe(INITIAL_EDIT_VERSION);
+  });
+});
+
+describe("provenance survives the author being deleted", () => {
+  it("still counts a human's first edit after their account is gone", async () => {
+    const fixture = await seedHeldProject();
+    const authorId = await addAuthor(fixture.workspaceId);
+
+    // A legacy clip: no system document, so the person's own save is version 1.
+    await prisma.clipEdit.create({
+      data: {
+        clipId: fixture.clipId,
+        version: INITIAL_EDIT_VERSION,
+        editorState: buildDefaultEditorState({
+          sourceVideoId: "v",
+          startMs: 0,
+          endMs: 4000,
+        }) as unknown as Prisma.InputJsonValue,
+        savedBy: authorId,
+      },
+    });
+
+    // savedBy is ON DELETE SET NULL, so removing the author turns their row into the exact shape
+    // the machine's row has: unsigned, version 1. Their work must not vanish with their account.
+    await prisma.user.delete({ where: { id: authorId } });
+    const orphaned = await prisma.clipEdit.findFirst({ where: { clipId: fixture.clipId } });
+    expect(orphaned?.savedBy, "the row under test is not orphaned").toBeNull();
+    expect(orphaned?.version).toBe(INITIAL_EDIT_VERSION);
+
+    expect(await settle(fixture.projectId)).toEqual({
+      settled: "kept_open",
+      reason: "human_work_needs_reconciliation",
+    });
+  });
+
+  it("marks the ANALYZE document in a way a deletion cannot produce", async () => {
+    const state = buildInitialEditorState({ sourceVideoId: "v", startMs: 0, endMs: 4000 }) as unknown as {
+      systemInitial?: boolean;
+    };
+    const human = buildDefaultEditorState({ sourceVideoId: "v", startMs: 0, endMs: 4000 }) as unknown as {
+      systemInitial?: boolean;
+    };
+    expect(state.systemInitial).toBe(true);
+    expect(human.systemInitial).toBeUndefined();
   });
 });

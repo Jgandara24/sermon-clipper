@@ -10,9 +10,13 @@ import { getCaptionPreset } from "@/lib/editor/caption-presets";
  * nothing, which on Highlighter means the caption goes dead for the whole line while someone is
  * speaking.
  *
- * The rule: the line's own span is divided evenly among the tokens of the text as typed. It is
- * arbitrary, in the way any answer here is arbitrary, but it is one rule, it is total, and both
- * renderers apply it — so the token lit on screen is the token lit in the file.
+ * The rule has two cases, decided by whether the member changed how many words there are.
+ *
+ * A **correction** — the same number of tokens — keeps each source word's timing and replaces only
+ * its text, so fixing one typo does not re-time the line. A **rewrite** — tokens added or removed —
+ * has no correspondence left to preserve, and divides the line's own span evenly among the tokens
+ * as typed. Both renderers apply the same rule, so the token lit on screen is the token lit in the
+ * file.
  */
 
 function sourceWords(spec: Array<[string, number, number]>): CaptionWord[] {
