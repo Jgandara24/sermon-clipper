@@ -90,3 +90,43 @@ export function applyCaptionTextOverrides(
     overrideMap.has(line.id) ? { ...line, text: overrideMap.get(line.id)! } : line,
   );
 }
+
+/**
+ * True when the line's text no longer spells out its words — i.e. a member has retyped it.
+ *
+ * A line that carries no words at all is not retyped: there is nothing for its text to differ
+ * from, and it renders whole exactly as it always did.
+ */
+export function isRetyped(line: Pick<CaptionLine, "text"> & { words?: CaptionWord[] }): boolean {
+  const words = line.words ?? [];
+  if (words.length === 0) return false;
+  return words.map((word) => word.word).join(" ") !== line.text;
+}
+
+/**
+ * Timings for a retyped line, by dividing its own span evenly among the tokens as typed.
+ *
+ * Matching edited text back to source words is guesswork, and guessing differently in the preview
+ * and the burn-in is the one outcome that must not happen. Giving up instead — highlighting
+ * nothing — sounds safe but is worse where it shows: on Highlighter the caption goes dead for the
+ * whole line while somebody is speaking.
+ *
+ * So: one rule, total, and arbitrary in the open. Even division loses the original word timing,
+ * which is the honest cost of text that no longer corresponds to it. The last token is closed on
+ * the line's own end so rounding cannot leave a sliver with nothing active.
+ */
+export function retypedWords(line: Pick<CaptionLine, "id" | "startMs" | "endMs" | "text">): CaptionWord[] {
+  const tokens = line.text.trim().split(/\s+/).filter((token) => token.length > 0);
+  if (tokens.length === 0) return [];
+
+  const span = line.endMs - line.startMs;
+  return tokens.map((token, index) => ({
+    id: `${line.id}-retyped-${index}`,
+    word: token,
+    startMs: line.startMs + Math.round((span * index) / tokens.length),
+    endMs:
+      index === tokens.length - 1
+        ? line.endMs
+        : line.startMs + Math.round((span * (index + 1)) / tokens.length),
+  }));
+}

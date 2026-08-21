@@ -37,6 +37,8 @@ import {
   applyCaptionTextOverrides,
   buildCaptionLines,
   exclusiveLineSpans,
+  isRetyped,
+  retypedWords,
 } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
@@ -129,17 +131,22 @@ export function VideoPreview({
     (line) => currentMs >= line.startMs && currentMs < line.endMs,
   );
   const captionPoint = style.box ?? defaultCaptionPoint(style.position);
+  // A retyped line no longer corresponds to its words, so its tokens are timed by the same rule
+  // the burn-in uses rather than by matching.
+  const currentWords = currentLine
+    ? isRetyped(currentLine)
+      ? retypedWords(currentLine)
+      : currentLine.words
+    : [];
   // One resolver, shared with the burn-in: the word lit here is the word lit in the file. Only a
   // preset that highlights has an active word at all — Clean and the retired presets render the
   // line whole, exactly as they always did.
   const activeWord =
     currentLine && style.activeWordHighlight
-      ? resolveActiveWord(currentLine.words, currentMs)
+      ? resolveActiveWord(currentWords, currentMs)
       : null;
-  // A retyped line no longer corresponds to its words, so there is nothing to highlight.
-  const captionIsRetyped =
-    currentLine !== undefined &&
-    currentLine.words.map((word) => word.word).join(" ") !== currentLine.text;
+  // Nothing left to lay out word by word once the text is empty.
+  const captionIsRetyped = currentWords.length === 0;
 
   useEffect(() => {
     seekedRef.current = false;
@@ -455,7 +462,7 @@ export function VideoPreview({
                 */}
                 {captionIsRetyped || !style.activeWordHighlight
                   ? applyTextCase(currentLine.text, style.textCase)
-                  : currentLine.words.map((word, index) => (
+                  : currentWords.map((word, index) => (
                       <Fragment key={word.id}>
                         {/* The separator sits outside the word, so the highlight covers the
                             word and not the space in front of it. */}

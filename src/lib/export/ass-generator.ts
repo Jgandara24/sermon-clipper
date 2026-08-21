@@ -2,7 +2,7 @@ import { highlightSlices } from "@/lib/editor/active-word";
 import { popResetTags, popTags } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
-import { exclusiveLineSpans } from "@/lib/editor/caption-lines";
+import { exclusiveLineSpans, isRetyped, retypedWords } from "@/lib/editor/caption-lines";
 import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
 
 /**
@@ -122,12 +122,13 @@ export function generateAssSubtitles(
 
   const events = spanned
     .flatMap((line) => {
-      const words = line.words ?? [];
-      // A retyped line no longer corresponds to its words, so there is nothing to align a
-      // highlight to. It renders whole, exactly as it reads. A preset that does not highlight
-      // renders whole for the same reason it always did: nothing about it changed.
-      const retyped = words.map((word) => word.word).join(" ") !== line.text;
-      if (!style.activeWordHighlight || words.length === 0 || retyped) {
+      // A retyped line no longer corresponds to its words, so its highlight is timed by the
+      // shared rule instead of by matching. A preset that does not highlight renders the line
+      // whole for the same reason it always did: nothing about it changed.
+      const words = isRetyped(line)
+        ? retypedWords({ ...line, id: line.id ?? "line" })
+        : (line.words ?? []);
+      if (!style.activeWordHighlight || words.length === 0) {
         return [dialogue(line.startMs, line.endMs, escapeAssText(applyTextCase(line.text, style.textCase)))];
       }
 

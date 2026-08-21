@@ -223,11 +223,19 @@ describe("per-word highlighting", () => {
     expect(events[0]).not.toContain(HIGHLIGHT_TAG);
   });
 
-  it("renders a retyped line whole, because its words no longer match it", () => {
+  it("times a retyped line by its own tokens, rather than going dead", () => {
+    // Its words no longer spell the text, so there is nothing to match a highlight to. The line's
+    // span is divided among the tokens as typed instead — one lit token throughout, not none.
     const retyped = { ...LINE, text: "something else entirely" };
     const events = dialogue(generateAssSubtitles([retyped], style, 1080, 1920));
-    expect(events).toHaveLength(1);
-    expect(events[0]).toContain("SOMETHING ELSE ENTIRELY");
+    expect(events).toHaveLength(3);
+    for (const event of events) {
+      // Every token is on screen in every event; the tags in between are what lights one of them.
+      for (const token of ["SOMETHING", "ELSE", "ENTIRELY"]) {
+        expect(event).toContain(token);
+      }
+      expect(event.split("\\c&H").length - 1, "an event lights no token").toBeGreaterThan(0);
+    }
   });
 
   it("covers the line end to end", () => {
