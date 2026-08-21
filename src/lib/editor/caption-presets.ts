@@ -127,7 +127,9 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
     id: "highlighter",
     name: "Highlighter",
     style: {
-      fontFamily: "Inter, system-ui, sans-serif",
+      // Bundled, so the preview and the burn-in draw it with the same file. Highlighter is new,
+      // so choosing this changes nothing that already exists.
+      fontFamily: "'DejaVu Sans', sans-serif",
       sizePx: 48,
       textColor: "#FFFFFF",
       highlightColor: NEON_YELLOW,

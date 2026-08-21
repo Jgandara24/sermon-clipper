@@ -37,18 +37,25 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 FROM node:24-bookworm-slim AS runtime
-# fonts-dejavu-core and fontconfig are named here rather than inherited from ffmpeg's dependency
-# tree, because libass silently substitutes a face it cannot find: a caption set in a font the
-# image lacks still renders, just not in that font. The caption picker offers exactly the families
-# listed below (src/lib/editor/caption-fonts.ts), so the build fails if any of them stops
-# resolving — a substituted face must never reach a church's published clip unnoticed.
+# fontconfig is named rather than inherited from ffmpeg's dependency tree, because the font gate
+# below depends on it. No distribution font package is installed on purpose: the caption faces are
+# copied in from the repository so the browser and the burn-in draw with the same files.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg ca-certificates curl fontconfig fonts-dejavu-core \
+      ffmpeg ca-certificates curl fontconfig \
     && rm -rf /var/lib/apt/lists/* \
-    && ffmpeg -filters | grep -q subtitles \
+    && ffmpeg -filters | grep -q subtitles
+
+# The caption faces come from the repository, not from a distribution package, so the browser and
+# the burn-in draw with the same files. libass never fails on a missing face — it substitutes
+# silently — so the build fails here instead, and a substituted face can never reach a published
+# clip unnoticed. Keep in step with src/lib/editor/caption-fonts.ts.
+COPY public/fonts /usr/share/fonts/truetype/sermon-clipper
+RUN fc-cache -f \
     && for family in "DejaVu Sans" "DejaVu Serif" "DejaVu Sans Mono"; do \
-         fc-list : family | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -qx "$family" \
-           || { echo "caption font missing from the image: $family"; exit 1; }; \
+         fc-match "$family" --format '%{family}\n' | grep -qx "$family" \
+           || { echo "caption font does not resolve in the image: $family"; exit 1; }; \
+         fc-match "$family" --format '%{file}\n' | grep -q '/sermon-clipper/' \
+           || { echo "caption font resolves outside the bundled set: $family"; exit 1; }; \
        done
 
 # yt-dlp fetches URL-imported source videos (FINALIZE URL branch). The standalone Linux binary

@@ -1,0 +1,91 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  BUNDLED_CAPTION_FONTS,
+  FONT_OPTIONS,
+  PRESET_DEFAULT_FONT_VALUE,
+  isBundledFontValue,
+} from "@/lib/editor/caption-fonts";
+import { CAPTION_PRESETS, getCaptionPreset } from "@/lib/editor/caption-presets";
+
+/**
+ * A font choice is only honest if the same file draws the preview and the burn-in. Naming a family
+ * the browser happens to have and the worker happens to have is not that: either can substitute,
+ * silently, and the church publishes something it never saw.
+ *
+ * So the permitted faces are files in this repository, served to the browser and copied into the
+ * worker image.
+ */
+
+const root = process.cwd();
+const read = (relative: string) => readFileSync(path.join(root, relative), "utf8");
+
+describe("bundled caption fonts", () => {
+  it("ships every permitted face as a file in the repository", () => {
+    expect(BUNDLED_CAPTION_FONTS.length).toBeGreaterThan(0);
+    for (const font of BUNDLED_CAPTION_FONTS) {
+      for (const file of [font.regularFile, font.boldFile]) {
+        const full = path.join(root, "public", file);
+        expect(existsSync(full), `${file} is missing`).toBe(true);
+        // A real font, not a placeholder someone committed to make a test pass.
+        expect(statSync(full).size, `${file} is too small to be a font`).toBeGreaterThan(50_000);
+      }
+    }
+  });
+
+  it("declares each face to the browser with @font-face", () => {
+    const css = read("src/app/globals.css");
+    for (const font of BUNDLED_CAPTION_FONTS) {
+      expect(css, `${font.family} has no @font-face`).toContain(`font-family: "${font.family}"`);
+      expect(css, `${font.regularFile} is not referenced`).toContain(font.regularFile);
+      expect(css, `${font.boldFile} is not referenced`).toContain(font.boldFile);
+    }
+  });
+
+  it("copies the same files into the worker image and keeps the gate", () => {
+    const dockerfile = read("Dockerfile.worker");
+    expect(dockerfile, "the bundled fonts are not copied in").toMatch(/COPY .*fonts/);
+    expect(dockerfile, "the font gate is gone").toMatch(/fc-match|fc-list/);
+    // The image must not also pull a distribution copy, or the two could drift.
+    expect(dockerfile).not.toContain("fonts-dejavu-core");
+  });
+
+  it("offers only bundled families, plus an honest preset-default entry", () => {
+    const families = BUNDLED_CAPTION_FONTS.map((font) => font.family);
+    for (const option of FONT_OPTIONS) {
+      expect(families, `${option.label} is not bundled`).toContain(option.rendersAs);
+      expect(option.value).toContain(option.rendersAs);
+    }
+    expect(isBundledFontValue(PRESET_DEFAULT_FONT_VALUE)).toBe(false);
+  });
+
+  it("recognises a stored font that is not one of the explicit choices", () => {
+    // Clean stores a stack this repository does not ship. The control must say so rather than
+    // display a family the document does not use.
+    expect(isBundledFontValue(getCaptionPreset("clean").style.fontFamily)).toBe(false);
+    expect(isBundledFontValue(FONT_OPTIONS[0].value)).toBe(true);
+  });
+
+  it("leaves the stored font of Clean and every retired preset exactly as it was", () => {
+    // Changing these changes what an approved clip renders, which is the whole point of not
+    // touching them.
+    expect(getCaptionPreset("clean").style.fontFamily).toBe("Inter, system-ui, sans-serif");
+    expect(getCaptionPreset("bold-serif").style.fontFamily).toBe("Georgia, 'Times New Roman', serif");
+    expect(getCaptionPreset("karaoke").style.fontFamily).toBe("Inter, system-ui, sans-serif");
+    expect(getCaptionPreset("quiet").style.fontFamily).toBe("Inter, system-ui, sans-serif");
+  });
+
+  it("gives Highlighter a bundled default, because Highlighter is new", () => {
+    const highlighter = getCaptionPreset("highlighter").style.fontFamily;
+    expect(isBundledFontValue(highlighter)).toBe(true);
+  });
+
+  it("keeps every preset's font either bundled or untouched, never invented", () => {
+    for (const preset of CAPTION_PRESETS) {
+      const bundled = isBundledFontValue(preset.style.fontFamily);
+      const legacy = preset.id !== "highlighter";
+      expect(bundled || legacy, `${preset.id} has an unbundled new font`).toBe(true);
+    }
+  });
+});

@@ -6,7 +6,11 @@ import {
   getCaptionPreset,
   SELECTABLE_CAPTION_PRESETS,
 } from "@/lib/editor/caption-presets";
-import { FONT_OPTIONS } from "@/lib/editor/caption-fonts";
+import {
+  FONT_OPTIONS,
+  isBundledFontValue,
+  PRESET_DEFAULT_FONT_VALUE,
+} from "@/lib/editor/caption-fonts";
 import {
   clampToRange,
   displayedValue,
@@ -39,6 +43,9 @@ export function CaptionStylePanel({
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const preset = getCaptionPreset(captions.presetId).style;
+  // What the document actually stores. A preset that predates the bundled faces keeps its own
+  // stack, and the picker reports that rather than the nearest bundled name.
+  const storedFont = captions.overrides.fontFamily ?? preset.fontFamily;
 
   function setOverrides(next: Partial<Captions["overrides"]>, mode: CommitMode) {
     onChange({ ...captions, overrides: { ...captions.overrides, ...next } }, mode);
@@ -78,10 +85,30 @@ export function CaptionStylePanel({
         <label className="text-xs text-stone-600">
           Font
           <select
-            value={captions.overrides.fontFamily ?? preset.fontFamily}
-            onChange={(event) => setOverrides({ fontFamily: event.target.value }, "immediate")}
+            value={isBundledFontValue(storedFont) ? storedFont : PRESET_DEFAULT_FONT_VALUE}
+            onChange={(event) =>
+              setOverrides(
+                // Choosing the preset-default entry clears the override rather than storing the
+                // sentinel, so the document goes back to whatever its preset says.
+                {
+                  fontFamily:
+                    event.target.value === PRESET_DEFAULT_FONT_VALUE
+                      ? undefined
+                      : event.target.value,
+                },
+                "immediate",
+              )
+            }
             className="mt-1 w-full rounded-md border border-stone-300 px-2 py-1.5"
           >
+            {/*
+              Clean and the retired presets store a stack this repository does not ship. Naming one
+              of the bundled families here would tell the member their caption is set in a font the
+              document does not use, so the control says what is actually true instead.
+            */}
+            {isBundledFontValue(storedFont) ? null : (
+              <option value={PRESET_DEFAULT_FONT_VALUE}>Preset default</option>
+            )}
             {FONT_OPTIONS.map((font) => (
               <option key={font.value} value={font.value}>
                 {font.label}

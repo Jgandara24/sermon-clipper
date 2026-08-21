@@ -236,7 +236,8 @@ describe("font choices are proven on the render host", () => {
     readFileSync(path.join(process.cwd(), "Dockerfile.worker"), "utf8");
 
   it("installs fonts in the worker image", () => {
-    expect(dockerfile()).toMatch(/fonts-dejavu|fonts-liberation|COPY .*\.(ttf|otf)/);
+    // The faces are copied in from the repository; tests/caption-fonts.test.ts covers which.
+    expect(dockerfile()).toMatch(/COPY .*fonts/);
   });
 
   it("gates the build on the fonts actually resolving", () => {

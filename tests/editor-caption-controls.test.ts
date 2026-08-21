@@ -128,7 +128,7 @@ describe("resolveCaptionStyle carries the new controls", () => {
   it("falls back to the preset for anything not overridden", () => {
     const style = resolveCaptionStyle("highlighter", {});
     expect(style.weight).toBe(800);
-    expect(style.fontFamily).toBe("Inter, system-ui, sans-serif");
+    expect(style.fontFamily).toBe("'DejaVu Sans', sans-serif");
   });
 });
 

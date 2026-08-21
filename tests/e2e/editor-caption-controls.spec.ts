@@ -194,6 +194,39 @@ test.describe("Caption controls", () => {
     await expect(page.getByTestId("caption-line")).toBeVisible();
   });
 
+  test("the font it says it is using is the font the browser loaded", async ({ page }) => {
+    await openCanvasEditor(page, fixture.clipId);
+    await chooseHighlighter(page);
+
+    // Highlighter's default is a bundled face. The browser must have loaded that exact family,
+    // not fallen back to whatever the machine calls sans-serif — otherwise the member is judging
+    // the caption in a font the burn-in will not use.
+    const loaded = await page.evaluate(async () => {
+      await document.fonts.ready;
+      return {
+        sans: document.fonts.check('16px "DejaVu Sans"'),
+        families: [...document.fonts].map((face) => face.family),
+      };
+    });
+    expect(loaded.sans, "the bundled Sans face is not loaded").toBe(true);
+    expect(loaded.families).toContain("DejaVu Sans");
+
+    // And the caption is actually asking for it.
+    await expect(page.getByTestId("caption-line")).toHaveCSS(
+      "font-family",
+      /DejaVu Sans/,
+    );
+  });
+
+  test("a preset whose font is not bundled says so rather than naming one", async ({ page }) => {
+    await openCanvasEditor(page, fixture.clipId);
+
+    // Clean stores a stack this repository does not ship, so the picker must not claim otherwise.
+    await expect(page.getByLabel("Font")).toHaveValue("__preset_default__");
+    const options = await page.getByLabel("Font").locator("option").allTextContents();
+    expect(options[0]).toBe("Preset default");
+  });
+
   test("an off-step typed weight lands on the step both controls use", async ({ page }) => {
     await openCanvasEditor(page, fixture.clipId);
 
