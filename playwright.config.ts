@@ -29,7 +29,10 @@ export default defineConfig({
     command: "npm run dev",
     url: "http://127.0.0.1:3000",
     reuseExistingServer: true,
-    timeout: 120_000,
+    // A cold Turbopack start has to compile the first route before the URL answers, and a shared
+    // CI runner does that well inside three minutes but not always inside two. The old ceiling
+    // failed the suite at startup without running a test.
+    timeout: 300_000,
     env: {
       STORAGE_LOCAL_ROOT: path.join(process.cwd(), ".data", "e2e-storage"),
       WHISPER_MODEL_PATH: "",
