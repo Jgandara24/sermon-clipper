@@ -2056,3 +2056,45 @@ smaller target than the handles have — acceptable, because clicking anywhere o
 seeks, so dragging the knob is the precise gesture rather than the only one.
 
 Status: Active.
+
+## 2026-08-21 - CI Runs The End-To-End Suite Against A Built Application
+
+Decision: CI builds the application in its own workflow step and points Playwright's web server at
+`npm run start`. Local runs keep `npm run dev`. The suite signs in by creating a real `AuthSession`
+row and setting the session cookie that holds its token — the same pair the application creates
+when a visitor completes an email one-time code.
+
+Why: a cold `next dev` start has to compile the first route before the URL answers, and CI kept
+timing out at `config.webServer` on commits that had passed minutes earlier on another branch. The
+timeout was already raised once, 120s to 300s, and that theory was wrong — a later failure hit the
+300s ceiling too. A built server has nothing left to compile and answered in under half a second on
+every run measured here (393 ms, 395 ms, 421 ms). Next's own testing guide recommends running
+end-to-end tests against production code for the same reason.
+
+That switch was blocked by authentication. Every spec set `DEV_SESSION_COOKIE`, which
+`getCurrentUser` reads only behind `process.env.NODE_ENV !== "production"`, so the branch is
+dead-code-eliminated from a production build. This is not a deduction from the bundle: with the dev
+cookie unchanged, the built server served the login page instead of the dashboard.
+
+The alternative was an escape hatch beside that gate — a new environment variable read in
+production code purely so tests could bypass login, plus a readiness check to make sure it was
+never set in production. Creating a real session needs none of that. No product code changed, no
+new environment variable exists, and the suite now travels the exact path production uses, so an
+expired session and a revoked session are covered for the first time.
+
+Building the application also exposed two production behaviours the development server had been
+hiding. Signed media URLs refuse to fall back to a development secret, and `POST
+/api/videos/[id]/srt` drains pending jobs in-process, which puts `ANALYZE` inside the web server —
+where production refuses the heuristic analyzer unless `ANALYSIS_ALLOW_HEURISTIC` is set. With no
+provider key configured the job parked in `RETRYING` with `ANALYZE_PROVIDER_UNAVAILABLE` and the
+project never left `PROCESSING`. Both are now supplied to the end-to-end server through
+`playwright.config.ts`, beside the `WHISPER_MODEL_PATH` that was already there.
+
+Tradeoff: a pull request now builds the application twice, once in `verify` and once in `e2e`, for
+roughly a minute of extra runner time — paid to remove a failure mode that has cost whole runs.
+CI no longer exercises `next dev`, so a defect that appears only under the development server would
+have to be caught locally, where `next dev` remains the default. `MEDIA_URL_SECRET` is generated
+per run and never leaves the process tree, so a media URL captured from one run signs nothing in
+the next.
+
+Status: Active.

@@ -2,7 +2,7 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { prisma } from "../../src/lib/prisma";
-import { DEV_SESSION_COOKIE } from "../../src/lib/auth";
+import { signInAs, signOutTestSessions } from "./auth-session";
 import { getStorageProvider } from "../../src/lib/storage";
 import {
   createCanvasFixture,
@@ -65,19 +65,11 @@ test.describe("The playhead on a phone", () => {
 
   test.beforeEach(async ({ context }) => {
     fixture = await createCanvasFixture(getStorageProvider());
-    await context.addCookies([
-      {
-        name: DEV_SESSION_COOKIE,
-        value: fixture.userId,
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: true,
-        sameSite: "Lax",
-      },
-    ]);
+    await signInAs(context, fixture.userId);
   });
 
   test.afterEach(async () => {
+    await signOutTestSessions();
     await destroyCanvasFixture(fixture);
     if (process.env.STORAGE_LOCAL_ROOT) {
       await rm(process.env.STORAGE_LOCAL_ROOT, { recursive: true, force: true });

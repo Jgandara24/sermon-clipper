@@ -93,6 +93,9 @@ jobs:
       - run: npm ci
       - run: npm run prisma:generate
       - run: npm run db:migrate:deploy
+      # Built here rather than inside the Playwright web server, so a build failure is reported as
+      # a build failure instead of as a web server that never answered.
+      - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
 
