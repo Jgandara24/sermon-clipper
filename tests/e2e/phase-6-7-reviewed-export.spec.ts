@@ -246,7 +246,11 @@ test.describe("Phase 6/7 browser workflow", () => {
   test("applies brand, approves, exports, and downloads a vertical MP4", async ({ page }) => {
     await page.goto(`/app/projects/${fixture.projectId}`);
     await expect(page.getByRole("heading", { name: "Suggested clips" })).toBeVisible();
-    await expect(page.getByText("John 14")).toBeVisible();
+    // The detected-scripture badge, addressed by its title rather than its text. The transcript
+    // viewer fetches its segments after hydration and one of them also contains "John 14", so a
+    // plain text match is a race: one element before that fetch lands, two after it, and a strict
+    // mode violation as soon as the server is quick enough to lose the race.
+    await expect(page.getByTitle('Detected from "John 14"')).toBeVisible();
 
     await page.getByLabel("Edit this clip").click();
     await expect(page.getByRole("heading", { name: "Peace Stays With Us" })).toBeVisible();
