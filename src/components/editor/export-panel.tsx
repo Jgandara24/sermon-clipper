@@ -149,8 +149,8 @@ export function ExportPanel({
       ) : null}
 
       <p className="text-xs text-stone-500">
-        Renders your saved edit — crop, captions, lower-third, and word cuts — into a downloadable
-        MP4. Approval is not needed to download.
+        Renders your saved edit — trim, crop, captions, and lower-third — into a downloadable MP4.
+        Approval is not needed to download.
       </p>
 
       {publishBlockedReason ? (

@@ -135,8 +135,18 @@ async function expectSelectedMode(page: Page, label: "Center" | "Face") {
   await expect(selected).toHaveClass(/border-teal-700/);
 }
 
-/** The word cut this suite toggles; its strike-through styling marks it deleted. */
-const saysWord = (page: Page) => page.getByRole("button", { name: "says" });
+/** A transcript correction: the editor's other kind of discrete edit, alongside a layout choice. */
+const saysWord = (page: Page) => page.getByRole("button", { name: "says", exact: true });
+const saysField = (page: Page) =>
+  page.getByRole("textbox", { name: "Correct the word says" });
+
+/** Corrects "says" to "said" and commits it, which is one edit and one history entry. */
+async function correctSaysWord(page: Page) {
+  await saysWord(page).click();
+  await saysField(page).fill("said");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "said", exact: true })).toBeVisible();
+}
 
 async function openEditor(page: Page, clipId: string) {
   await page.goto(`/app/clips/${clipId}/editor`);
@@ -252,7 +262,7 @@ test.describe("Editor undo and redo", () => {
   test("an undo is saved, and survives a reload", async ({ page }) => {
     await openEditor(page, fixture.clipId);
 
-    await saysWord(page).click();
+    await correctSaysWord(page);
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 
     await undoButton(page).click();
@@ -264,11 +274,16 @@ test.describe("Editor undo and redo", () => {
     });
     // The edit and the undo are both written.
     expect(versions.length).toBeGreaterThanOrEqual(2);
-    expect((versions.at(-1)!.editorState as { wordEdits: { deletedWordIds: string[] } }).wordEdits.deletedWordIds).toEqual([]);
+    expect(
+      (versions.at(-1)!.editorState as { wordEdits: { textOverrides: unknown[] } }).wordEdits
+        .textOverrides,
+    ).toEqual([]);
 
     await page.reload();
     await expect(page.getByRole("heading", { name: "Peace Stays With Us" })).toBeVisible();
-    await expect(saysWord(page)).not.toHaveClass(/line-through/);
+    // The undo was stored, so the reloaded clip says what was transcribed.
+    await expect(saysWord(page)).toBeVisible();
+    await expect(page.getByRole("button", { name: "said", exact: true })).toHaveCount(0);
   });
 
   test("a save acknowledgement neither adds history nor destroys redo", async ({ page }) => {
@@ -298,7 +313,7 @@ test.describe("Editor undo and redo", () => {
     await undoButton(page).click();
     await expect(redoButton(page)).toBeEnabled();
 
-    await saysWord(page).click();
+    await correctSaysWord(page);
 
     await expect(redoButton(page)).toBeDisabled();
   });

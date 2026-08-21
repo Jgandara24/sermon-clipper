@@ -34,6 +34,12 @@ import {
   type SavePhase,
   type SaveScheduler,
 } from "@/lib/editor/save-scheduler";
+import {
+  applyWordTextOverrides,
+  restoreAllDeletedWords,
+  setWordText,
+  type EditorWordWithText,
+} from "@/lib/editor/transcript";
 import type { EditorState } from "@/lib/editor/types";
 import {
   applyEditorDeletions,
@@ -76,6 +82,9 @@ export function ClipEditor({
   // Playback position (from the preview) and outgoing seek requests (from the trim timeline).
   const [currentMs, setCurrentMs] = useState(initialState.source.startMs);
   const [seek, setSeek] = useState<{ ms: number; token: number } | null>(null);
+  // The word open for correction. Selection is view state, not document state: choosing a word
+  // changes nothing that is saved, so it must never write a version.
+  const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
   const stateRef = useRef(initialState);
 
   const allWords = useMemo(() => flattenWords(segments), [segments]);
@@ -203,19 +212,42 @@ export function ClipEditor({
     setHistory(closeInteraction);
   }, [scheduler]);
 
-  function toggleWord(word: { id: string; isFiller: boolean }) {
-    updateState((prev) => {
-      const deleted = prev.wordEdits.deletedWordIds.includes(word.id);
-      return {
-        ...prev,
-        wordEdits: {
-          ...prev.wordEdits,
-          deletedWordIds: deleted
-            ? prev.wordEdits.deletedWordIds.filter((id) => id !== word.id)
-            : [...prev.wordEdits.deletedWordIds, word.id],
-        },
-      };
-    });
+  /**
+   * Clicking a word puts the playhead exactly on it and opens it for correction. Neither half
+   * touches the document, so a click alone never writes a version.
+   */
+  function handleSelectWord(word: EditorWordWithText) {
+    // Moving to another word ends the correction in progress: it is written, and it stays its own
+    // undo entry. Doing it here rather than waiting for the field's blur means it happens even
+    // when the field is removed before the browser gets round to blurring it.
+    if (selectedWordId !== null && selectedWordId !== word.id) commitNow();
+    setSelectedWordId(word.id);
+    requestSeek(word.startMs);
+  }
+
+  // A keystroke is mid-interaction: it updates the preview now and coalesces into one save and
+  // one undo entry, the same way a slider drag does.
+  function handleChangeWordText(word: EditorWordWithText, text: string) {
+    updateState((prev) => setWordText(prev, word.id, text, word.originalWord), "idle");
+  }
+
+  /**
+   * Enter or blur: write what is pending, close the undo entry, and put the caret away.
+   *
+   * Only the word that was being corrected is closed. A blur raised because the user clicked
+   * straight onto another word arrives after that word is already selected, and clearing the
+   * selection then would throw away the choice they just made.
+   */
+  const handleCommitWordText = useCallback(
+    (wordId: string) => {
+      setSelectedWordId((current) => (current === wordId ? null : current));
+      commitNow();
+    },
+    [commitNow],
+  );
+
+  function handleRestoreAllWords() {
+    updateState(restoreAllDeletedWords);
   }
 
   // Drag-to-trim writes the clip window directly; the timeline has already snapped and clamped,
@@ -251,8 +283,17 @@ export function ClipEditor({
     });
   }
 
+  // Follows both trim handles: the range comes from the document, so contracting or extending the
+  // clip re-derives the list rather than filtering a fixed one.
   const wordsInClip = useMemo(
-    () => applyEditorDeletions(wordsInRange(allWords, state.source.startMs, state.source.endMs), state),
+    () =>
+      applyWordTextOverrides(
+        applyEditorDeletions(
+          wordsInRange(allWords, state.source.startMs, state.source.endMs),
+          state,
+        ),
+        state,
+      ),
     [allWords, state],
   );
 
@@ -355,7 +396,11 @@ export function ClipEditor({
           />
           <ScriptEditorPanel
             words={wordsInClip}
-            onToggleWord={toggleWord}
+            selectedWordId={selectedWordId}
+            onSelectWord={handleSelectWord}
+            onChangeWordText={handleChangeWordText}
+            onCommitWordText={handleCommitWordText}
+            onRestoreAllWords={handleRestoreAllWords}
             onExtendBefore={() => handleExtend("before")}
             onExtendAfter={() => handleExtend("after")}
             canExtendBefore={state.source.startMs > 0}
