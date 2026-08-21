@@ -5,7 +5,7 @@ import { resolveActiveWord } from "../../src/lib/editor/active-word";
 import { buildCaptionLines } from "../../src/lib/editor/caption-lines";
 import { getCaptionPreset } from "../../src/lib/editor/caption-presets";
 import { generateAssSubtitles } from "../../src/lib/export/ass-generator";
-import { DEV_SESSION_COOKIE } from "../../src/lib/auth";
+import { signInAs, signOutTestSessions } from "./auth-session";
 import { getStorageProvider } from "../../src/lib/storage";
 import {
   createCanvasFixture,
@@ -42,19 +42,11 @@ test.describe("Caption controls", () => {
 
   test.beforeEach(async ({ context }) => {
     fixture = await createCanvasFixture(getStorageProvider());
-    await context.addCookies([
-      {
-        name: DEV_SESSION_COOKIE,
-        value: fixture.userId,
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: true,
-        sameSite: "Lax",
-      },
-    ]);
+    await signInAs(context, fixture.userId);
   });
 
   test.afterEach(async () => {
+    await signOutTestSessions();
     await destroyCanvasFixture(fixture);
     if (process.env.STORAGE_LOCAL_ROOT) {
       await rm(process.env.STORAGE_LOCAL_ROOT, { recursive: true, force: true });
@@ -191,19 +183,11 @@ test.describe("One highlighted word at a time", () => {
 
   test.beforeEach(async ({ context }) => {
     fixture = await createCanvasFixture(getStorageProvider());
-    await context.addCookies([
-      {
-        name: DEV_SESSION_COOKIE,
-        value: fixture.userId,
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: true,
-        sameSite: "Lax",
-      },
-    ]);
+    await signInAs(context, fixture.userId);
   });
 
   test.afterEach(async () => {
+    await signOutTestSessions();
     await destroyCanvasFixture(fixture);
     if (process.env.STORAGE_LOCAL_ROOT) {
       await rm(process.env.STORAGE_LOCAL_ROOT, { recursive: true, force: true });
