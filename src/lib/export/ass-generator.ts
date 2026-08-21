@@ -1,8 +1,7 @@
-import { quantisedHighlightSlices } from "@/lib/editor/active-word";
 import { popPhases, popPhaseTags, popResetTags } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
-import { exclusiveLineSpans, isRetyped, retypedWords } from "@/lib/editor/caption-lines";
+import { captionActivations } from "@/lib/editor/caption-timeline";
 import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
 
 /**
@@ -118,60 +117,42 @@ export function generateAssSubtitles(
     return `Dialogue: 0,${msToAssTime(startMs)},${msToAssTime(endMs)},Default,,0,0,0,,${positionTag}${body}`;
   }
 
-  // Only the highlighting path needs one line on screen at a time; every other preset keeps
-  // the spans the line builder produced.
-  const spanned = style.activeWordHighlight
-    ? exclusiveLineSpans(lines as CaptionLine[])
-    : lines;
+  // One decision about what is on screen, shared with the preview: which line, which words, and
+  // which stretch. Applying these rules twice is what let the file show a caption the browser did
+  // not, three milliseconds either side of a line.
+  const events = captionActivations(lines as CaptionLine[], style.activeWordHighlight)
+    .flatMap((activation) => {
+      const runFor = (activeTags: string | null) =>
+        activation.words.length === 0
+          ? escapeAssText(applyTextCase(activation.line.text, style.textCase))
+          : activation.words
+              .map((word) => {
+                const cased = escapeAssText(applyTextCase(word.word, style.textCase));
+                if (word.id !== activation.activeWordId || activeTags === null) return cased;
+                // Scale and colour together, then back to rest, so the words after this one are
+                // neither popped nor coloured. Nothing here moves a neighbour — that is Slice 8.
+                return `{${activeTags}}${highlightTag}${cased}${restoreTag}{${popResetTags()}}`;
+              })
+              .join(" ");
 
-  const events = spanned
-    .flatMap((line) => {
-      // A retyped line no longer corresponds to its words, so its highlight is timed by the
-      // shared rule instead of by matching. A preset that does not highlight renders the line
-      // whole for the same reason it always did: nothing about it changed.
-      const words = isRetyped(line)
-        ? retypedWords({ ...line, id: line.id ?? "line" })
-        : (line.words ?? []);
-      if (!style.activeWordHighlight || words.length === 0) {
-        return [dialogue(line.startMs, line.endMs, escapeAssText(applyTextCase(line.text, style.textCase)))];
+      if (activation.activeWordId === null) {
+        return [dialogue(activation.startMs, activation.endMs, runFor(null))];
       }
 
-      return quantisedHighlightSlices({
-        id: line.id ?? "line",
-        startMs: line.startMs,
-        endMs: line.endMs,
-        words,
-        text: line.text,
-      }).flatMap((slice) => {
-        const line_ = (activeTags: string | null) =>
-          words
-            .map((word) => {
-              const cased = escapeAssText(applyTextCase(word.word, style.textCase));
-              if (word.id !== slice.activeWordId || activeTags === null) return cased;
-              // Scale and colour together, then back to rest, so the words after this one are
-              // neither popped nor coloured. Nothing here moves a neighbour — that is Slice 8.
-              return `{${activeTags}}${highlightTag}${cased}${restoreTag}{${popResetTags()}}`;
-            })
-            .join(" ");
+      // One event per phase of the pop. libass gives no agreed meaning to two `\t` over the same
+      // property, so each event carries exactly one, starting from a value it states.
+      const phases = popPhases(activation.endMs - activation.startMs);
+      if (phases.length === 0) {
+        return [dialogue(activation.startMs, activation.endMs, runFor(null))];
+      }
 
-        // The slices are already on the timestamp grid, so these times need no further rounding.
-        if (slice.activeWordId === null) {
-          return [dialogue(slice.startMs, slice.endMs, line_(null))];
-        }
-
-        // One event per phase of the pop. libass gives no agreed meaning to two `\t` over the
-        // same property, so each event carries exactly one, starting from a value it states.
-        const phases = popPhases(slice.endMs - slice.startMs);
-        if (phases.length === 0) return [dialogue(slice.startMs, slice.endMs, line_(null))];
-
-        return phases.map((phase) =>
-          dialogue(
-            slice.startMs + phase.startMs,
-            slice.startMs + phase.endMs,
-            line_(popPhaseTags(phase)),
-          ),
-        );
-      });
+      return phases.map((phase) =>
+        dialogue(
+          activation.startMs + phase.startMs,
+          activation.startMs + phase.endMs,
+          runFor(popPhaseTags(phase)),
+        ),
+      );
     })
     .join("\n");
   const lowerThirdEvent = lowerThird

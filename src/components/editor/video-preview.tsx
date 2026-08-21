@@ -30,16 +30,10 @@ import {
   seekByMs,
   SKIP_STEP_MS,
 } from "@/lib/editor/playback";
-import { activeSliceAt } from "@/lib/editor/active-word";
+import { captionActivationAt } from "@/lib/editor/caption-timeline";
 import { popScaleAt } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
-import {
-  applyCaptionTextOverrides,
-  buildCaptionLines,
-  exclusiveLineSpans,
-  isRetyped,
-  retypedWords,
-} from "@/lib/editor/caption-lines";
+import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
 import type { EditorWordWithDeletion } from "@/lib/editor/words";
@@ -122,33 +116,16 @@ export function VideoPreview({
   );
 
   const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
-  // The same spans the burn-in uses. Only a highlighting preset needs one line on screen at a
-  // time; every other preset keeps the spans the line builder produced, unchanged.
-  const spannedLines = style.activeWordHighlight
-    ? exclusiveLineSpans(captionLines)
-    : captionLines;
-  const currentLine = spannedLines.find(
-    (line) => currentMs >= line.startMs && currentMs < line.endMs,
-  );
-  const captionPoint = style.box ?? defaultCaptionPoint(style.position);
-  // A retyped line no longer corresponds to its words, so its tokens are timed by the same rule
-  // the burn-in uses rather than by matching.
-  const currentWords = currentLine
-    ? isRetyped(currentLine)
-      ? retypedWords(currentLine)
-      : currentLine.words
-    : [];
-  // The activation, not the word, is what both renderers measure the pop from: a word that goes
-  // active, inactive, then active again — which nested intervals produce — starts a new curve each
-  // time, and its own startMs cannot say that. Only a preset that highlights has an activation at
-  // all; Clean and the retired presets render the line whole, exactly as they always did.
-  const activeSlice =
-    currentLine && style.activeWordHighlight && currentWords.length > 0
-      ? activeSliceAt({ ...currentLine, words: currentWords }, currentMs)
-      : null;
-  const activeWordId = activeSlice?.activeWordId ?? null;
-  // Nothing left to lay out word by word once the text is empty.
+  // One decision about what is on screen, shared with the burn-in: which line, which words, and
+  // which stretch. Deciding it here as well as there is what let the file show a caption the
+  // browser did not, three milliseconds either side of a line.
+  const activation = captionActivationAt(captionLines, currentMs, style.activeWordHighlight);
+  const currentLine = activation?.line;
+  const currentWords = activation?.words ?? [];
+  const activeWordId = activation?.activeWordId ?? null;
+  // Nothing left to lay out word by word once the text is empty or the preset renders it whole.
   const captionIsRetyped = currentWords.length === 0;
+  const captionPoint = style.box ?? defaultCaptionPoint(style.position);
 
   useEffect(() => {
     seekedRef.current = false;
@@ -478,14 +455,14 @@ export function VideoPreview({
                             // be identical whether or not anything is active. A transform does
                             // not affect layout, so the pop moves nothing.
                             display: "inline-block",
-                            ...(word.id === activeWordId && activeSlice
+                            ...(word.id === activeWordId && activation
                               ? {
                                   color: style.highlightColor,
                                   // Same curve the burn-in evaluates, on the same clock: elapsed
                                   // into this activation, over this activation's own length.
                                   transform: `scale(${popScaleAt(
-                                    currentMs - activeSlice.startMs,
-                                    activeSlice.endMs - activeSlice.startMs,
+                                    currentMs - activation!.startMs,
+                                    activation!.endMs - activation!.startMs,
                                   )})`,
                                 }
                               : null),

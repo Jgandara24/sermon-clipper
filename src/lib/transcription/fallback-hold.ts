@@ -1,5 +1,4 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { isSystemInitialDocument } from "@/lib/editor/types";
 import type { TranscriptionProviderName } from "./policy";
 
 type ExceptionClient = Pick<PrismaClient, "editorialException"> | Prisma.TransactionClient;
@@ -126,13 +125,19 @@ export async function settleTranscriptionFallbackHold(
 
   const since = { gte: hold.createdAt };
   const clipScope = { clip: { projectId: params.projectId } };
-  const [editRows, approvals, exports] = await Promise.all([
-    // Fetched rather than counted: a JSON filter for "not the machine's document" is a NOT over a
-    // comparison that is NULL for every row without the key, which in SQL excludes exactly the
-    // human edits this is trying to find. Counting in code says what is meant.
-    client.clipEdit.findMany({
-      where: { ...clipScope, createdAt: since },
-      select: { editorState: true },
+  const [totalEdits, systemEdits, approvals, exports] = await Promise.all([
+    client.clipEdit.count({ where: { ...clipScope, createdAt: since } }),
+    // Counted in the database, and asked as a positive: "is this the machine's document?" A
+    // negative JSON filter would be a NOT over a comparison that is NULL for every row without the
+    // key, which excludes exactly the human edits this is looking for. Loading the documents to
+    // decide in code answers correctly but transfers every stored editor state since the hold —
+    // autosaves and overlays make that unbounded.
+    client.clipEdit.count({
+      where: {
+        ...clipScope,
+        createdAt: since,
+        editorState: { path: ["systemInitial"], equals: true },
+      },
     }),
     client.clipApproval.count({ where: { ...clipScope, createdAt: since } }),
     client.exportJob.count({ where: { ...clipScope, createdAt: since } }),
@@ -141,7 +146,7 @@ export async function settleTranscriptionFallbackHold(
   // ANALYZE writes each clip's first document itself. That row is the machine's, not a person's,
   // and counting it meant a healthy re-transcription could never close the hold it opened — every
   // rebuilt clip arrived already looking like human work.
-  const edits = editRows.filter((row) => !isSystemInitialDocument(row.editorState)).length;
+  const edits = Math.max(0, totalEdits - systemEdits);
 
   if (edits + approvals + exports > 0) {
     await client.editorialException.update({
