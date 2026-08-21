@@ -229,7 +229,7 @@ export function ClipTimeline({
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className="relative mt-3 h-16 w-full touch-none select-none rounded-md bg-stone-100"
+        className="relative mt-6 h-16 w-full touch-none select-none rounded-md bg-stone-100"
         role="group"
         aria-label="Clip trim timeline"
       >
@@ -252,26 +252,37 @@ export function ClipTimeline({
         />
 
         {/*
-          Playhead: draggable, with a grab target wider than the hairline it draws. It sits below
-          the trim handles deliberately — the two coincide whenever the playhead is parked at an
-          edge of the clip, and trimming is this component's primary control.
+          Playhead. The line it draws spans the track, but only the knob above the track takes a
+          pointer — the two are separate elements on purpose.
+
+          The playhead sits at the clip start whenever the editor opens, and at the clip end after
+          "Go to end", and a trim handle sits at each of those points too. When both claimed the
+          full height of the track they claimed identical pixels, and the handle — deliberately
+          stacked on top, because trimming is this component's primary control — swallowed every
+          press meant for the playhead. Trying to scrub from either edge trimmed the clip instead.
+
+          Giving the playhead a target the handles do not reach settles it without reopening that:
+          handles still own the track, the knob owns the strip above it, and neither can take a
+          gesture aimed at the other.
         */}
         {playheadVisible ? (
           <div
-            data-trim="playhead"
-            role="slider"
-            tabIndex={0}
-            aria-label="Playhead"
-            aria-valuemin={Math.round(startMs)}
-            aria-valuemax={Math.round(endMs)}
-            aria-valuenow={Math.round(currentMs)}
-            aria-valuetext={formatClock(currentMs)}
-            onKeyDown={handlePlayheadKeyDown}
-            className="absolute inset-y-0 z-10 -ml-2 w-4 cursor-ew-resize touch-none"
+            className="pointer-events-none absolute inset-y-0 z-10 -ml-2 w-4"
             style={{ left: `${msToPct(currentMs)}%` }}
           >
-            <div className="pointer-events-none absolute inset-y-0 left-2 w-0.5 bg-red-500" />
-            <div className="pointer-events-none absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-red-500" />
+            <div className="absolute inset-y-0 left-2 w-0.5 bg-red-500" />
+            <div
+              data-trim="playhead"
+              role="slider"
+              tabIndex={0}
+              aria-label="Playhead"
+              aria-valuemin={Math.round(startMs)}
+              aria-valuemax={Math.round(endMs)}
+              aria-valuenow={Math.round(currentMs)}
+              aria-valuetext={formatClock(currentMs)}
+              onKeyDown={handlePlayheadKeyDown}
+              className="pointer-events-auto absolute -top-4 left-2 h-4 w-4 -translate-x-1/2 cursor-ew-resize touch-none rounded-full border-2 border-white bg-red-500 shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+            />
           </div>
         ) : null}
 
