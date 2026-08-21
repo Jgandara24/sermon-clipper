@@ -84,22 +84,17 @@ describe("legacy presets are preserved", () => {
 // ── 2. The Highlighter pop, at rest spacing ───────────────────────────────────────────────────
 
 describe("the Highlighter pop", () => {
-  it("evaluates one shared curve that rises to the peak and holds", () => {
-    expect(popScaleAt(0)).toBe(1);
-    expect(popScaleAt(-50)).toBe(1);
-    expect(popScaleAt(POP.riseMs)).toBeCloseTo(POP.peakScale, 5);
-    // Flat afterwards, so a long word does not keep growing.
-    expect(popScaleAt(POP.riseMs + 5_000)).toBeCloseTo(POP.peakScale, 5);
-    expect(POP.peakScale).toBeGreaterThan(1);
-  });
-
+  // The curve's shape and its parity with the burn-in are covered in
+  // tests/caption-pop-nested-parity.test.ts, which reads the emitted tags back.
   it("rises monotonically to the peak", () => {
-    let previous = popScaleAt(0);
+    const duration = 800;
+    let previous = popScaleAt(0, duration);
     for (let ms = 1; ms <= POP.riseMs; ms += 1) {
-      const value = popScaleAt(ms);
+      const value = popScaleAt(ms, duration);
       expect(value).toBeGreaterThanOrEqual(previous);
       previous = value;
     }
+    expect(previous).toBeCloseTo(POP.peakScale, 5);
   });
 
   it("scales the active Highlighter word in the burn-in", () => {
@@ -126,12 +121,11 @@ describe("the Highlighter pop", () => {
   it("puts the pop on the active word only, never on its neighbours", () => {
     const ass = generateAssSubtitles(ONE_LINE, getCaptionPreset("highlighter").style, 1080, 1920);
     for (const event of dialogues(ass)) {
-      // `\t(0,` opens a pop, once per popped word. A line has one active word, so an event that
-      // highlights carries exactly one; an event over a silent gap carries none.
+      // One transform per event at most: a phase that needs its own gets its own event. A hold
+      // phase carries a static scale and no transform at all, which is why this is a ceiling
+      // rather than an equality.
       const pops = event.split("\\t(0,").length - 1;
-      const highlights = event.split("\\c&H").length - 1;
       expect(pops, "a word popped without being the active word").toBeLessThanOrEqual(1);
-      if (highlights > 0) expect(pops).toBe(1);
     }
   });
 });

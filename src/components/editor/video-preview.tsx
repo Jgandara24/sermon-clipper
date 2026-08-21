@@ -30,7 +30,7 @@ import {
   seekByMs,
   SKIP_STEP_MS,
 } from "@/lib/editor/playback";
-import { resolveActiveWord } from "@/lib/editor/active-word";
+import { activeSliceAt } from "@/lib/editor/active-word";
 import { popScaleAt } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import {
@@ -138,13 +138,15 @@ export function VideoPreview({
       ? retypedWords(currentLine)
       : currentLine.words
     : [];
-  // One resolver, shared with the burn-in: the word lit here is the word lit in the file. Only a
-  // preset that highlights has an active word at all — Clean and the retired presets render the
-  // line whole, exactly as they always did.
-  const activeWord =
-    currentLine && style.activeWordHighlight
-      ? resolveActiveWord(currentWords, currentMs)
+  // The activation, not the word, is what both renderers measure the pop from: a word that goes
+  // active, inactive, then active again — which nested intervals produce — starts a new curve each
+  // time, and its own startMs cannot say that. Only a preset that highlights has an activation at
+  // all; Clean and the retired presets render the line whole, exactly as they always did.
+  const activeSlice =
+    currentLine && style.activeWordHighlight && currentWords.length > 0
+      ? activeSliceAt({ ...currentLine, words: currentWords }, currentMs)
       : null;
+  const activeWordId = activeSlice?.activeWordId ?? null;
   // Nothing left to lay out word by word once the text is empty.
   const captionIsRetyped = currentWords.length === 0;
 
@@ -469,18 +471,22 @@ export function VideoPreview({
                         {index > 0 ? " " : ""}
                         <span
                           data-testid="caption-word"
-                          data-active={word.id === activeWord?.id ? "true" : "false"}
+                          data-active={word.id === activeWordId ? "true" : "false"}
                           style={{
                             // Every word is inline-block, not just the active one: a span that
                             // changes display changes the line's layout, and rest spacing has to
                             // be identical whether or not anything is active. A transform does
                             // not affect layout, so the pop moves nothing.
                             display: "inline-block",
-                            ...(word.id === activeWord?.id
+                            ...(word.id === activeWordId && activeSlice
                               ? {
                                   color: style.highlightColor,
-                                  // Same curve the burn-in evaluates, from the same module.
-                                  transform: `scale(${popScaleAt(currentMs - word.startMs)})`,
+                                  // Same curve the burn-in evaluates, on the same clock: elapsed
+                                  // into this activation, over this activation's own length.
+                                  transform: `scale(${popScaleAt(
+                                    currentMs - activeSlice.startMs,
+                                    activeSlice.endMs - activeSlice.startMs,
+                                  )})`,
                                 }
                               : null),
                           }}

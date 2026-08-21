@@ -39,6 +39,8 @@ const CASES = [
   { label: "more tokens", line: MORE, tokens: 7 },
 ];
 
+const HIGHLIGHT = /\{\\c&H[0-9A-F]{8}\}([a-zA-Z]+)/;
+
 describe("retyped caption timing", () => {
   for (const { label, line, tokens } of CASES) {
     it(`covers the line end to end with ${label}`, () => {
@@ -73,13 +75,45 @@ describe("retyped caption timing", () => {
     it(`burns in the retyped text, highlighted, with ${label}`, () => {
       const ass = generateAssSubtitles([line], getCaptionPreset("highlighter").style, 1080, 1920);
       const events = ass.split("\n").filter((l) => l.startsWith("Dialogue: 0"));
-      // One event per token, each lighting one of them — not one dead event for the line.
-      expect(events.length).toBe(tokens);
+      // Each token gets its turn — the line is not left dead. Events outnumber tokens because an
+      // activation is drawn as one event per phase of the pop.
+      const highlighted = new Set(events.map((event) => HIGHLIGHT.exec(event)?.[1]));
+      // Highlighter renders uppercase, so compare on the same footing.
+      expect(highlighted).toEqual(new Set(line.text.split(" ").map((t) => t.toUpperCase())));
+      expect(events.length).toBeGreaterThanOrEqual(tokens);
       for (const event of events) {
         expect(event.split("\\c&H").length - 1, "an event lights no token").toBeGreaterThan(0);
       }
     });
   }
+
+  it("keeps every source timing when only the words themselves changed", () => {
+    // A one-token typo fix must not re-time the line: the words still line up one for one, and
+    // their timings came from the transcript rather than from a guess.
+    const timed = retypedWords(SAME);
+    expect(timed.map((w) => [w.startMs, w.endMs])).toEqual(
+      SOURCE.map((w) => [w.startMs, w.endMs]),
+    );
+    expect(timed.map((w) => w.word)).toEqual(["grace", "abides", "here"]);
+    // A single corrected word behaves the same way.
+    const oneWordFixed = retypedWords(lineWith("peace stays with"));
+    expect(oneWordFixed.map((w) => [w.startMs, w.endMs])).toEqual(
+      SOURCE.map((w) => [w.startMs, w.endMs]),
+    );
+  });
+
+  it("divides the line evenly once the token count changes", () => {
+    // No correspondence left to preserve, so one stated rule rather than a guess.
+    const fewer = retypedWords(FEWER);
+    expect(fewer.map((w) => [w.startMs, w.endMs])).toEqual([
+      [0, 750],
+      [750, 1500],
+    ]);
+    const more = retypedWords(MORE);
+    expect(more).toHaveLength(7);
+    expect(more[0].startMs).toBe(0);
+    expect(more[6].endMs).toBe(1500);
+  });
 
   it("leaves a legacy preset's retyped line whole and unhighlighted", () => {
     const ass = generateAssSubtitles([SAME], getCaptionPreset("clean").style, 1080, 1920);

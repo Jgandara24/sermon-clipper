@@ -104,20 +104,37 @@ export function isRetyped(line: Pick<CaptionLine, "text"> & { words?: CaptionWor
 }
 
 /**
- * Timings for a retyped line, by dividing its own span evenly among the tokens as typed.
+ * Timings for a retyped line.
  *
- * Matching edited text back to source words is guesswork, and guessing differently in the preview
- * and the burn-in is the one outcome that must not happen. Giving up instead — highlighting
- * nothing — sounds safe but is worse where it shows: on Highlighter the caption goes dead for the
- * whole line while somebody is speaking.
+ * Two cases, decided by whether the member changed how many words there are.
  *
- * So: one rule, total, and arbitrary in the open. Even division loses the original word timing,
- * which is the honest cost of text that no longer corresponds to it. The last token is closed on
- * the line's own end so rounding cannot leave a sliver with nothing active.
+ * **A correction** — the same number of tokens — keeps each source word's timing and replaces only
+ * its text. Fixing one typo must not re-time the whole line: the words underneath still line up
+ * one for one with what is now written, and their timings came from the transcript rather than
+ * from a guess.
+ *
+ * **A rewrite** — tokens added or removed — has no such correspondence, and matching edited text
+ * back to source words is guesswork that the preview and the burn-in would have to guess
+ * identically. So the line's own span is divided evenly among the tokens as typed. That loses the
+ * original timing, which is the honest cost of text that no longer corresponds to it, and it is
+ * one rule: total, stated here, and applied by both renderers.
+ *
+ * Giving up instead — highlighting nothing — sounds safe and is worse where it shows: on
+ * Highlighter the caption goes dead for the whole line while somebody is speaking.
+ *
+ * The last token is closed on the line's own end so rounding cannot leave a sliver with nothing
+ * active.
  */
-export function retypedWords(line: Pick<CaptionLine, "id" | "startMs" | "endMs" | "text">): CaptionWord[] {
+export function retypedWords(
+  line: Pick<CaptionLine, "id" | "startMs" | "endMs" | "text"> & { words?: CaptionWord[] },
+): CaptionWord[] {
   const tokens = line.text.trim().split(/\s+/).filter((token) => token.length > 0);
   if (tokens.length === 0) return [];
+
+  const source = line.words ?? [];
+  if (source.length === tokens.length) {
+    return tokens.map((token, index) => ({ ...source[index], word: token }));
+  }
 
   const span = line.endMs - line.startMs;
   return tokens.map((token, index) => ({

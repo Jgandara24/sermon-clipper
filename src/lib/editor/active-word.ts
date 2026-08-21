@@ -88,3 +88,14 @@ export function highlightSlices(line: CaptionLine): HighlightSlice[] {
 
   return slices;
 }
+
+/**
+ * The stretch covering `ms`, or null.
+ *
+ * The activation is the clock both renderers measure the pop from, so the preview needs the slice
+ * rather than the word: a word that goes active, inactive, then active again starts a new curve
+ * each time, and its own `startMs` cannot say that.
+ */
+export function activeSliceAt(line: CaptionLine, ms: number): HighlightSlice | null {
+  return highlightSlices(line).find((slice) => ms >= slice.startMs && ms < slice.endMs) ?? null;
+}

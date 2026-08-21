@@ -173,8 +173,15 @@ describe("per-word highlighting", () => {
     return ass.split("\n").filter((line) => line.startsWith("Dialogue: 0"));
   }
 
-  it("emits one event per highlight stretch, not one per line", () => {
-    expect(dialogue(generateAssSubtitles([LINE], style, 1080, 1920))).toHaveLength(3);
+  it("emits events per highlight stretch, not one per line", () => {
+    // Each stretch is drawn as a run of events, one per phase of the pop, because libass gives no
+    // agreed meaning to two transforms over one property. Three words, so three stretches.
+    const events = dialogue(generateAssSubtitles([LINE], style, 1080, 1920));
+    const highlighted = new Set(
+      events.map((event) => new RegExp(`${HIGHLIGHT_TAG}}([A-Z]+)`).exec(event)?.[1]),
+    );
+    expect(highlighted).toEqual(new Set(["PEACE", "STAYS", "HERE"]));
+    expect(events.length).toBeGreaterThanOrEqual(3);
   });
 
   it("colours exactly one word in each event", () => {
@@ -195,14 +202,20 @@ describe("per-word highlighting", () => {
 
   it("highlights the word the preview would highlight at the same instant", () => {
     const events = dialogue(generateAssSubtitles([LINE], style, 1080, 1920));
-    const expectedOrder = [0, 500, 1000].map((ms) =>
-      resolveActiveWord(WORDS, ms)!.word.toUpperCase(),
-    );
-    expectedOrder.forEach((word, index) => {
+    const assMs = (stamp: string) => {
+      const [h, m, rest] = stamp.split(":");
+      const [sec, cs] = rest.split(".");
+      return ((Number(h) * 60 + Number(m)) * 60 + Number(sec)) * 1000 + Number(cs) * 10;
+    };
+    for (const ms of [0, 200, 500, 700, 1000, 1150]) {
+      const event = events.find((e) => {
+        const parts = e.split(",");
+        return ms >= assMs(parts[1]) && ms < assMs(parts[2]);
+      })!;
       // The highlighted word is the one immediately after the colour switch.
-      const highlighted = new RegExp(`${HIGHLIGHT_TAG}}([A-Z]+)`).exec(events[index])![1];
-      expect(highlighted).toBe(word);
-    });
+      const highlighted = new RegExp(`${HIGHLIGHT_TAG}}([A-Z]+)`).exec(event)![1];
+      expect(highlighted, `at ${ms}ms`).toBe(resolveActiveWord(WORDS, ms)!.word.toUpperCase());
+    }
   });
 
   it("restores the text colour after the highlighted word", () => {
@@ -228,7 +241,10 @@ describe("per-word highlighting", () => {
     // span is divided among the tokens as typed instead — one lit token throughout, not none.
     const retyped = { ...LINE, text: "something else entirely" };
     const events = dialogue(generateAssSubtitles([retyped], style, 1080, 1920));
-    expect(events).toHaveLength(3);
+    const highlighted = new Set(
+      events.map((event) => new RegExp(`${HIGHLIGHT_TAG}}([A-Z]+)`).exec(event)?.[1]),
+    );
+    expect(highlighted).toEqual(new Set(["SOMETHING", "ELSE", "ENTIRELY"]));
     for (const event of events) {
       // Every token is on screen in every event; the tags in between are what lights one of them.
       for (const token of ["SOMETHING", "ELSE", "ENTIRELY"]) {

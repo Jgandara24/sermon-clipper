@@ -1,5 +1,5 @@
 import { highlightSlices } from "@/lib/editor/active-word";
-import { popResetTags, popTags } from "@/lib/editor/caption-animation";
+import { popPhases, popPhaseTags, popResetTags } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
 import { exclusiveLineSpans, isRetyped, retypedWords } from "@/lib/editor/caption-lines";
@@ -9,11 +9,15 @@ import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
  * Renders one ASS (Advanced SubStation Alpha) subtitle file per clip export, burned in via
  * ffmpeg's `subtitles=` filter (libass).
  *
- * A line that carries its words is cut into one subtitle event per highlight stretch, with the
- * active word coloured. The stretches come from the same resolver the preview calls, so the word
- * lit on screen and the word lit in the file are the same word at every instant. A line without
- * words, or one the member has retyped, renders as a single event with nothing highlighted —
- * there is no word list to align a highlight to.
+ * A line that carries its words is cut into one subtitle event per phase of the highlight, with
+ * the active word coloured and scaled. The stretches come from the same resolver the preview
+ * calls, and the phases from the same curve it evaluates, so the word lit on screen and the word
+ * lit in the file are the same word at the same size at every instant.
+ *
+ * A line the member has retyped no longer spells out its words, so its highlight is timed by the
+ * shared rule in `caption-lines.ts` rather than by matching — it is highlighted, not left dead.
+ * A line carrying no words at all has nothing to align a highlight to and renders whole, as does
+ * every preset that does not highlight.
  */
 
 function hexToAssColor(hex: string): string {
@@ -138,21 +142,35 @@ export function generateAssSubtitles(
         endMs: line.endMs,
         words,
         text: line.text,
-      }).map((slice) =>
-        dialogue(
-          slice.startMs,
-          slice.endMs,
+      }).flatMap((slice) => {
+        const line_ = (activeTags: string | null) =>
           words
             .map((word) => {
               const cased = escapeAssText(applyTextCase(word.word, style.textCase));
-              if (word.id !== slice.activeWordId) return cased;
+              if (word.id !== slice.activeWordId || activeTags === null) return cased;
               // Scale and colour together, then back to rest, so the words after this one are
               // neither popped nor coloured. Nothing here moves a neighbour — that is Slice 8.
-              return `{${popTags()}}${highlightTag}${cased}${restoreTag}{${popResetTags()}}`;
+              return `{${activeTags}}${highlightTag}${cased}${restoreTag}{${popResetTags()}}`;
             })
-            .join(" "),
-        ),
-      );
+            .join(" ");
+
+        if (slice.activeWordId === null) {
+          return [dialogue(slice.startMs, slice.endMs, line_(null))];
+        }
+
+        // One event per phase of the pop. libass gives no agreed meaning to two `\t` over the
+        // same property, so each event carries exactly one, starting from a value it states.
+        const phases = popPhases(slice.endMs - slice.startMs);
+        if (phases.length === 0) return [dialogue(slice.startMs, slice.endMs, line_(null))];
+
+        return phases.map((phase) =>
+          dialogue(
+            slice.startMs + phase.startMs,
+            slice.startMs + phase.endMs,
+            line_(popPhaseTags(phase)),
+          ),
+        );
+      });
     })
     .join("\n");
   const lowerThirdEvent = lowerThird
