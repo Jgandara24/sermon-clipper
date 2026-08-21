@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TEXT_CASES } from "./text-case";
+import { DEFAULT_TEXT_CASE, TEXT_CASES } from "./text-case";
 
 // Editor state is one versioned JSON document per clip (guide §12). `version` is duplicated
 // inside the document (matching the guide's own example) for client convenience, but
@@ -104,4 +104,24 @@ export function wordId(segmentId: string, wordIndex: number): string {
  */
 export function isWordDeleted(state: EditorState, id: string): boolean {
   return state.wordEdits.deletedWordIds.includes(id);
+}
+
+/**
+ * The document a clip is born with.
+ *
+ * Uppercase is the default for new content, and this is the only place that says so. It is applied
+ * where a clip is created — not in `buildDefaultEditorState`, which is also the fallback for a clip
+ * that predates the default and has no document of its own. Those clips must keep rendering what
+ * they always rendered, and they do, because nothing writes this for them.
+ */
+export function buildInitialEditorState(params: {
+  sourceVideoId: string;
+  startMs: number;
+  endMs: number;
+}): EditorState {
+  const state = buildDefaultEditorState(params);
+  return {
+    ...state,
+    captions: { ...state.captions, overrides: { ...state.captions.overrides, textCase: DEFAULT_TEXT_CASE } },
+  };
 }
