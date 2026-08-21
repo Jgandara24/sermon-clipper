@@ -50,9 +50,10 @@ export function captionActivations(
 
   return exclusiveLineSpans(lines).flatMap((line) => {
     const words = isRetyped(line) ? retypedWords(line) : (line.words ?? []);
-    if (words.length === 0) {
-      return [{ line, words: [], startMs: line.startMs, endMs: line.endMs, activeWordId: null }];
-    }
+    // A line with nothing to highlight — never timed, or retyped to whitespace — is one stretch
+    // with no active word, and it goes through the same quantisation as every other stretch.
+    // Handing back its raw boundaries instead put the preview at 3–1007ms while the file, which
+    // can only state centiseconds, showed 0–1010ms: the drift this module exists to remove.
     return quantisedHighlightSlices({ ...line, words }).map((slice) => ({
       line,
       words,

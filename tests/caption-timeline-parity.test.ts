@@ -135,3 +135,98 @@ describe("what is on screen is one decision", () => {
     expect(activations[0].activeWordId).toBeNull();
   });
 });
+
+/**
+ * A Highlighter caption with nothing to highlight is still a Highlighter caption.
+ *
+ * The no-word path handed back the line's raw boundaries while every other Highlighter activation
+ * was quantised, so the preview showed a wordless line from 3ms to 1007ms and the file from 0ms to
+ * 1010ms — the very drift the module exists to remove, surviving in the one branch that had no
+ * words to quantise around. Two lines reach that branch: one that never had timed words, and one a
+ * member retyped to nothing but whitespace.
+ */
+describe("a Highlighter caption with no timed words is on the same grid", () => {
+  const NO_WORDS: CaptionLine = { id: "n", startMs: 3, endMs: 1007, words: [], text: "alpha beta" };
+  const BLANK_RETYPE: CaptionLine = { id: "r", startMs: 3, endMs: 1007, words: WORDS, text: " \t " };
+
+  const cases: Array<[string, CaptionLine]> = [
+    ["a line that never had timed words", NO_WORDS],
+    ["a line retyped to whitespace only", BLANK_RETYPE],
+  ];
+
+  for (const [label, line] of cases) {
+    describe(label, () => {
+      const ass = () => generateAssSubtitles([line], style, 1080, 1920);
+
+      it("agrees about caption presence at every millisecond from 0 through 1020", () => {
+        const rendered = ass();
+        for (let ms = 0; ms <= 1020; ms += 1) {
+          const preview = captionActivationAt([line], ms, true);
+          const exported = eventAt(rendered, ms);
+          // Never skipped: one side present and the other absent is the defect itself.
+          expect(preview !== null, `caption presence disagrees at ${ms}ms`).toBe(exported !== null);
+        }
+      });
+
+      it("selects exactly the quantised interval, 0ms to 1010ms, for the preview", () => {
+        const activations = captionActivations([line], true);
+        expect(activations).toHaveLength(1);
+        expect(activations[0].startMs).toBe(0);
+        expect(activations[0].endMs).toBe(1010);
+        expect(activations[0].activeWordId).toBeNull();
+        expect(activations[0].words).toEqual([]);
+        for (const ms of [0, 1, 2, 3, 500, 1006, 1007, 1008, 1009]) {
+          expect(captionActivationAt([line], ms, true), `no caption at ${ms}ms`).not.toBeNull();
+        }
+      });
+
+      it("writes exactly the quantised interval, 0ms to 1010ms, to the file", () => {
+        const written = events(ass());
+        expect(written).toHaveLength(1);
+        expect(written[0].startMs).toBe(0);
+        expect(written[0].endMs).toBe(1010);
+        for (const ms of [0, 1, 2, 3, 500, 1006, 1007, 1008, 1009]) {
+          expect(eventAt(ass(), ms), `no event at ${ms}ms`).not.toBeNull();
+        }
+      });
+
+      it("is absent on both sides at and after 1010ms", () => {
+        const rendered = ass();
+        for (const ms of [1010, 1011, 1012, 1020, 1500]) {
+          expect(captionActivationAt([line], ms, true), `preview still has a caption at ${ms}ms`).toBeNull();
+          expect(eventAt(rendered, ms), `export still has an event at ${ms}ms`).toBeNull();
+        }
+      });
+
+      it("lights no word on either side", () => {
+        const rendered = ass();
+        for (let ms = 0; ms <= 1020; ms += 1) {
+          expect(captionActivationAt([line], ms, true)?.activeWordId ?? null).toBeNull();
+          expect(assActiveWord(eventAt(rendered, ms)), `export lights a word at ${ms}ms`).toBeNull();
+        }
+      });
+
+      it("keeps a legacy preset on the line's own raw boundaries", () => {
+        const activations = captionActivations([line], false);
+        expect(activations).toHaveLength(1);
+        expect(activations[0].startMs).toBe(3);
+        expect(activations[0].endMs).toBe(1007);
+        expect(activations[0].activeWordId).toBeNull();
+        expect(captionActivationAt([line], 0, false), "legacy caption appeared before 3ms").toBeNull();
+        expect(captionActivationAt([line], 2, false), "legacy caption appeared before 3ms").toBeNull();
+        expect(captionActivationAt([line], 3, false), "legacy caption missing at 3ms").not.toBeNull();
+        expect(captionActivationAt([line], 1006, false), "legacy caption missing at 1006ms").not.toBeNull();
+        expect(captionActivationAt([line], 1007, false), "legacy caption lingered at 1007ms").toBeNull();
+        expect(captionActivationAt([line], 1009, false), "legacy caption lingered at 1009ms").toBeNull();
+      });
+    });
+  }
+
+  it("quantises a wordless line exactly as it quantises a line with words", () => {
+    // Same boundaries, with and without words: the on-screen stretch must be the same interval.
+    const withWords = captionActivations([LINE], true);
+    const without = captionActivations([NO_WORDS], true);
+    expect(without[0].startMs).toBe(withWords[0].startMs);
+    expect(without[without.length - 1].endMs).toBe(withWords[withWords.length - 1].endMs);
+  });
+});
