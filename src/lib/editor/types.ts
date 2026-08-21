@@ -34,6 +34,12 @@ export const editorStateSchema = z.object({
       sizePx: z.number().int().min(16).max(160).optional(),
       position: z.enum(["top", "middle", "bottom"]).optional(),
       textCase: z.enum(TEXT_CASES).optional(),
+      // Where the caption sits on the canvas, as fractions of the frame, once the member has
+      // dragged it. Absent means "wherever `position` puts it" — which is every clip made before
+      // direct manipulation existed, and they must keep rendering exactly where they always did.
+      box: z
+        .object({ xPct: z.number().min(0).max(1), yPct: z.number().min(0).max(1) })
+        .optional(),
       // Legacy: documents written before the shared case model carry only this. Still parsed so
       // those clips keep rendering what they always rendered.
       uppercase: z.boolean().optional(),

@@ -26,6 +26,7 @@ import {
   redo,
   undo,
 } from "@/lib/editor/history";
+import type { CanvasPoint } from "@/lib/editor/canvas";
 import { MIN_CLIP_MS } from "@/lib/editor/trim";
 import {
   type CommitMode,
@@ -250,6 +251,31 @@ export function ClipEditor({
     updateState(restoreAllDeletedWords);
   }
 
+  /**
+   * A frame of a caption drag or corner-resize. `idle` is what makes the whole gesture one undo
+   * entry and one coalesced save, exactly as a slider drag is — the preview still updates on this
+   * call, with nothing between the pointer event and the render.
+   */
+  function handleCaptionMove(point: CanvasPoint) {
+    updateState(
+      (prev) => ({
+        ...prev,
+        captions: { ...prev.captions, overrides: { ...prev.captions.overrides, box: point } },
+      }),
+      "idle",
+    );
+  }
+
+  function handleCaptionResize(sizePx: number) {
+    updateState(
+      (prev) => ({
+        ...prev,
+        captions: { ...prev.captions, overrides: { ...prev.captions.overrides, sizePx } },
+      }),
+      "idle",
+    );
+  }
+
   // Drag-to-trim writes the clip window directly; the timeline has already snapped and clamped,
   // so this just guards the minimum length and rejects no-op updates.
   function handleTrim(nextStartMs: number, nextEndMs: number) {
@@ -367,6 +393,10 @@ export function ClipEditor({
             showSafeZones={showSafeZones}
             brandTemplate={selectedBrandTemplate}
             onCurrentMsChange={setCurrentMs}
+            onCaptionMove={handleCaptionMove}
+            onCaptionResize={handleCaptionResize}
+            // The gesture is over: write what is pending and close its undo entry.
+            onCaptionCommit={commitNow}
             seek={seek}
           />
           <label className="flex items-center gap-2 text-sm text-stone-600">

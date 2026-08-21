@@ -7,6 +7,8 @@ export type CaptionStyle = {
   highlightColor: string;
   background: "none" | "pill";
   position: "top" | "middle" | "bottom";
+  /** A dragged position, if the member has set one. Null means `position` decides. */
+  box?: { xPct: number; yPct: number } | null;
   alignment: "left" | "center" | "right";
   textCase: TextCase;
   strokeColor: string;

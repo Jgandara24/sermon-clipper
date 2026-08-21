@@ -1984,3 +1984,44 @@ Says, Never What The Clip Contains" — the sentence stating that the change "do
 P1.4's export-side `CONTINUOUS_RANGE_REQUIRED` gate". It does. The rest of that entry stands.
 
 Status: Active.
+
+## 2026-08-21 - A Caption Carries A Point On The Canvas; How The Canvas Is Viewed Is Never Saved
+
+Decision: a caption is a direct-manipulation object. It is selected by clicking it on the video,
+dragged to any point, and scaled from four corner handles. `captions.overrides.box` stores that
+point as `{ xPct, yPct }` — fractions of the frame — and a corner resize writes the existing
+`sizePx`. A caption has no independent width and height to drag; the text decides those, so what a
+corner handle controls is how big the type is.
+
+`box` is optional and absent by default. Without it the discrete `position` decides, the ASS
+generator emits no positioning override at all, and every clip made before direct manipulation
+renders byte-identically to how it always did. With it, the burn-in emits `\an5\pos(x,y)` — the
+same point the preview draws at, so the two cannot disagree.
+
+**Zoom and pan are view state and are never written to the document.** They live in the component,
+not in `editor_state`. The one place the view and the document meet is `pointerToCanvasPct`, which
+undoes the viewport on the way in, so dragging an object to the same visible place produces the
+same saved coordinate at 100% and at 400%. `canvasTransform` and its inverse sit beside each other
+in `src/lib/editor/canvas.ts` for exactly that reason: the inverse is only correct while it undoes
+that transform, and separating them would let the two drift.
+
+Guides — safe zones, the centre-snap guide — and the selection border and handles are DOM in the
+editor and have no representation in an ASS subtitle file. There is no path by which one could
+reach a rendered video; that is a property of the architecture, not a filter applied at render time.
+
+Canvas zoom is separate from the trim timeline's window. They are different views of different
+things (a frame and a stretch of time) and share no state.
+
+Why the module and the component are written without mentioning captions: Slice 9's title overlay
+is the second object on this canvas. `src/lib/editor/canvas.ts` and
+`src/components/editor/canvas-object.tsx` are the reusable half, and Slice 9 is meant to mount them
+rather than grow a parallel implementation. Slice 6 deliberately stops short of the title itself.
+
+Tradeoff: a dragged caption is positioned absolutely, so it no longer reflows with the frame's
+margins the way an alignment-and-margin caption does — a caption dropped near an edge stays near
+that edge. That is what direct manipulation means, and the safe-zone guides exist to make the
+consequence visible while editing. Pinch-to-zoom claims two-finger gestures over the canvas, so a
+two-finger page scroll started on the video zooms instead; the canvas is one screen-height tall at
+most, and scrolling from anywhere else on the page is unaffected.
+
+Status: Active. Implements Slice 6 of `docs/EDITOR_DELTA_PLAN_2026-08-18.md`.

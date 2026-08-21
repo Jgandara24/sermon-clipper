@@ -87,10 +87,17 @@ export function generateAssSubtitles(
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
   ].join("\n");
 
+  // A caption the member dragged is drawn at that exact point, centred on itself. Without a
+  // dragged position nothing is emitted, so every clip made before direct manipulation renders
+  // byte-identically to how it always did.
+  const positionTag = style.box
+    ? `{\\an5\\pos(${Math.round(style.box.xPct * videoWidth)},${Math.round(style.box.yPct * videoHeight)})}`
+    : "";
+
   const events = lines
     .map((line) => {
       const text = applyTextCase(line.text, style.textCase);
-      return `Dialogue: 0,${msToAssTime(line.startMs)},${msToAssTime(line.endMs)},Default,,0,0,0,,${escapeAssText(text)}`;
+      return `Dialogue: 0,${msToAssTime(line.startMs)},${msToAssTime(line.endMs)},Default,,0,0,0,,${positionTag}${escapeAssText(text)}`;
     })
     .join("\n");
   const lowerThirdEvent = lowerThird
