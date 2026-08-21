@@ -12,8 +12,9 @@ import { ExportFailureError } from "./errors";
 /** No ClipEdit row exists for a clip that was never edited; its export renders the defaults. */
 export const DEFAULT_EDIT_VERSION = 0;
 
-/** The version ANALYZE writes when it creates a clip's first document. Nobody signed it. */
-export const INITIAL_EDIT_VERSION = 1;
+// Defined beside the document it stamps, and re-exported here because this module is where the
+// export layer reads versions from. One definition, no import cycle.
+export { INITIAL_EDIT_VERSION } from "@/lib/editor/types";
 
 /** The job carries no usable version, so there is nothing to render faithfully. */
 export const EXPORT_EDIT_VERSION_MISSING = "EXPORT_EDIT_VERSION_MISSING";

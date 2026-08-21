@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { DEFAULT_TEXT_CASE, TEXT_CASES } from "./text-case";
 
+/** The version ANALYZE stamps on a clip's first document. Nobody signed it. */
+export const INITIAL_EDIT_VERSION = 1;
+
 // Editor state is one versioned JSON document per clip (guide §12). `version` is duplicated
 // inside the document (matching the guide's own example) for client convenience, but
 // ClipEdit.version in the database is authoritative for optimistic concurrency.
@@ -122,6 +125,10 @@ export function buildInitialEditorState(params: {
   const state = buildDefaultEditorState(params);
   return {
     ...state,
+    // The row this is stored in carries the same number. A document that disagrees with its own
+    // row is a document nobody can reason about — the save route already keeps the two in step,
+    // and so must the one the machine writes.
+    version: INITIAL_EDIT_VERSION,
     captions: { ...state.captions, overrides: { ...state.captions.overrides, textCase: DEFAULT_TEXT_CASE } },
   };
 }

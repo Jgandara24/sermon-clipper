@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { INITIAL_EDIT_VERSION } from "@/lib/editor/types";
 import type { TranscriptionProviderName } from "./policy";
 
 type ExceptionClient = Pick<PrismaClient, "editorialException"> | Prisma.TransactionClient;
@@ -126,7 +127,17 @@ export async function settleTranscriptionFallbackHold(
   const since = { gte: hold.createdAt };
   const clipScope = { clip: { projectId: params.projectId } };
   const [edits, approvals, exports] = await Promise.all([
-    client.clipEdit.count({ where: { ...clipScope, createdAt: since } }),
+    client.clipEdit.count({
+      where: {
+        ...clipScope,
+        createdAt: since,
+        // ANALYZE writes each clip's first document itself, unsigned. That row is the machine's,
+        // not a person's, and counting it meant a healthy re-transcription could never close the
+        // hold it opened — every rebuilt clip arrived already looking like human work. A save
+        // made by someone always carries their id, so the two cannot be confused.
+        NOT: { savedBy: null, version: INITIAL_EDIT_VERSION },
+      },
+    }),
     client.clipApproval.count({ where: { ...clipScope, createdAt: since } }),
     client.exportJob.count({ where: { ...clipScope, createdAt: since } }),
   ]);
