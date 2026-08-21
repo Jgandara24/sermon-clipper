@@ -16,7 +16,13 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: "http://127.0.0.1:3000",
-    trace: "retain-on-failure",
+    // Off, and it must stay off. The suite signs in by putting a real session token in the cookie
+    // jar, and a trace records the parameters of every action — `addCookies` included — so a
+    // single failed authenticated test would write a live bearer token into trace.zip, an artifact
+    // that outlives the run and gets uploaded and shared. Deleting the session afterwards does not
+    // help: the artifact is written at failure time, while the token still opens the application.
+    // Failures are diagnosed from the error context snapshot and the piped server log instead.
+    trace: "off",
   },
   projects: [
     {
