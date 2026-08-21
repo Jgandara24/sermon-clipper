@@ -2,6 +2,7 @@ import { highlightSlices } from "@/lib/editor/active-word";
 import { popResetTags, popTags } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
+import { exclusiveLineSpans } from "@/lib/editor/caption-lines";
 import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
 
 /**
@@ -113,7 +114,13 @@ export function generateAssSubtitles(
     return `Dialogue: 0,${msToAssTime(startMs)},${msToAssTime(endMs)},Default,,0,0,0,,${positionTag}${body}`;
   }
 
-  const events = lines
+  // Only the highlighting path needs one line on screen at a time; every other preset keeps
+  // the spans the line builder produced.
+  const spanned = style.activeWordHighlight
+    ? exclusiveLineSpans(lines as CaptionLine[])
+    : lines;
+
+  const events = spanned
     .flatMap((line) => {
       const words = line.words ?? [];
       // A retyped line no longer corresponds to its words, so there is nothing to align a

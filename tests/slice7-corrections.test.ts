@@ -3,7 +3,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { generateAssSubtitles } from "@/lib/export/ass-generator";
 import { getCaptionPreset } from "@/lib/editor/caption-presets";
-import { buildCaptionLines, type CaptionWord } from "@/lib/editor/caption-lines";
+import {
+  buildCaptionLines,
+  exclusiveLineSpans,
+  type CaptionWord,
+} from "@/lib/editor/caption-lines";
 import { highlightSlices, resolveActiveWord } from "@/lib/editor/active-word";
 import { POP, popScaleAt } from "@/lib/editor/caption-animation";
 import { buildDefaultEditorState } from "@/lib/editor/types";
@@ -147,18 +151,20 @@ describe("active words across line boundaries", () => {
   ]);
 
   it("splits into two lines that do not overlap in time", () => {
-    const lines = buildCaptionLines(OVERLAP);
+    const lines = exclusiveLineSpans(buildCaptionLines(OVERLAP));
     expect(lines).toHaveLength(2);
     expect(lines[0].endMs).toBeLessThanOrEqual(lines[1].startMs);
   });
 
   it("shows exactly one caption line at the overlapping instant", () => {
-    const onScreen = buildCaptionLines(OVERLAP).filter((l) => 2500 >= l.startMs && 2500 < l.endMs);
+    const onScreen = exclusiveLineSpans(buildCaptionLines(OVERLAP)).filter(
+      (l) => 2500 >= l.startMs && 2500 < l.endMs,
+    );
     expect(onScreen).toHaveLength(1);
   });
 
   it("resolves the same single active word in the preview and in the export", () => {
-    const lines = buildCaptionLines(OVERLAP);
+    const lines = exclusiveLineSpans(buildCaptionLines(OVERLAP));
     // The export's answer: the slice covering the instant, from every line's slices.
     const exportAnswer = (ms: number) => {
       for (const line of lines) {

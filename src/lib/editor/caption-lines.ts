@@ -57,11 +57,11 @@ export function buildCaptionLines(
   }
   flush();
 
-  return clipToOneLineAtATime(lines);
+  return lines;
 }
 
 /**
- * Makes the lines mutually exclusive in time.
+ * Makes the lines mutually exclusive in time. Highlighter's path only.
  *
  * A line ends at its last word's end, and source word intervals overlap — so the last word of one
  * line can still be running when the first word of the next has started. Left alone that puts two
@@ -72,7 +72,7 @@ export function buildCaptionLines(
  * The words are left exactly as they are. Only the line's own on-screen span moves, and only ever
  * earlier — a line is never extended over its neighbour.
  */
-function clipToOneLineAtATime(lines: CaptionLine[]): CaptionLine[] {
+export function exclusiveLineSpans(lines: CaptionLine[]): CaptionLine[] {
   return lines.map((line, index) => {
     const next = lines[index + 1];
     if (!next || next.startMs >= line.endMs) return line;

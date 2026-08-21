@@ -33,7 +33,11 @@ import {
 import { resolveActiveWord } from "@/lib/editor/active-word";
 import { popScaleAt } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
-import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
+import {
+  applyCaptionTextOverrides,
+  buildCaptionLines,
+  exclusiveLineSpans,
+} from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
 import type { EditorWordWithDeletion } from "@/lib/editor/words";
@@ -116,7 +120,12 @@ export function VideoPreview({
   );
 
   const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
-  const currentLine = captionLines.find(
+  // The same spans the burn-in uses. Only a highlighting preset needs one line on screen at a
+  // time; every other preset keeps the spans the line builder produced, unchanged.
+  const spannedLines = style.activeWordHighlight
+    ? exclusiveLineSpans(captionLines)
+    : captionLines;
+  const currentLine = spannedLines.find(
     (line) => currentMs >= line.startMs && currentMs < line.endMs,
   );
   const captionPoint = style.box ?? defaultCaptionPoint(style.position);
