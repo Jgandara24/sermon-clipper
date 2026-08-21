@@ -2025,3 +2025,34 @@ two-finger page scroll started on the video zooms instead; the canvas is one scr
 most, and scrolling from anywhere else on the page is unaffected.
 
 Status: Active. Implements Slice 6 of `docs/EDITOR_DELTA_PLAN_2026-08-18.md`.
+
+## 2026-08-21 - The Playhead Owns The Strip Above The Track; The Trim Handles Own The Track
+
+Decision: the playhead's pointer target is a knob sitting immediately above the timeline track. The
+trim handles keep the track itself. The two share no pixels, so neither can take a gesture aimed at
+the other. The red line the playhead draws is decoration only and takes no pointer at all.
+
+Why: the playhead and a trim handle occupied identical pixels whenever the playhead was parked at a
+clip edge — which is where it sits when the editor opens, and again after "Go to end". Both claimed
+the full height of the track at the same horizontal position. The handle was deliberately stacked on
+top (2026-08-20, Slice 4: trimming is the timeline's primary control, and the playhead had been
+swallowing presses meant for a handle), so every press aimed at the playhead at an edge reached the
+handle instead. **Trying to scrub from the start of a clip trimmed it.** Measured on a 0–4,000 ms
+clip: the start moved to 954 ms and the editor wrote a new `ClipEdit`, which invalidates an
+editorial approval.
+
+That write is why the guarding test looked flaky. `dragging the playhead does not save a new
+version` asserts the `ClipEdit` count straight after the drag, and the trim's save is idle-debounced
+— measured at 0 rows 100 ms after the gesture and 1 row four seconds later. The defect was
+deterministic; only whether the write had landed by assertion time varied. The test was right every
+time it failed, and right every time it passed.
+
+Separating the targets settles both defects at once rather than trading one for the other: Slice 4's
+rule stands untouched, and the playhead becomes reachable at an edge for the first time.
+
+Tradeoff: the knob sits outside the track, so the track needs clearance above it and the timeline is
+a little taller. The knob is a 16 px circle rather than the full height of the track, which is a
+smaller target than the handles have — acceptable, because clicking anywhere on the track already
+seeks, so dragging the knob is the precise gesture rather than the only one.
+
+Status: Active.
