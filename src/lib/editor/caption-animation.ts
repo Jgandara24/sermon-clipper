@@ -1,31 +1,46 @@
-// The pop curve, defined once.
+// The pop curve, defined once and evaluated the same way by both renderers.
 //
-// The browser preview evaluates it per frame; the burn-in expresses the same shape with libass
-// `\t` transforms. Two definitions would drift the moment either is touched, and a caption that
-// pops on screen but not in the file is the defect this module exists to prevent.
+// The browser preview calls `popScaleAt` per frame; the burn-in emits `popTags`, and libass
+// evaluates those tags with its own interpolation. "Both pop" is not the requirement — they have
+// to draw the same number at the same millisecond, so the function below is libass's formula
+// rather than something that merely resembles it.
+//
+// libass interpolates `\t(t1,t2,accel,...)` by raising the normalised time to `accel`:
+//
+//     k = ((t - t1) / (t2 - t1)) ^ accel        clamped to [0, 1]
+//     value = from + (to - from) * k
+//
+// An `accel` below 1 leaves fast and eases in, which is the shape a pop wants. That exponent is
+// why a quadratic ease-out in the preview and an `accel` in the tags are different curves however
+// alike they look on paper.
+//
+// The pop is one transform, not a rise followed by a settle. Two `\t` over the same property
+// overlap in a way renderers do not agree on — the second one's starting value is either the
+// static base or whatever the first had reached, and the answer decides the whole shape. A curve
+// nobody can state exactly is not a shared curve, so the settle is left for the visual pass to ask
+// for deliberately, as a second event rather than a second transform.
 //
 // Slice 7 owns the pop. Slice 8 owns the neighbour micro-shift: nothing here moves a word other
-// than the active one, and nothing here reserves permanent room. Words sit at rest spacing, which
-// is why an active word can overlap its neighbours slightly at large sizes until Slice 8 lands —
-// the plan calls that out as a deliberate, short-lived intermediate state.
+// than the active one, and nothing here reserves permanent room.
 
 /**
- * Shape of the pop. A fast attack, a shorter settle, then a flat hold — so a long word does not
- * keep growing, and a short one still reaches its peak.
+ * Shape of the pop: how long it takes, how big it gets, and how it accelerates.
  *
- * These numbers are a starting point for the manual visual pass, not a measured result. They are
- * in one place so that pass can move them once.
+ * Provisional, for the manual visual pass — in one place so that pass can move them once. The
+ * parity between the two renderers does not depend on the values.
  */
 export const POP = {
   riseMs: 90,
-  settleMs: 120,
   peakScale: 1.18,
-  heldScale: 1.06,
+  /** libass `\t` acceleration. Below 1 leaves fast and eases into the peak. */
+  accel: 0.5,
 } as const;
 
-/** Decelerating: fast off the mark, easing into the peak. */
-function easeOut(t: number): number {
-  return 1 - (1 - t) * (1 - t);
+/** libass's own interpolation, clamped exactly as libass clamps it. */
+function interpolate(elapsedMs: number, durationMs: number, accel: number): number {
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0;
+  if (elapsedMs >= durationMs) return 1;
+  return Math.pow(elapsedMs / durationMs, accel);
 }
 
 /**
@@ -35,32 +50,22 @@ function easeOut(t: number): number {
  * preview asks this every frame, including frames where nothing is active.
  */
 export function popScaleAt(elapsedMs: number): number {
-  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 1;
-  if (elapsedMs < POP.riseMs) {
-    return 1 + (POP.peakScale - 1) * easeOut(elapsedMs / POP.riseMs);
-  }
-  if (elapsedMs < POP.riseMs + POP.settleMs) {
-    const t = (elapsedMs - POP.riseMs) / POP.settleMs;
-    return POP.peakScale + (POP.heldScale - POP.peakScale) * easeOut(t);
-  }
-  return POP.heldScale;
+  return 1 + (POP.peakScale - 1) * interpolate(elapsedMs, POP.riseMs, POP.accel);
 }
 
 /** libass percentages, which is what `\fscx`/`\fscy` take. */
 const pct = (scale: number) => Math.round(scale * 100);
 
 /**
- * The libass tags that draw the same curve, relative to the start of the event the word is in.
- *
- * `\t`'s third parameter is an acceleration: below 1 starts fast, which is the decelerating attack
- * `easeOut` describes. The settle runs linear, which is close enough at this duration to read as
- * one motion rather than two.
+ * The tags that make libass draw the same curve, relative to the start of the event the word is
+ * in. The static `\fscx100\fscy100` is the transform's starting value; x and y move together so
+ * the word grows without distorting.
  */
 export function popTags(): string {
+  const peak = pct(POP.peakScale);
   return (
     `\\fscx100\\fscy100` +
-    `\\t(0,${POP.riseMs},0.5,\\fscx${pct(POP.peakScale)}\\fscy${pct(POP.peakScale)})` +
-    `\\t(${POP.riseMs},${POP.riseMs + POP.settleMs},1,\\fscx${pct(POP.heldScale)}\\fscy${pct(POP.heldScale)})`
+    `\\t(0,${POP.riseMs},${POP.accel},\\fscx${peak}\\fscy${peak})`
   );
 }
 

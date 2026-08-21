@@ -80,15 +80,13 @@ describe("legacy presets are preserved", () => {
 // ── 2. The Highlighter pop, at rest spacing ───────────────────────────────────────────────────
 
 describe("the Highlighter pop", () => {
-  it("evaluates one shared curve that rises, settles, then holds", () => {
+  it("evaluates one shared curve that rises to the peak and holds", () => {
     expect(popScaleAt(0)).toBe(1);
     expect(popScaleAt(-50)).toBe(1);
     expect(popScaleAt(POP.riseMs)).toBeCloseTo(POP.peakScale, 5);
-    expect(popScaleAt(POP.riseMs + POP.settleMs)).toBeCloseTo(POP.heldScale, 5);
     // Flat afterwards, so a long word does not keep growing.
-    expect(popScaleAt(POP.riseMs + POP.settleMs + 5_000)).toBeCloseTo(POP.heldScale, 5);
-    expect(POP.peakScale).toBeGreaterThan(POP.heldScale);
-    expect(POP.heldScale).toBeGreaterThan(1);
+    expect(popScaleAt(POP.riseMs + 5_000)).toBeCloseTo(POP.peakScale, 5);
+    expect(POP.peakScale).toBeGreaterThan(1);
   });
 
   it("rises monotonically to the peak", () => {
