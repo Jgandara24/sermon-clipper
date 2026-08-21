@@ -12,7 +12,7 @@ import {
   WorkspaceRole,
 } from "@prisma/client";
 import { prisma } from "../../src/lib/prisma";
-import { DEV_SESSION_COOKIE } from "../../src/lib/auth";
+import { signInAs, signOutTestSessions } from "./auth-session";
 import { getStorageProvider } from "../../src/lib/storage";
 
 const execFileAsync = promisify(execFile);
@@ -144,19 +144,11 @@ test.describe("Editor playback and transport", () => {
 
   test.beforeEach(async ({ context }) => {
     fixture = await createFixture();
-    await context.addCookies([
-      {
-        name: DEV_SESSION_COOKIE,
-        value: fixture.userId,
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: true,
-        sameSite: "Lax",
-      },
-    ]);
+    await signInAs(context, fixture.userId);
   });
 
   test.afterEach(async () => {
+    await signOutTestSessions();
     if (fixture?.workspaceId) {
       await prisma.workspace.delete({ where: { id: fixture.workspaceId } });
     }

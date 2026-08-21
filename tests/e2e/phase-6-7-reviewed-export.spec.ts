@@ -13,7 +13,7 @@ import {
   WorkspaceRole,
 } from "@prisma/client";
 import { prisma } from "../../src/lib/prisma";
-import { DEV_SESSION_COOKIE } from "../../src/lib/auth";
+import { signInAs, signOutTestSessions } from "./auth-session";
 import { getStorageProvider } from "../../src/lib/storage";
 import { runOnePendingExportJob } from "../../src/lib/exports/runner";
 import { runOnePendingJob } from "../../src/lib/jobs/runner";
@@ -227,19 +227,11 @@ test.describe("Phase 6/7 browser workflow", () => {
 
   test.beforeEach(async ({ context }) => {
     fixture = await createFixture();
-    await context.addCookies([
-      {
-        name: DEV_SESSION_COOKIE,
-        value: fixture.userId,
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: true,
-        sameSite: "Lax",
-      },
-    ]);
+    await signInAs(context, fixture.userId);
   });
 
   test.afterEach(async () => {
+    await signOutTestSessions();
     if (fixture?.workspaceId) {
       await prisma.workspace.delete({ where: { id: fixture.workspaceId } });
     }
@@ -254,7 +246,11 @@ test.describe("Phase 6/7 browser workflow", () => {
   test("applies brand, approves, exports, and downloads a vertical MP4", async ({ page }) => {
     await page.goto(`/app/projects/${fixture.projectId}`);
     await expect(page.getByRole("heading", { name: "Suggested clips" })).toBeVisible();
-    await expect(page.getByText("John 14")).toBeVisible();
+    // The detected-scripture badge, addressed by its title rather than its text. The transcript
+    // viewer fetches its segments after hydration and one of them also contains "John 14", so a
+    // plain text match is a race: one element before that fetch lands, two after it, and a strict
+    // mode violation as soon as the server is quick enough to lose the race.
+    await expect(page.getByTitle('Detected from "John 14"')).toBeVisible();
 
     await page.getByLabel("Edit this clip").click();
     await expect(page.getByRole("heading", { name: "Peace Stays With Us" })).toBeVisible();
@@ -319,19 +315,11 @@ test.describe("Phase 6/7 upload-to-ranked-clips workflow", () => {
 
   test.beforeEach(async ({ context }) => {
     fixture = await createUserWorkspaceFixture();
-    await context.addCookies([
-      {
-        name: DEV_SESSION_COOKIE,
-        value: fixture.userId,
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: true,
-        sameSite: "Lax",
-      },
-    ]);
+    await signInAs(context, fixture.userId);
   });
 
   test.afterEach(async () => {
+    await signOutTestSessions();
     if (fixture?.workspaceId) {
       await prisma.workspace.delete({ where: { id: fixture.workspaceId } });
     }
