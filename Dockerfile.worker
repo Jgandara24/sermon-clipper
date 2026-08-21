@@ -37,10 +37,19 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 FROM node:24-bookworm-slim AS runtime
+# fonts-dejavu-core and fontconfig are named here rather than inherited from ffmpeg's dependency
+# tree, because libass silently substitutes a face it cannot find: a caption set in a font the
+# image lacks still renders, just not in that font. The caption picker offers exactly the families
+# listed below (src/lib/editor/caption-fonts.ts), so the build fails if any of them stops
+# resolving — a substituted face must never reach a church's published clip unnoticed.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg ca-certificates curl \
+      ffmpeg ca-certificates curl fontconfig fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
-    && ffmpeg -filters | grep -q subtitles
+    && ffmpeg -filters | grep -q subtitles \
+    && for family in "DejaVu Sans" "DejaVu Serif" "DejaVu Sans Mono"; do \
+         fc-list : family | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -qx "$family" \
+           || { echo "caption font missing from the image: $family"; exit 1; }; \
+       done
 
 # yt-dlp fetches URL-imported source videos (FINALIZE URL branch). The standalone Linux binary
 # bundles its Python runtime, so no python3 apt package is needed. Deliberately unpinned:

@@ -2142,3 +2142,63 @@ alignment. Font weight has no direct equivalent in ASS, which knows only bold or
 above renders bold and everything below renders regular; the browser shows the true weight.
 
 Status: Active. Implements Slice 7 of `docs/EDITOR_DELTA_PLAN_2026-08-18.md`.
+
+## 2026-08-21 - Highlighting And Weight Belong To Highlighter, Not To Every Clip
+
+Decision: per-word colour, the pop, and a heavy default weight are properties of the Highlighter
+preset. `activeWordHighlight` on the resolved caption style decides them, and it is true for
+Highlighter alone. `weight` is optional: every preset that predates this slice leaves it unset,
+which renders as an unset browser weight and ASS `Bold=0` — exactly what `origin/main` produced.
+An explicit weight in a saved document still wins, for any preset.
+
+Why: the first version of this slice gave `clean`, `bold-serif` and `karaoke` a weight of 700 and
+`quiet` 500, and applied the active-word colour to every preset. Both change clips that already
+exist. 700 crosses the `>= 600` threshold that maps to ASS bold, so every Clean clip a church had
+already approved would have re-rendered bold, and every one of them would have gained a coloured
+word the member never asked for. Hiding a preset from the picker was already understood not to
+license changing its output; adding a property to it is the same thing by another route.
+
+The supersession is narrow and worth stating plainly: the entry above this one says the highlight
+is "a colour change and nothing else — no reserved clearance, no scale, no shift". The colour and
+the scale are both here now, on the active Highlighter word. What that entry was right about, and
+what still holds, is that **no width is reserved and no neighbour moves**. The plan removes the
+permanent maximum-pop clearance in this slice and gives the neighbour micro-shift to Slice 8; it
+does not remove the pop. Until Slice 8 lands, an active word can overlap its neighbours slightly
+at large sizes, which the plan calls out as a deliberate short-lived state.
+
+`src/lib/editor/caption-animation.ts` holds the curve, and both renderers evaluate it: the preview
+per frame, the burn-in as libass `\t` transforms on the active word's run only. Its numbers — rise
+90 ms to 1.18, settle 120 ms to 1.06, then flat — are a starting point for the manual visual pass,
+not a measured result, and they are in one constant so that pass can move them once.
+
+Caption lines are now mutually exclusive in time. A line ended at its last word's end, and source
+word intervals overlap, so the last word of one line could still be running when the first word of
+the next had started: two lines on screen, the burn-in lighting a word in each while the preview,
+which takes the first line matching the instant, showed one. Each line now ends where the next
+begins. The words are untouched; only the line's own span moves, and only ever earlier.
+
+Uppercase is no longer a default for new documents. A version-0 clip is rendered by building the
+default document at export time, so anything set there reaches clips that already exist and were
+never edited. The previous entry accepted that as a known exception; it is not one we are keeping.
+Uppercase now arrives by choosing Highlighter, which carries it in its own style. The cost is
+explicit: a genuinely new clip no longer starts in Uppercase, because at version 0 nothing
+distinguishes a new clip from an old one.
+
+The font picker offers only what the render host has. `fc-list` inside the built worker image
+reports three families — DejaVu Sans, DejaVu Serif, DejaVu Sans Mono — and none of Inter, Georgia,
+Arial Black or Courier New. libass substitutes silently, so a member choosing Georgia was getting
+something else in the file they published, with nothing to tell them. `Dockerfile.worker` now
+installs those faces by name and fails the build if any stops resolving. Preset font stacks are
+deliberately left alone: changing them would change existing clips, which is the defect this entry
+is about.
+
+Typed numbers snap to their control's step. A range input normalises what it is given, so typing
+350 into a 100-900 field stepping by 100 left the number field on 350 while Chromium put the
+slider on 400 and the document saved a third value.
+
+Tradeoff: the pop puts scale tags on every highlighted event, which grows the ASS file and gives
+libass more to interpolate. The font list is shorter and plainer than the one it replaces, and its
+faces are not the ones a designer would pick — but they are the ones that survive the render.
+
+Status: Active. Corrects the entry above it; supersedes its "no scale" and default-Uppercase
+statements only.

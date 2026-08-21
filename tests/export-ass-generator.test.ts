@@ -238,7 +238,7 @@ describe("per-word highlighting", () => {
 });
 
 describe("rest spacing", () => {
-  it("adds no spacing, padding or scale for the highlighted word", () => {
+  it("reserves no permanent room and moves no neighbour, while the active word pops", () => {
     const WORDS: CaptionWord[] = [
       { id: "w0", word: "peace", startMs: 0, endMs: 400 },
       { id: "w1", word: "stays", startMs: 400, endMs: 900 },
@@ -249,9 +249,17 @@ describe("rest spacing", () => {
       1080,
       1920,
     );
-    // Slice 8 owns motion. Nothing here scales, shifts, or reserves room for a word.
-    for (const tag of ["\\fscx", "\\fscy", "\\fsp", "\\t(", "\\move("]) {
-      expect(ass).not.toContain(tag);
+    // Slice 8 owns the neighbour micro-shift: `\fsp` would widen the line permanently and
+    // `\move` would slide a word. Slice 7 owns the pop itself, so the scale tags belong here.
+    for (const tag of ["\\fsp", "\\move("]) {
+      expect(ass, `${tag} is Slice 8's, not Slice 7's`).not.toContain(tag);
+    }
+    expect(ass).toContain("\\fscx");
+    expect(ass).toContain("\\t(");
+
+    // Exactly one word pops per event, and only the one that is active.
+    for (const event of ass.split("\n").filter((l) => l.startsWith("Dialogue: 0"))) {
+      expect(event.split("\\t(0,").length - 1).toBeLessThanOrEqual(1);
     }
   });
 

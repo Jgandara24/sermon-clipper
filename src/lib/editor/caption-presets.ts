@@ -10,8 +10,18 @@ export type CaptionStyle = {
   /** A dragged position, if the member has set one. Null means `position` decides. */
   box?: { xPct: number; yPct: number } | null;
   alignment: "left" | "center" | "right";
-  /** CSS font weight, 100-900. The burn-in has only bold or not, so 600+ reads as bold. */
-  weight: number;
+  /**
+   * CSS font weight, 100-900. Undefined means "whatever the browser and libass already did" —
+   * unset in the preview, Bold=0 in the burn-in. Every preset that predates Slice 7 leaves it
+   * undefined on purpose: giving them a number changes clips a church already approved.
+   */
+  weight?: number;
+  /**
+   * True only for a preset whose active word is coloured and popped. Everything that predates
+   * Slice 7 renders a line whole, exactly as it always has — per-word highlighting is a property
+   * of Highlighter, not a new behaviour applied to every clip already approved.
+   */
+  activeWordHighlight: boolean;
   textCase: TextCase;
   strokeColor: string;
   strokePx: number;
@@ -46,11 +56,11 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       background: "none",
       position: "bottom",
       alignment: "center",
-      weight: 700,
       textCase: "original",
       strokeColor: "#000000",
       strokePx: 2,
       shadow: true,
+      activeWordHighlight: false,
     },
     selectable: true,
   },
@@ -65,11 +75,11 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       background: "none",
       position: "bottom",
       alignment: "center",
-      weight: 700,
       textCase: "original",
       strokeColor: "#1A1A1A",
       strokePx: 3,
       shadow: true,
+      activeWordHighlight: false,
     },
     selectable: false,
   },
@@ -84,11 +94,11 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       background: "pill",
       position: "middle",
       alignment: "center",
-      weight: 700,
       textCase: "uppercase",
       strokeColor: "#000000",
       strokePx: 0,
       shadow: false,
+      activeWordHighlight: false,
     },
     selectable: false,
   },
@@ -103,11 +113,11 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       background: "none",
       position: "bottom",
       alignment: "center",
-      weight: 500,
       textCase: "original",
       strokeColor: "#000000",
       strokePx: 1,
       shadow: false,
+      activeWordHighlight: false,
     },
     selectable: false,
   },
@@ -129,6 +139,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       strokeColor: "#000000",
       strokePx: 3,
       shadow: true,
+      activeWordHighlight: true,
     },
     selectable: true,
   },

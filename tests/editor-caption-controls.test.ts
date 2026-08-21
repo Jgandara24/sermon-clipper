@@ -70,12 +70,18 @@ describe("Highlighter", () => {
 });
 
 describe("text case for new content", () => {
-  it("a new clip starts in Uppercase", () => {
+  it("a new clip carries no case, so a version-0 clip renders as it always did", () => {
+    // A clip that has never been edited is rendered by building this document at export time, so
+    // a default here reaches clips that already exist — including ones a church has approved.
     const state = buildDefaultEditorState({ sourceVideoId: "v", startMs: 0, endMs: 1000 });
-    expect(state.captions.overrides.textCase).toBe("uppercase");
+    expect(state.captions.overrides.textCase).toBeUndefined();
     expect(resolveCaptionStyle(state.captions.presetId, state.captions.overrides).textCase).toBe(
-      "uppercase",
+      "original",
     );
+  });
+
+  it("Uppercase arrives by choosing Highlighter, which carries it in its own style", () => {
+    expect(resolveCaptionStyle("highlighter", {}).textCase).toBe("uppercase");
   });
 
   it("a stored clip that carries no case keeps its preset's", () => {

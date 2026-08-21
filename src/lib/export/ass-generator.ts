@@ -1,4 +1,5 @@
 import { highlightSlices } from "@/lib/editor/active-word";
+import { popResetTags, popTags } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
 import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
@@ -91,7 +92,7 @@ export function generateAssSubtitles(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${style.weight >= 600 ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
+    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${style.weight !== undefined && style.weight >= 600 ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
     `Style: LowerThird,${fontName},38,${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},1,0,0,0,100,100,0,0,3,8,1,1,70,70,400,1`,
     "",
     "[Events]",
@@ -116,9 +117,10 @@ export function generateAssSubtitles(
     .flatMap((line) => {
       const words = line.words ?? [];
       // A retyped line no longer corresponds to its words, so there is nothing to align a
-      // highlight to. It renders whole, exactly as it reads.
+      // highlight to. It renders whole, exactly as it reads. A preset that does not highlight
+      // renders whole for the same reason it always did: nothing about it changed.
       const retyped = words.map((word) => word.word).join(" ") !== line.text;
-      if (words.length === 0 || retyped) {
+      if (!style.activeWordHighlight || words.length === 0 || retyped) {
         return [dialogue(line.startMs, line.endMs, escapeAssText(applyTextCase(line.text, style.textCase)))];
       }
 
@@ -135,9 +137,10 @@ export function generateAssSubtitles(
           words
             .map((word) => {
               const cased = escapeAssText(applyTextCase(word.word, style.textCase));
-              return word.id === slice.activeWordId
-                ? `${highlightTag}${cased}${restoreTag}`
-                : cased;
+              if (word.id !== slice.activeWordId) return cased;
+              // Scale and colour together, then back to rest, so the words after this one are
+              // neither popped nor coloured. Nothing here moves a neighbour — that is Slice 8.
+              return `{${popTags()}}${highlightTag}${cased}${restoreTag}{${popResetTags()}}`;
             })
             .join(" "),
         ),

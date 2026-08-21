@@ -7,9 +7,24 @@
 
 export type NumericRange = { min: number; max: number; step?: number };
 
+/**
+ * Rounds to the range's own step, measured from its minimum.
+ *
+ * A range input normalises whatever it is given to the step, so a typed value that skips the step
+ * leaves the number field showing one number and the slider showing another. Chromium does this
+ * silently: type 350 into a 100-900 field stepping by 100 and the slider sits at 400. Snapping
+ * here means both controls are told the same number in the first place.
+ */
+function snapToStep(value: number, range: NumericRange): number {
+  if (!range.step || range.step <= 0) return value;
+  const steps = Math.round((value - range.min) / range.step);
+  return range.min + steps * range.step;
+}
+
 export function clampToRange(value: number, range: NumericRange): number {
   if (!Number.isFinite(value)) return range.min;
-  return Math.min(range.max, Math.max(range.min, value));
+  const snapped = snapToStep(value, range);
+  return Math.min(range.max, Math.max(range.min, snapped));
 }
 
 /**

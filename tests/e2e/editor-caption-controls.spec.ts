@@ -33,6 +33,12 @@ const FIXTURE_WORDS = [
   { word: "us", startMs: 1800, endMs: 2400 },
 ];
 
+/** Per-word highlighting belongs to Highlighter; Clean renders the line whole, as it always did. */
+async function chooseHighlighter(page: Page) {
+  await page.getByRole("button", { name: "Highlighter" }).click();
+  await expect(captionWords(page).first()).toBeVisible();
+}
+
 async function waitForSaved(page: Page) {
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 }
@@ -98,9 +104,9 @@ test.describe("Caption controls", () => {
 
   test("the Weight slider and its number field stay synchronised", async ({ page }) => {
     await openCanvasEditor(page, fixture.clipId);
-    // Clean's weight is 700, and both controls open showing it.
-    await expect(weightSlider(page)).toHaveValue("700");
-    await expect(weightField(page)).toHaveValue("700");
+    // Clean sets no weight, so both controls open at the browser's own normal.
+    await expect(weightSlider(page)).toHaveValue("400");
+    await expect(weightField(page)).toHaveValue("400");
 
     await weightSlider(page).fill("300");
     await expect(weightField(page)).toHaveValue("300");
@@ -153,7 +159,9 @@ test.describe("Caption controls", () => {
     await expect(page.getByLabel("Highlight colour")).toHaveValue("#ccff00");
   });
 
-  test("all five text cases are offered, and a new clip starts in Uppercase", async ({ page }) => {
+  test("all five text cases are offered, and an unedited clip keeps its preset's", async ({
+    page,
+  }) => {
     await openCanvasEditor(page, fixture.clipId);
 
     const options = await page.getByLabel("Text case").locator("option").allTextContents();
@@ -164,17 +172,43 @@ test.describe("Caption controls", () => {
       "lowercase",
       "Original",
     ]);
-    await expect(page.getByLabel("Text case")).toHaveValue("uppercase");
-    // A new clip renders uppercase, which is what the picker is reporting.
-    await expect(captionWords(page).first()).toHaveText(/^PEACE$/);
+    // A clip nobody has edited renders exactly as it did before this slice: Clean's own case.
+    await expect(page.getByLabel("Text case")).toHaveValue("original");
+    await expect(page.getByTestId("caption-line")).toHaveText(/Peace stays with us/);
   });
 
   test("changing the case re-renders the words", async ({ page }) => {
     await openCanvasEditor(page, fixture.clipId);
+    await chooseHighlighter(page);
 
     await page.getByLabel("Text case").selectOption("lowercase");
 
     await expect(captionWords(page).first()).toHaveText(/^peace$/);
+  });
+
+  test("Clean renders the line whole and lights no word", async ({ page }) => {
+    await openCanvasEditor(page, fixture.clipId);
+
+    // Clean is the opening preset and does not animate, so there are no per-word runs at all.
+    await expect(captionWords(page)).toHaveCount(0);
+    await expect(page.getByTestId("caption-line")).toBeVisible();
+  });
+
+  test("an off-step typed weight lands on the step both controls use", async ({ page }) => {
+    await openCanvasEditor(page, fixture.clipId);
+
+    // The slider steps by 100. Chromium silently normalises 350 to 400, so a field that keeps
+    // 350 leaves the two controls showing different numbers and saves a third.
+    await weightField(page).fill("350");
+
+    await expect(weightField(page)).toHaveValue("400");
+    await expect(weightSlider(page)).toHaveValue("400");
+
+    await weightField(page).blur();
+    await waitForSaved(page);
+    await expect
+      .poll(async () => (await storedState(fixture.clipId))?.captions.overrides.weight)
+      .toBe(400);
   });
 });
 
@@ -196,6 +230,7 @@ test.describe("One highlighted word at a time", () => {
 
   test("exactly one word is highlighted at the opening frame", async ({ page }) => {
     await openCanvasEditor(page, fixture.clipId);
+    await chooseHighlighter(page);
 
     const active = page.locator("[data-testid='caption-word'][data-active='true']");
     await expect(captionWords(page)).toHaveCount(4);
@@ -205,6 +240,7 @@ test.describe("One highlighted word at a time", () => {
 
   test("the highlight moves to the word being spoken, one at a time", async ({ page }) => {
     await openCanvasEditor(page, fixture.clipId);
+    await chooseHighlighter(page);
     const active = page.locator("[data-testid='caption-word'][data-active='true']");
 
     // Clicking a transcript word seeks to its exact start, so the caption must light that word.
@@ -223,6 +259,7 @@ test.describe("One highlighted word at a time", () => {
 
   test("the caption line is laid out at rest spacing", async ({ page }) => {
     await openCanvasEditor(page, fixture.clipId);
+    await chooseHighlighter(page);
     const line = page.getByTestId("caption-line");
 
     const spacing = await line.evaluate((node) => {
@@ -239,6 +276,7 @@ test.describe("One highlighted word at a time", () => {
 
   test("highlighting a word does not move the line", async ({ page }) => {
     await openCanvasEditor(page, fixture.clipId);
+    await chooseHighlighter(page);
     const line = page.getByTestId("caption-line");
     const before = (await line.boundingBox())!;
 
@@ -253,6 +291,7 @@ test.describe("One highlighted word at a time", () => {
 
   test("the burn-in lights the same word the preview is showing", async ({ page }) => {
     await openCanvasEditor(page, fixture.clipId);
+    await chooseHighlighter(page);
     await page.getByRole("button", { name: "Highlighter" }).click();
     await waitForSaved(page);
     await page.getByRole("button", { name: "Go to start" }).click();

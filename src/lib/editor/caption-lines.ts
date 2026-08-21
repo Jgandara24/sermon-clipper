@@ -57,7 +57,27 @@ export function buildCaptionLines(
   }
   flush();
 
-  return lines;
+  return clipToOneLineAtATime(lines);
+}
+
+/**
+ * Makes the lines mutually exclusive in time.
+ *
+ * A line ends at its last word's end, and source word intervals overlap — so the last word of one
+ * line can still be running when the first word of the next has started. Left alone that puts two
+ * lines on screen at once, and the burn-in then highlights a word in each while the preview, which
+ * takes the first line matching the instant, shows one. Ending each line where the next begins
+ * removes the overlap for both readers at once, from one definition.
+ *
+ * The words are left exactly as they are. Only the line's own on-screen span moves, and only ever
+ * earlier — a line is never extended over its neighbour.
+ */
+function clipToOneLineAtATime(lines: CaptionLine[]): CaptionLine[] {
+  return lines.map((line, index) => {
+    const next = lines[index + 1];
+    if (!next || next.startMs >= line.endMs) return line;
+    return { ...line, endMs: Math.max(line.startMs, next.startMs) };
+  });
 }
 
 /** Applies manual text overrides (keyed by caption line id) without touching word timing. */

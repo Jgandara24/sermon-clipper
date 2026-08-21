@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_TEXT_CASE, TEXT_CASES } from "./text-case";
+import { TEXT_CASES } from "./text-case";
 
 // Editor state is one versioned JSON document per clip (guide §12). `version` is duplicated
 // inside the document (matching the guide's own example) for client convenience, but
@@ -80,13 +80,11 @@ export function buildDefaultEditorState(params: {
     source: { videoId: params.sourceVideoId, startMs: params.startMs, endMs: params.endMs },
     wordEdits: { deletedWordIds: [], restoredFillerIds: [], textOverrides: [] },
     extensions: [],
-    // Uppercase is the default for new content only. A stored document that carries no case
-    // keeps falling back to its preset's, so nothing already made changes appearance.
-    captions: {
-      presetId: "clean",
-      overrides: { textCase: DEFAULT_TEXT_CASE },
-      textOverrides: [],
-    },
+    // No case override. A version-0 clip is rendered by building this document at export time, so
+    // anything set here changes clips that already exist and were never edited — including ones a
+    // church has already approved. Uppercase belongs to the Highlighter preset, which carries it
+    // in its own style, and to any document a member has actually saved.
+    captions: { presetId: "clean", overrides: {}, textOverrides: [] },
     layout: { mode: "center", crop: { x: 0, y: 0, w: 1, h: 1 }, aspect: "9:16" },
     overlays: [],
     brandTemplateId: null,

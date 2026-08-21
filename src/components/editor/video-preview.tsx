@@ -31,6 +31,7 @@ import {
   SKIP_STEP_MS,
 } from "@/lib/editor/playback";
 import { resolveActiveWord } from "@/lib/editor/active-word";
+import { popScaleAt } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
@@ -119,8 +120,13 @@ export function VideoPreview({
     (line) => currentMs >= line.startMs && currentMs < line.endMs,
   );
   const captionPoint = style.box ?? defaultCaptionPoint(style.position);
-  // One resolver, shared with the burn-in: the word lit here is the word lit in the file.
-  const activeWord = currentLine ? resolveActiveWord(currentLine.words, currentMs) : null;
+  // One resolver, shared with the burn-in: the word lit here is the word lit in the file. Only a
+  // preset that highlights has an active word at all — Clean and the retired presets render the
+  // line whole, exactly as they always did.
+  const activeWord =
+    currentLine && style.activeWordHighlight
+      ? resolveActiveWord(currentLine.words, currentMs)
+      : null;
   // A retyped line no longer corresponds to its words, so there is nothing to highlight.
   const captionIsRetyped =
     currentLine !== undefined &&
@@ -433,11 +439,12 @@ export function VideoPreview({
                 }}
               >
                 {/*
-                  Rest spacing. The active word is coloured and nothing else about it changes — no
-                  reserved clearance, no scale — so a line with no active word is laid out exactly
-                  as a line with one. Making the highlight move its neighbours is Slice 8's work.
+                  Rest spacing: no width is reserved for the pop, so a line with nothing active is
+                  laid out exactly like one with an active word. The active word scales on the
+                  shared curve and its neighbours do not move, which is why it can overlap them
+                  slightly at large sizes until Slice 8 shifts them aside.
                 */}
-                {captionIsRetyped
+                {captionIsRetyped || !style.activeWordHighlight
                   ? applyTextCase(currentLine.text, style.textCase)
                   : currentLine.words.map((word, index) => (
                       <Fragment key={word.id}>
@@ -447,9 +454,17 @@ export function VideoPreview({
                         <span
                           data-testid="caption-word"
                           data-active={word.id === activeWord?.id ? "true" : "false"}
-                          style={{
-                            color: word.id === activeWord?.id ? style.highlightColor : undefined,
-                          }}
+                          style={
+                            word.id === activeWord?.id
+                              ? {
+                                  color: style.highlightColor,
+                                  // Same curve the burn-in evaluates, from the same module.
+                                  // `display` because a span cannot be scaled while inline.
+                                  display: "inline-block",
+                                  transform: `scale(${popScaleAt(currentMs - word.startMs)})`,
+                                }
+                              : undefined
+                          }
                         >
                           {applyTextCase(word.word, style.textCase)}
                         </span>

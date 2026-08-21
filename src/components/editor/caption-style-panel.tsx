@@ -6,6 +6,7 @@ import {
   getCaptionPreset,
   SELECTABLE_CAPTION_PRESETS,
 } from "@/lib/editor/caption-presets";
+import { FONT_OPTIONS } from "@/lib/editor/caption-fonts";
 import {
   clampToRange,
   displayedValue,
@@ -20,15 +21,11 @@ type Captions = EditorState["captions"];
 
 const SIZE_RANGE: NumericRange = { min: 16, max: 160, step: 1 };
 const WEIGHT_RANGE: NumericRange = { min: 100, max: 900, step: 100 };
+/** What the Weight control shows for a preset that sets none: the browser's own normal. */
+const DEFAULT_DISPLAY_WEIGHT = 400;
 const STROKE_RANGE: NumericRange = { min: 0, max: 20, step: 1 };
 
 /** Faces that exist on the render host as well as in the browser, so the two agree. */
-const FONT_OPTIONS = [
-  { value: "Inter, system-ui, sans-serif", label: "Inter" },
-  { value: "Georgia, 'Times New Roman', serif", label: "Georgia" },
-  { value: "'Arial Black', Arial, sans-serif", label: "Arial Black" },
-  { value: "'Courier New', monospace", label: "Courier New" },
-];
 
 export function CaptionStylePanel({
   captions,
@@ -137,7 +134,7 @@ export function CaptionStylePanel({
           label="Weight"
           range={WEIGHT_RANGE}
           override={captions.overrides.weight}
-          presetValue={preset.weight}
+          presetValue={preset.weight ?? DEFAULT_DISPLAY_WEIGHT}
           onChange={(value, mode) => setOverrides({ weight: value }, mode)}
           onCommit={onCommit}
         />
