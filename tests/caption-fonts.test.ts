@@ -47,8 +47,19 @@ describe("bundled caption fonts", () => {
     const dockerfile = read("Dockerfile.worker");
     expect(dockerfile, "the bundled fonts are not copied in").toMatch(/COPY .*fonts/);
     expect(dockerfile, "the font gate is gone").toMatch(/fc-match|fc-list/);
-    // The image must not also pull a distribution copy, or the two could drift.
-    expect(dockerfile).not.toContain("fonts-dejavu-core");
+
+    // No font package is installed: two copies of a family means fontconfig chooses between them,
+    // and the burn-in would draw a file the browser never loaded.
+    const installed = dockerfile
+      .split("\n")
+      .filter((line) => line.includes("apt-get install"))
+      .join(" ");
+    expect(installed, "a distribution font package is installed").not.toMatch(/fonts-/);
+
+    // ffmpeg pulls one in transitively regardless, so it has to be removed explicitly.
+    expect(dockerfile, "the transitive copy is not removed").toContain(
+      "rm -rf /usr/share/fonts/truetype/dejavu",
+    );
   });
 
   it("offers only bundled families, plus an honest preset-default entry", () => {

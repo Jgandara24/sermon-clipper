@@ -40,10 +40,16 @@ FROM node:24-bookworm-slim AS runtime
 # fontconfig is named rather than inherited from ffmpeg's dependency tree, because the font gate
 # below depends on it. No distribution font package is installed on purpose: the caption faces are
 # copied in from the repository so the browser and the burn-in draw with the same files.
+#
+# ffmpeg pulls fonts-dejavu-core in transitively, which leaves a second copy of the same families
+# on the system. Two copies means fontconfig chooses between them, and it chose that one — the
+# burn-in would have drawn a file the browser never loaded, which is exactly the defect this is
+# meant to prevent. The distribution copy is removed so the bundled one is the only one left.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg ca-certificates curl fontconfig \
     && rm -rf /var/lib/apt/lists/* \
-    && ffmpeg -filters | grep -q subtitles
+    && ffmpeg -filters | grep -q subtitles \
+    && rm -rf /usr/share/fonts/truetype/dejavu
 
 # The caption faces come from the repository, not from a distribution package, so the browser and
 # the burn-in draw with the same files. libass never fails on a missing face — it substitutes
