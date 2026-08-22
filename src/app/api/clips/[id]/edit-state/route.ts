@@ -113,7 +113,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         data: {
           clipId: id,
           version: nextVersion,
-          editorState: { ...parsed.data.state, version: nextVersion } as Prisma.InputJsonValue,
+          // `systemInitial` marks the document ANALYZE writes, and only that one. Stripping it
+          // here means a client cannot make a person's edit look like the machine's and slip past
+          // the transcription fallback hold.
+          editorState: {
+            ...parsed.data.state,
+            systemInitial: undefined,
+            version: nextVersion,
+          } as Prisma.InputJsonValue,
           isAutosave: parsed.data.isAutosave ?? false,
           savedBy: auth.user.id,
         },

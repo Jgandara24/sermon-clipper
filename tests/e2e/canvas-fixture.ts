@@ -21,6 +21,16 @@ export const CLIP_END_MS = 4000;
 
 export type CanvasFixture = { userId: string; workspaceId: string; clipId: string };
 
+export type FixtureWord = { word: string; startMs: number; endMs: number };
+
+/** The words the canvas fixture seeds unless a spec supplies its own. */
+export const CANVAS_FIXTURE_WORDS: FixtureWord[] = [
+  { word: "Peace", startMs: 0, endMs: 600 },
+  { word: "stays", startMs: 600, endMs: 1200 },
+  { word: "with", startMs: 1200, endMs: 1800 },
+  { word: "us", startMs: 1800, endMs: 2400 },
+];
+
 function uniqueKey(label: string) {
   return `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -42,7 +52,10 @@ async function createTinySourceVideo(outputPath: string) {
  */
 export async function createCanvasFixture(
   storage: { absolutePath: (key: string) => string; size: (key: string) => Promise<number> },
+  options: { words?: FixtureWord[] } = {},
 ): Promise<CanvasFixture> {
+  const words = options.words ?? CANVAS_FIXTURE_WORDS;
+  const fullText = words.map((word) => word.word).join(" ");
   const user = await prisma.user.create({
     data: { email: `${uniqueKey("canvas")}@example.com`, authProvider: AuthProvider.DEV },
   });
@@ -89,7 +102,7 @@ export async function createCanvasFixture(
       sourceVideoId: sourceVideo.id,
       language: "en",
       provider: "e2e-fixture",
-      fullText: "Peace stays with us.",
+      fullText,
     },
   });
   await prisma.transcriptSegment.create({
@@ -98,13 +111,15 @@ export async function createCanvasFixture(
       idx: 0,
       startMs: CLIP_START_MS,
       endMs: CLIP_END_MS,
-      text: "Peace stays with us.",
-      words: [
-        { word: "Peace", startMs: 0, endMs: 600, confidence: 0.99, isFiller: false, deleted: false },
-        { word: "stays", startMs: 600, endMs: 1200, confidence: 0.99, isFiller: false, deleted: false },
-        { word: "with", startMs: 1200, endMs: 1800, confidence: 0.99, isFiller: false, deleted: false },
-        { word: "us", startMs: 1800, endMs: 2400, confidence: 0.99, isFiller: false, deleted: false },
-      ],
+      text: fullText,
+      words: words.map((word) => ({
+        word: word.word,
+        startMs: word.startMs,
+        endMs: word.endMs,
+        confidence: 0.99,
+        isFiller: false,
+        deleted: false,
+      })),
     },
   });
 

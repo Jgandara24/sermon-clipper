@@ -2098,3 +2098,249 @@ per run and never leaves the process tree, so a media URL captured from one run 
 the next.
 
 Status: Active.
+
+## 2026-08-21 - One Resolver Decides The Highlighted Word, And Retired Presets Keep Rendering
+
+Decision: exactly one word is highlighted at any timestamp, and the same function decides which one
+in the browser preview and in the burned-in render. `src/lib/editor/active-word.ts` is that
+function. The preview asks it per frame; the export asks it once per stretch, through
+`highlightSlices`, and emits one subtitle event per stretch with the active word coloured.
+
+Source word intervals overlap — forced alignment and ASR both emit spans that run into each other —
+so "which word is active" needs a total rule, not a `find`. Among the words covering an instant,
+the one that started most recently wins; ties break on the shorter interval and then on position.
+Those tie-breaks are arbitrary but fixed. What matters is that the answer is single and stable: a
+caption that lights one word on screen and a different word in the file is worse than one that
+lights neither.
+
+**The picker offers Clean and Highlighter. Nothing else is removed.** `bold-serif`, `karaoke` and
+`quiet` keep their exact styles and still resolve by id, so a clip a church already approved
+renders as it always did. Retiring a preset from the picker is not a reason to change delivered
+work. Highlighter is new: Neon Yellow (`#CCFF00`) on the bottom safe band, uppercase, weight 800.
+
+**Uppercase is the default for new content only.** It lands in `buildDefaultEditorState`, not in a
+preset, so a stored document that carries no case still falls back to its preset's case and does
+not change. The one edge this leaves: a clip created before today, never edited, and exported for
+the first time after today renders uppercase, because a version-0 export builds the default state
+at render time. That clip has no saved appearance to preserve, and the alternative — putting the
+default on the Clean preset — would change every existing Clean clip instead.
+
+X and Y position fields are gone; the canvas from Slice 6 is the position control. Font moves into
+the main Captions section. Every numeric control is a slider paired with a number field, both
+writing through one handler so they cannot drift; `src/lib/editor/numeric-field.ts` owns what a
+typed value means, including that an emptied field is "no override" rather than zero.
+
+Words are laid out at rest spacing. The highlight is a colour change and nothing else — no
+reserved clearance, no scale, no shift — so a line with no active word is laid out exactly like a
+line with one. Moving a word's neighbours is Slice 8's work and is deliberately absent here; the
+export test asserts that by refusing every ASS animation and scaling tag.
+
+Tradeoff: per-word highlighting multiplies subtitle events — one per stretch instead of one per
+line — which makes the ASS file larger and slightly slows libass. A line the member has retyped
+no longer corresponds to its words, so it renders whole and unhighlighted rather than guessing an
+alignment. Font weight has no direct equivalent in ASS, which knows only bold or not, so 600 and
+above renders bold and everything below renders regular; the browser shows the true weight.
+
+Status: Active. Implements Slice 7 of `docs/EDITOR_DELTA_PLAN_2026-08-18.md`.
+
+## 2026-08-21 - Highlighting And Weight Belong To Highlighter, Not To Every Clip
+
+Decision: per-word colour, the pop, and a heavy default weight are properties of the Highlighter
+preset. `activeWordHighlight` on the resolved caption style decides them, and it is true for
+Highlighter alone. `weight` is optional: every preset that predates this slice leaves it unset,
+which renders as an unset browser weight and ASS `Bold=0` — exactly what `origin/main` produced.
+An explicit weight in a saved document still wins, for any preset.
+
+Why: the first version of this slice gave `clean`, `bold-serif` and `karaoke` a weight of 700 and
+`quiet` 500, and applied the active-word colour to every preset. Both change clips that already
+exist. 700 crosses the `>= 600` threshold that maps to ASS bold, so every Clean clip a church had
+already approved would have re-rendered bold, and every one of them would have gained a coloured
+word the member never asked for. Hiding a preset from the picker was already understood not to
+license changing its output; adding a property to it is the same thing by another route.
+
+The supersession is narrow and worth stating plainly: the entry above this one says the highlight
+is "a colour change and nothing else — no reserved clearance, no scale, no shift". The colour and
+the scale are both here now, on the active Highlighter word. What that entry was right about, and
+what still holds, is that **no width is reserved and no neighbour moves**. The plan removes the
+permanent maximum-pop clearance in this slice and gives the neighbour micro-shift to Slice 8; it
+does not remove the pop. Until Slice 8 lands, an active word can overlap its neighbours slightly
+at large sizes, which the plan calls out as a deliberate short-lived state.
+
+`src/lib/editor/caption-animation.ts` holds the curve, and both renderers evaluate it: the preview
+per frame, the burn-in as libass `\t` transforms on the active word's run only. Its numbers — rise
+90 ms to 1.18, settle 120 ms to 1.06, then flat — are a starting point for the manual visual pass,
+not a measured result, and they are in one constant so that pass can move them once.
+
+Caption lines are now mutually exclusive in time. A line ended at its last word's end, and source
+word intervals overlap, so the last word of one line could still be running when the first word of
+the next had started: two lines on screen, the burn-in lighting a word in each while the preview,
+which takes the first line matching the instant, showed one. Each line now ends where the next
+begins. The words are untouched; only the line's own span moves, and only ever earlier.
+
+Uppercase is no longer a default for new documents. A version-0 clip is rendered by building the
+default document at export time, so anything set there reaches clips that already exist and were
+never edited. The previous entry accepted that as a known exception; it is not one we are keeping.
+Uppercase now arrives by choosing Highlighter, which carries it in its own style. The cost is
+explicit: a genuinely new clip no longer starts in Uppercase, because at version 0 nothing
+distinguishes a new clip from an old one.
+
+The font picker offers only what the render host has. `fc-list` inside the built worker image
+reports three families — DejaVu Sans, DejaVu Serif, DejaVu Sans Mono — and none of Inter, Georgia,
+Arial Black or Courier New. libass substitutes silently, so a member choosing Georgia was getting
+something else in the file they published, with nothing to tell them. `Dockerfile.worker` now
+installs those faces by name and fails the build if any stops resolving. Preset font stacks are
+deliberately left alone: changing them would change existing clips, which is the defect this entry
+is about.
+
+Typed numbers snap to their control's step. A range input normalises what it is given, so typing
+350 into a 100-900 field stepping by 100 left the number field on 350 while Chromium put the
+slider on 400 and the document saved a third value.
+
+Tradeoff: the pop puts scale tags on every highlighted event, which grows the ASS file and gives
+libass more to interpolate. The font list is shorter and plainer than the one it replaces, and its
+faces are not the ones a designer would pick — but they are the ones that survive the render.
+
+Status: Active. Corrects the entry above it; supersedes its "no scale" and default-Uppercase
+statements only.
+
+## 2026-08-21 - What Slice 7 Actually Settled, After Three Rounds Of Correction
+
+Decision: this entry supersedes specific statements in the two entries above it. Those stay as
+written — the record of what was believed when it was believed is worth more than a tidy file —
+but where they conflict with this, this is what the code does.
+
+**Uppercase for new content lives in ANALYZE, not in the default document.** The entry above says
+uppercase is no longer a default for new documents and arrives only by choosing Highlighter. That
+was the safe half of the answer, and it gave up the requirement. `buildDefaultEditorState` still
+carries no case, because it is also the fallback for a clip that predates the default and must keep
+rendering what it always rendered. `buildInitialEditorState` carries it instead, and ANALYZE — the
+only production path that creates a generated clip — writes it as the clip's first `ClipEdit` at
+`INITIAL_EDIT_VERSION`, unsigned. New clips get Uppercase; a clip with no document is untouched;
+no date cutoff decides anything.
+
+That had a consequence nobody wanted. `settleTranscriptionFallbackHold` counts a `ClipEdit` as
+human work, so every rebuilt clip arrived already looking edited and a healthy re-transcription
+could never close the hold it opened. The count now excludes an unsigned row at the initial
+version, which is exactly the shape the machine writes and never the shape a person's save takes.
+The stored document also stamps the same version as its row; it had been writing 0 inside a row
+numbered 1.
+
+**The pop is timed by the activation, and it rises, settles and returns.** The entry above
+describes a single transform that rises to a peak and holds, and says the settle was deferred.
+Both are superseded. Holding at 1.18 until the highlight moved was not a pop — it ended in a snap.
+
+Two things make the curve one curve rather than two that resemble each other. Word intervals nest:
+"alpha" can run 0–1000ms with "beta" inside it at 200–400ms, so alpha is active, then beta, then
+alpha again. Timed from alpha's own start, that second activation is already 400ms old; timed from
+the event drawing it, it has just begun. The activation is the clock — both renderers measure from
+the start of the `HighlightSlice`. And because two `\t` over one property have no agreed meaning
+across renderers, each phase is its own Dialogue event carrying a single transform from a starting
+value it states, rather than several transforms layered in one event.
+
+A short activation cannot fit every phase. The return is reserved first out of whatever time
+exists, because a word cut off at full size is the snap this was meant to remove; rise and settle
+take what is left, and the return starts from wherever the curve actually reached.
+
+**A retyped caption keeps its timings when only the words changed.** The entry above says the
+line's span is divided evenly among the tokens as typed, full stop, and calls losing the source
+timing the honest cost. It is the honest cost of a rewrite, not of a typo. The same number of
+tokens is a correction: each token keeps the timing of the word it replaces. A changed count is a
+rewrite, where no correspondence survives, and keeps the even division.
+
+**Mutually exclusive line spans are Highlighter's alone.** Stated in the entry above and unchanged,
+recorded here because it is easy to lose: `buildCaptionLines` produces the spans it always
+produced, and `exclusiveLineSpans` is applied by the burn-in and the preview only when the resolved
+style highlights. Clipping every line shortened Clean's captions — measured at 2.40s against
+2.60s on an overlapping transcript — and a clip a church approved would have burned in with
+different timings.
+
+**The bundled faces are the only copy.** The entry above says the faces are bundled and the image
+build gates on fontconfig resolving them. Half of that shipped broken and the gate caught it:
+ffmpeg pulls `fonts-dejavu-core` in transitively, so the image carried two copies of every family
+and fontconfig chose the distribution one. The burn-in would have drawn a file the browser never
+loaded — the defect bundling exists to prevent, hiding inside the fix for it. The distribution
+directory is removed at build time, and the gate asserts each family resolves to a file under
+`/usr/share/fonts/truetype/sermon-clipper`, not merely that it resolves.
+
+**Every caption word is an inline block, not only the active one.** This landed inside a commit
+whose message is about waiting for fonts in a test, so it is recorded here as the product change it
+is. A span that changes `display` changes the line's layout, so scaling only the active word moved
+the line by 23.67px — the pop has to be a transform, which does not affect layout, over a display
+that never changes. Rest spacing is now identical whether or not anything is active, which is what
+the slice promised and what the guarding test measures.
+
+Tradeoff: the phase split multiplies subtitle events again — one per phase of each activation
+rather than one per activation — which grows the ASS file and gives libass more to interpolate.
+Bundling the faces also puts about 2.8MB of font files in the repository and a webfont load in
+front of the first caption paint; anything measuring a caption has to wait for
+`document.fonts.ready` or it measures the fallback's metrics, which cost one real defect and one
+misdiagnosis before it was written down.
+
+Status: Active. Supersedes the two entries above it on uppercase defaults, retyped-caption timing,
+and the pop curve; confirms them on exclusive line spans and bundled fonts.
+
+## 2026-08-21 - Provenance Belongs In The Document, And Parity Belongs At The File's Resolution
+
+Decision: two narrow corrections to the entry above it. Everything else there stands.
+
+**A system-created document says so in the document.** That entry says the fallback hold excludes
+"an unsigned row at the initial version, which is exactly the shape the machine writes and never
+the shape a person's save takes". The second half was wrong. `ClipEdit.savedBy` is ON DELETE SET
+NULL, so a person's first edit on a clip that predates the initial document becomes unsigned at
+version 1 the moment their account is removed — indistinguishable from the machine's row, and their
+work would have stopped counting exactly when they left.
+
+The document carries `systemInitial: true`, written only by `buildInitialEditorState` and stripped
+by the save route so a client cannot forge it onto a person's edit. Deleting a user does not reach
+inside a stored document, so the distinction survives what `savedBy` does not.
+
+The count also moved out of SQL. A JSON filter for "not the machine's document" is a NOT over a
+comparison that is NULL for every row without the key, and in SQL that excludes the rows it was
+meant to find — every human edit. The rows are fetched and filtered in code, which says what is
+meant and is what the tests actually exercise.
+
+**Parity holds at the resolution the file has, not at the resolution the browser has.** An ASS
+timestamp is centiseconds and an ASS scale is whole percent. The preview has neither limit, so a
+curve agreed "exactly" still came apart: an activation running 3ms to 203ms is written as 0ms to
+200ms, and at 201ms the browser was still drawing one word while the file had moved to the next.
+Partial phases had the same problem in the other axis — a rise that only half happens reaches
+1.0329 in the browser and is written as 103.
+
+So the quantisation happens once, before either renderer draws: `quantisePopTime` to the
+centisecond, `quantisePopScale` to whole percent, and `quantisedHighlightSlices` as the single set
+of stretches both renderers select from. Within a phase both then evaluate the same endpoints over
+the same span with the same exponent, so they agree at every millisecond rather than nearly.
+
+Choosing whole percent rather than decimal `\fscx` is deliberate: decimal scale syntax would have
+needed proving against the worker's own libass build before it could be relied on, and rounding
+both sides to what every renderer certainly accepts needs no such proof.
+
+Tradeoff: an activation shorter than a centisecond disappears from the highlight rather than
+flickering for a frame, and every pop boundary is now up to 5ms from where the transcript put it.
+Both are below what anyone can see, and both are the price of the preview and the file agreeing
+about which word is lit.
+
+Status: Active. Corrects the entry above it on how a system document is recognised and on what
+"the same curve" means.
+
+## 2026-08-21 - Human Work Is Counted In The Database, Not Loaded Into Code
+
+Decision: one narrow correction to the entry above it. Everything else there stands.
+
+That entry says the fallback hold's rows "are fetched and filtered in code". That is not how it
+ships. Loading every stored editor state since the hold opened transfers documents the count never
+needs — autosaves and overlays make that unbounded — and the last Slice 7 commit moved the count
+back into the database without the negative JSON filter that made the first attempt wrong.
+
+The method, as `settleTranscriptionFallbackHold` now does it:
+
+- Count every `ClipEdit` in the project since the hold opened.
+- Count the machine's documents with a positive JSON comparison:
+  `editorState.systemInitial` equals `true`. Asked positively, a row without the key is simply
+  not a match, which is the answer wanted; asked negatively it was NULL, which excluded exactly
+  the human edits.
+- Human edits are the first count minus the second.
+- No `editorState` document is transferred.
+
+Status: Active. Supersedes the entry above it on one statement only: where the fallback hold's
+human-edit count happens.

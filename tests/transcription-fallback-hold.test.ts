@@ -127,6 +127,8 @@ describe("settleTranscriptionFallbackHold", () => {
   function client(options: {
     hold?: { id: string; createdAt: Date } | null;
     edits?: number;
+    /** How many of `edits` are the machine's own initial documents. */
+    systemEdits?: number;
     approvals?: number;
     exports?: number;
   }) {
@@ -141,12 +143,68 @@ describe("settleTranscriptionFallbackHold", () => {
             return {};
           }),
         },
-        clipEdit: { count: vi.fn().mockResolvedValue(options.edits ?? 0) },
+        // Two counts: every edit, then the machine's own initial documents among them, asked as a
+        // positive JSON comparison. Human work is the difference.
+        clipEdit: {
+          count: vi
+            .fn()
+            .mockResolvedValueOnce(options.edits ?? 0)
+            .mockResolvedValueOnce(options.systemEdits ?? 0),
+        },
         clipApproval: { count: vi.fn().mockResolvedValue(options.approvals ?? 0) },
         exportJob: { count: vi.fn().mockResolvedValue(options.exports ?? 0) },
       },
     };
   }
+
+  describe("system documents are subtracted, not loaded", () => {
+    it("resolves when every edit since the hold is the machine's own document", async () => {
+      const { tx, updates } = client({ edits: 3, systemEdits: 3 });
+
+      const outcome = await settleTranscriptionFallbackHold(tx as never, {
+        projectId: "proj-1",
+        transcriptProvider: "elevenlabs_scribe_v2",
+        primaryProvider: "scribe",
+      });
+
+      expect(outcome).toEqual({ settled: "resolved" });
+      expect((updates[0] as { data: { state?: string } } | undefined)?.data.state).toBe("RESOLVED");
+    });
+
+    it("keeps the hold open for the human edits among them", async () => {
+      const { tx } = client({ edits: 4, systemEdits: 3 });
+
+      expect(
+        await settleTranscriptionFallbackHold(tx as never, {
+          projectId: "proj-1",
+          transcriptProvider: "elevenlabs_scribe_v2",
+          primaryProvider: "scribe",
+        }),
+      ).toEqual({ settled: "kept_open", reason: "human_work_needs_reconciliation" });
+    });
+
+    it("asks the database rather than loading the documents", async () => {
+      const { tx } = client({ edits: 2, systemEdits: 2 });
+
+      await settleTranscriptionFallbackHold(tx as never, {
+        projectId: "proj-1",
+        transcriptProvider: "elevenlabs_scribe_v2",
+        primaryProvider: "scribe",
+      });
+
+      // A positive comparison, so it cannot fall into the NOT-over-NULL trap, and a count, so the
+      // editor documents never cross the wire.
+      expect(tx.clipEdit.count).toHaveBeenCalledTimes(2);
+      expect(tx.clipEdit.count).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            editorState: { path: ["systemInitial"], equals: true },
+          }),
+        }),
+      );
+      expect((tx.clipEdit as { findMany?: unknown }).findMany).toBeUndefined();
+    });
+  });
 
   it("does nothing when the project carries no open hold", async () => {
     const { tx, updates } = client({ hold: null });

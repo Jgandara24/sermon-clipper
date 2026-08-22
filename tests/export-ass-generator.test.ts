@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { generateAssSubtitles } from "@/lib/export/ass-generator";
 import { getCaptionPreset } from "@/lib/editor/caption-presets";
+import { resolveActiveWord } from "@/lib/editor/active-word";
+import type { CaptionWord } from "@/lib/editor/caption-lines";
+
+/** The colour override tag libass expects: &H00BBGGRR, byte-reversed from the stored hex. */
+function assColourTag(hex: string): string {
+  const clean = hex.replace("#", "");
+  const [r, g, b] = [clean.slice(0, 2), clean.slice(2, 4), clean.slice(4, 6)];
+  return `{\\c&H00${`${b}${g}${r}`.toUpperCase()}`;
+}
 
 const LINES = [
   { startMs: 0, endMs: 1200, text: "peace is not the absence" },
@@ -144,5 +153,171 @@ describe("generateAssSubtitles", () => {
       const events = ass.split("\n").filter((line) => line.startsWith("Dialogue:"));
       expect(events).toHaveLength(LINES.length);
     });
+  });
+});
+
+describe("per-word highlighting", () => {
+  const WORDS: CaptionWord[] = [
+    { id: "w0", word: "peace", startMs: 0, endMs: 400 },
+    { id: "w1", word: "stays", startMs: 400, endMs: 900 },
+    { id: "w2", word: "here", startMs: 900, endMs: 1200 },
+  ];
+  const LINE = { id: "line-0", startMs: 0, endMs: 1200, text: "peace stays here", words: WORDS };
+  const style = getCaptionPreset("highlighter").style;
+  // ASS colours are &H00BBGGRR — the reverse of the hex the editor stores. Derived rather than
+  // written out, so this states "the highlight colour" and not one particular spelling of it.
+  const HIGHLIGHT_TAG = assColourTag(style.highlightColor);
+  const TEXT_TAG = assColourTag(style.textColor);
+
+  function dialogue(ass: string) {
+    return ass.split("\n").filter((line) => line.startsWith("Dialogue: 0"));
+  }
+
+  it("emits events per highlight stretch, not one per line", () => {
+    // Each stretch is drawn as a run of events, one per phase of the pop, because libass gives no
+    // agreed meaning to two transforms over one property. Three words, so three stretches.
+    const events = dialogue(generateAssSubtitles([LINE], style, 1080, 1920));
+    const highlighted = new Set(
+      events.map((event) => new RegExp(`${HIGHLIGHT_TAG}}([A-Z]+)`).exec(event)?.[1]),
+    );
+    expect(highlighted).toEqual(new Set(["PEACE", "STAYS", "HERE"]));
+    expect(events.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("colours exactly one word in each event", () => {
+    for (const event of dialogue(generateAssSubtitles([LINE], style, 1080, 1920))) {
+      // One switch to the highlight colour per event means one highlighted word.
+      const highlights = event.split(HIGHLIGHT_TAG).length - 1;
+      expect(highlights).toBe(1);
+    }
+  });
+
+  it("carries every word of the line in every event", () => {
+    for (const event of dialogue(generateAssSubtitles([LINE], style, 1080, 1920))) {
+      for (const word of ["PEACE", "STAYS", "HERE"]) {
+        expect(event).toContain(word);
+      }
+    }
+  });
+
+  it("highlights the word the preview would highlight at the same instant", () => {
+    const events = dialogue(generateAssSubtitles([LINE], style, 1080, 1920));
+    const assMs = (stamp: string) => {
+      const [h, m, rest] = stamp.split(":");
+      const [sec, cs] = rest.split(".");
+      return ((Number(h) * 60 + Number(m)) * 60 + Number(sec)) * 1000 + Number(cs) * 10;
+    };
+    for (const ms of [0, 200, 500, 700, 1000, 1150]) {
+      const event = events.find((e) => {
+        const parts = e.split(",");
+        return ms >= assMs(parts[1]) && ms < assMs(parts[2]);
+      })!;
+      // The highlighted word is the one immediately after the colour switch.
+      const highlighted = new RegExp(`${HIGHLIGHT_TAG}}([A-Z]+)`).exec(event)![1];
+      expect(highlighted, `at ${ms}ms`).toBe(resolveActiveWord(WORDS, ms)!.word.toUpperCase());
+    }
+  });
+
+  it("restores the text colour after the highlighted word", () => {
+    const event = dialogue(generateAssSubtitles([LINE], style, 1080, 1920))[0];
+    expect(event).toContain(TEXT_TAG);
+  });
+
+  it("applies the caption's case to each word, not just to the line", () => {
+    const ass = generateAssSubtitles([LINE], style, 1080, 1920);
+    expect(ass).toContain("PEACE");
+    expect(ass).not.toContain("peace");
+  });
+
+  it("renders a line with no words as one plain event", () => {
+    const plain = { startMs: 0, endMs: 1200, text: "peace stays here" };
+    const events = dialogue(generateAssSubtitles([plain], style, 1080, 1920));
+    expect(events).toHaveLength(1);
+    expect(events[0]).not.toContain(HIGHLIGHT_TAG);
+  });
+
+  it("times a retyped line by its own tokens, rather than going dead", () => {
+    // Its words no longer spell the text, so there is nothing to match a highlight to. The line's
+    // span is divided among the tokens as typed instead — one lit token throughout, not none.
+    const retyped = { ...LINE, text: "something else entirely" };
+    const events = dialogue(generateAssSubtitles([retyped], style, 1080, 1920));
+    const highlighted = new Set(
+      events.map((event) => new RegExp(`${HIGHLIGHT_TAG}}([A-Z]+)`).exec(event)?.[1]),
+    );
+    expect(highlighted).toEqual(new Set(["SOMETHING", "ELSE", "ENTIRELY"]));
+    for (const event of events) {
+      // Every token is on screen in every event; the tags in between are what lights one of them.
+      for (const token of ["SOMETHING", "ELSE", "ENTIRELY"]) {
+        expect(event).toContain(token);
+      }
+      expect(event.split("\\c&H").length - 1, "an event lights no token").toBeGreaterThan(0);
+    }
+  });
+
+  it("covers the line end to end", () => {
+    const events = dialogue(generateAssSubtitles([LINE], style, 1080, 1920));
+    expect(events[0]).toContain("0:00:00.00");
+    expect(events[events.length - 1]).toContain("0:00:01.20");
+  });
+});
+
+describe("rest spacing", () => {
+  it("reserves no permanent room and moves no neighbour, while the active word pops", () => {
+    const WORDS: CaptionWord[] = [
+      { id: "w0", word: "peace", startMs: 0, endMs: 400 },
+      { id: "w1", word: "stays", startMs: 400, endMs: 900 },
+    ];
+    const ass = generateAssSubtitles(
+      [{ id: "l", startMs: 0, endMs: 900, text: "peace stays", words: WORDS }],
+      getCaptionPreset("highlighter").style,
+      1080,
+      1920,
+    );
+    // Slice 8 owns the neighbour micro-shift: `\fsp` would widen the line permanently and
+    // `\move` would slide a word. Slice 7 owns the pop itself, so the scale tags belong here.
+    for (const tag of ["\\fsp", "\\move("]) {
+      expect(ass, `${tag} is Slice 8's, not Slice 7's`).not.toContain(tag);
+    }
+    expect(ass).toContain("\\fscx");
+    expect(ass).toContain("\\t(");
+
+    // Exactly one word pops per event, and only the one that is active.
+    for (const event of ass.split("\n").filter((l) => l.startsWith("Dialogue: 0"))) {
+      expect(event.split("\\t(0,").length - 1).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("lays out a line with no active word exactly like one with an active word", () => {
+    const WORDS: CaptionWord[] = [
+      { id: "w0", word: "peace", startMs: 0, endMs: 200 },
+      { id: "w1", word: "stays", startMs: 900, endMs: 1100 },
+    ];
+    const events = generateAssSubtitles(
+      [{ id: "l", startMs: 0, endMs: 1100, text: "peace stays", words: WORDS }],
+      getCaptionPreset("highlighter").style,
+      1080,
+      1920,
+    )
+      .split("\n")
+      .filter((line) => line.startsWith("Dialogue: 0"));
+
+    // The middle stretch has nothing active; the words it draws are the same words, unspaced.
+    const highlightTag = assColourTag(getCaptionPreset("highlighter").style.highlightColor);
+    const withoutHighlight = events.find((event) => !event.includes(highlightTag))!;
+    expect(withoutHighlight).toContain("PEACE STAYS");
+  });
+});
+
+describe("weight", () => {
+  it("renders a heavy caption bold", () => {
+    const ass = generateAssSubtitles(LINES, { ...getCaptionPreset("clean").style, weight: 800 }, 1080, 1920);
+    const styleLine = ass.split("\n").find((line) => line.startsWith("Style: Default"))!;
+    expect(styleLine.split(",")[7]).toBe("-1");
+  });
+
+  it("renders a light caption unbold", () => {
+    const ass = generateAssSubtitles(LINES, { ...getCaptionPreset("clean").style, weight: 300 }, 1080, 1920);
+    const styleLine = ass.split("\n").find((line) => line.startsWith("Style: Default"))!;
+    expect(styleLine.split(",")[7]).toBe("0");
   });
 });

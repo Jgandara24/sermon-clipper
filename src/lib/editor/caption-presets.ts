@@ -10,6 +10,18 @@ export type CaptionStyle = {
   /** A dragged position, if the member has set one. Null means `position` decides. */
   box?: { xPct: number; yPct: number } | null;
   alignment: "left" | "center" | "right";
+  /**
+   * CSS font weight, 100-900. Undefined means "whatever the browser and libass already did" —
+   * unset in the preview, Bold=0 in the burn-in. Every preset that predates Slice 7 leaves it
+   * undefined on purpose: giving them a number changes clips a church already approved.
+   */
+  weight?: number;
+  /**
+   * True only for a preset whose active word is coloured and popped. Everything that predates
+   * Slice 7 renders a line whole, exactly as it always has — per-word highlighting is a property
+   * of Highlighter, not a new behaviour applied to every clip already approved.
+   */
+  activeWordHighlight: boolean;
   textCase: TextCase;
   strokeColor: string;
   strokePx: number;
@@ -20,7 +32,16 @@ export type CaptionPreset = {
   id: string;
   name: string;
   style: CaptionStyle;
+  /**
+   * False for a preset that is no longer offered but must still render. A clip saved against one
+   * keeps its exact look — hiding a preset from the picker is not a reason to change what a church
+   * already approved.
+   */
+  selectable: boolean;
 };
+
+/** Neon Yellow: the Highlighter preset's active-word colour. */
+export const NEON_YELLOW = "#CCFF00";
 
 // Original names/styles per guide §13 — never reuse a competitor's preset names.
 export const CAPTION_PRESETS: CaptionPreset[] = [
@@ -39,7 +60,9 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       strokeColor: "#000000",
       strokePx: 2,
       shadow: true,
+      activeWordHighlight: false,
     },
+    selectable: true,
   },
   {
     id: "bold-serif",
@@ -56,7 +79,9 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       strokeColor: "#1A1A1A",
       strokePx: 3,
       shadow: true,
+      activeWordHighlight: false,
     },
+    selectable: false,
   },
   {
     id: "karaoke",
@@ -73,7 +98,9 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       strokeColor: "#000000",
       strokePx: 0,
       shadow: false,
+      activeWordHighlight: false,
     },
+    selectable: false,
   },
   {
     id: "quiet",
@@ -90,9 +117,40 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
       strokeColor: "#000000",
       strokePx: 1,
       shadow: false,
+      activeWordHighlight: false,
     },
+    selectable: false,
+  },
+  {
+    // Bottom Safe: sits in the bottom band every platform keeps clear of its own chrome, which is
+    // what the safe-zone guides draw.
+    id: "highlighter",
+    name: "Highlighter",
+    style: {
+      // Bundled, so the preview and the burn-in draw it with the same file. Highlighter is new,
+      // so choosing this changes nothing that already exists.
+      fontFamily: "'DejaVu Sans', sans-serif",
+      sizePx: 48,
+      textColor: "#FFFFFF",
+      highlightColor: NEON_YELLOW,
+      background: "none",
+      position: "bottom",
+      alignment: "center",
+      weight: 800,
+      textCase: "uppercase",
+      strokeColor: "#000000",
+      strokePx: 3,
+      shadow: true,
+      activeWordHighlight: true,
+    },
+    selectable: true,
   },
 ];
+
+/** What the picker offers. Everything else still resolves by id and still renders. */
+export const SELECTABLE_CAPTION_PRESETS: CaptionPreset[] = CAPTION_PRESETS.filter(
+  (preset) => preset.selectable,
+);
 
 export function getCaptionPreset(id: string): CaptionPreset {
   return CAPTION_PRESETS.find((preset) => preset.id === id) ?? CAPTION_PRESETS[0];

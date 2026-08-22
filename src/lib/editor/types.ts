@@ -1,10 +1,22 @@
 import { z } from "zod";
-import { TEXT_CASES } from "./text-case";
+import { DEFAULT_TEXT_CASE, TEXT_CASES } from "./text-case";
+
+/** The version ANALYZE stamps on a clip's first document. Nobody signed it. */
+export const INITIAL_EDIT_VERSION = 1;
 
 // Editor state is one versioned JSON document per clip (guide §12). `version` is duplicated
 // inside the document (matching the guide's own example) for client convenience, but
 // ClipEdit.version in the database is authoritative for optimistic concurrency.
 export const editorStateSchema = z.object({
+  /**
+   * Set only by ANALYZE, on the document it writes when it creates a clip. It is the durable way
+   * to tell the machine's row from a person's: `ClipEdit.savedBy` is ON DELETE SET NULL, so a real
+   * first edit becomes unsigned at version 1 the moment its author's account is removed — exactly
+   * the shape the machine's row has. A stored document is not touched by that deletion.
+   *
+   * The save route strips it, so a save made by a person can never carry it.
+   */
+  systemInitial: z.literal(true).optional(),
   version: z.number().int().min(0),
   source: z.object({
     videoId: z.string(),
@@ -44,6 +56,11 @@ export const editorStateSchema = z.object({
       // those clips keep rendering what they always rendered.
       uppercase: z.boolean().optional(),
       highlightColor: z.string().optional(),
+      fontFamily: z.string().min(1).max(200).optional(),
+      weight: z.number().int().min(100).max(900).optional(),
+      strokePx: z.number().min(0).max(20).optional(),
+      shadow: z.boolean().optional(),
+      background: z.enum(["none", "pill"]).optional(),
     }),
     textOverrides: z.array(z.object({ segmentId: z.string(), text: z.string() })),
   }),
@@ -75,6 +92,10 @@ export function buildDefaultEditorState(params: {
     source: { videoId: params.sourceVideoId, startMs: params.startMs, endMs: params.endMs },
     wordEdits: { deletedWordIds: [], restoredFillerIds: [], textOverrides: [] },
     extensions: [],
+    // No case override. A version-0 clip is rendered by building this document at export time, so
+    // anything set here changes clips that already exist and were never edited — including ones a
+    // church has already approved. Uppercase belongs to the Highlighter preset, which carries it
+    // in its own style, and to any document a member has actually saved.
     captions: { presetId: "clean", overrides: {}, textOverrides: [] },
     layout: { mode: "center", crop: { x: 0, y: 0, w: 1, h: 1 }, aspect: "9:16" },
     overlays: [],
@@ -95,4 +116,45 @@ export function wordId(segmentId: string, wordIndex: number): string {
  */
 export function isWordDeleted(state: EditorState, id: string): boolean {
   return state.wordEdits.deletedWordIds.includes(id);
+}
+
+/**
+ * The document a clip is born with.
+ *
+ * Uppercase is the default for new content, and this is the only place that says so. It is applied
+ * where a clip is created — not in `buildDefaultEditorState`, which is also the fallback for a clip
+ * that predates the default and has no document of its own. Those clips must keep rendering what
+ * they always rendered, and they do, because nothing writes this for them.
+ */
+export function buildInitialEditorState(params: {
+  sourceVideoId: string;
+  startMs: number;
+  endMs: number;
+}): EditorState {
+  const state = buildDefaultEditorState(params);
+  return {
+    ...state,
+    // The row this is stored in carries the same number. A document that disagrees with its own
+    // row is a document nobody can reason about — the save route already keeps the two in step,
+    // and so must the one the machine writes.
+    version: INITIAL_EDIT_VERSION,
+    // Durable provenance. See the schema field for why savedBy cannot carry this.
+    systemInitial: true,
+    captions: { ...state.captions, overrides: { ...state.captions.overrides, textCase: DEFAULT_TEXT_CASE } },
+  };
+}
+
+/**
+ * True for the document ANALYZE writes when it creates a clip.
+ *
+ * Read from the stored document rather than from `ClipEdit.savedBy`, which is ON DELETE SET NULL:
+ * a person's first edit becomes unsigned at version 1 the moment their account is removed, which
+ * is indistinguishable from the machine's row. A document is not touched by that deletion.
+ */
+export function isSystemInitialDocument(editorState: unknown): boolean {
+  return (
+    typeof editorState === "object" &&
+    editorState !== null &&
+    (editorState as { systemInitial?: unknown }).systemInitial === true
+  );
 }

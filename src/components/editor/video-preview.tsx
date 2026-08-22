@@ -9,7 +9,7 @@ import {
   RotateCcw,
   RotateCw,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   CANVAS_VIEWPORT_RESET,
   canvasTransform,
@@ -30,6 +30,8 @@ import {
   seekByMs,
   SKIP_STEP_MS,
 } from "@/lib/editor/playback";
+import { captionActivationAt } from "@/lib/editor/caption-timeline";
+import { popScaleAt } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
@@ -114,9 +116,15 @@ export function VideoPreview({
   );
 
   const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
-  const currentLine = captionLines.find(
-    (line) => currentMs >= line.startMs && currentMs < line.endMs,
-  );
+  // One decision about what is on screen, shared with the burn-in: which line, which words, and
+  // which stretch. Deciding it here as well as there is what let the file show a caption the
+  // browser did not, three milliseconds either side of a line.
+  const activation = captionActivationAt(captionLines, currentMs, style.activeWordHighlight);
+  const currentLine = activation?.line;
+  const currentWords = activation?.words ?? [];
+  const activeWordId = activation?.activeWordId ?? null;
+  // Nothing left to lay out word by word once the text is empty or the preset renders it whole.
+  const captionIsRetyped = currentWords.length === 0;
   const captionPoint = style.box ?? defaultCaptionPoint(style.position);
 
   useEffect(() => {
@@ -410,10 +418,12 @@ export function VideoPreview({
               }}
             >
               <span
+                data-testid="caption-line"
                 className="block whitespace-nowrap rounded px-2 py-1 text-center"
                 style={{
                   fontFamily: style.fontFamily,
                   fontSize: `${style.sizePx * 0.4}px`,
+                  fontWeight: style.weight,
                   color: style.textColor,
                   // No text-transform: the preview lays out the same string the burn-in does, so
                   // the two cannot disagree — and CSS cannot express Sentence case or Title Case.
@@ -423,7 +433,45 @@ export function VideoPreview({
                     style.strokePx > 0 ? `${style.strokePx * 0.3}px ${style.strokeColor}` : undefined,
                 }}
               >
-                {applyTextCase(currentLine.text, style.textCase)}
+                {/*
+                  Rest spacing: no width is reserved for the pop, so a line with nothing active is
+                  laid out exactly like one with an active word. The active word scales on the
+                  shared curve and its neighbours do not move, which is why it can overlap them
+                  slightly at large sizes until Slice 8 shifts them aside.
+                */}
+                {captionIsRetyped || !style.activeWordHighlight
+                  ? applyTextCase(currentLine.text, style.textCase)
+                  : currentWords.map((word, index) => (
+                      <Fragment key={word.id}>
+                        {/* The separator sits outside the word, so the highlight covers the
+                            word and not the space in front of it. */}
+                        {index > 0 ? " " : ""}
+                        <span
+                          data-testid="caption-word"
+                          data-active={word.id === activeWordId ? "true" : "false"}
+                          style={{
+                            // Every word is inline-block, not just the active one: a span that
+                            // changes display changes the line's layout, and rest spacing has to
+                            // be identical whether or not anything is active. A transform does
+                            // not affect layout, so the pop moves nothing.
+                            display: "inline-block",
+                            ...(word.id === activeWordId && activation
+                              ? {
+                                  color: style.highlightColor,
+                                  // Same curve the burn-in evaluates, on the same clock: elapsed
+                                  // into this activation, over this activation's own length.
+                                  transform: `scale(${popScaleAt(
+                                    currentMs - activation!.startMs,
+                                    activation!.endMs - activation!.startMs,
+                                  )})`,
+                                }
+                              : null),
+                          }}
+                        >
+                          {applyTextCase(word.word, style.textCase)}
+                        </span>
+                      </Fragment>
+                    ))}
               </span>
             </CanvasObject>
           ) : null}

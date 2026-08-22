@@ -1,4 +1,6 @@
-import { GeneratedClipStatus, ProjectStatus } from "@prisma/client";
+import { GeneratedClipStatus, ProjectStatus, type Prisma } from "@prisma/client";
+import { buildInitialEditorState } from "@/lib/editor/types";
+import { INITIAL_EDIT_VERSION } from "@/lib/exports/edit-version";
 import { getAnalysisProvider, type AnalysisProviderSelection } from "@/lib/analysis";
 import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidate-limit";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
@@ -326,6 +328,26 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
           status: GeneratedClipStatus.SUGGESTED,
         },
       });
+
+      // ANALYZE is the only production path that creates a generated clip, which makes it the
+      // only place that can tell new content from old. Writing the clip's first document here is
+      // what gives new clips Uppercase without reaching a clip that predates the default: that one
+      // has no document at all, and its export still builds the unchanged fallback.
+      if (project.sourceVideoId) {
+        await tx.clipEdit.create({
+          data: {
+            clipId: created.id,
+            version: INITIAL_EDIT_VERSION,
+            editorState: buildInitialEditorState({
+              sourceVideoId: project.sourceVideoId,
+              startMs: clip.startMs,
+              endMs: clip.endMs,
+            }) as unknown as Prisma.InputJsonValue,
+            // System-created, so nobody signed it. `savedBy` is nullable for exactly this.
+            savedBy: null,
+          },
+        });
+      }
 
       await tx.clipScore.create({
         data: {

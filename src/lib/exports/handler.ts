@@ -185,6 +185,14 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     state.captions.textOverrides,
   ).map((line) => ({
     ...line,
+    // The words travel with the line so the burn-in can light the same word the preview does,
+    // remapped by the same function as the line itself — a word left on the source timeline
+    // would highlight at the wrong moment.
+    words: line.words.map((word) => ({
+      ...word,
+      startMs: mapToKeptTimeline(word.startMs, keptRanges),
+      endMs: mapToKeptTimeline(word.endMs, keptRanges),
+    })),
     // Caption timestamps are on the original source timeline; remap to the concatenated
     // (post-cut) output timeline the rendered file actually plays on.
     startMs: mapToKeptTimeline(line.startMs, keptRanges),
