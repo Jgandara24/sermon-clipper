@@ -387,7 +387,8 @@ reviewable commit series so a parity problem stops there rather than inside the 
 
 ### Slice 9 — Title overlay defaults and live preview
 
-**Depends on:** Slice 3 (case), Slice 6 (drag, resize, snapping), Slice 1 (no debounce).
+**Depends on:** Slice 3 (case), Slice 6 (drag, resize, snapping), Slice 1 (no debounce), and
+Slice 7 (`captionActivations`, the centisecond grid, and the bundled-font gate this slice reuses).
 
 **Re-scoped 2026-08-21 against the verified baseline (§1).** This slice was written as defaults
 and live preview over an existing title-banner model. There is no model. `EditorState.overlays`
@@ -420,11 +421,12 @@ single selector both renderers read.
 - The title in the burn-in. A title the preview shows and the export omits is the defect this
   whole plan exists to prevent, so the ASS generator draws it from the same model, in the same
   face, at the same position and time.
-- **A bundled title face.** The title's font is selected from `BUNDLED_CAPTION_FONTS` (or a face
-  added to `public/fonts` under the same rules), served by `@font-face` and installed in the
-  worker image, and the worker-image build gate that already requires `fc-match` to resolve each
-  caption family to a bundled file is extended to the title face. A title drawn in a face the
-  browser has and the worker does not is a parity failure the gate exists to catch at build time.
+- **A bundled title face: `DejaVu Sans`.** Its regular and bold files are already in
+  `public/fonts`, already declared by `@font-face` in `globals.css`, already copied into the worker
+  image, and already named in the `Dockerfile.worker` `fc-match` gate — so the gate that guards the
+  caption faces guards the title face unchanged, and no new font work is needed. A title drawn in a
+  face the browser has and the worker does not is a parity failure the gate exists to catch at
+  build time.
 
 **Behavior**
 
@@ -551,7 +553,7 @@ Slice 5  transcript                       ── needs 1, 4
 Slice 6  direct-manipulation canvas       ── needs 1, 2
 Slice 7  caption controls + highlighting  ── needs 3, 6
 Slice 8  neighbour micro-shift            ── needs 7; own slice; real render is the gate
-Slice 9  title defaults and live preview  ── needs 1, 3, 6
+Slice 9  title defaults and live preview  ── needs 1, 3, 6, 7
 Slice 10 timeline layout                  ── needs 4
 Slice 11 timeline media                   ── needs 10
 Slice 12 shell and header polish          ── last; touches the protected file's neighbourhood
@@ -559,8 +561,9 @@ Slice 13 export parity and final QA       ── needs everything
 ```
 
 Corrected 2026-08-21: Slices 8 and 9 each begin by creating modules the original §1 said already
-existed (measured caption layout; the title-banner model and a safe-area datum). Their order and
-dependencies above are unchanged; their size is not — see each slice.
+existed (measured caption layout; the title-banner model and a safe-area datum). Their order is
+unchanged and Slice 8's dependencies are unchanged; Slice 9 gains a dependency on Slice 7, whose
+outputs it reuses. Their size has changed — see each slice.
 
 ## 6. Rules that hold across every slice
 
