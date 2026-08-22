@@ -2344,3 +2344,33 @@ The method, as `settleTranscriptionFallbackHold` now does it:
 
 Status: Active. Supersedes the entry above it on one statement only: where the fallback hold's
 human-edit count happens.
+
+## 2026-08-21 - A Slice Estimates Against The Branch It Is Built On
+
+Decision: §1 of `docs/EDITOR_DELTA_PLAN_2026-08-18.md` is corrected to the verified state of
+`origin/main` at `276d3fd`, and Slices 8 and 9 are re-scoped against it. No other slice changes.
+
+The original §1 listed nine modules and behaviours as "already true in the baseline":
+`caption-animation.ts`, `caption-layout.ts`, `font-metrics.ts`, `use-text-measurer.ts`,
+`social-safe-area.ts`, `panel-resize.ts`, `document-history.ts`, `title-banner.ts`, and the
+`activeCaptionWordId` / `exclusiveCaptionWordEnds` pair. Every one of them lives only on the
+unmerged prototype branch `p1/kinetic-captions-and-editor`, which the plan names as the thing it
+is a delta against. The slices were built on `origin/main`, where none of them existed. The row
+claiming Clean did not animate was also untrue until Slice 7 made it so.
+
+Slice 7 found this when it went to wire the pop curve and had to write `caption-animation.ts`,
+`active-word.ts` and `caption-timeline.ts` instead. Two of the nine are now true under other
+names (`history.ts` from Slice 2; the active-word resolver from Slice 7); one was true all along
+(export policy); the rest are still absent.
+
+The consequence for the work ahead: Slice 8 must create a measured, shared caption layout before
+any word can move, and Slice 9 must create the title-banner model, a safe-area datum, a track, a
+panel and a burn-in path before it can set defaults on them. Both are larger than planned, and the
+plan now says so.
+
+The rule: a plan's baseline is the branch the work will be built on, verified by reading that
+branch's tree, not the branch the plan was drafted from. Every future slice estimate states what
+it must create, and that statement comes from `git ls-tree` against the target, not from the
+plan's own history.
+
+Status: Active. Corrects the plan's baseline; does not supersede any prior entry.

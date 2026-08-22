@@ -20,22 +20,38 @@ plan is settled — the slices below are what turn it into something worth revie
 
 ---
 
-## 1. What the baseline already gives us
+## 1. What the baseline actually gives us (corrected 2026-08-21, after Slice 7)
 
-Worth knowing before reading the slices, because several handoff requirements are already met at
-the model layer and only need wiring or correction.
+**The original version of this section was wrong, and the error was structural.** It listed nine
+modules and behaviours as "already true in the baseline" and told the slices to wire or correct
+them. Every one of those modules exists only on the unmerged prototype branch
+`p1/kinetic-captions-and-editor` (`914d23d`), which this plan names as the thing it is a delta
+against. The slices, though, were built on `origin/main` — and `origin/main` never contained any
+of them. Slice 7 discovered this when it went to wire the pop curve and found nothing to wire.
 
-| Already true in the baseline | Where it lives |
-| --- | --- |
-| Exactly one active caption word is derivable at any timestamp, even when source word intervals overlap | `activeCaptionWordId`, `exclusiveCaptionWordEnds` |
-| The pop curve is one shared definition that the browser preview and the ASS generator both evaluate | `caption-animation.ts` |
-| Caption line layout is measured once and consumed by both renderers | `caption-layout.ts`, `font-metrics.ts`, `use-text-measurer.ts` |
-| Only Clean and Highlighter are offered; Clean does not animate; Highlighter is neon yellow, bottom-safe, word-by-word | `caption-presets.ts` |
-| A versioned social safe area exists as data | `social-safe-area.ts` |
-| Panel min/max widths and a video minimum are already computed | `panel-resize.ts` |
-| Undo/redo with grouping is already a pure reducer | `document-history.ts` |
-| A title-banner overlay model with defaults, upsert, remove, and dismiss | `title-banner.ts` |
-| Manual export no longer requires editorial approval, with billing and access untouched | landed — see §2 |
+What follows was verified against `origin/main` at `276d3fd` (the merge of PR #51, Slice 7) by
+reading the tree, not the plan. Slices 8 onward estimate against this table and nothing else.
+
+| Original §1 claim | Verified state on `origin/main` | Where it lives now | Created by |
+| --- | --- | --- | --- |
+| Exactly one active caption word at any timestamp, even with overlapping source intervals (`activeCaptionWordId`, `exclusiveCaptionWordEnds`) | **True, under different names.** Neither symbol exists. `resolveActiveWord` is a total, deterministic resolver; `exclusiveLineSpans` removes line overlap on the highlighting path only. | `src/lib/editor/active-word.ts`, `src/lib/editor/caption-lines.ts` | Slice 7 (`631870c`) |
+| The pop curve is one shared definition both renderers evaluate (`caption-animation.ts`) | **True.** `popPhases`, `popScaleAt`, `popPhaseTags`, `popClock`, quantised to centiseconds and whole percent. Plus `caption-timeline.ts`: one selector (`captionActivations`) decides which line, which words and which stretch, read by both the preview and the burn-in. | `src/lib/editor/caption-animation.ts`, `src/lib/editor/caption-timeline.ts` | Slice 7 (`61e77a8`, `4741575`) |
+| Caption line layout is measured once and consumed by both renderers (`caption-layout.ts`, `font-metrics.ts`, `use-text-measurer.ts`) | **Absent.** No shared layout, no font-metrics measurer, no browser measurer hook, and no `fontkit`/`opentype` dependency. The preview lays words out with CSS inline-blocks; the burn-in emits one Dialogue per phase carrying the whole run and lets libass lay it out. Neither side knows a word's width. What does exist: the faces are bundled in `public/fonts`, served by `@font-face` and installed in the worker image, so the same TTF is available to measure on both sides. | — (`src/lib/editor/caption-fonts.ts` lists the bundled faces) | Not created. **Slice 8 must create it.** |
+| Only Clean and Highlighter are offered; Clean does not animate; Highlighter is neon yellow, bottom-safe, word-by-word (`caption-presets.ts`) | **True now; was not true before Slice 7.** `selectable` marks Clean and Highlighter; retired presets stay resolvable by id. `activeWordHighlight` is true for Highlighter alone, so Clean renders whole and lights nothing. Highlighter is `#CCFF00`, `position: "bottom"`, per-word. "Bottom-safe" means the preset's `position`, not a safe-area datum — see the next row. | `src/lib/editor/caption-presets.ts` | Slice 7 (`631870c`) |
+| A versioned social safe area exists as data (`social-safe-area.ts`) | **Absent.** The canvas draws guide zones as inline CSS percentages (`inset-x-[6%] top-[6%] bottom-[12%]`) inside `VideoPreview`, toggled on screen and never exported. There is no data model, no version, no anchor vocabulary, and nothing the burn-in or a title default can read. | `src/components/editor/video-preview.tsx` (guides only) | Not created. **Slice 9 needs "Top Safe" and must create the datum.** |
+| Panel min/max widths and a video minimum are already computed (`panel-resize.ts`) | **Absent.** No module, no limits, no resize arithmetic anywhere under `src/`. | — | Not created. Slice 10 wants draggable dividers with min and max widths; it must create this. Slice 10 is otherwise unchanged. |
+| Undo/redo with grouping is already a pure reducer (`document-history.ts`) | **True, under a different name.** `createHistory`, `recordEdit`, `closeInteraction`, `undo`, `redo`, `applyConfirmedSave`, `historyShortcut` — pure functions, interaction-grouped. | `src/lib/editor/history.ts` | Slice 2 (`0850b90`) |
+| A title-banner overlay model with defaults, upsert, remove, and dismiss (`title-banner.ts`) | **Absent.** `EditorState.overlays` is `z.array(z.unknown())`. The only overlay anything writes is the brand template's `{ type: "lowerThird" }`, and the only overlay the burn-in draws is that lower third. No title type, no defaults, no helpers, no track, no panel, no burn-in. | — | Not created. **Slice 9 must create it.** |
+| Manual export no longer requires editorial approval, with billing and access untouched | **True.** The export route gates on workspace access, range continuity and rate limit; nothing checks approval. | `src/app/api/clips/[id]/exports/route.ts` | Landed before the slices — see §2 |
+
+Two lessons, so the mistake is not repeated:
+
+- **A plan's baseline is the branch the work will be built on, not the branch the plan was
+  written from.** The prototype branch is still unmerged and still labelled `PROTOTYPE, NOT
+  ACCEPTED`; nothing on it counts as existing.
+- **Verify by reading the tree.** A module named in a plan is a claim; `git ls-tree` against the
+  target branch is the evidence. Every slice from 8 onward states what it must create, and that
+  statement comes from the repository, not from this document's history.
 
 ## 2. Handoff step 3 (export policy) is done and live
 
@@ -285,6 +301,36 @@ transcript before changing any editor code.
 destabilise preview/export parity, and it must not be able to take the control cleanup down with
 it.
 
+**Re-scoped 2026-08-21 against the verified baseline (§1).** This slice was sized on the belief
+that caption layout was already measured once and shared by both renderers. It is not. Nothing on
+`origin/main` knows a word's width: the preview lets CSS lay out inline-blocks, and the burn-in
+hands libass one Dialogue per phase carrying the whole run. A neighbour cannot move aside by an
+amount nobody has computed, and the preview and the file cannot agree on an offset neither can
+state. So before any word moves, this slice has to create the measurement layer the original
+plan assumed was there.
+
+**What Slice 7 gives this slice, verified:** `captionActivations` (one selector for which line,
+which words, which stretch, on the centisecond grid), `popClock` and `popPhases` (the activation's
+clock and its phases), `popScaleAt` (the preview's evaluation), `popPhaseTags` (the file's), and
+the bundled faces in `public/fonts` served to the browser and installed in the worker image, so
+the same TTF is on both sides to be measured.
+
+**What must be created, not wired:**
+
+- `src/lib/editor/caption-layout.ts` — a pure layout: given a line's words, a measurer, the
+  style and the active word, return each word's rest position and its shifted position. One
+  function, one rule, no DOM and no fonts in it; both renderers call it.
+- A server-side measurer over the bundled TTFs for the burn-in (the prototype used `fontkit`;
+  `origin/main` has no font-parsing dependency, so one must be chosen and added). The build gate
+  that already checks `fc-match` resolves each family to a bundled file is the right place to
+  also prove the measurer opens the same file.
+- A browser measurer over the same faces for the preview, which must not report a width until
+  `document.fonts.ready` — Slice 7 measured the fallback's metrics once (234.77px against
+  258.44px) and paid for it.
+- Per-word positioning in the ASS generator. Today a Dialogue event carries the whole run and
+  libass positions it; a neighbour that moves needs its own event with its own `\pos` or `\move`.
+  That is a restructuring of how caption events are emitted, not an addition to it.
+
 **Behavior**
 
 - When a word becomes active, its immediate neighbours move slightly aside for the duration of the
@@ -306,6 +352,15 @@ because every word is a neighbour twice as well as being active once.
 retreat to a stepped shift — the neighbour jumps aside for the pop and back afterwards, with no
 interpolation. Recorded so the retreat is a decision rather than a surprise.
 
+**Risks the re-scope adds.** Two measurers over one file can still disagree — hinting, kerning,
+subpixel rounding, and the browser's own layout of an inline-block are each a source of a
+fraction of a pixel, and a fraction of a pixel is an overlap the frame sampler will catch. The
+acceptance test therefore measures both sides against the same fixture line in the same face and
+states the tolerance, before any motion is attempted. The second risk is the event restructuring:
+once words are positioned individually, legacy presets must still emit exactly what they emit
+today — the parity tests that guard Clean's timings are the regression net, and a byte-identical
+ASS fixture for a legacy preset should be added before the generator is touched.
+
 **Coverage**
 
 - Rest spacing is unchanged from slice 7 — the micro-shift adds no permanent width.
@@ -314,12 +369,51 @@ interpolation. Recorded so the retreat is a decision rather than a surprise.
 - **One real ffmpeg render**, not a unit test: burn a Highlighter line, sample frames across a
   pop, and confirm the motion is smooth and collision-free. This is the acceptance gate.
 - Event count for a representative line stays within the budget the render proves affordable.
+- *Added:* the browser measurer and the server measurer agree on every word of the fixture line
+  within a stated tolerance, after `document.fonts.ready`.
+- *Added:* a legacy preset's ASS output is byte-identical before and after the per-word event
+  restructuring.
+- *Added:* browser coverage through the real `VideoPreview`, not only the pure layout function.
+
+**Size.** Originally one slice of motion work. Now two stages that must land in order — the
+shared measured layout with its parity test, then the motion — and the first stage is the larger
+of the two. Plan for roughly double the original estimate, with the measurement stage as its own
+reviewable commit series so a parity problem stops there rather than inside the animation.
 
 ---
 
 ### Slice 9 — Title overlay defaults and live preview
 
 **Depends on:** Slice 3 (case), Slice 6 (drag, resize, snapping), Slice 1 (no debounce).
+
+**Re-scoped 2026-08-21 against the verified baseline (§1).** This slice was written as defaults
+and live preview over an existing title-banner model. There is no model. `EditorState.overlays`
+is `z.array(z.unknown())`; the only overlay anything writes is the brand template's
+`{ type: "lowerThird" }`, and the only overlay the burn-in draws is that lower third. "Top Safe"
+also names a safe-area datum that does not exist — the canvas guides are inline CSS percentages
+with no data behind them. The product behaviour below stands; the slice now includes building
+the thing the behaviour is about.
+
+**What Slice 6 and Slice 7 give this slice, verified:** `CanvasObject` (drag, corner-resize,
+centre snap with a visible guide, labelled by prop and not caption-specific), the instant-preview
+/ coalesced-save split, the shared case model, and `captionActivations` as the pattern for a
+single selector both renderers read.
+
+**What must be created, not wired:**
+
+- `src/lib/editor/title-banner.ts` — the overlay type, its defaults (first three seconds, Top
+  Safe, horizontally centred, centre-aligned, uppercase black on white, no border, no shadow), and
+  pure `read`, `upsert`, `remove`, `dismiss` and `ensureDefault` helpers over `overlays`. The
+  `overlays` schema must gain a discriminated title type without invalidating stored documents
+  that carry only a lower third or nothing.
+- A safe-area datum — at minimum the anchor vocabulary (`top-safe`, `center`, `bottom-safe`,
+  `custom`) and the bounds the canvas guides already draw, as data with a version, so "Top Safe"
+  is a number both renderers read rather than a CSS class one of them has.
+- The Title track in the timeline, with region drag and start/end trim.
+- The Title settings panel, and the track-to-panel switching the behaviour bullets describe.
+- The title in the burn-in. A title the preview shows and the export omits is the defect this
+  whole plan exists to prevent, so the ASS generator draws it from the same model, in the same
+  face, at the same position and time.
 
 **Behavior**
 
@@ -334,7 +428,22 @@ interpolation. Recorded so the retreat is a decision rather than a surprise.
   immediately, including while dragging through a colour picker.
 - Horizontal and vertical position readouts update continuously while the title is dragged.
 
-**Coverage:** title defaults; continuous control updates; recreate-after-remove.
+**Risks the re-scope adds.** The schema change touches every stored document: `overlays` has
+been `unknown[]` since the beginning, and a stricter parser that rejects an old shape would stop
+clips loading. Parse leniently, write strictly. The second risk is a second renderer disagreement
+of the kind Slice 7 spent five rounds on: the title has its own face, case and position, and each
+is a place the preview and the file can drift. Reuse the centisecond grid and the single-selector
+pattern from the start rather than discovering the need for them afterwards.
+
+**Coverage:** title defaults; continuous control updates; recreate-after-remove. *Added:* old
+documents with no title, or only a lower third, still parse and render as before; title present
+in the ASS output at the same time, position and text as the preview at sampled timestamps;
+browser coverage through the real canvas for drag, resize, snap and the track switching.
+
+**Size.** Originally a defaults-and-polish slice. Now a model, a schema migration in the lenient
+sense, a track, a panel and a burn-in path as well. Plan for roughly three times the original
+estimate, and land the model and burn-in before the panel so parity is proven before the controls
+exist to break it.
 
 ---
 
@@ -431,6 +540,10 @@ Slice 11 timeline media                   ── needs 10
 Slice 12 shell and header polish          ── last; touches the protected file's neighbourhood
 Slice 13 export parity and final QA       ── needs everything
 ```
+
+Corrected 2026-08-21: Slices 8 and 9 each begin by creating modules the original §1 said already
+existed (measured caption layout; the title-banner model and a safe-area datum). Their order and
+dependencies above are unchanged; their size is not — see each slice.
 
 ## 6. Rules that hold across every slice
 
