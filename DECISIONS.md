@@ -2322,3 +2322,25 @@ about which word is lit.
 
 Status: Active. Corrects the entry above it on how a system document is recognised and on what
 "the same curve" means.
+
+## 2026-08-21 - Human Work Is Counted In The Database, Not Loaded Into Code
+
+Decision: one narrow correction to the entry above it. Everything else there stands.
+
+That entry says the fallback hold's rows "are fetched and filtered in code". That is not how it
+ships. Loading every stored editor state since the hold opened transfers documents the count never
+needs — autosaves and overlays make that unbounded — and the last Slice 7 commit moved the count
+back into the database without the negative JSON filter that made the first attempt wrong.
+
+The method, as `settleTranscriptionFallbackHold` now does it:
+
+- Count every `ClipEdit` in the project since the hold opened.
+- Count the machine's documents with a positive JSON comparison:
+  `editorState.systemInitial` equals `true`. Asked positively, a row without the key is simply
+  not a match, which is the answer wanted; asked negatively it was NULL, which excluded exactly
+  the human edits.
+- Human edits are the first count minus the second.
+- No `editorState` document is transferred.
+
+Status: Active. Supersedes the entry above it on one statement only: where the fallback hold's
+human-edit count happens.
