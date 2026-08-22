@@ -22,24 +22,27 @@ plan is settled — the slices below are what turn it into something worth revie
 
 ## 1. What the baseline actually gives us (corrected 2026-08-21, after Slice 7)
 
-**The original version of this section was wrong, and the error was structural.** It listed nine
-modules and behaviours as "already true in the baseline" and told the slices to wire or correct
-them. Every one of those modules exists only on the unmerged prototype branch
-`p1/kinetic-captions-and-editor` (`914d23d`), which this plan names as the thing it is a delta
-against. The slices, though, were built on `origin/main` — and `origin/main` never contained any
-of them. Slice 7 discovered this when it went to wire the pop curve and found nothing to wire.
+**The original version of this section was wrong, and the error was structural.** It made nine
+claims about what was "already true in the baseline" and told the slices to wire or correct the
+things it named. The artifacts it named — the modules and the two symbols — were on the
+prototype branch `p1/kinetic-captions-and-editor` (`914d23d`), which this plan names as the thing
+it is a delta against. The slices, though, were built on `origin/main`, and **before Slice 1 the
+target branch lacked every one of those exact prototype artifacts.** Some of the behaviours they
+described have since been built on `main` by the slices, under other names; some were true on
+`main` all along by other means; some are still absent. The table says which. Slice 7 found the
+gap when it went to wire the pop curve and had nothing to wire.
 
 What follows was verified against `origin/main` at `276d3fd` (the merge of PR #51, Slice 7) by
 reading the tree, not the plan. Slices 8 onward estimate against this table and nothing else.
 
 | Original §1 claim | Verified state on `origin/main` | Where it lives now | Created by |
 | --- | --- | --- | --- |
-| Exactly one active caption word at any timestamp, even with overlapping source intervals (`activeCaptionWordId`, `exclusiveCaptionWordEnds`) | **True, under different names.** Neither symbol exists. `resolveActiveWord` is a total, deterministic resolver; `exclusiveLineSpans` removes line overlap on the highlighting path only. | `src/lib/editor/active-word.ts`, `src/lib/editor/caption-lines.ts` | Slice 7 (`631870c`) |
-| The pop curve is one shared definition both renderers evaluate (`caption-animation.ts`) | **True.** `popPhases`, `popScaleAt`, `popPhaseTags`, `popClock`, quantised to centiseconds and whole percent. Plus `caption-timeline.ts`: one selector (`captionActivations`) decides which line, which words and which stretch, read by both the preview and the burn-in. | `src/lib/editor/caption-animation.ts`, `src/lib/editor/caption-timeline.ts` | Slice 7 (`61e77a8`, `4741575`) |
+| Exactly one active caption word at any timestamp, even with overlapping source intervals (`activeCaptionWordId`, `exclusiveCaptionWordEnds`) | **True as "at most one", under different names.** Neither symbol exists. `resolveActiveWord(words, ms)` returns the single word covering `ms` — latest start wins, ties broken by shorter interval then later position — or **`null`** before the first interval, after the last, and in any gap between intervals. It is deterministic, not total over time. `exclusiveLineSpans` removes line overlap on the highlighting path only. | `src/lib/editor/active-word.ts` (`resolveActiveWord`), `src/lib/editor/caption-lines.ts` (`exclusiveLineSpans`) | Slice 7: `active-word.ts` in `631870c`; `exclusiveLineSpans` in `94c6601` |
+| The pop curve is one shared definition both renderers evaluate (`caption-animation.ts`) | **True.** `popPhases`, `popScaleAt`, `popPhaseTags`, `popClock`, quantised to centiseconds and whole percent. Plus `caption-timeline.ts`: one selector (`captionActivations`) decides which line, which words and which stretch, read by both the preview and the burn-in. | `src/lib/editor/caption-animation.ts`, `src/lib/editor/caption-timeline.ts` | Slice 7: `caption-animation.ts` in `61e77a8`; `caption-timeline.ts` in `4741575`; the no-word stretch joined the grid in `3167e68` |
 | Caption line layout is measured once and consumed by both renderers (`caption-layout.ts`, `font-metrics.ts`, `use-text-measurer.ts`) | **Absent.** No shared layout, no font-metrics measurer, no browser measurer hook, and no `fontkit`/`opentype` dependency. The preview lays words out with CSS inline-blocks; the burn-in emits one Dialogue per phase carrying the whole run and lets libass lay it out. Neither side knows a word's width. What does exist: the faces are bundled in `public/fonts`, served by `@font-face` and installed in the worker image, so the same TTF is available to measure on both sides. | — (`src/lib/editor/caption-fonts.ts` lists the bundled faces) | Not created. **Slice 8 must create it.** |
-| Only Clean and Highlighter are offered; Clean does not animate; Highlighter is neon yellow, bottom-safe, word-by-word (`caption-presets.ts`) | **True now; was not true before Slice 7.** `selectable` marks Clean and Highlighter; retired presets stay resolvable by id. `activeWordHighlight` is true for Highlighter alone, so Clean renders whole and lights nothing. Highlighter is `#CCFF00`, `position: "bottom"`, per-word. "Bottom-safe" means the preset's `position`, not a safe-area datum — see the next row. | `src/lib/editor/caption-presets.ts` | Slice 7 (`631870c`) |
+| Only Clean and Highlighter are offered; Clean does not animate; Highlighter is neon yellow, bottom-safe, word-by-word (`caption-presets.ts`) | **True now; not true before Slice 7.** Before Slice 7, `main` offered four presets (`clean`, `bold-serif`, `karaoke`, `quiet`), had no Highlighter, and highlighted nothing in either renderer — so "Clean does not animate" held only because nothing did. Since Slice 7: `selectable` marks Clean and Highlighter and the picker reads `SELECTABLE_CAPTION_PRESETS`; retired presets stay resolvable by id; `activeWordHighlight` is true for Highlighter alone, so Clean renders whole and lights nothing; Highlighter is `#CCFF00`, `position: "bottom"`, per-word. "Bottom-safe" means the preset's `position`, not a safe-area datum — see the next row. | `src/lib/editor/caption-presets.ts` | Slice 7 (`631870c`) |
 | A versioned social safe area exists as data (`social-safe-area.ts`) | **Absent.** The canvas draws guide zones as inline CSS percentages (`inset-x-[6%] top-[6%] bottom-[12%]`) inside `VideoPreview`, toggled on screen and never exported. There is no data model, no version, no anchor vocabulary, and nothing the burn-in or a title default can read. | `src/components/editor/video-preview.tsx` (guides only) | Not created. **Slice 9 needs "Top Safe" and must create the datum.** |
-| Panel min/max widths and a video minimum are already computed (`panel-resize.ts`) | **Absent.** No module, no limits, no resize arithmetic anywhere under `src/`. | — | Not created. Slice 10 wants draggable dividers with min and max widths; it must create this. Slice 10 is otherwise unchanged. |
+| Panel min/max widths and a video minimum are already computed (`panel-resize.ts`) | **Absent.** There is no panel-resize module and no panel-width resize arithmetic. (The canvas has its own caption-object resize and pinch-zoom arithmetic; that is not panel width.) | — | Not created. Slice 12 owns the draggable dividers with min and max widths; it must create this. Slice 12's text is unchanged. |
 | Undo/redo with grouping is already a pure reducer (`document-history.ts`) | **True, under a different name.** `createHistory`, `recordEdit`, `closeInteraction`, `undo`, `redo`, `applyConfirmedSave`, `historyShortcut` — pure functions, interaction-grouped. | `src/lib/editor/history.ts` | Slice 2 (`0850b90`) |
 | A title-banner overlay model with defaults, upsert, remove, and dismiss (`title-banner.ts`) | **Absent.** `EditorState.overlays` is `z.array(z.unknown())`. The only overlay anything writes is the brand template's `{ type: "lowerThird" }`, and the only overlay the burn-in draws is that lower third. No title type, no defaults, no helpers, no track, no panel, no burn-in. | — | Not created. **Slice 9 must create it.** |
 | Manual export no longer requires editorial approval, with billing and access untouched | **True.** The export route gates on workspace access, range continuity and rate limit; nothing checks approval. | `src/app/api/clips/[id]/exports/route.ts` | Landed before the slices — see §2 |
@@ -48,7 +51,7 @@ Two lessons, so the mistake is not repeated:
 
 - **A plan's baseline is the branch the work will be built on, not the branch the plan was
   written from.** The prototype branch is still unmerged and still labelled `PROTOTYPE, NOT
-  ACCEPTED`; nothing on it counts as existing.
+  ACCEPTED`; nothing on it counts as existing on `main` until a slice builds it there.
 - **Verify by reading the tree.** A module named in a plan is a claim; `git ls-tree` against the
   target branch is the evidence. Every slice from 8 onward states what it must create, and that
   statement comes from the repository, not from this document's history.
@@ -406,14 +409,22 @@ single selector both renderers read.
   pure `read`, `upsert`, `remove`, `dismiss` and `ensureDefault` helpers over `overlays`. The
   `overlays` schema must gain a discriminated title type without invalidating stored documents
   that carry only a lower third or nothing.
-- A safe-area datum — at minimum the anchor vocabulary (`top-safe`, `center`, `bottom-safe`,
-  `custom`) and the bounds the canvas guides already draw, as data with a version, so "Top Safe"
-  is a number both renderers read rather than a CSS class one of them has.
+- **One shared safe-area datum** — the anchor vocabulary (`top-safe`, `center`, `bottom-safe`,
+  `custom`) and the bounds, as versioned data — that **every consumer reads**: the existing
+  canvas guide (which today hard-codes its percentages in CSS), caption preview placement, title
+  placement in the preview, and caption and title placement in the ASS export. Four consumers,
+  one source. A guide drawn from one number and a title placed by another is the drift this plan
+  exists to prevent, so none of them keeps a private copy.
 - The Title track in the timeline, with region drag and start/end trim.
 - The Title settings panel, and the track-to-panel switching the behaviour bullets describe.
 - The title in the burn-in. A title the preview shows and the export omits is the defect this
   whole plan exists to prevent, so the ASS generator draws it from the same model, in the same
   face, at the same position and time.
+- **A bundled title face.** The title's font is selected from `BUNDLED_CAPTION_FONTS` (or a face
+  added to `public/fonts` under the same rules), served by `@font-face` and installed in the
+  worker image, and the worker-image build gate that already requires `fc-match` to resolve each
+  caption family to a bundled file is extended to the title face. A title drawn in a face the
+  browser has and the worker does not is a parity failure the gate exists to catch at build time.
 
 **Behavior**
 
@@ -436,9 +447,15 @@ is a place the preview and the file can drift. Reuse the centisecond grid and th
 pattern from the start rather than discovering the need for them afterwards.
 
 **Coverage:** title defaults; continuous control updates; recreate-after-remove. *Added:* old
-documents with no title, or only a lower third, still parse and render as before; title present
-in the ASS output at the same time, position and text as the preview at sampled timestamps;
-browser coverage through the real canvas for drag, resize, snap and the track switching.
+documents with no title, or only a lower third, still parse and render as before. *Added, title
+parity:* at sampled timestamps the preview and the ASS output agree on time, position, text,
+**font, size, weight, case, alignment, background, border, shadow, and box dimensions** — each
+one a property the two renderers can drift on, each one asserted, none inferred from another.
+*Added, safe-area parity:* the guide, the caption preview, the title preview, and the ASS export
+each read the shared datum, with a test per consumer proving that changing the datum moves all
+four and that none carries a private copy. *Added:* the worker-image font gate fails when the
+title face is not resolvable to a bundled file. *Added:* browser coverage through the real canvas
+for drag, resize, snap and the track switching.
 
 **Size.** Originally a defaults-and-polish slice. Now a model, a schema migration in the lenient
 sense, a track, a panel and a burn-in path as well. Plan for roughly three times the original
@@ -559,22 +576,21 @@ dependencies above are unchanged; their size is not — see each slice.
 
 ## 7. What this plan does not cover
 
-- **P1.1, P1.2, P1.3** remain outstanding. P1.1 (render an explicitly pinned edit version) is two
-  changes, not one, and both are still missing on `main`:
+- **P1.1 is done; P1.2 and P1.3 remain outstanding.** *(Corrected 2026-08-21; the paragraph
+  below replaces the earlier statement that both halves of P1.1 were missing.)* P1.1 (render an
+  explicitly pinned edit version) landed in PR #42 (`62815d2`, merged `9c0e8fc`, 2026-08-20),
+  verified on `origin/main` at `276d3fd`:
 
-  - **Nothing writes the version.** `ExportJob.editVersion` exists in the schema, but the exports
-    route computes the version only to build the idempotency key
-    (`export:<clip>:v<version>:<filename>`) and never stores it on the row.
-  - **Nothing reads it.** `runExportJob` resolves the newest `ClipEdit` by `version desc` and
-    makes no reference to `job.editVersion` at all.
+  - **The version is written.** The exports route stores `editVersion` on the `ExportJob` row
+    (`src/app/api/clips/[id]/exports/route.ts`), as well as using it in the idempotency key
+    (`export:<clip>:v<version>:<filename>`).
+  - **The version is read.** `runExportJob` loads the document through `loadPinnedEditorState`
+    with `job.editVersion` (`src/lib/exports/handler.ts`), so a job renders the edit it was asked
+    for even when newer edits were saved between the request and the run.
 
-  Removing the export approval gate made this more pressing, not less. Approval used to be an
-  accidental brake: an editor save demoted an approved clip to DRAFT, which blocked the next
-  export until someone re-approved, so the window in which a queued job could be rendered from a
-  newer edit was small. Now a member can edit and export immediately, and the render takes
-  whichever edit is newest when the worker picks the job up. Nothing is corrupted — the output is
-  a real saved edit — but it can be a different edit than the one the export was asked for, and
-  the idempotency key will still claim it was the older version.
+  The earlier concern stands as history: removing the export approval gate removed an accidental
+  brake, and without the pin a queued export could have rendered a newer edit than the one
+  requested. The pin closes that window.
 - **Transcription provider activation.** Done and live (PR #39, merged `c278b39`): Scribe v2 is
   the primary provider in production with whisper.cpp secondary. One consequence reaches the
   editor — a sermon that fell back to whisper.cpp puts an editorial hold on its project, so those

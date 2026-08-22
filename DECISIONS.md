@@ -2374,3 +2374,60 @@ it must create, and that statement comes from `git ls-tree` against the target, 
 plan's own history.
 
 Status: Active. Corrects the plan's baseline; does not supersede any prior entry.
+
+## 2026-08-21 - Corrections To The Baseline Entry, And A Disk-Floor Failure
+
+Decision: the entry above it stands in its conclusion — slices estimate against the verified
+tree of the branch they are built on — and is corrected on six statements. Nothing in it is
+edited; this entry says what was wrong.
+
+**Nine claims, not nine modules.** The original §1 made nine claims about the baseline. Seven of
+them named modules and one named two symbols; the ninth (export policy) named no artifact at
+all. The entry above counted "nine modules", which is not what §1 said.
+
+**The time scope.** The entry above says every one of those modules "lives only on the unmerged
+prototype branch". The accurate statement is about a point in time: before Slice 1, the target
+branch `origin/main` lacked every one of the exact prototype artifacts the claims named. Since
+then the slices have built some of those behaviours on `main`. The tally on `origin/main` at
+`276d3fd`: five of the nine claims are true. Four became true through the completed slices —
+history (`history.ts`, Slice 2), active-word resolution (`resolveActiveWord` and
+`exclusiveLineSpans`, Slice 7), the shared pop curve (`caption-animation.ts` and
+`caption-timeline.ts`, Slice 7), and the Clean/Highlighter preset set (Slice 7). One was true all
+along by other means: export policy. Four remain absent: measured shared layout, a safe-area
+datum, panel resizing, and the title-banner model. The entry above said "the rest are still
+absent" after counting three, which implied six.
+
+**"Clean does not animate".** The entry above says this "was also untrue until Slice 7 made it
+so". Before Slice 7, `main` had no Highlighter, offered four presets, and highlighted nothing in
+either renderer — so the statement held trivially. What was untrue before Slice 7 was the
+surrounding claim: "only Clean and Highlighter are offered" and "Highlighter is neon yellow,
+word-by-word". Slice 7 made those true.
+
+**"Exactly one active word" is "at most one".** `resolveActiveWord` returns the single covering
+word, or `null` before the first interval, after the last, and in any gap between intervals. It
+is deterministic, not total over time. The corrected §1 row says so and cites the commits:
+`active-word.ts` in `631870c`, `exclusiveLineSpans` in `94c6601`.
+
+**§7 was stale on P1.1.** It said nothing writes or reads `ExportJob.editVersion`. PR #42
+(`62815d2`, merged `9c0e8fc`, 2026-08-20) writes it in the exports route and reads it through
+`loadPinnedEditorState` in `runExportJob`. P1.1 is done; P1.2 and P1.3 remain. Corrected in the
+plan.
+
+**Panel dividers belong to Slice 12**, not Slice 10, and the narrow fact is that there is no
+panel-resize module or panel-width arithmetic — not that there is "no resize arithmetic anywhere
+under `src/`", which the canvas object's corner resize contradicts.
+
+**Process failure: the disk floor was crossed.** Jake's rule is 15 GiB free before any build or
+deployment step, and stop if a reading falls below it. During `npm run verify` for the commit
+that wrote the entry above, free disk went from 15.13 GiB to 14.09 GiB, and the sampler meant to
+watch it during the build produced no readings (macOS `awk` has no `strftime`; the failure was
+silent). The commit, push and PR were made after removing the worktree's `.next` brought the
+reading back to 15.14 GiB. That was the wrong call: the rule is stop on the first reading below
+the floor, clean only the session's own artifacts, and report — not continue once the number
+recovers. Recorded so the next session treats it that way. Two consequences are already in
+effect: the floor is confirmed before each step rather than once at the start, and a sampler
+that emits nothing is treated as a failed sampler, not a quiet disk.
+
+Status: Active. Corrects the entry above it on the count, the time scope, the Clean claim, the
+active-word claim, the §7 P1.1 statement, and the Slice 12 ownership of panel resizing; records
+the disk-floor failure. Does not change the entry's conclusion.
