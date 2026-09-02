@@ -2465,3 +2465,52 @@ finished download is the user's own step.
 
 Status: Active. Supersedes the 2026-07-06 entry "Export Idempotency Key Is Scoped To (Clip, Edit
 Version, Filename)".
+
+
+## 2026-09-02 - A Successful Export Is One That Proved Itself Before It Was Stored
+
+Decision: every rendered export passes quality control before anything keeps it. `SUCCEEDED` now
+means the file passed these checks, not that ffmpeg exited zero.
+
+Seven checks run on the rendered file, in `src/lib/qc/render-output.ts`, a pure module: the file
+decodes, its dimensions are the expected vertical frame, an audio stream is present, the duration
+is within tolerance of the duration the edit asked for, the file is not empty, a checksum exists,
+and a clip that has caption lines produced caption events. The duration tolerance scales with the
+clip — five percent, never below one second — because a flat tolerance either fails short clips on
+ordinary re-encode drift or lets a badly truncated long clip through.
+
+QC runs before the upload. A refused render leaves no object in storage, no `ExportedFile` row,
+and nothing for retention to clean up later.
+
+The verdict is stored either way, on the Wave 1 columns: `qcStatus`, `qcCheckedAt`, `qcChecksum`,
+and `qcDetails`, which carries a versioned record of every check that ran, passing and failing.
+The checksum QC computed is the same value `ExportedFile.checksum` receives, so the two are
+asserted equal rather than assumed to agree. A failure also records an `export_render_qc_failed`
+operational event carrying the clip id.
+
+`ExportedFile.width` and `height` are now the measured values. The old path probed after the
+upload with `.catch(() => null)` and then wrote the 1080x1920 constants whenever the probe had
+failed, so a wrongly shaped file was recorded as a correctly shaped one. Nothing substitutes a
+dimension any more.
+
+A QC failure is retryable, not terminal. This follows the precedent set for
+`CONTINUOUS_RANGE_REQUIRED`: the common case is deterministic and will fail three times and land
+FAILED with the QC record visible, but a truncated write or a transient encoder fault is real and
+a retry can clear it. A terminal refusal would spend that possibility to save two renders.
+
+The caption-events check is an input-side fact carried in the same gate on purpose. It is what
+catches the blank-caption render — a file that decodes, has audio, is the right shape and the
+right length, and has no captions drawn on it. No other check here would notice that.
+
+Why: the previous path uploaded first and validated afterwards, and swallowed the probe error
+when it validated at all. A file that did not decode was stored, recorded with invented
+dimensions, marked SUCCEEDED, and made available to download and to schedule.
+
+Tradeoff: a caption defect still costs one full render before it is caught, because QC runs after
+ffmpeg. Catching an empty caption script before the encode would be cheaper and is a later
+improvement, not a change to this gate. The duration tolerance is a judgement: five percent
+accepts keyframe-seek drift on a long clip, and a truncation small enough to hide inside it is
+smaller than a viewer would notice.
+
+Status: Active.
+
