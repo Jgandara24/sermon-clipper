@@ -604,7 +604,7 @@ Why: Guide §15 step 2 requires "re-submitting the same job id must not double-c
 
 Tradeoff: Two exports of the same clip state with two different filenames create two separate render jobs rather than reusing one — an accepted minor inefficiency in exchange for keeping the idempotency key derivation simple and not requiring a client-supplied key.
 
-Status: Active.
+Status: Superseded by the 2026-09-02 export-identity decision. The filename is no longer part of the key.
 
 ## 2026-07-16 - Retention Reaper Purges Media, Keeps The Record
 
@@ -2432,6 +2432,41 @@ Status: Active. Corrects the entry above it on the count, the time scope, the Cl
 active-word claim, the §7 P1.1 statement, and the Slice 12 ownership of panel resizing; records
 the disk-floor failure. Does not change the entry's conclusion.
 
+## 2026-09-02 - An Export Is Identified By Its Clip And Its Edit Version, And Nothing Else
+
+Decision: the export idempotency key is `export:{clipId}:v{editVersion}`. The filename is removed
+from it. `buildExportIdempotencyKey` no longer accepts a filename parameter, so no caller can
+reintroduce one by accident. The filename is still chosen, still stored on the `ExportJob` row,
+and still names the downloaded file. It describes the download, not the work.
+
+`parseExportIdempotencyKeyVersion` still reads keys written before this change. A key from
+between P1.1 and P1.2 carries the filename after the version and parses to the same version; a
+key from before P1.1 carries no version and still returns null. A legacy key that stopped parsing
+would turn a pinned export back into an unpinned one, which is what P1.1 exists to prevent.
+
+The idempotency lookup keeps running before `checkExportJobLimits`. That ordering is now
+deliberate rather than incidental: a re-request that returns an existing job creates no render,
+so it is not charged against the workspace caps, and with the filename out of the key a
+re-request can no longer be a rename in disguise. A test asserts both halves.
+
+Why: the user interface posts no filename, so the server built the default itself from
+`new Date()`. The date sat inside the identity, so the same clip at the same saved edit version
+became a different key at midnight and rendered a second time on its own. A caller-supplied
+rename did the same thing on demand. Neither produces different pixels. Two requests that would
+render the same frames are one piece of work.
+
+Tradeoff: a clip that already has an export under a legacy key will not match the new key, so its
+next export request renders once more under the new identity. That is one extra render per
+already-exported clip and version, and it is preferred to a backfill: two legacy rows for the same
+clip and version with different filenames would collide on the unique index, and choosing a
+winner between two real rendered files is not a migration's decision to make. A caller that
+deliberately wants the same cut under two names now gets one job and one name; renaming a
+finished download is the user's own step.
+
+Status: Active. Supersedes the 2026-07-06 entry "Export Idempotency Key Is Scoped To (Clip, Edit
+Version, Filename)".
+
+
 ## 2026-09-02 - A Successful Export Is One That Proved Itself Before It Was Stored
 
 Decision: every rendered export passes quality control before anything keeps it. `SUCCEEDED` now
@@ -2478,3 +2513,4 @@ accepts keyframe-seek drift on a long clip, and a truncation small enough to hid
 smaller than a viewer would notice.
 
 Status: Active.
+
