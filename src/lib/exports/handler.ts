@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ExportJob, PrismaClient } from "@prisma/client";
+import { Prisma, RenderQcStatus, type ExportJob, type PrismaClient } from "@prisma/client";
 import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
@@ -13,12 +13,19 @@ import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
 import { applyWordTextOverrides } from "@/lib/editor/transcript";
 import { applyEditorDeletions, flattenWords, wordsInRange } from "@/lib/editor/words";
-import { generateAssSubtitles } from "@/lib/export/ass-generator";
+import { countCaptionDialogueEvents, generateAssSubtitles } from "@/lib/export/ass-generator";
 import { parseLowerThird } from "@/lib/brand-template";
 import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
 import { computeKeptRanges, mapToKeptTimeline } from "@/lib/export/kept-ranges";
 import { renderClipExport } from "@/lib/export/render";
 import { probeVideoFile } from "@/lib/media/probe";
+import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
+import {
+  evaluateRenderOutputQc,
+  RENDER_QC_FAILED,
+  RENDER_QC_FAILED_MESSAGE,
+  renderQcDurationToleranceS,
+} from "@/lib/qc/render-output";
 import {
   getStorageProvider,
   storageProviderKind,
@@ -33,6 +40,8 @@ export { ExportFailureError };
 
 const OUTPUT_WIDTH = 1080;
 const OUTPUT_HEIGHT = 1920;
+/** Schema version of the stored `ExportJob.qcDetails` document. */
+const QC_DETAILS_VERSION = 1;
 const DOWNLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function recordExportStorageFact(params: {
@@ -228,7 +237,11 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   const workDir = await mkdtemp(path.join(os.tmpdir(), "sermon-export-"));
   const sourceFilePath = path.join(workDir, "source-video");
   const outputPath = path.join(workDir, "output.mp4");
-  let probeResult: Awaited<ReturnType<typeof probeVideoFile>> | null;
+  // Measured, never substituted: the old path wrote the OUTPUT_WIDTH/OUTPUT_HEIGHT constants
+  // into ExportedFile whenever the probe had failed, so a wrongly shaped file was recorded as a
+  // correctly shaped one.
+  let outputWidth: number;
+  let outputHeight: number;
   let bytes: number;
   let checksum: string;
   let sourceBytes = Number(sourceVideo.sizeBytes ?? BigInt(0));
@@ -296,6 +309,72 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     });
 
     const outputBytes = (await stat(outputPath)).size;
+
+    // P1.3: the file proves itself before anything keeps it. Nothing is uploaded until QC passes,
+    // so a render that did not decode, lost its audio, came out the wrong shape, ran short, or
+    // burned in none of its captions never becomes a stored, deliverable file.
+    let probeError: string | null = null;
+    const probed = await probeVideoFile(outputPath).catch((error: unknown) => {
+      probeError = error instanceof Error ? error.message : String(error);
+      return null;
+    });
+    const outputChecksum = await hashFile(outputPath);
+    const qc = evaluateRenderOutputQc(
+      {
+        probe: probed,
+        probeError,
+        bytes: outputBytes,
+        checksum: outputChecksum,
+        captionEvents: countCaptionDialogueEvents(assContent),
+      },
+      {
+        width: OUTPUT_WIDTH,
+        height: OUTPUT_HEIGHT,
+        durationS: outputDurationS,
+        durationToleranceS: renderQcDurationToleranceS(outputDurationS),
+        captionLines: captionLines.length,
+      },
+    );
+
+    // The verdict is recorded either way, so a refused render leaves evidence rather than only a
+    // failure code. The checksum stored here is the same value ExportedFile receives, so the two
+    // can be asserted equal instead of assumed to agree.
+    await prisma.exportJob.update({
+      where: { id: job.id },
+      data: {
+        qcStatus: qc.status === "PASSED" ? RenderQcStatus.PASSED : RenderQcStatus.FAILED,
+        qcCheckedAt: new Date(),
+        qcChecksum: outputChecksum,
+        qcDetails: { version: QC_DETAILS_VERSION, checks: qc.checks } as Prisma.InputJsonValue,
+      },
+    });
+
+    if (qc.status === "FAILED") {
+      await recordOperationalEventSafely(prisma, {
+        workspaceId: job.workspaceId,
+        category: "export",
+        eventType: "export_render_qc_failed",
+        severity: "warning",
+        message: "A rendered export failed quality control and was not saved.",
+        clipId: job.clipId,
+        exportJobId: job.id,
+        metadata: {
+          editVersion: job.editVersion,
+          attempt: job.attempt,
+          failures: qc.failures.map((check) => ({ name: check.name, detail: check.detail })),
+        },
+      });
+      throw new ExportFailureError(RENDER_QC_FAILED, RENDER_QC_FAILED_MESSAGE);
+    }
+
+    if (!probed || probed.width === null || probed.height === null) {
+      // Unreachable: the decode and dimension checks refuse this file first. Kept so the recorded
+      // dimensions can only ever be the measured ones.
+      throw new ExportFailureError(RENDER_QC_FAILED, RENDER_QC_FAILED_MESSAGE);
+    }
+    outputWidth = probed.width;
+    outputHeight = probed.height;
+
     const uploadStartedAt = Date.now();
     try {
       await storage.uploadFile(exportsKey, outputPath, "video/mp4");
@@ -320,12 +399,14 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       wallTimeMs: Date.now() - uploadStartedAt,
       outcome: "succeeded",
     });
-    [probeResult, bytes, checksum] = await Promise.all([
-      probeVideoFile(outputPath).catch(() => null),
-      storage.size(exportsKey),
-      hashFile(outputPath),
-    ]);
+    bytes = await storage.size(exportsKey);
+    checksum = outputChecksum;
   } catch (error) {
+    // A QC refusal already carries its own code and its own user message. Rewrapping it as
+    // RENDER_FAILED would hide which check refused the file.
+    if (error instanceof ExportFailureError) {
+      throw error;
+    }
     throw new ExportFailureError("RENDER_FAILED", "Export failed on our side — your clip is safe.", {
       cause: error,
     });
@@ -337,8 +418,8 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     data: {
       storageKey: exportsKey,
       bytes: BigInt(bytes),
-      width: probeResult?.width ?? OUTPUT_WIDTH,
-      height: probeResult?.height ?? OUTPUT_HEIGHT,
+      width: outputWidth,
+      height: outputHeight,
       checksum,
       downloadExpiresAt: new Date(Date.now() + DOWNLOAD_TTL_MS),
     },

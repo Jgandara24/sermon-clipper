@@ -7,6 +7,9 @@ import { ExportFailureError } from "./errors";
  * the worker gets around to it". The requested version is written to ExportJob.editVersion at
  * enqueue time and read back here — the two can never disagree, because both the stored version
  * and the idempotency key are derived from the same number by buildExportIdempotencyKey.
+ *
+ * P1.2: that same key is the whole identity of an export. One clip and one edit version are one
+ * render, whatever the resulting file is called.
  */
 
 /** No ClipEdit row exists for a clip that was never edited; its export renders the defaults. */
@@ -30,21 +33,30 @@ const NOT_FOUND_MESSAGE =
 const UNREADABLE_MESSAGE =
   "The saved version this export was requested for couldn't be read. Export the clip again from the editor.";
 
-const KEY_PATTERN = /^export:([^:]+):v(\d+):([\s\S]*)$/;
+// The trailing group matches the filename that keys written before P1.2 still carry, so their
+// version stays readable. Nothing writes that shape any more.
+const KEY_PATTERN = /^export:([^:]+):v(\d+)(?::[\s\S]*)?$/;
 
 /**
  * The single place an export idempotency key is built. Callers pass the version they intend to
  * pin, so the key's version and the row's editVersion are the same value by construction.
+ *
+ * P1.2: identity is the clip and the edit version, and nothing else. The filename names the
+ * download, not the work — two requests that would render identical pixels are one render.
+ * The parameter is gone rather than ignored, so no caller can reintroduce it by accident.
  */
 export function buildExportIdempotencyKey(params: {
   clipId: string;
   editVersion: number;
-  filename: string;
 }): string {
-  return `export:${params.clipId}:v${params.editVersion}:${params.filename}`;
+  return `export:${params.clipId}:v${params.editVersion}`;
 }
 
-/** Reads the version back out of a key. Returns null for keys written before P1.1. */
+/**
+ * Reads the version back out of a key. Returns null for keys written before P1.1, which carry no
+ * version at all. Keys written between P1.1 and P1.2 carry a filename after the version and still
+ * parse: a legacy key that stopped parsing would turn a pinned export into an unpinned one.
+ */
 export function parseExportIdempotencyKeyVersion(key: string): number | null {
   const match = KEY_PATTERN.exec(key);
   return match ? Number.parseInt(match[2], 10) : null;

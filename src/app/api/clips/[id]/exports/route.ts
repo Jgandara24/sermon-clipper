@@ -19,7 +19,7 @@ const postBodySchema = z.object({
   filename: z.string().trim().min(1).max(200).optional(),
 });
 
-/** Enqueues an export job for a clip (guide §15/§19). Idempotent per (clip, edit version, filename). */
+/** Enqueues an export job for a clip (guide §15/§19). Idempotent per (clip, edit version). */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiWorkspace("EXPORT_CLIP");
   if ("error" in auth) return auth.error;
@@ -79,6 +79,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return apiError(CONTINUOUS_RANGE_REQUIRED, CONTINUOUS_RANGE_MESSAGE, { status: 409 });
   }
 
+  // Identity is the clip and the pinned edit version (P1.2). The filename is decided after it,
+  // and deliberately takes no part in it: the default embeds today's date, so a filename inside
+  // the key rotated the identity at midnight and rendered the same saved edit a second time.
+  const idempotencyKey = buildExportIdempotencyKey({ clipId: clip.id, editVersion });
+
+  // Idempotent re-requests of an existing job bypass rate limits — they create no new render.
+  // This ordering is deliberate and now safe: with the filename out of the key, a re-request
+  // cannot be a rename in disguise, so nothing reaches the queue without being counted.
+  const existing = await prisma.exportJob.findUnique({ where: { idempotencyKey } });
+  if (existing) {
+    return apiData({ exportJobId: existing.id });
+  }
+
+  // Metadata only: it names the downloaded file. A caller that renames gets the job it already
+  // has, under the name that job was created with.
   const filename =
     parsed.data.filename ??
     buildDefaultExportFilename({
@@ -86,15 +101,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       clipTitle: clip.title,
       date: new Date(),
     });
-  const idempotencyKey = buildExportIdempotencyKey({ clipId: clip.id, editVersion, filename });
-
-  // Idempotent re-requests of an existing job bypass rate limits — they create no new render.
-  // Only genuinely new jobs (including filename variations, the unlimited-render loophole)
-  // count against the workspace's concurrent and daily caps.
-  const existing = await prisma.exportJob.findUnique({ where: { idempotencyKey } });
-  if (existing) {
-    return apiData({ exportJobId: existing.id });
-  }
 
   const limit = await checkExportJobLimits(prisma, auth.workspace.id);
   if (!limit.allowed) {

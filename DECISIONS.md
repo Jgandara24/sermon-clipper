@@ -604,7 +604,7 @@ Why: Guide §15 step 2 requires "re-submitting the same job id must not double-c
 
 Tradeoff: Two exports of the same clip state with two different filenames create two separate render jobs rather than reusing one — an accepted minor inefficiency in exchange for keeping the idempotency key derivation simple and not requiring a client-supplied key.
 
-Status: Active.
+Status: Superseded by the 2026-09-02 export-identity decision. The filename is no longer part of the key.
 
 ## 2026-07-16 - Retention Reaper Purges Media, Keeps The Record
 
@@ -2431,3 +2431,86 @@ that emits nothing is treated as a failed sampler, not a quiet disk.
 Status: Active. Corrects the entry above it on the count, the time scope, the Clean claim, the
 active-word claim, the §7 P1.1 statement, and the Slice 12 ownership of panel resizing; records
 the disk-floor failure. Does not change the entry's conclusion.
+
+## 2026-09-02 - An Export Is Identified By Its Clip And Its Edit Version, And Nothing Else
+
+Decision: the export idempotency key is `export:{clipId}:v{editVersion}`. The filename is removed
+from it. `buildExportIdempotencyKey` no longer accepts a filename parameter, so no caller can
+reintroduce one by accident. The filename is still chosen, still stored on the `ExportJob` row,
+and still names the downloaded file. It describes the download, not the work.
+
+`parseExportIdempotencyKeyVersion` still reads keys written before this change. A key from
+between P1.1 and P1.2 carries the filename after the version and parses to the same version; a
+key from before P1.1 carries no version and still returns null. A legacy key that stopped parsing
+would turn a pinned export back into an unpinned one, which is what P1.1 exists to prevent.
+
+The idempotency lookup keeps running before `checkExportJobLimits`. That ordering is now
+deliberate rather than incidental: a re-request that returns an existing job creates no render,
+so it is not charged against the workspace caps, and with the filename out of the key a
+re-request can no longer be a rename in disguise. A test asserts both halves.
+
+Why: the user interface posts no filename, so the server built the default itself from
+`new Date()`. The date sat inside the identity, so the same clip at the same saved edit version
+became a different key at midnight and rendered a second time on its own. A caller-supplied
+rename did the same thing on demand. Neither produces different pixels. Two requests that would
+render the same frames are one piece of work.
+
+Tradeoff: a clip that already has an export under a legacy key will not match the new key, so its
+next export request renders once more under the new identity. That is one extra render per
+already-exported clip and version, and it is preferred to a backfill: two legacy rows for the same
+clip and version with different filenames would collide on the unique index, and choosing a
+winner between two real rendered files is not a migration's decision to make. A caller that
+deliberately wants the same cut under two names now gets one job and one name; renaming a
+finished download is the user's own step.
+
+Status: Active. Supersedes the 2026-07-06 entry "Export Idempotency Key Is Scoped To (Clip, Edit
+Version, Filename)".
+
+
+## 2026-09-02 - A Successful Export Is One That Proved Itself Before It Was Stored
+
+Decision: every rendered export passes quality control before anything keeps it. `SUCCEEDED` now
+means the file passed these checks, not that ffmpeg exited zero.
+
+Seven checks run on the rendered file, in `src/lib/qc/render-output.ts`, a pure module: the file
+decodes, its dimensions are the expected vertical frame, an audio stream is present, the duration
+is within tolerance of the duration the edit asked for, the file is not empty, a checksum exists,
+and a clip that has caption lines produced caption events. The duration tolerance scales with the
+clip — five percent, never below one second — because a flat tolerance either fails short clips on
+ordinary re-encode drift or lets a badly truncated long clip through.
+
+QC runs before the upload. A refused render leaves no object in storage, no `ExportedFile` row,
+and nothing for retention to clean up later.
+
+The verdict is stored either way, on the Wave 1 columns: `qcStatus`, `qcCheckedAt`, `qcChecksum`,
+and `qcDetails`, which carries a versioned record of every check that ran, passing and failing.
+The checksum QC computed is the same value `ExportedFile.checksum` receives, so the two are
+asserted equal rather than assumed to agree. A failure also records an `export_render_qc_failed`
+operational event carrying the clip id.
+
+`ExportedFile.width` and `height` are now the measured values. The old path probed after the
+upload with `.catch(() => null)` and then wrote the 1080x1920 constants whenever the probe had
+failed, so a wrongly shaped file was recorded as a correctly shaped one. Nothing substitutes a
+dimension any more.
+
+A QC failure is retryable, not terminal. This follows the precedent set for
+`CONTINUOUS_RANGE_REQUIRED`: the common case is deterministic and will fail three times and land
+FAILED with the QC record visible, but a truncated write or a transient encoder fault is real and
+a retry can clear it. A terminal refusal would spend that possibility to save two renders.
+
+The caption-events check is an input-side fact carried in the same gate on purpose. It is what
+catches the blank-caption render — a file that decodes, has audio, is the right shape and the
+right length, and has no captions drawn on it. No other check here would notice that.
+
+Why: the previous path uploaded first and validated afterwards, and swallowed the probe error
+when it validated at all. A file that did not decode was stored, recorded with invented
+dimensions, marked SUCCEEDED, and made available to download and to schedule.
+
+Tradeoff: a caption defect still costs one full render before it is caught, because QC runs after
+ffmpeg. Catching an empty caption script before the encode would be cheaper and is a later
+improvement, not a change to this gate. The duration tolerance is a judgement: five percent
+accepts keyframe-seek drift on a long clip, and a truncation small enough to hide inside it is
+smaller than a viewer would notice.
+
+Status: Active.
+

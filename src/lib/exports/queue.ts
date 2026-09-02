@@ -5,12 +5,15 @@ import { buildExportIdempotencyKey } from "./edit-version";
 const MAX_ATTEMPTS = EXPORT_MAX_ATTEMPTS; // initial attempt + 2 retries, per guide §15 step 6
 
 /**
- * Idempotent by idempotencyKey — a retried POST for the same clip/version/filename reuses the
- * same job.
+ * Idempotent by idempotencyKey — a retried POST for the same clip and edit version reuses the
+ * same job, whatever filename it asks for (P1.2).
  *
  * The caller passes the edit version it selected rather than a prebuilt key: the stored
  * editVersion and the version inside the key are derived from that one number here, so the job
  * the worker renders can never disagree with the job the key claims to represent (P1.1).
+ *
+ * The filename is stored on the row because the download needs a name. It is not part of the
+ * identity, so renaming cannot mint a second render.
  */
 export async function enqueueExportJob(
   client: PrismaClient,
@@ -19,7 +22,6 @@ export async function enqueueExportJob(
   const idempotencyKey = buildExportIdempotencyKey({
     clipId: params.clipId,
     editVersion: params.editVersion,
-    filename: params.filename,
   });
 
   const existing = await client.exportJob.findUnique({ where: { idempotencyKey } });
