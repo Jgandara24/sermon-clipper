@@ -45,3 +45,24 @@ export function captionFontShorthand(face: CaptionFace, sizePx: number): string 
   const weight = face.bold ? CAPTION_BOLD_WEIGHT : CAPTION_REGULAR_WEIGHT;
   return `${weight} ${Math.round(sizePx)}px "${face.family}"`;
 }
+
+/**
+ * Whether a loaded font face is the bundled one this caption needs.
+ *
+ * `document.fonts.check()` cannot answer this. It reports whether everything it *matched* is
+ * loaded, so a family the document never declared comes back true — and the canvas then measures
+ * a synthesised bold over some other face and reports a perfectly plausible width. That is how a
+ * 10px disagreement per word reached the parity test with the browser insisting it was ready.
+ *
+ * So readiness is a positive statement instead: a face in this exact family, at this exact weight,
+ * with status "loaded".
+ */
+export function isRequiredCaptionFaceEntry(
+  entry: { family: string; weight: string; status: string },
+  face: CaptionFace,
+): boolean {
+  const family = entry.family.trim().replace(/^['"]|['"]$/g, "");
+  if (family !== face.family) return false;
+  if (entry.status !== "loaded") return false;
+  return entry.weight.trim() === String(face.bold ? CAPTION_BOLD_WEIGHT : CAPTION_REGULAR_WEIGHT);
+}

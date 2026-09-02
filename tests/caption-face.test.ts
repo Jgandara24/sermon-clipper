@@ -5,6 +5,7 @@ import {
   CAPTION_BOLD_WEIGHT,
   CAPTION_REGULAR_WEIGHT,
   isBoldCaptionWeight,
+  isRequiredCaptionFaceEntry,
   resolveCaptionFace,
 } from "@/lib/editor/caption-face";
 
@@ -76,5 +77,55 @@ describe("captionFontShorthand", () => {
 
   it("rounds the size to whole pixels, so both sides ask for one number", () => {
     expect(captionFontShorthand({ family: "DejaVu Sans", bold: false }, 47.6)).toContain("48px");
+  });
+});
+
+describe("isRequiredCaptionFaceEntry", () => {
+  const bold = { family: "DejaVu Sans", bold: true };
+  const regular = { family: "DejaVu Sans", bold: false };
+
+  it("accepts the exact family, weight and loaded status", () => {
+    expect(
+      isRequiredCaptionFaceEntry({ family: "DejaVu Sans", weight: "700", status: "loaded" }, bold),
+    ).toBe(true);
+    expect(
+      isRequiredCaptionFaceEntry({ family: "DejaVu Sans", weight: "400", status: "loaded" }, regular),
+    ).toBe(true);
+  });
+
+  it("rejects a face that has not finished loading", () => {
+    expect(
+      isRequiredCaptionFaceEntry({ family: "DejaVu Sans", weight: "700", status: "unloaded" }, bold),
+    ).toBe(false);
+    expect(
+      isRequiredCaptionFaceEntry({ family: "DejaVu Sans", weight: "700", status: "loading" }, bold),
+    ).toBe(false);
+  });
+
+  it("rejects the other weight of the right family", () => {
+    // The trap this replaces: the regular face is loaded, the bold one is not, and the canvas
+    // synthesises bold from it and reports a plausible width.
+    expect(
+      isRequiredCaptionFaceEntry({ family: "DejaVu Sans", weight: "400", status: "loaded" }, bold),
+    ).toBe(false);
+  });
+
+  it("rejects another family entirely", () => {
+    expect(
+      isRequiredCaptionFaceEntry({ family: "Geist", weight: "700", status: "loaded" }, bold),
+    ).toBe(false);
+  });
+
+  it("rejects a variable-weight range rather than assuming it covers the weight", () => {
+    // A range would have to be parsed to be trusted, and none of the bundled faces is variable.
+    expect(
+      isRequiredCaptionFaceEntry({ family: "DejaVu Sans", weight: "100 900", status: "loaded" }, bold),
+    ).toBe(false);
+  });
+
+  it("tolerates the quoting and spacing a browser may report", () => {
+    expect(
+      isRequiredCaptionFaceEntry({ family: '"DejaVu Sans"', weight: " 700 ", status: "loaded" }, bold),
+    ).toBe(true);
   });
 });

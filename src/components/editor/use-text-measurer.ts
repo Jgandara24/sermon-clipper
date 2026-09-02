@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   captionFontShorthand,
+  isRequiredCaptionFaceEntry,
   resolveCaptionFace,
   type CaptionFace,
 } from "@/lib/editor/caption-face";
@@ -63,13 +64,18 @@ export function useCaptionTextMeasurer(style: {
       return;
     }
 
-    // `load` asks for this exact face rather than waiting on every font the page wants; `ready`
-    // then covers the case where it had already resolved.
-    void Promise.resolve(fonts.load(font))
+    // Settle the document's own font loading first, so the `@font-face` rules are registered
+    // before this asks for one of them; then ask for this exact face and let that settle too.
+    void Promise.resolve(fonts.ready)
+      .then(() => fonts.load(font))
       .then(() => fonts.ready)
       .then(() => {
-        if (cancelled || !fonts.check(font)) return;
-        setLoadedFont(font);
+        if (cancelled) return;
+        // Deliberately not `fonts.check(font)`. It reports whether everything it matched is
+        // loaded, so a family the document never declared comes back true, and the canvas then
+        // measures a synthesised bold over another face and returns a plausible width.
+        const loaded = [...fonts].some((entry) => isRequiredCaptionFaceEntry(entry, face));
+        if (loaded) setLoadedFont(font);
       })
       .catch(() => {
         // Leave it unready. A measurement now would be the fallback's metrics.
@@ -78,7 +84,7 @@ export function useCaptionTextMeasurer(style: {
     return () => {
       cancelled = true;
     };
-  }, [font]);
+  }, [font, face]);
 
   return useMemo(() => {
     if (loadedFont !== font || typeof document === "undefined") return unready(font);
