@@ -39,8 +39,24 @@ import type { EditorState } from "@/lib/editor/types";
 import type { EditorWordWithDeletion } from "@/lib/editor/words";
 import type { EditorBrandTemplate } from "@/components/editor/brand-template-panel";
 import { CanvasObject, type CanvasObjectGesture } from "@/components/editor/canvas-object";
+import { layOutCaptionRows } from "@/lib/editor/caption-layout";
+import { useCaptionTextMeasurer } from "@/components/editor/use-text-measurer";
 
 /** Matches the schema's bounds on captions.overrides.sizePx. */
+/**
+ * The frame the burn-in positions in. The preview lays the caption out in these coordinates and
+ * scales the result to whatever width it is actually drawn at, so both renderers answer the same
+ * question and only the last step differs.
+ */
+const FRAME_WIDTH = 1080;
+/** Left and right margins the burn-in's style line declares. The usable row width is what is left. */
+const CAPTION_MARGIN_H = 40;
+/**
+ * Used only before the canvas has been measured, for the one frame between mount and the first
+ * resize observation.
+ */
+const FALLBACK_PREVIEW_SCALE = 318 / FRAME_WIDTH;
+
 const CAPTION_MIN_SIZE_PX = 16;
 const CAPTION_MAX_SIZE_PX = 160;
 
@@ -124,8 +140,70 @@ export function VideoPreview({
   const currentWords = activation?.words ?? [];
   const activeWordId = activation?.activeWordId ?? null;
   // Nothing left to lay out word by word once the text is empty or the preset renders it whole.
+  // How much of a frame pixel a preview pixel is, measured rather than assumed.
+  //
+  // The caption size used to be a flat 0.4 of the style's own size, which quietly asserted the
+  // canvas was 432px wide. It is not — at the editor's usual width it is about 318px — so the
+  // preview drew captions around a third larger, relative to the frame, than the exported file
+  // does. Positioning words in frame coordinates makes that assumption load-bearing, so the scale
+  // is now taken from the element.
+  const [canvasWidthPx, setCanvasWidthPx] = useState(0);
+  useEffect(() => {
+    const element = canvasRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[entries.length - 1]?.contentRect.width ?? 0;
+      if (width > 0) setCanvasWidthPx(width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const previewScale = canvasWidthPx > 0 ? canvasWidthPx / FRAME_WIDTH : FALLBACK_PREVIEW_SCALE;
+
   const captionIsRetyped = currentWords.length === 0;
   const captionPoint = style.box ?? defaultCaptionPoint(style.position);
+
+  // The browser half of the measured layout. Until the bundled face has loaded this reports
+  // nothing, and the caption keeps the CSS flow it has always used — a measurement taken before
+  // the file arrives is the fallback's metrics, and it looks perfectly valid.
+  const measurer = useCaptionTextMeasurer(style);
+  const measuredRows =
+    measurer.ready && style.activeWordHighlight && !captionIsRetyped
+      ? layOutCaptionRows({
+          words: currentWords.map((word) => ({
+            id: word.id,
+            text: applyTextCase(word.word, style.textCase),
+          })),
+          measure: measurer.measure,
+          spaceWidth: measurer.spaceWidth,
+          activeWordId,
+          // Slice 8a positions words; it does not move them. The neighbour shift arrives in 8b.
+          peakScale: 1,
+          maxWidth: FRAME_WIDTH - CAPTION_MARGIN_H * 2,
+        })
+      : null;
+
+  const captionRowPitchPx = style.sizePx * previewScale;
+  const captionBlockWidthPx = measuredRows
+    ? Math.max(...measuredRows.rows.map((row) => row.restWidth)) * previewScale
+    : 0;
+  const captionBlockHeightPx = measuredRows ? measuredRows.rows.length * captionRowPitchPx : 0;
+  /**
+   * How far the block shifts so its anchor lands where the burn-in puts it.
+   *
+   * The canvas object centres whatever it holds on the caption's point, which is right for a
+   * caption that was dragged there and for a middle-positioned one. A bottom-anchored caption is
+   * different: the burn-in keeps its last row on the margin line and stacks further rows above, so
+   * a second row must grow upward rather than push the first one up. A top-anchored one grows
+   * downward for the same reason.
+   */
+  const captionRowsShiftPx = (() => {
+    if (!measuredRows || style.box) return 0;
+    const extra = ((measuredRows.rows.length - 1) / 2) * captionRowPitchPx;
+    if (style.position === "top") return extra;
+    if (style.position === "middle") return 0;
+    return -extra;
+  })();
 
   useEffect(() => {
     seekedRef.current = false;
@@ -422,7 +500,7 @@ export function VideoPreview({
                 className="block whitespace-nowrap rounded px-2 py-1 text-center"
                 style={{
                   fontFamily: style.fontFamily,
-                  fontSize: `${style.sizePx * 0.4}px`,
+                  fontSize: `${style.sizePx * previewScale}px`,
                   fontWeight: style.weight,
                   color: style.textColor,
                   // No text-transform: the preview lays out the same string the burn-in does, so
@@ -437,41 +515,83 @@ export function VideoPreview({
                   Rest spacing: no width is reserved for the pop, so a line with nothing active is
                   laid out exactly like one with an active word. The active word scales on the
                   shared curve and its neighbours do not move, which is why it can overlap them
-                  slightly at large sizes until Slice 8 shifts them aside.
+                  slightly at large sizes until Slice 8b shifts them aside.
                 */}
-                {captionIsRetyped || !style.activeWordHighlight
-                  ? applyTextCase(currentLine.text, style.textCase)
-                  : currentWords.map((word, index) => (
-                      <Fragment key={word.id}>
-                        {/* The separator sits outside the word, so the highlight covers the
-                            word and not the space in front of it. */}
-                        {index > 0 ? " " : ""}
+                {measuredRows ? (
+                  // Positioned from the same layout the burn-in reads, in the same frame
+                  // coordinates, so the two agree about where a word is rather than one flowing
+                  // text and the other placing it.
+                  <span
+                    className="relative block"
+                    style={{
+                      width: `${captionBlockWidthPx}px`,
+                      height: `${captionBlockHeightPx}px`,
+                      transform: `translateY(${captionRowsShiftPx}px)`,
+                    }}
+                  >
+                    {measuredRows.rows.map((row, rowIndex) =>
+                      row.words.map((word) => (
                         <span
+                          key={word.id}
                           data-testid="caption-word"
                           data-active={word.id === activeWordId ? "true" : "false"}
+                          className="absolute whitespace-pre"
                           style={{
-                            // Every word is inline-block, not just the active one: a span that
-                            // changes display changes the line's layout, and rest spacing has to
-                            // be identical whether or not anything is active. A transform does
-                            // not affect layout, so the pop moves nothing.
-                            display: "inline-block",
-                            ...(word.id === activeWordId && activation
-                              ? {
-                                  color: style.highlightColor,
-                                  // Same curve the burn-in evaluates, on the same clock: elapsed
-                                  // into this activation, over this activation's own length.
-                                  transform: `scale(${popScaleAt(
-                                    currentMs - activation!.startMs,
-                                    activation!.endMs - activation!.startMs,
-                                  )})`,
-                                }
-                              : null),
+                            left: `${captionBlockWidthPx / 2 + word.restX * previewScale}px`,
+                            top: `${rowIndex * captionRowPitchPx + captionRowPitchPx / 2}px`,
+                            // The word is centred on its own point, so the pop scales it about
+                            // itself and nothing beside it can move.
+                            transform: `translate(-50%, -50%) scale(${
+                              word.id === activeWordId && activation
+                                ? popScaleAt(
+                                    currentMs - activation.startMs,
+                                    activation.endMs - activation.startMs,
+                                  )
+                                : 1
+                            })`,
+                            ...(word.id === activeWordId ? { color: style.highlightColor } : null),
                           }}
                         >
-                          {applyTextCase(word.word, style.textCase)}
+                          {word.text}
                         </span>
-                      </Fragment>
-                    ))}
+                      )),
+                    )}
+                  </span>
+                ) : captionIsRetyped || !style.activeWordHighlight ? (
+                  applyTextCase(currentLine.text, style.textCase)
+                ) : (
+                  currentWords.map((word, index) => (
+                    <Fragment key={word.id}>
+                      {/* The separator sits outside the word, so the highlight covers the
+                          word and not the space in front of it. */}
+                      {index > 0 ? " " : ""}
+                      <span
+                        data-testid="caption-word"
+                        data-active={word.id === activeWordId ? "true" : "false"}
+                        style={{
+                          // Every word is inline-block, not just the active one: a span that
+                          // changes display changes the line's layout, and rest spacing has to
+                          // be identical whether or not anything is active. A transform does
+                          // not affect layout, so the pop moves nothing.
+                          display: "inline-block",
+                          ...(word.id === activeWordId && activation
+                            ? {
+                                color: style.highlightColor,
+                                // Same curve the burn-in evaluates, on the same clock: elapsed
+                                // into this activation, over this activation's own length.
+                                transform: `scale(${popScaleAt(
+                                  currentMs - activation!.startMs,
+                                  activation!.endMs - activation!.startMs,
+                                )})`,
+                              }
+                            : null),
+                        }}
+                      >
+                        {applyTextCase(word.word, style.textCase)}
+                      </span>
+                    </Fragment>
+                  ))
+                )}
               </span>
             </CanvasObject>
           ) : null}
