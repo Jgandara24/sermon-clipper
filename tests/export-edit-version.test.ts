@@ -32,28 +32,46 @@ function clientWithEdits(edits: Array<{ version: number }>) {
 }
 
 describe("buildExportIdempotencyKey", () => {
-  it("encodes the clip, the edit version, and the filename", () => {
-    expect(
-      buildExportIdempotencyKey({ clipId: "clip-1", editVersion: 7, filename: "sermon.mp4" }),
-    ).toBe("export:clip-1:v7:sermon.mp4");
-  });
-
-  it("round-trips the version back out, even for a filename containing colons", () => {
-    const key = buildExportIdempotencyKey({
-      clipId: "clip-1",
-      editVersion: 12,
-      filename: "series: part 2 - v3.mp4",
-    });
-    expect(parseExportIdempotencyKeyVersion(key)).toBe(12);
+  it("identifies an export by clip and edit version alone", () => {
+    expect(buildExportIdempotencyKey({ clipId: "clip-1", editVersion: 7 })).toBe("export:clip-1:v7");
   });
 
   it("reads version 0 back as 0, not as a missing version", () => {
-    const key = buildExportIdempotencyKey({ clipId: "clip-1", editVersion: 0, filename: "a.mp4" });
+    const key = buildExportIdempotencyKey({ clipId: "clip-1", editVersion: 0 });
+    expect(key).toBe("export:clip-1:v0");
     expect(parseExportIdempotencyKeyVersion(key)).toBe(0);
   });
 
-  it("returns null for a key that carries no version", () => {
+  it("round-trips every version it writes", () => {
+    for (const editVersion of [0, 1, 9, 137]) {
+      const key = buildExportIdempotencyKey({ clipId: "clip-1", editVersion });
+      expect(parseExportIdempotencyKeyVersion(key)).toBe(editVersion);
+    }
+  });
+});
+
+describe("parseExportIdempotencyKeyVersion reads keys written before P1.2", () => {
+  // P1.2 removed the filename from the identity. Rows written before it still carry the old
+  // three-part key, and their version must stay readable — a key that stops parsing turns a
+  // pinned legacy export into an unpinned one, which is exactly what P1.1 forbids.
+  it("reads the version out of a legacy key that carries a filename", () => {
+    expect(parseExportIdempotencyKeyVersion("export:clip-1:v7:sermon.mp4")).toBe(7);
+  });
+
+  it("reads the version out of a legacy key whose filename contains colons", () => {
+    expect(parseExportIdempotencyKeyVersion("export:clip-1:v12:series: part 2 - v3.mp4")).toBe(12);
+  });
+
+  it("reads legacy version 0 back as 0", () => {
+    expect(parseExportIdempotencyKeyVersion("export:clip-1:v0:a.mp4")).toBe(0);
+  });
+
+  it("returns null for a key that carries no version at all", () => {
     expect(parseExportIdempotencyKeyVersion("export:clip-1:sermon.mp4")).toBeNull();
+  });
+
+  it("returns null for a key from another queue", () => {
+    expect(parseExportIdempotencyKeyVersion("probe:project-1")).toBeNull();
   });
 });
 
