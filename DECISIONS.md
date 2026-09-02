@@ -2514,3 +2514,52 @@ smaller than a viewer would notice.
 
 Status: Active.
 
+## 2026-09-02 - A Caption Keeps Its Bottom Anchor And Wraps, Because That Is What The Category Does
+
+Decision: when each caption word carries its own position, the two rules libass currently supplies
+implicitly are written down and reproduced exactly.
+
+**Vertical.** With no dragged position, the block is anchored at its bottom: the last row sits
+where it sits today, and extra rows stack upward at a pitch of one font size. With a dragged
+position, the block centres on that point. Both are expressed through libass's own alignment rather
+than reconstructed arithmetic — the bottom-anchored case emits `\an2` at the margin line, the
+dragged case emits `\an5` at the point — so the placement is computed by the same code that
+computes it today.
+
+**Wrapping.** A line wider than the usable frame breaks onto further rows by greedy fill at that
+width, which is what libass does now. Font size never changes to make a line fit, and the line
+builder's grouping is not altered.
+
+Per-word positioning applies only where it is safe to measure: a preset that highlights, drawing in
+a bundled face, centre-aligned. Today that is Highlighter alone. Everything else keeps the whole-run
+event it has always emitted, so Clean and every retired preset are untouched.
+
+Why: the product owner asked for whichever answer matches an Opus Clip style editor. For both
+questions that is the same answer, and it also happens to be the answer that changes no existing
+clip.
+
+A short-form caption is anchored to the bottom safe band because the bottom of the frame belongs to
+the platform's own chrome; a caption that grew downward as it got longer would walk into it. Growing
+upward from a fixed bottom is what every editor in this category does, and it is what this renderer
+already does. Centring on the point when a caption has been dragged is what direct manipulation
+means: the object goes where it was put.
+
+Wrapping rather than shrinking is the same argument. Caption size is a setting a church chooses, and
+a renderer that quietly reduced it for one line would make the text change size mid-clip, which no
+editor in this category does. Re-grouping lines by width upstream was rejected for a wider reason:
+it would change how captions are grouped on every clip, including the ones that fit today, to solve
+a problem only long lines have.
+
+Measured from real renders before deciding, at Highlighter's 48px bold on a 1080x1920 frame: a
+one-row caption's text bottom sits 240px above the frame bottom and a two-row caption's sits 239px,
+so the block is bottom-anchored; row pitch is 48px; a caption dragged to y 806 measured its centre
+at 805 with one row and with two. `EVERLASTING RIGHTEOUSNESS THROUGHOUT` is 1242px against 1000px of
+usable frame, and libass breaks it after `RIGHTEOUSNESS`. With every word on its own event and no
+wrapping rule, the same line runs from x -81 to x 1161 and is clipped on both sides.
+
+Tradeoff: the layout module now returns rows rather than one row, and the pop and the neighbour
+shift that follows in Slice 8b operate within a row. Wrapping is ours to get right, and a wrap point
+that disagrees with libass's would move an existing caption, so the acceptance test compares real
+rendered frames rather than only the generated text.
+
+Status: Active.
