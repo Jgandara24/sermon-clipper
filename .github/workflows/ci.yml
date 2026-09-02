@@ -46,7 +46,13 @@ jobs:
           cache: "npm"
       # noninteractive so a package prompt can never wait forever on a headless runner, and
       # retries so a slow apt mirror fails as a retry rather than as a stall.
+      #
+      # The retries handle a mirror that answers slowly. They do not help one that stops
+      # answering: apt then sits on an open connection, and with no limit here the check ran to
+      # the job's own 30-minute cap before anyone could re-run it. Five minutes is far longer
+      # than this install has ever legitimately taken and turns that stall into a fast retry.
       - name: Install ffmpeg
+        timeout-minutes: 5
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -84,7 +90,13 @@ jobs:
           cache: "npm"
       # noninteractive so a package prompt can never wait forever on a headless runner, and
       # retries so a slow apt mirror fails as a retry rather than as a stall.
+      #
+      # The retries handle a mirror that answers slowly. They do not help one that stops
+      # answering: apt then sits on an open connection, and with no limit here the check ran to
+      # the job's own 30-minute cap before anyone could re-run it. Five minutes is far longer
+      # than this install has ever legitimately taken and turns that stall into a fast retry.
       - name: Install ffmpeg
+        timeout-minutes: 5
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |

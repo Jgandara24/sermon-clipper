@@ -26,6 +26,11 @@ import { runOnePendingJob } from "@/lib/jobs/runner";
 import { runProbeJob } from "@/lib/jobs/handlers/probe";
 import { createProjectFromUploadedSourceVideo } from "@/lib/project-service";
 import { getStorageProvider } from "@/lib/storage";
+import {
+  TRANSCRIPTION_FALLBACK_EXCEPTION_TYPE,
+  transcriptProviderNameFor,
+} from "@/lib/transcription/fallback-hold";
+import { resolveTranscriptionProviderPolicy } from "@/lib/transcription/policy";
 
 const execFileAsync = promisify(execFile);
 const prisma = new PrismaClient();
@@ -564,7 +569,36 @@ describe("Phase 6/7 reviewed branded export workflow", () => {
 
       expect(completed.status).toBe(ProjectStatus.READY);
       expect(completed.sourceVideo?.durationS?.toNumber()).toBeGreaterThan(20);
-      expect(completed.sourceVideo?.transcript?.provider).toBe("whisper_cpp");
+      // The transcript came from the configured policy, and said so if it did not come from the
+      // primary.
+      //
+      // Worth knowing when this fails: the test above it is skipped unless a local whisper model
+      // exists, and CI has none. So this only ever runs on a developer machine, which is how a
+      // hard-coded provider name sat here unnoticed after Scribe became the primary.
+      //
+      // Naming one provider here was wrong in both directions. It failed on a machine where the
+      // primary's credential is present and the primary correctly served, and it would have kept
+      // passing if the policy had stopped being read at all. What the pipeline actually promises
+      // is narrower and worth asserting: the transcript comes from the primary, or from the named
+      // fallback with an open hold recorded against the project, and never from anything else.
+      const policy = resolveTranscriptionProviderPolicy(process.env);
+      const storedProvider = completed.sourceVideo?.transcript?.provider;
+      const usedFallback = storedProvider !== transcriptProviderNameFor(policy.primary);
+
+      if (usedFallback) {
+        expect(policy.fallback).not.toBeNull();
+        expect(storedProvider).toBe(transcriptProviderNameFor(policy.fallback!));
+        // A lower-quality transcript may caption a clip, but it may not do so silently: the
+        // publisher refuses those clips until a person clears this.
+        const hold = await prisma.editorialException.findFirst({
+          where: {
+            projectId: completed.id,
+            exceptionType: TRANSCRIPTION_FALLBACK_EXCEPTION_TYPE,
+            state: "OPEN",
+          },
+        });
+        expect(hold, "a fallback transcript must open a hold on the project").not.toBeNull();
+      }
       expect(completed.sourceVideo?.transcript?.fullText.toLowerCase()).toContain("john 14");
       expect(completed.generatedClips.length).toBeGreaterThan(0);
       expect(completed.generatedClips[0].rank).toBe(1);
