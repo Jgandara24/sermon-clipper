@@ -87,7 +87,16 @@ COPY package.json ./
 COPY scripts/worker-entrypoint.sh scripts/worker-entrypoint.sh
 RUN chmod +x scripts/worker-entrypoint.sh
 
+# The second half of the font gate. The check above proves fontconfig resolves each family to a
+# bundled file, which is what libass will draw. This proves the measurer opens that same file and
+# gets a width out of it — the measurer positions each word, so a face it cannot read is a caption
+# the preview and the burn-in would lay out differently. fc-match names the file, so the two
+# halves cannot drift onto different ones.
+RUN for family in "DejaVu Sans" "DejaVu Serif" "DejaVu Sans Mono"; do       file="$(fc-match "$family" --format '%{file}')";       node -e "const {openSync}=require('fontkit');const f=openSync(process.argv[1]);const w=f.layout('Peace').advanceWidth;if(!(f.unitsPerEm>0&&w>0))process.exit(1);console.log(process.argv[1],'ok',w)" "$file"         || { echo "the caption measurer cannot read the face fontconfig resolves: $family ($file)"; exit 1; };     done
+
 ENV NODE_ENV=production
+# The measurer opens the same files the burn-in draws, installed above under fontconfig's tree.
+ENV CAPTION_FONT_DIR=/usr/share/fonts/truetype/sermon-clipper
 ENV WHISPER_CPP_BINARY=whisper-cli
 ENV FFMPEG_PATH=ffmpeg
 ENV FFPROBE_PATH=ffprobe
