@@ -63,6 +63,27 @@ export type AssCaptionLine = Pick<CaptionLine, "startMs" | "endMs" | "text"> & {
   words?: CaptionWord[];
 };
 
+/** The style name every caption event is drawn in. The lower third has its own. */
+const CAPTION_STYLE_NAME = "Default";
+
+/**
+ * Counts the caption events in a generated script.
+ *
+ * Render QC asks whether the burn-in actually drew the captions the clip has (P1.3). A plain
+ * count of "Dialogue:" would answer wrongly: the lower third is a Dialogue event too, so a clip
+ * whose captions were all dropped would still look like it had one. Only events in the caption
+ * style count.
+ */
+export function countCaptionDialogueEvents(assContent: string): number {
+  let count = 0;
+  for (const line of assContent.split(/\r?\n/)) {
+    if (!line.startsWith("Dialogue:")) continue;
+    const fields = line.slice("Dialogue:".length).split(",");
+    if (fields[3]?.trim() === CAPTION_STYLE_NAME) count += 1;
+  }
+  return count;
+}
+
 export function generateAssSubtitles(
   lines: AssCaptionLine[],
   style: CaptionStyle,
