@@ -1,5 +1,6 @@
 import { popPhases, popPhaseTags, popResetTags } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
+import { isBoldCaptionWeight, resolveCaptionFace } from "@/lib/editor/caption-face";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
 import { captionActivations } from "@/lib/editor/caption-timeline";
 import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
@@ -85,7 +86,8 @@ export function generateAssSubtitles(
   const backColor = style.background === "pill" ? "&H80000000" : "&H00000000";
   const outline = style.background === "pill" ? Math.max(style.strokePx, 6) : style.strokePx;
   const shadow = style.shadow ? 2 : 0;
-  const fontName = style.fontFamily.split(",")[0].trim().replace(/^['"]|['"]$/g, "");
+  // The same resolver the preview measures with, so both renderers name one face.
+  const fontName = resolveCaptionFace(style).family;
 
   const header = [
     "[Script Info]",
@@ -96,7 +98,7 @@ export function generateAssSubtitles(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${style.weight !== undefined && style.weight >= 600 ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
+    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${isBoldCaptionWeight(style.weight) ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
     `Style: LowerThird,${fontName},38,${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},1,0,0,0,100,100,0,0,3,8,1,1,70,70,400,1`,
     "",
     "[Events]",
