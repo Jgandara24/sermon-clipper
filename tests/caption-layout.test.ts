@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { layOutCaptionLine, type CaptionLayoutWord } from "@/lib/editor/caption-layout";
+import {
+  layOutCaptionLine,
+  layOutCaptionRows,
+  type CaptionLayoutWord,
+} from "@/lib/editor/caption-layout";
 
 /** A measurer with no font behind it: every character is ten pixels wide. */
 const tenPerChar = (text: string) => text.length * 10;
@@ -169,5 +173,91 @@ describe("layOutCaptionLine measures the text it is given", () => {
     const result = layout(line("PEACE", "IS"), null);
 
     expect(result.words.map((word) => word.text)).toEqual(["PEACE", "IS"]);
+  });
+});
+
+describe("layOutCaptionRows wraps a line too wide for the frame", () => {
+  const rows = (texts: string[], maxWidth: number, activeWordId: string | null = null) =>
+    layOutCaptionRows({
+      words: line(...texts),
+      measure: tenPerChar,
+      spaceWidth: SPACE_WIDTH,
+      activeWordId,
+      peakScale: 1.2,
+      maxWidth,
+    });
+
+  it("keeps a line that fits on one row", () => {
+    // "ab cde" is 60 wide against 200 available.
+    const result = rows(["ab", "cde"], 200);
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].words.map((word) => word.id)).toEqual(["w0", "w1"]);
+  });
+
+  it("breaks greedily at the usable width, as libass does", () => {
+    // Widths 40, 40, 40 with 10px spaces: two words are 90, three are 140.
+    const result = rows(["aaaa", "bbbb", "cccc"], 100);
+
+    expect(result.rows.map((row) => row.words.map((word) => word.text))).toEqual([
+      ["aaaa", "bbbb"],
+      ["cccc"],
+    ]);
+  });
+
+  it("centres each row on its own zero, independently", () => {
+    const result = rows(["aaaa", "bbbb", "cccc"], 100);
+
+    expect(result.rows[0].restWidth).toBe(90);
+    expect(result.rows[1].restWidth).toBe(40);
+    expect(result.rows[1].words[0].restX).toBe(0);
+  });
+
+  it("never leaves a row empty, even when one word is wider than the frame", () => {
+    // A word that cannot fit still has to be drawn. Breaking before it would produce an empty row
+    // and still not make it fit.
+    const result = rows(["aaaaaaaaaaaa", "bb"], 50);
+
+    expect(result.rows.map((row) => row.words.map((word) => word.text))).toEqual([
+      ["aaaaaaaaaaaa"],
+      ["bb"],
+    ]);
+  });
+
+  it("returns no rows for a line with no words", () => {
+    expect(
+      layOutCaptionRows({
+        words: [],
+        measure: tenPerChar,
+        spaceWidth: SPACE_WIDTH,
+        activeWordId: null,
+        peakScale: 1.2,
+        maxWidth: 100,
+      }).rows,
+    ).toEqual([]);
+  });
+
+  it("shifts neighbours only within the active word's own row", () => {
+    // A word on another row is not a neighbour: nothing it does can collide with the active word.
+    const result = rows(["aaaa", "bbbb", "cccc"], 100, "w0");
+
+    const [first, second] = result.rows;
+    expect(first.words[1].shiftedX).toBeGreaterThan(first.words[1].restX);
+    expect(second.words[0].shiftedX).toBe(second.words[0].restX);
+  });
+
+  it("reports which row carries the active word", () => {
+    expect(rows(["aaaa", "bbbb", "cccc"], 100, "w2").activeRowIndex).toBe(1);
+    expect(rows(["aaaa", "bbbb", "cccc"], 100, "w0").activeRowIndex).toBe(0);
+    expect(rows(["aaaa", "bbbb", "cccc"], 100, null).activeRowIndex).toBe(-1);
+  });
+
+  it("lays rows out the same way whichever word is active", () => {
+    const none = rows(["aaaa", "bbbb", "cccc"], 100);
+    const active = rows(["aaaa", "bbbb", "cccc"], 100, "w1");
+
+    expect(active.rows.map((row) => row.words.map((word) => word.restX))).toEqual(
+      none.rows.map((row) => row.words.map((word) => word.restX)),
+    );
   });
 });

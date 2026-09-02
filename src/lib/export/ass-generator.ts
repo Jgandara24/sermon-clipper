@@ -4,6 +4,7 @@ import { isBoldCaptionWeight, resolveCaptionFace } from "@/lib/editor/caption-fa
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
 import { captionActivations } from "@/lib/editor/caption-timeline";
 import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
+import { layOutCaptionRows, type CaptionWordMeasurer } from "@/lib/editor/caption-layout";
 
 /**
  * Renders one ASS (Advanced SubStation Alpha) subtitle file per clip export, burned in via
@@ -58,6 +59,19 @@ function escapeAssText(text: string): string {
   return text.replace(/\n/g, "\\N").replace(/\{/g, "(").replace(/\}/g, ")");
 }
 
+/** Left and right margins the style line declares. The usable row width is what is left. */
+const MARGIN_H = 40;
+
+/**
+ * Measures caption text in the face the burn-in draws with, so each word can be given its own
+ * position. Without one, a line is emitted as a single run and libass lays it out, exactly as it
+ * always has.
+ */
+export type AssCaptionMeasurer = {
+  measure: CaptionWordMeasurer;
+  spaceWidth: number;
+};
+
 /** A caption line to render. `words` is optional: without it the line renders unhighlighted. */
 export type AssCaptionLine = Pick<CaptionLine, "startMs" | "endMs" | "text"> & {
   id?: string;
@@ -98,6 +112,7 @@ export function generateAssSubtitles(
     startMs: number;
     endMs: number;
   } | null,
+  measurer?: AssCaptionMeasurer | null,
 ): string {
   const alignment = resolveAlignment(style.position, style.alignment);
   const marginV = marginVForPosition(style.position, videoHeight);
@@ -140,11 +155,106 @@ export function generateAssSubtitles(
     return `Dialogue: 0,${msToAssTime(startMs)},${msToAssTime(endMs)},Default,,0,0,0,,${positionTag}${body}`;
   }
 
+  // Per-word positioning applies where it can be done honestly: a preset that highlights, drawn in
+  // a face this repository ships and can therefore measure. Everything else keeps the single run it
+  // has always emitted and lets libass lay it out, so Clean and every retired preset are untouched.
+  const perWord = Boolean(measurer) && style.activeWordHighlight;
+
+  /**
+   * Where a row sits, and which point of it the position refers to.
+   *
+   * Both rules are expressed through libass's own alignment rather than reconstructed arithmetic:
+   * an anchored caption states the same margin line the style already states, and a dragged one
+   * states its point. That is what makes the placement match what ships today (2026-09-02
+   * decision).
+   */
+  function rowPlacement(rowIndex: number, rowCount: number): { tag: string; x: number; y: number } {
+    const pitch = style.sizePx;
+    if (style.box) {
+      // Dragged: the block centres on the point, so rows spread either side of it.
+      const centre = style.box.yPct * videoHeight;
+      return {
+        tag: "\\an5",
+        x: style.box.xPct * videoWidth,
+        y: Math.round(centre + (rowIndex - (rowCount - 1) / 2) * pitch),
+      };
+    }
+    if (style.position === "top") {
+      // Anchored at the top: the first row sits on the margin line and rows grow downward.
+      return { tag: "\\an8", x: videoWidth / 2, y: Math.round(marginV + rowIndex * pitch) };
+    }
+    if (style.position === "middle") {
+      return {
+        tag: "\\an5",
+        x: videoWidth / 2,
+        y: Math.round(videoHeight / 2 + (rowIndex - (rowCount - 1) / 2) * pitch),
+      };
+    }
+    // Anchored at the bottom: the last row sits on the margin line and rows grow upward, which is
+    // what the frame's bottom band being the platform's own makes necessary.
+    return {
+      tag: "\\an2",
+      x: videoWidth / 2,
+      y: Math.round(videoHeight - marginV - (rowCount - 1 - rowIndex) * pitch),
+    };
+  }
+
+  function perWordEvents(activation: {
+    words: CaptionWord[];
+    startMs: number;
+    endMs: number;
+    activeWordId: string | null;
+  }): string[] {
+    const layout = layOutCaptionRows({
+      words: activation.words.map((word) => ({
+        id: word.id,
+        text: applyTextCase(word.word, style.textCase),
+      })),
+      measure: measurer!.measure,
+      spaceWidth: measurer!.spaceWidth,
+      activeWordId: activation.activeWordId,
+      // Slice 8a positions words; it does not move them. The neighbour shift arrives in 8b.
+      peakScale: 1,
+      maxWidth: videoWidth - MARGIN_H * 2,
+    });
+
+    const phases =
+      activation.activeWordId === null ? [] : popPhases(activation.endMs - activation.startMs);
+
+    return layout.rows.flatMap((row, rowIndex) => {
+      const place = rowPlacement(rowIndex, layout.rows.length);
+      return row.words.flatMap((word) => {
+        const at = `{${place.tag}\\pos(${Math.round(place.x + word.restX)},${place.y})}`;
+        const text = escapeAssText(word.text);
+
+        if (word.id !== activation.activeWordId || phases.length === 0) {
+          return [
+            `Dialogue: 0,${msToAssTime(activation.startMs)},${msToAssTime(activation.endMs)},Default,,0,0,0,,${at}${text}`,
+          ];
+        }
+
+        // The active word is the only one that animates, so it is the only one cut into phases.
+        // libass gives no agreed meaning to two transforms over one property, so each event
+        // carries exactly one and states the value it starts from.
+        return phases.map(
+          (phase) =>
+            `Dialogue: 0,${msToAssTime(activation.startMs + phase.startMs)},${msToAssTime(activation.startMs + phase.endMs)},Default,,0,0,0,,${at}{${popPhaseTags(phase)}}${highlightTag}${text}`,
+        );
+      });
+    });
+  }
+
   // One decision about what is on screen, shared with the preview: which line, which words, and
   // which stretch. Applying these rules twice is what let the file show a caption the browser did
   // not, three milliseconds either side of a line.
   const events = captionActivations(lines as CaptionLine[], style.activeWordHighlight)
     .flatMap((activation) => {
+      // A line with no words to place has nothing to position per word; it renders whole either
+      // way, so it keeps the path it always used.
+      if (perWord && activation.words.length > 0) {
+        return perWordEvents(activation);
+      }
+
       const runFor = (activeTags: string | null) =>
         activation.words.length === 0
           ? escapeAssText(applyTextCase(activation.line.text, style.textCase))

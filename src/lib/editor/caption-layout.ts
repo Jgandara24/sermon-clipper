@@ -110,3 +110,72 @@ export function layOutCaptionLine(params: CaptionLineLayoutParams): CaptionLineL
     shiftedX: (wordId) => byId.get(wordId)?.shiftedX ?? 0,
   };
 }
+
+export type CaptionRowsLayout = {
+  /** Rows top to bottom. Each is laid out and centred on its own zero. */
+  rows: CaptionLineLayout[];
+  /** Index of the row carrying the active word, or -1 when nothing on this line is active. */
+  activeRowIndex: number;
+};
+
+export type CaptionRowsLayoutParams = CaptionLineLayoutParams & {
+  /** The widest a row may be. A line wider than this breaks onto further rows. */
+  maxWidth: number;
+};
+
+/**
+ * The same layout, wrapped to a width.
+ *
+ * A caption line is capped at five words, which usually fits: at Highlighter's size five ordinary
+ * words measure about 761px against 1000px of usable frame. Three long ones measure 1242px, and
+ * libass breaks that onto two rows today. Once every word carries its own position libass has one
+ * word per event and nothing left to wrap, so the break has to be made here or the caption runs off
+ * both edges of the frame.
+ *
+ * The rule is greedy fill at the usable width, which is what libass does. A word wider than the
+ * whole row still gets a row of its own: breaking before it would leave an empty row and would not
+ * make it fit.
+ *
+ * Neighbours shift only within the active word's own row. A word on another row cannot collide with
+ * it, so nothing there needs to move.
+ */
+export function layOutCaptionRows(params: CaptionRowsLayoutParams): CaptionRowsLayout {
+  const measured = params.words.map((word) => ({
+    word,
+    width: params.measure(word.text),
+  }));
+
+  const grouped: CaptionLayoutWord[][] = [];
+  let current: CaptionLayoutWord[] = [];
+  let currentWidth = 0;
+  for (const { word, width } of measured) {
+    const widthWithWord =
+      current.length === 0 ? width : currentWidth + params.spaceWidth + width;
+    if (current.length > 0 && widthWithWord > params.maxWidth) {
+      grouped.push(current);
+      current = [word];
+      currentWidth = width;
+      continue;
+    }
+    current.push(word);
+    currentWidth = widthWithWord;
+  }
+  if (current.length > 0) grouped.push(current);
+
+  const activeRowIndex = params.activeWordId
+    ? grouped.findIndex((row) => row.some((word) => word.id === params.activeWordId))
+    : -1;
+
+  const rows = grouped.map((words, index) =>
+    layOutCaptionLine({
+      words,
+      measure: params.measure,
+      spaceWidth: params.spaceWidth,
+      // Only the row holding the active word makes room for it.
+      activeWordId: index === activeRowIndex ? params.activeWordId : null,
+      peakScale: params.peakScale,
+    }),
+  );
+
+  return { rows, activeRowIndex };
+}

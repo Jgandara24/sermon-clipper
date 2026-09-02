@@ -13,7 +13,13 @@ import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
 import { applyWordTextOverrides } from "@/lib/editor/transcript";
 import { applyEditorDeletions, flattenWords, wordsInRange } from "@/lib/editor/words";
-import { countCaptionDialogueEvents, generateAssSubtitles } from "@/lib/export/ass-generator";
+import {
+  countCaptionDialogueEvents,
+  generateAssSubtitles,
+  type AssCaptionMeasurer,
+} from "@/lib/export/ass-generator";
+import { resolveCaptionFace } from "@/lib/editor/caption-face";
+import { createCaptionMeasurer, UnbundledCaptionFaceError } from "@/lib/export/font-metrics";
 import { parseLowerThird } from "@/lib/brand-template";
 import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
 import { computeKeptRanges, mapToKeptTimeline } from "@/lib/export/kept-ranges";
@@ -209,6 +215,24 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   }));
 
   const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
+
+  // Per-word positioning needs the same file libass will draw with. A preset whose face this
+  // repository does not ship keeps the single run it has always emitted — measuring a face we do
+  // not have would be a guess, and libass would silently substitute another one anyway.
+  let captionMeasurer: AssCaptionMeasurer | null = null;
+  if (style.activeWordHighlight) {
+    const face = resolveCaptionFace(style);
+    try {
+      const measurer = createCaptionMeasurer({
+        family: face.family,
+        bold: face.bold,
+        sizePx: style.sizePx,
+      });
+      captionMeasurer = { measure: measurer.measure, spaceWidth: measurer.spaceWidth };
+    } catch (error) {
+      if (!(error instanceof UnbundledCaptionFaceError)) throw error;
+    }
+  }
   const brandTemplate = state.brandTemplateId
     ? await prisma.brandTemplate.findFirst({
         where: { id: state.brandTemplateId, workspaceId: job.workspaceId },
@@ -230,6 +254,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
           endMs: Math.min(4000, Math.max(1000, state.source.endMs - state.source.startMs)),
         }
       : null,
+    captionMeasurer,
   );
 
   const storage = getStorageProvider();
