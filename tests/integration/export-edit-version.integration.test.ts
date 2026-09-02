@@ -393,7 +393,7 @@ describe("enqueue keeps the stored version and the idempotency key in agreement"
     expect(stored.editVersion).toBe(7);
     expect(parseExportIdempotencyKeyVersion(stored.idempotencyKey)).toBe(7);
     expect(stored.idempotencyKey).toBe(
-      buildExportIdempotencyKey({ clipId, editVersion: 7, filename: "agreement.mp4" }),
+      buildExportIdempotencyKey({ clipId, editVersion: 7 }),
     );
   });
 
