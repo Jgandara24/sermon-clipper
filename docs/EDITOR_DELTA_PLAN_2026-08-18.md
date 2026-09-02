@@ -334,6 +334,23 @@ the same TTF is on both sides to be measured.
   libass positions it; a neighbour that moves needs its own event with its own `\pos` or `\move`.
   That is a restructuring of how caption events are emitted, not an addition to it.
 
+**Two things the per-word positioning step must decide (found 2026-09-02, while building the
+measurement stage).** The measurement half is done and changes no rendered output. Moving words
+onto their own `\pos` does change it, and it needs two answers this plan never gave:
+
+1. **Vertical placement.** Today a caption without a dragged box emits no `\pos` at all: libass
+   places the line from the style's alignment and `MarginV`. A word positioned individually needs
+   an explicit `y`, so that rule has to be reproduced rather than inherited. Getting it slightly
+   wrong moves every existing Highlighter clip.
+
+2. **Wrapping.** Lines are capped at five words, and a typical one fits: `PEACE IS NOT THE ABSENCE`
+   measures 761px against the 1000px of usable frame at Highlighter's 48px bold. A line of long
+   words does not — `EVERLASTING RIGHTEOUSNESS THROUGHOUT` measures 1242px. libass wraps that onto
+   two rows today. Per-word positioning has to wrap it too, or that caption runs off the frame.
+
+Both change what an existing Highlighter clip looks like, so the step that makes them is the step
+that needs a real render in front of a person, not only the motion step after it.
+
 **Behavior**
 
 - When a word becomes active, its immediate neighbours move slightly aside for the duration of the

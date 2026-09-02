@@ -136,6 +136,10 @@ const fieldSchemas = {
   // empty string still falls back, exactly as before)
   FFMPEG_PATH: optionalString,
   FFPROBE_PATH: optionalString,
+  // Where the bundled caption faces live for the server-side measurer. In the repository they sit
+  // in `public/fonts`; the worker image installs the same files under fontconfig's tree and sets
+  // this to that path. One setting, so the measurer opens the file the burn-in draws.
+  CAPTION_FONT_DIR: optionalString,
   YTDLP_PATH: optionalString,
   YTDLP_PROXY_URL: optionalString,
   YTDLP_PROXY_PRICE_PER_GB_USD: optionalNonNegativeNumber,
@@ -265,6 +269,10 @@ export function ffmpegPath(): string {
 
 export function ffprobePath(): string {
   return env.FFPROBE_PATH || "ffprobe";
+}
+
+export function captionFontDir(): string {
+  return env.CAPTION_FONT_DIR || "public/fonts";
 }
 
 export function ytDlpPath(): string {
