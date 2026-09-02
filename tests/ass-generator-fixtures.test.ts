@@ -261,7 +261,10 @@ describe("per-word positioning is applied only where it can be done honestly", (
     );
     const dialogue = ass.split("\n").filter((line) => line.startsWith("Dialogue:"));
 
-    expect(dialogue.every((line) => line.includes("\\pos("))).toBe(true);
+    // Every word states where it is: at rest with a position, or moving aside with a move.
+    expect(
+      dialogue.every((line) => line.includes("\\pos(") || line.includes("\\move(")),
+    ).toBe(true);
     // One event per word at least, rather than one per phase carrying the whole run.
     expect(dialogue.length).toBeGreaterThan(7);
   });

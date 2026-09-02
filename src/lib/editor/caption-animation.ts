@@ -203,3 +203,51 @@ export function popPhaseTags(phase: PopPhase): string {
 export function popResetTags(): string {
   return `\\fscx100\\fscy100`;
 }
+
+// --- The neighbour micro-shift (Slice 8b) ---------------------------------------------------
+//
+// The active word scales about its own centre; the words beside it move aside to keep clear of it
+// and return when it does. Position is the part libass cannot animate the same way it animates
+// scale: `\t` does not apply to `\pos`, and `\move` is one straight motion per event with no
+// acceleration. So the offset is straight inside each phase and exact at every boundary, and the
+// preview interpolates it the same straight way even though it evaluates the pop itself on the
+// accelerated curve.
+
+/** How far aside a neighbour sits when the active word is at `scale`: 0 at rest, 1 at the peak. */
+export function shiftProgressForScale(scale: number): number {
+  const span = POP.peakScale - 1;
+  if (span <= 0) return 0;
+  const progress = (scale - 1) / span;
+  return Math.min(1, Math.max(0, progress));
+}
+
+/** The two offsets one phase moves between, which is exactly what a `\move` states. */
+export function popPhaseShiftProgress(phase: PopPhase): { from: number; to: number } {
+  return {
+    from: shiftProgressForScale(phase.fromScale),
+    to: shiftProgressForScale(phase.toScale),
+  };
+}
+
+/**
+ * The neighbour offset at a moment, for the preview.
+ *
+ * Straight within a phase, to match what the file can express. Outside the activation, and before
+ * any phase begins, a neighbour is at rest.
+ */
+export function popShiftProgressAt(elapsedMs: number, activeDurationMs: number): number {
+  const phases = popPhases(activeDurationMs);
+  if (phases.length === 0) return 0;
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0;
+
+  const last = phases[phases.length - 1];
+  if (elapsedMs >= last.endMs) return shiftProgressForScale(last.toScale);
+
+  const phase = phases.find((candidate) => elapsedMs < candidate.endMs) ?? last;
+  const span = phase.endMs - phase.startMs;
+  const { from, to } = popPhaseShiftProgress(phase);
+  if (span <= 0) return to;
+
+  const throughPhase = Math.min(1, Math.max(0, (elapsedMs - phase.startMs) / span));
+  return from + (to - from) * throughPhase;
+}

@@ -31,7 +31,7 @@ import {
   SKIP_STEP_MS,
 } from "@/lib/editor/playback";
 import { captionActivationAt } from "@/lib/editor/caption-timeline";
-import { popScaleAt } from "@/lib/editor/caption-animation";
+import { POP, popScaleAt, popShiftProgressAt } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
@@ -177,8 +177,7 @@ export function VideoPreview({
           measure: measurer.measure,
           spaceWidth: measurer.spaceWidth,
           activeWordId,
-          // Slice 8a positions words; it does not move them. The neighbour shift arrives in 8b.
-          peakScale: 1,
+          peakScale: POP.peakScale,
           maxWidth: FRAME_WIDTH - CAPTION_MARGIN_H * 2,
         })
       : null;
@@ -530,31 +529,45 @@ export function VideoPreview({
                     }}
                   >
                     {measuredRows.rows.map((row, rowIndex) =>
-                      row.words.map((word) => (
-                        <span
-                          key={word.id}
-                          data-testid="caption-word"
-                          data-active={word.id === activeWordId ? "true" : "false"}
-                          className="absolute whitespace-pre"
-                          style={{
-                            left: `${captionBlockWidthPx / 2 + word.restX * previewScale}px`,
-                            top: `${rowIndex * captionRowPitchPx + captionRowPitchPx / 2}px`,
-                            // The word is centred on its own point, so the pop scales it about
-                            // itself and nothing beside it can move.
-                            transform: `translate(-50%, -50%) scale(${
-                              word.id === activeWordId && activation
-                                ? popScaleAt(
-                                    currentMs - activation.startMs,
-                                    activation.endMs - activation.startMs,
-                                  )
-                                : 1
-                            })`,
-                            ...(word.id === activeWordId ? { color: style.highlightColor } : null),
-                          }}
-                        >
-                          {word.text}
-                        </span>
-                      )),
+                      row.words.map((word) => {
+                        const isActive = word.id === activeWordId;
+                        // How far this word has moved aside. Straight within each phase, because
+                        // that is all the burned-in file can express, and both sides must agree
+                        // between boundaries as well as at them.
+                        const shift =
+                          isActive || !activation
+                            ? 0
+                            : (word.shiftedX - word.restX) *
+                              popShiftProgressAt(
+                                currentMs - activation.startMs,
+                                activation.endMs - activation.startMs,
+                              );
+                        return (
+                          <span
+                            key={word.id}
+                            data-testid="caption-word"
+                            data-active={isActive ? "true" : "false"}
+                            className="absolute whitespace-pre"
+                            style={{
+                              left: `${captionBlockWidthPx / 2 + (word.restX + shift) * previewScale}px`,
+                              top: `${rowIndex * captionRowPitchPx + captionRowPitchPx / 2}px`,
+                              // The word is centred on its own point, so the pop scales it about
+                              // itself. The words beside it move; it does not.
+                              transform: `translate(-50%, -50%) scale(${
+                                isActive && activation
+                                  ? popScaleAt(
+                                      currentMs - activation.startMs,
+                                      activation.endMs - activation.startMs,
+                                    )
+                                  : 1
+                              })`,
+                              ...(isActive ? { color: style.highlightColor } : null),
+                            }}
+                          >
+                            {word.text}
+                          </span>
+                        );
+                      }),
                     )}
                   </span>
                 ) : captionIsRetyped || !style.activeWordHighlight ? (
