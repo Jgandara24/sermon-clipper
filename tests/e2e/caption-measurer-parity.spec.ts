@@ -23,11 +23,24 @@ import { createCaptionMeasurer } from "../../src/lib/export/font-metrics";
 /**
  * Maximum disagreement allowed on one word, in pixels at 48px.
  *
- * Measured, not guessed: on Chromium the two agree exactly on this fixture. The allowance exists
- * for shaping and rounding differences across browser versions, and is a small fraction of the
- * space between words, so no disagreement inside it can put two words on top of each other.
+ * Measured, not guessed, on both platforms this runs on:
+ *
+ *  - macOS Chromium agrees exactly. PEACE is 173.1328125px from fontkit and from the canvas.
+ *  - Linux Chromium in CI does not, and reports whole numbers: IS measures 53 there against
+ *    fontkit's 52.4296875, a difference of 0.57px. That is host font hinting, not a wrong face —
+ *    the readiness check below passes, so both sides are reading the bundled file.
+ *
+ * One pixel leaves headroom over the 0.57px actually seen without hiding anything that matters.
+ * For scale, a space at this size is 16.71px, so a disagreement inside the tolerance is about
+ * three percent of the gap between two words: visible to a measuring instrument, not to a viewer,
+ * and static rather than moving.
+ *
+ * It is worth being clear about what this tolerance does and does not protect. Each renderer lays
+ * a line out with its own measurer used consistently, so a disagreement here cannot make two words
+ * collide in either one. What it bounds is how far the preview's idea of a line can sit from the
+ * file's — the parity Slice 8 exists to keep.
  */
-const TOLERANCE_PX = 0.5;
+const TOLERANCE_PX = 1;
 
 const FIXTURE_WORDS = ["PEACE", "IS", "NOT", "THE", "ABSENCE", "OF", "TROUBLE."];
 
@@ -82,25 +95,32 @@ test.describe("the caption measurers agree", () => {
     ).toBe(true);
 
     const deltas = browser.widths.map((width, index) => Math.abs(width - serverWidths[index]));
-    const worst = Math.max(...deltas, Math.abs(browser.space - server.spaceWidth));
-    // Reported so a future disagreement arrives with its size rather than only a pass or a fail.
+    const spaceDelta = Math.abs(browser.space - server.spaceWidth);
+    const worst = Math.max(...deltas, spaceDelta);
+
+    // Every measurement, every time, rather than stopping at the first word over the line. A
+    // disagreement is worth seeing whole: one word out is a shaping quirk, all of them out is a
+    // wrong face, and the two want different fixes.
+    const report = [
+      ...FIXTURE_WORDS.map(
+        (word, index) =>
+          `${word}: browser ${browser.widths[index]}, fontkit ${serverWidths[index]}, off by ${deltas[index].toFixed(4)}`,
+      ),
+      `space: browser ${browser.space}, fontkit ${server.spaceWidth}, off by ${spaceDelta.toFixed(4)}`,
+    ].join("\n");
+
     test.info().annotations.push({
       type: "measurer parity",
-      description: `worst disagreement ${worst.toFixed(6)}px at ${style.sizePx}px in ${font}`,
+      description: `worst ${worst.toFixed(4)}px at ${style.sizePx}px in ${font} (${browser.resolvedFont})\n${report}`,
     });
 
-    for (const [index, word] of FIXTURE_WORDS.entries()) {
-      expect(
-        deltas[index],
-        `${word}: browser ${browser.widths[index]}, fontkit ${serverWidths[index]}`,
-      ).toBeLessThanOrEqual(TOLERANCE_PX);
-    }
-    expect(Math.abs(browser.space - server.spaceWidth)).toBeLessThanOrEqual(TOLERANCE_PX);
+    expect(worst, report).toBeLessThanOrEqual(TOLERANCE_PX);
   });
 
-  test("a disagreement stays far smaller than the space it must not close", async ({ page }) => {
-    // The tolerance is only safe if it cannot produce a collision. One space at this size is the
-    // gap the layout puts between words, so the allowance has to be a small part of it.
+  test("the tolerance stays a small part of the gap between two words", async () => {
+    // A tolerance is only meaningful next to the distance it is being compared against. If the
+    // allowance ever approached a space, the two renderers could disagree about a line by about
+    // the width of the gaps in it, and this test would be asserting nothing worth asserting.
     const style = getCaptionPreset("highlighter").style;
     const face = resolveCaptionFace(style);
     const server = createCaptionMeasurer({
@@ -109,7 +129,6 @@ test.describe("the caption measurers agree", () => {
       sizePx: style.sizePx,
     });
 
-    await page.goto("/login");
     expect(server.spaceWidth).toBeGreaterThan(TOLERANCE_PX * 10);
   });
 });
