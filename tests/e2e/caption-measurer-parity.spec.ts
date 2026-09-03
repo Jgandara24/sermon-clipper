@@ -78,13 +78,21 @@ test.describe("the caption measurers agree", () => {
     // The same sequence the hook uses, deliberately: settle the document's own font loading,
     // ask for this exact face, let that settle, then take the face list back to Node to judge.
     const browser = await page.evaluate(
-      async ({ font, words }) => {
+      async ({ font, words, sizePx }) => {
         await document.fonts.ready;
         await document.fonts.load(font);
         await document.fonts.ready;
         const context = document.createElement("canvas").getContext("2d");
         if (!context) throw new Error("no 2d context");
+
+        // The same rule the hook applies: an ASS font size is a height, so the em to measure at
+        // is the one that makes this face's ascent plus descent equal that number.
         context.font = font;
+        const probe = context.measureText("M");
+        const boxHeight = probe.fontBoundingBoxAscent + probe.fontBoundingBoxDescent;
+        const emPx = boxHeight > 0 ? (sizePx * sizePx) / boxHeight : sizePx;
+        context.font = font.replace(/\d+(\.\d+)?px/, `${Math.round(emPx * 100) / 100}px`);
+
         return {
           faces: [...document.fonts].map((entry) => ({
             family: entry.family,
@@ -92,11 +100,12 @@ test.describe("the caption measurers agree", () => {
             status: entry.status,
           })),
           resolvedFont: context.font,
+          emPx,
           widths: words.map((word) => context.measureText(word).width),
           space: context.measureText(" ").width,
         };
       },
-      { font, words: FIXTURE_WORDS },
+      { font, words: FIXTURE_WORDS, sizePx: style.sizePx },
     );
 
     // Asserted before any width is compared. A browser that never loaded the bundled face still

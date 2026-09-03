@@ -500,7 +500,11 @@ export function VideoPreview({
                 className="block whitespace-nowrap rounded px-2 py-1 text-center"
                 style={{
                   fontFamily: style.fontFamily,
-                  fontSize: `${style.sizePx * previewScale}px`,
+                  // The em the burn-in draws at, not the caption's nominal size. An ASS font
+                  // size is a height, so a caption drawn at the number itself is about a sixth
+                  // larger than the exported file's. Before the face has loaded there is nothing
+                  // to ask, and the nominal size is the honest guess.
+                  fontSize: `${(measurer.ready ? measurer.emPx : style.sizePx) * previewScale}px`,
                   fontWeight: style.weight,
                   color: style.textColor,
                   // No text-transform: the preview lays out the same string the burn-in does, so

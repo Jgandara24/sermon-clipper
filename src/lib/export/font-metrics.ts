@@ -49,6 +49,24 @@ function openFace(filePath: string): Font {
   return face;
 }
 
+/**
+ * The em size a face is actually drawn at for a given ASS font size.
+ *
+ * An ASS `Fontsize` is not an em size. libass scales the face so that its ascent plus descent
+ * equals the number, which for a face whose ascent and descent exceed its em square means the glyphs
+ * are drawn smaller than the number suggests. DejaVu Sans Bold has an em of 2048 and an ascent plus
+ * descent of 2384, so a Fontsize of 48 draws an em of 41.2px.
+ *
+ * Measuring at the number itself made every advance 16.4 percent too wide, which put roughly an
+ * extra space between every pair of words. Verified against libass to the pixel: the step from
+ * PEACE to IS is 163px rendered, and 163.09px predicted by this rule.
+ */
+export function assEmPx(sizePx: number, ascent: number, descent: number, unitsPerEm: number): number {
+  const height = ascent + Math.abs(descent);
+  if (!(height > 0)) return sizePx;
+  return (sizePx * unitsPerEm) / height;
+}
+
 export type CaptionMeasurer = {
   /** Advance width of a string at the requested size, in pixels. */
   measure: CaptionWordMeasurer;
@@ -56,6 +74,8 @@ export type CaptionMeasurer = {
   spaceWidth: number;
   /** The file the measurements came from, so a caller can prove which face was used. */
   filePath: string;
+  /** The em the face is drawn at, which is smaller than the style's font size. */
+  emPx: number;
 };
 
 export function createCaptionMeasurer(params: {
@@ -69,9 +89,11 @@ export function createCaptionMeasurer(params: {
   }
 
   const face = openFace(filePath);
-  const scale = params.sizePx / face.unitsPerEm;
+  // The em libass will actually draw at, not the number in the style line.
+  const emPx = assEmPx(params.sizePx, face.ascent, face.descent, face.unitsPerEm);
+  const scale = emPx / face.unitsPerEm;
   const measure: CaptionWordMeasurer = (text) =>
     text.length === 0 ? 0 : face.layout(text).advanceWidth * scale;
 
-  return { measure, spaceWidth: measure(" "), filePath };
+  return { measure, spaceWidth: measure(" "), filePath, emPx };
 }

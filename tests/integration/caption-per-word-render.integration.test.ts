@@ -103,6 +103,70 @@ async function renderBoth(style: CaptionStyle, lines: AssCaptionLine[], atSecond
   return { today, perWord };
 }
 
+/** A line of five ordinary words on one row, for comparing spacing. */
+const FIVE_WORDS: AssCaptionLine[] = [
+  {
+    id: "five",
+    startMs: 0,
+    endMs: 2500,
+    text: "peace is not the absence",
+    words: ["peace", "is", "not", "the", "absence"].map((word, index) => ({
+      id: `five:${index}`,
+      word,
+      startMs: index * 500,
+      endMs: (index + 1) * 500,
+    })),
+  },
+];
+
+/**
+ * The widest gap that still sits inside a word, in pixels.
+ *
+ * Measured at Highlighter's 48px bold: gaps between letters run 2 to 7px, gaps between words 17
+ * to 21px once the sizing is right. Sixteen sits between the two.
+ */
+const WITHIN_WORD_GAP_PX = 16;
+
+/**
+ * The columns of drawn ink in one band, grouped into words.
+ *
+ * Letters are separated by background too, so the raw runs count letters. Runs closer together
+ * than a within-word gap are one word.
+ */
+async function inkWords(pngPath: string, band: [number, number]): Promise<Array<[number, number]>> {
+  const { stdout } = await execFileAsync(
+    "ffmpeg",
+    ["-v", "error", "-i", pngPath, "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+    { encoding: "buffer", maxBuffer: 1 << 28 },
+  );
+  const raw = stdout as unknown as Buffer;
+  const runs: Array<[number, number]> = [];
+  let start = -1;
+  for (let x = 0; x < W; x += 1) {
+    let hasInk = false;
+    for (let y = band[0]; y <= band[1] && !hasInk; y += 1) {
+      if (raw[y * W + x] > 90) hasInk = true;
+    }
+    if (hasInk && start < 0) start = x;
+    if (!hasInk && start >= 0) {
+      runs.push([start, x - 1]);
+      start = -1;
+    }
+  }
+  if (start >= 0) runs.push([start, W - 1]);
+
+  const words: Array<[number, number]> = [];
+  for (const run of runs) {
+    const previous = words[words.length - 1];
+    if (previous && run[0] - previous[1] - 1 <= WITHIN_WORD_GAP_PX) {
+      previous[1] = run[1];
+      continue;
+    }
+    words.push([...run] as [number, number]);
+  }
+  return words;
+}
+
 describe("per-word positioning puts ink where libass used to put it", () => {
   it("keeps an undragged caption's rows in exactly the same place", async () => {
     const style = getCaptionPreset("highlighter").style;
@@ -187,4 +251,54 @@ describe("per-word positioning puts ink where libass used to put it", () => {
 
     expect(withMeasurer).toBe(without);
   });
+});
+
+describe("per-word spacing matches what libass does with the same words", () => {
+  const style = getCaptionPreset("highlighter").style;
+  const ROW: [number, number] = [1600, 1700];
+
+  it("puts the words the same distance apart as libass's own layout", async () => {
+    // The bug this guards against, found by the product owner watching a render and measured
+    // afterwards: an ASS font size is a height, not an em. libass scales a face so its ascent
+    // plus descent equals the number, and measuring at the number itself made every advance
+    // 16.4 percent too wide. Rendered, that put a gap of about 40px where libass puts 20 — the
+    // line read as though the space bar had been pressed twice between every pair of words.
+    //
+    // Nothing about this is visible in the generated text, so it is asserted against pixels.
+    const withPositions = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
+    const libassOwn = generateAssSubtitles(FIVE_WORDS, style, W, H, null, null);
+
+    // At the instant an activation begins, nothing is scaled and nothing has moved.
+    const ours = await renderFrame(withPositions, 0);
+    const theirs = await renderFrame(libassOwn, 0);
+
+    try {
+      const oursWords = await inkWords(ours.png, ROW);
+      const theirsWords = await inkWords(theirs.png, ROW);
+
+      const gaps = (words: Array<[number, number]>) =>
+        words.slice(1).map((word, index) => word[0] - words[index][1] - 1);
+
+      const oursGaps = gaps(oursWords);
+      const theirsGaps = gaps(theirsWords);
+      expect(oursGaps.length).toBe(theirsGaps.length);
+
+      // Within a few pixels: the two lay out by different code, and a whole-number position
+      // rounds. What must not recur is a gap that is twice the other's.
+      for (const [index, gap] of oursGaps.entries()) {
+        expect(
+          Math.abs(gap - theirsGaps[index]),
+          `gap ${index}: ours ${gap}, libass ${theirsGaps[index]}`,
+        ).toBeLessThanOrEqual(4);
+      }
+
+      // And the line as a whole is the same width, which is the reading a viewer actually gets.
+      const width = (words: Array<[number, number]>) =>
+        words[words.length - 1][1] - words[0][0] + 1;
+      expect(Math.abs(width(oursWords) - width(theirsWords))).toBeLessThanOrEqual(6);
+    } finally {
+      await rm(ours.dir, { recursive: true, force: true });
+      await rm(theirs.dir, { recursive: true, force: true });
+    }
+  }, 180_000);
 });

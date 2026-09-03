@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUNDLED_CAPTION_FONTS } from "@/lib/editor/caption-fonts";
 import {
+  assEmPx,
   createCaptionMeasurer,
   resolveBundledFontFile,
   UnbundledCaptionFaceError,
@@ -31,9 +32,11 @@ describe("createCaptionMeasurer", () => {
   it("measures a word in the bundled face at the requested size", () => {
     const measurer = createCaptionMeasurer({ family: "DejaVu Sans", bold: false, sizePx: 48 });
 
-    // Checked against fontkit directly: DejaVu Sans has 2048 units per em, and "PEACE" advances
-    // 6618 of them, which is 155.109375px at 48px.
-    expect(measurer.measure("PEACE")).toBeCloseTo(155.109375, 6);
+    // DejaVu Sans has 2048 units per em and "PEACE" advances 6618 of them. That is 155.11px if
+    // 48 were an em size, and it is not: libass scales the face so ascent plus descent, 2384
+    // units here, equals 48. So the advance is 6618 x 48 / 2384.
+    expect(measurer.measure("PEACE")).toBeCloseTo((6618 * 48) / 2384, 6);
+    expect(measurer.measure("PEACE")).toBeCloseTo(133.248, 3);
   });
 
   it("scales linearly with the requested size", () => {
@@ -85,5 +88,37 @@ describe("createCaptionMeasurer", () => {
     const first = measurer.measure("Peace");
 
     expect(measurer.measure("Peace")).toBe(first);
+  });
+});
+
+describe("an ASS font size is a height, not an em", () => {
+  it("draws DejaVu Sans Bold smaller than the number in the style line", () => {
+    // Em 2048, ascent plus descent 2384, so a Fontsize of 48 draws an em of 41.2px.
+    expect(assEmPx(48, 1901, -483, 2048)).toBeCloseTo(41.23, 2);
+  });
+
+  it("leaves a face whose ascent and descent match its em alone", () => {
+    expect(assEmPx(48, 1600, -448, 2048)).toBe(48);
+  });
+
+  it("falls back to the size given when the metrics are unusable", () => {
+    expect(assEmPx(48, 0, 0, 2048)).toBe(48);
+  });
+
+  it("measures a word the width libass will draw it", () => {
+    // Verified against a real render: the step from PEACE to IS measures 163px, and the advance
+    // of PEACE plus a space predicts 163.09px under this rule. Measuring at the style's own
+    // number gave 189.84px, which put an extra space between every pair of words.
+    const measurer = createCaptionMeasurer({ family: "DejaVu Sans", bold: true, sizePx: 48 });
+
+    expect(measurer.measure("PEACE")).toBeCloseTo(148.73, 1);
+    expect(measurer.measure("PEACE") + measurer.spaceWidth).toBeCloseTo(163.09, 1);
+  });
+
+  it("reports the em it measured at, so a renderer can draw at the same size", () => {
+    const measurer = createCaptionMeasurer({ family: "DejaVu Sans", bold: true, sizePx: 48 });
+
+    expect(measurer.emPx).toBeCloseTo(41.23, 2);
+    expect(measurer.emPx).toBeLessThan(48);
   });
 });

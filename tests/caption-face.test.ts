@@ -75,8 +75,12 @@ describe("captionFontShorthand", () => {
     );
   });
 
-  it("rounds the size to whole pixels, so both sides ask for one number", () => {
-    expect(captionFontShorthand({ family: "DejaVu Sans", bold: false }, 47.6)).toContain("48px");
+  it("keeps two decimals of the size, because the em is not a round number", () => {
+    // The em a caption is drawn at is the size that makes the face's ascent plus descent equal
+    // its nominal size: 48 becomes 41.23 for DejaVu Sans. Rounding that to whole pixels moved
+    // every word by a fraction and put the two renderers back on different numbers.
+    expect(captionFontShorthand({ family: "DejaVu Sans", bold: false }, 41.234)).toContain("41.23px");
+    expect(captionFontShorthand({ family: "DejaVu Sans", bold: false }, 48)).toContain("48px");
   });
 });
 
