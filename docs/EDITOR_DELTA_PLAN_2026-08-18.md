@@ -481,6 +481,25 @@ sense, a track, a panel and a burn-in path as well. Plan for roughly three times
 estimate, and land the model and burn-in before the panel so parity is proven before the controls
 exist to break it.
 
+**Built 2026-09-03, in three parts.** The safe-area datum (#62, merged), the model, layout and
+burn-in (#63), and the track, panel and canvas object (#64). Landed in the order the size note
+asks for: model and burn-in before the panel.
+
+One behaviour bullet is **not** built and moved to Slice 10 — the track-to-panel switching. See
+below. Everything else in this slice is done, including the parity, safe-area and font-gate
+coverage the re-scope added.
+
+Three things found on the way that were not in the plan, all recorded in DECISIONS.md:
+
+- The five places that hard-coded the safe area disagreed in three of them (guide 6%, burn-in 8%,
+  preview 10%), and a **sixth** copy turned up afterwards — the preview's own `CAPTION_MARGIN_H`,
+  which wrapped caption rows from a different 40 than the burn-in's.
+- Two of those disagreements are a model rather than a mistake: the bottom anchor is the chrome
+  edge, and the top anchor sits a stated 2% below the top band. Both anchors are now derived.
+- Two genuine disagreements are recorded and **not** resolved, because resolving either re-renders
+  clips churches have already approved: the caption's 40px side margin against the guide's 6%, and
+  the preview's block centre against the burn-in's anchored edge.
+
 ---
 
 ### Slice 10 — Timeline layout
@@ -497,6 +516,14 @@ from timeline layout.
 - Timeline zoom exposes more or less of the source. It does not change trim limits.
 - Trim handles stay limited by the real source boundaries.
 - Transport controls stay centred above the tracks.
+- **Moved here from Slice 9, 2026-09-03:** clicking Title opens Title settings; Video returns to
+  Caption Style; Audio opens Audio settings. This passed manual review in the prototype, so it is a
+  behaviour to preserve rather than to design. It could not be built in Slice 9 because there are
+  no Video or Audio tracks to switch between — the timeline is still the single trim track, and the
+  rows this bullet switches between are the ones this slice creates. The Title track exists and is
+  self-contained (`title-track.tsx`), built to the shape `ClipTimeline` was written to be copied
+  into, so this slice inherits two tracks rather than one and has to place them, not invent them.
+  The Title settings ship today as a stacked panel; making it switchable is what remains.
 
 **Coverage:** the 15-second context with source-boundary clamps; zoom does not move trim limits.
 
