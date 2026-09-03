@@ -119,6 +119,10 @@ describe("no consumer keeps a private copy of the safe area", () => {
     const source = read("components/editor/video-preview.tsx");
     expect(source).toContain("safeAreaGuideGeometry");
     expect(source).not.toMatch(/\[6%\]|\[12%\]|\[22%\]/);
+    // The preview kept its own copy of the caption's 40px side margin, and wrapped from it while
+    // the burn-in wrapped from the datum's. Two numbers that happened to agree is not one number.
+    expect(source).toContain("captionMaxWidthPx");
+    expect(source).not.toMatch(/const CAPTION_MARGIN_H/);
   });
 
   it("leaves no hard-coded caption margin in the burn-in", () => {

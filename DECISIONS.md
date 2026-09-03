@@ -2727,3 +2727,86 @@ waits for the product owner.
 
 Status: Active. The title overlay reads `top-safe` from this datum from birth, so it starts with no
 copy of its own.
+
+## 2026-09-02 - The Title Overlay Parses Leniently And Writes Strictly
+
+Decision: `EditorState.overlays` keeps its `z.array(z.unknown())` schema. The title lives in it as a
+`{ type: "title" }` entry, found by `readTitleBanner`, which validates that one entry and steps over
+everything else untouched. Writing goes through `upsertTitleBanner`, which validates before it puts
+anything in.
+
+Why not a discriminated union in the schema: `overlays` has been `unknown[]` since the beginning and
+every stored document carries whatever was in it. A stricter parser that rejected an old shape would
+stop a clip loading — the worst failure this editor has, because the member cannot get to their work
+to fix it. An entry that claims to be a title but does not parse is treated as no title, so a
+document written by a later version degrades to "no title" rather than to "cannot open".
+
+**Removal needs two operations, not one.** The behaviour is that X removes the title and selecting
+the empty Title track recreates the default. Those pull in opposite directions: something has to
+create a default, and the member has to be able to say no permanently.
+
+- `removeTitleBanner` drops the title and nothing else.
+- `dismissTitleBanner` drops it and leaves a `{ type: "titleDismissed" }` marker. This is what X
+  does. Without the marker the title would reappear on the next load and the member would have to
+  remove it every time.
+- `ensureDefaultTitleBanner` adds the default only when there is no title **and** none was
+  dismissed.
+- `upsertTitleBanner` clears the marker, because putting a title back is the member asking for one.
+
+Defaults, from the plan: the clip's first three seconds, Top Safe, horizontally centred,
+centre-aligned, uppercase black on white, no border, no shadow. Two are decisions the plan did not
+state. A clip shorter than three seconds gets a title that **ends with the clip** rather than one
+that runs off the end and is never fully seen. And the default is *not* written into
+`buildDefaultEditorState`: a version-0 document is what an unedited clip is rendered from, so a
+title there would appear on every clip that already exists and was never opened.
+
+The anchor is a name in the shared safe area, not a number, so the title starts with no private copy
+of the frame's geometry. The face is `DejaVu Sans`, already bundled, already declared in
+`globals.css`, already in the worker image and already named in the `Dockerfile.worker` `fc-match`
+gate — so the gate guarding the caption faces guards this one unchanged.
+
+Tradeoff: reading is a linear scan that silently ignores a malformed title, so a member whose title
+was corrupted sees it vanish rather than sees an error. That is the right way round for a document
+they cannot otherwise open, but it means corruption is invisible rather than reported.
+
+Status: Active. The burn-in and the panel follow; the model lands first so parity is provable before
+there are controls to break it.
+
+## 2026-09-02 - The Title Is Drawn As Shapes, Not As A Styled Box
+
+Decision: the burn-in draws the title as an explicit `\p1` rectangle with the text on a layer above
+it, not as an ASS opaque box (`BorderStyle: 3`). A border is a second, larger rectangle behind the
+first, and it is drawn **inside** the width the member set rather than growing the box past it.
+
+Why: "box dimensions" is one of the properties the preview and the file have to agree on. An opaque
+box hugs its own text at a size neither renderer states — it is libass's arithmetic over the glyphs,
+and the browser has no way to reproduce it. A drawing is stated: the rectangle in the file is the
+rectangle `layOutTitleBanner` computed, to the pixel, and the render test reads it back out of the
+frame to prove it.
+
+`src/lib/editor/title-layout.ts` is the single selector both renderers read, the same pattern
+`captionActivations` established in Slice 7. It owns the box, the wrap, the line height, where each
+line's centre sits and where the text is anchored. Neither renderer measures anything the other
+does not.
+
+Two rules inside it worth stating:
+
+- **A line's height is the font size.** An ASS `Fontsize` is a height — libass scales the face so
+  ascent plus descent equals it — so a line occupies exactly that many pixels and neither renderer
+  has to guess a leading. This is the same correction the caption measurers got earlier today.
+- **The case is applied before the text is measured.** Measuring "grace" and drawing "GRACE" is how
+  a box comes out too small for its own text.
+
+Also decided: an override colour is `&HBBGGRR&`, not the style line's `&H00BBGGRR`. A style line
+carries alpha in the same field; an override does not, and running them together makes libass read
+the pair wrong. That is a separate helper now rather than a reused one.
+
+The title's times are remapped onto the kept timeline through `retimeTitleBanner`, the same way
+caption lines already were. A title left on the source timeline drifts by however much was deleted
+before it.
+
+Tradeoff: a title costs three or more events where an opaque box would cost one, and the generator
+now carries a second layout path. Bought with it: every property in the parity list is asserted
+against one shared number rather than inferred, and the rendered frame is checked against it.
+
+Status: Active. The preview reads the same layout; the panel follows.
