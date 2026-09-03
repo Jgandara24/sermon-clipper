@@ -2603,3 +2603,38 @@ the same five words are burned in twice, once positioned per word and once laid 
 the gaps must agree within a few pixels.
 
 Status: Active.
+
+## 2026-09-02 - A Neighbour's Motion Is Subdivided Until It Tracks The Pop Curve
+
+Decision: a neighbouring word's `\move` events are no longer one per pop phase. The motion is split
+recursively until every straight piece sits within `POP_SHIFT_TOLERANCE` of the shared curve, or
+until the piece is one `POP_TIME_STEP_MS` long and the file has no shorter time to state. Only a
+phase that actually curves is split; a phase a neighbour crosses in a straight line stays one event.
+
+Why: the product owner watched the first render and said the motion was "a lot better ... could be a
+little more smoother all together". Measured, the cause was not subtle. One straight line per phase
+put a neighbour **0.25 of its whole clearance** away from the curve it was meant to be following,
+mid-rise, and gave it three or four speed changes across a pop while the active word's own scale was
+interpolated smoothly by libass. The word was smooth; its neighbours were piecewise, and that is
+what reads as stepping.
+
+Subdividing takes that 0.25 down to 0.083, and the 0.083 is the format's floor rather than a choice:
+an accelerated rise leaves rest at unbounded speed, so across the first centisecond no straight line
+can do better. Past that first step the achieved error is under 0.018.
+
+Only the neighbour is subdivided. The active word emits exactly the events it emitted before, so the
+pop's own shape — the part already accepted — is untouched, and the three Clean fixtures are
+unchanged byte for byte.
+
+Tradeoff: **events per word on a five-word line rise from 20.0 to 36.0**, and the asserted budget
+rises from 20 to 45 per word with it. That is the direct cost of the smoothness and it is paid in
+file size, not in render time — libass reads thousands of events and x264 dominates. The restraint
+that keeps it from being worse is splitting only the curved phase: subdividing the settle, the hold
+and the return would have cost another 24 events per word and moved nothing, because a neighbour
+already crosses those in a straight line.
+
+Rejected: the stepped shift recorded as the fallback in the 2026-08-20 neighbour decision. It is the
+opposite of what was asked for, and it is now off the table rather than dormant.
+
+Status: Active. Amends the 2026-08-20 neighbour micro-shift decision, whose "one linear motion per
+phase" implementation constraint this replaces. Pending the product owner's verdict on a re-render.

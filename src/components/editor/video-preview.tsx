@@ -535,9 +535,9 @@ export function VideoPreview({
                     {measuredRows.rows.map((row, rowIndex) =>
                       row.words.map((word) => {
                         const isActive = word.id === activeWordId;
-                        // How far this word has moved aside. Straight within each phase, because
-                        // that is all the burned-in file can express, and both sides must agree
-                        // between boundaries as well as at them.
+                        // How far this word has moved aside. Straight within each segment of the
+                        // subdivided motion, because that is all the burned-in file can express,
+                        // and both sides must agree between boundaries as well as at them.
                         const shift =
                           isActive || !activation
                             ? 0

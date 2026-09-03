@@ -337,16 +337,20 @@ describe("the neighbour micro-shift, rendered", () => {
   }, 180_000);
 
   it("stays inside a stated event budget", async () => {
-    // Measured, not guessed. A neighbour needs one event per phase because a move carries no
-    // acceleration, so the count is roughly (words on the row) x (phases) per activation. The
-    // budget is what that arithmetic gives with headroom, and it is asserted so a future change
-    // to the curve cannot quietly multiply the file.
+    // Measured, not guessed. A neighbour needs one event per straight piece of its motion, because
+    // a move carries no acceleration, so the count is roughly (words on the row) x (segments) per
+    // activation. Subdividing the neighbour's motion so it tracks the curve took this five-word
+    // line from 20.0 events per word to 36.0 — the four pop phases became eight neighbour
+    // segments, and only the phase that actually curves was split. The budget is what that
+    // arithmetic gives with headroom, and it is asserted so a further change to the curve cannot
+    // quietly multiply the file.
     const ass = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
     const events = ass.split("\n").filter((line) => line.startsWith("Dialogue:")).length;
 
     expect(events).toBeGreaterThan(FIVE_WORDS[0].words!.length);
-    expect(events).toBeLessThanOrEqual(20 * FIVE_WORDS[0].words!.length);
+    expect(events).toBeLessThanOrEqual(45 * FIVE_WORDS[0].words!.length);
   });
+
 
   it("leaves the active word where it was, so nothing is dragged with it", () => {
     // The property the per-word arrangement exists to keep. The active word's own event states a

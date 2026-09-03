@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   POP,
+  POP_SHIFT_TOLERANCE,
+  POP_TIME_STEP_MS,
   popPhaseShiftProgress,
   popPhases,
   popScaleAt,
   popShiftProgressAt,
+  popShiftSegments,
   shiftProgressForScale,
 } from "@/lib/editor/caption-animation";
 import { getCaptionPreset } from "@/lib/editor/caption-presets";
@@ -19,10 +22,12 @@ import { generateAssSubtitles, type AssCaptionLine } from "@/lib/export/ass-gene
  *
  * The word's own scale is animated on an accelerated curve. Its neighbours' positions cannot be:
  * libass animates a position only through `\move`, which is one straight motion per event with no
- * acceleration. So the offset is straight inside each phase and exact at every boundary, and both
- * renderers have to do it that way or they disagree about where a word is between boundaries.
+ * acceleration. One straight line per pop phase left a neighbour a quarter of its clearance away
+ * from the curve mid-rise, and changing speed three times across a pop read as stepping. So the
+ * motion is subdivided until each straight piece tracks the curve within a stated tolerance, and
+ * both renderers interpolate over the same pieces.
  */
-describe("the neighbour shift follows the pop, one straight line per phase", () => {
+describe("the neighbour shift tracks the pop curve, one straight line per segment", () => {
   const DURATION = 600;
 
   it("is at rest before the pop and after the return", () => {
@@ -45,33 +50,99 @@ describe("the neighbour shift follows the pop, one straight line per phase", () 
     }
   });
 
-  it("moves in a straight line inside a phase, which is all libass can do", () => {
-    const rise = popPhases(DURATION)[0];
-    const middle = (rise.startMs + rise.endMs) / 2;
-    const from = shiftProgressForScale(rise.fromScale);
-    const to = shiftProgressForScale(rise.toScale);
-
-    expect(popShiftProgressAt(middle, DURATION)).toBeCloseTo((from + to) / 2, 10);
+  it("moves in a straight line inside a segment, which is all libass can do", () => {
+    for (const segment of popShiftSegments(DURATION)) {
+      const middle = (segment.startMs + segment.endMs) / 2;
+      expect(popShiftProgressAt(middle, DURATION)).toBeCloseTo(
+        (segment.from + segment.to) / 2,
+        10,
+      );
+    }
   });
 
-  it("is deliberately not the scale curve mid-rise", () => {
-    // If these agreed, the rise would have lost its acceleration and the pop its shape. The gap
-    // between them is the cost of libass having no accelerated move, and it is bounded by a phase.
+  it("tracks the shared curve within the stated tolerance, everywhere", () => {
+    // This is the whole point of subdividing. One line per phase put the neighbour a quarter of
+    // its clearance from where the curve says it is; the product owner saw that as stepping.
+    let worst = 0;
+    for (let ms = 0; ms <= DURATION; ms += 0.5) {
+      const straight = popShiftProgressAt(ms, DURATION);
+      const curve = shiftProgressForScale(popScaleAt(ms, DURATION));
+      worst = Math.max(worst, Math.abs(straight - curve));
+    }
+    expect(worst).toBeLessThanOrEqual(POP_SHIFT_TOLERANCE);
+  });
+
+  it("puts what is left of that gap in the one step the format cannot subdivide", () => {
+    // An accelerated rise leaves rest at unbounded speed, so the first time step is the one place
+    // a straight line cannot follow it — the file has no shorter time to state. Past that step the
+    // motion tracks the curve an order of magnitude more closely, and saying so here stops the
+    // tolerance above from being read as the accuracy everywhere.
+    let worst = 0;
+    for (let ms = POP_TIME_STEP_MS; ms <= DURATION; ms += 0.5) {
+      const straight = popShiftProgressAt(ms, DURATION);
+      const curve = shiftProgressForScale(popScaleAt(ms, DURATION));
+      worst = Math.max(worst, Math.abs(straight - curve));
+    }
+    expect(worst).toBeLessThanOrEqual(POP_SHIFT_TOLERANCE / 5);
+  });
+
+  it("subdivides only where the curve bends, so a straight phase stays one event", () => {
+    // A phase the offset crosses in a straight line is already exact. Splitting it would multiply
+    // the file and move nothing, which is the difference between smoother and merely larger.
+    const straightPhases = popPhases(DURATION).filter(
+      (phase) => phase.accel === 1 || phase.fromScale === phase.toScale,
+    );
+    expect(straightPhases.length).toBeGreaterThan(0);
+
+    const segments = popShiftSegments(DURATION);
+    for (const phase of straightPhases) {
+      const within = segments.filter(
+        (segment) => segment.startMs >= phase.startMs && segment.endMs <= phase.endMs,
+      );
+      expect(within, `phase ${phase.startMs}-${phase.endMs} was split`).toHaveLength(1);
+    }
+  });
+
+  it("gives the curved rise more pieces than the one it had", () => {
     const rise = popPhases(DURATION)[0];
     expect(rise.accel).not.toBe(1);
-    const middle = (rise.startMs + rise.endMs) / 2;
+    const within = popShiftSegments(DURATION).filter((segment) => segment.endMs <= rise.endMs);
+    expect(within.length).toBeGreaterThan(1);
+  });
 
-    const straight = popShiftProgressAt(middle, DURATION);
-    const curved = shiftProgressForScale(popScaleAt(middle, DURATION));
-    expect(Math.abs(straight - curved)).toBeGreaterThan(0.05);
+  it("covers the activation end to end, in order, on the file's own time grid", () => {
+    // A gap between segments is a moment neither renderer has an answer for, and a boundary off
+    // the grid is a time the file cannot state.
+    const segments = popShiftSegments(DURATION);
+    const phases = popPhases(DURATION);
+    expect(segments.length).toBeGreaterThan(0);
+    expect(segments[0].startMs).toBe(phases[0].startMs);
+    expect(segments[segments.length - 1].endMs).toBe(phases[phases.length - 1].endMs);
+
+    for (const [index, segment] of segments.entries()) {
+      expect(segment.endMs).toBeGreaterThan(segment.startMs);
+      expect(segment.startMs % POP_TIME_STEP_MS).toBe(0);
+      expect(segment.endMs % POP_TIME_STEP_MS).toBe(0);
+      if (index > 0) expect(segment.startMs).toBe(segments[index - 1].endMs);
+    }
+  });
+
+  it("keeps every phase boundary a segment boundary, where both renderers are exact", () => {
+    const segments = popShiftSegments(DURATION);
+    const bounds = new Set(segments.flatMap((segment) => [segment.startMs, segment.endMs]));
+    for (const phase of popPhases(DURATION)) {
+      expect(bounds.has(phase.startMs), `phase start ${phase.startMs} is not a boundary`).toBe(true);
+      expect(bounds.has(phase.endMs), `phase end ${phase.endMs} is not a boundary`).toBe(true);
+    }
   });
 
   it("gives an activation too short for any phase nothing to do", () => {
     expect(popShiftProgressAt(0, 0)).toBe(0);
     expect(popShiftProgressAt(5, 0)).toBe(0);
+    expect(popShiftSegments(0)).toEqual([]);
   });
 
-  it("maps a phase's own scales to the offsets the file moves between", () => {
+  it("maps a phase's own scales to the offsets it starts and ends at", () => {
     for (const phase of popPhases(DURATION)) {
       const span = popPhaseShiftProgress(phase);
       expect(span.from).toBeCloseTo(shiftProgressForScale(phase.fromScale), 10);
@@ -92,14 +163,17 @@ describe("the neighbour shift follows the pop, one straight line per phase", () 
     expect(shiftProgressForScale(POP.peakScale)).toBe(1);
   });
 
-  it("covers a short activation the same way, phase by phase", () => {
+  it("covers a short activation the same way, segment by segment", () => {
     // A short activation drops phases rather than shortening the return, so the shift still ends
     // at rest and still agrees at every boundary that survived.
     const short = 120;
-    const phases = popPhases(short);
-    expect(phases.length).toBeGreaterThan(0);
+    const segments = popShiftSegments(short);
+    expect(segments.length).toBeGreaterThan(0);
     expect(popShiftProgressAt(short, short)).toBe(0);
-    for (const phase of phases) {
+    for (const segment of segments) {
+      expect(popShiftProgressAt(segment.endMs, short)).toBeCloseTo(segment.to, 10);
+    }
+    for (const phase of popPhases(short)) {
       expect(popShiftProgressAt(phase.endMs, short)).toBeCloseTo(
         popPhaseShiftProgress(phase).to,
         10,
@@ -132,7 +206,7 @@ describe("the preview and the file agree on where a neighbour is", () => {
   }
 
   it("moves a neighbour between the two positions the layout states, and no others", () => {
-    // The file says where a word starts and ends each phase. The preview computes the same two
+    // The file says where a word starts and ends each segment. The preview computes the same two
     // numbers from the same layout and the same progress curve. If these drift apart, the caption
     // the church watches is not the caption it publishes.
     const m = measurer();
@@ -154,11 +228,10 @@ describe("the preview and the file agree on where a neighbour is", () => {
     const centreX = 1080 / 2;
     const expected = new Set<number>();
     for (const word of layout.rows[0].words) {
-      for (const phase of popPhases(500)) {
-        const shift = popPhaseShiftProgress(phase);
+      for (const segment of popShiftSegments(500)) {
         const span = word.shiftedX - word.restX;
-        expected.add(Math.round(centreX + word.restX + span * shift.from));
-        expected.add(Math.round(centreX + word.restX + span * shift.to));
+        expected.add(Math.round(centreX + word.restX + span * segment.from));
+        expected.add(Math.round(centreX + word.restX + span * segment.to));
       }
     }
 
@@ -191,16 +264,12 @@ describe("the preview and the file agree on where a neighbour is", () => {
     }
   });
 
-  it("gives the preview the same offset the file moves to, at every phase boundary", () => {
-    // The preview reads a time; the file reads a phase. At a boundary the two must produce the
+  it("gives the preview the same offset the file moves to, at every segment boundary", () => {
+    // The preview reads a time; the file reads a segment. At a boundary the two must produce the
     // same number, because that is the only place both are exact.
-    for (const phase of popPhases(500)) {
-      const fromPreview = popShiftProgressAt(phase.startMs, 500);
-      const toPreview = popShiftProgressAt(phase.endMs, 500);
-      const inFile = popPhaseShiftProgress(phase);
-
-      expect(fromPreview).toBeCloseTo(inFile.from, 10);
-      expect(toPreview).toBeCloseTo(inFile.to, 10);
+    for (const segment of popShiftSegments(500)) {
+      expect(popShiftProgressAt(segment.startMs, 500)).toBeCloseTo(segment.from, 10);
+      expect(popShiftProgressAt(segment.endMs, 500)).toBeCloseTo(segment.to, 10);
     }
   });
 });

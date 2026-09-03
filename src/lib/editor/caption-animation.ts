@@ -209,9 +209,15 @@ export function popResetTags(): string {
 // The active word scales about its own centre; the words beside it move aside to keep clear of it
 // and return when it does. Position is the part libass cannot animate the same way it animates
 // scale: `\t` does not apply to `\pos`, and `\move` is one straight motion per event with no
-// acceleration. So the offset is straight inside each phase and exact at every boundary, and the
-// preview interpolates it the same straight way even though it evaluates the pop itself on the
-// accelerated curve.
+// acceleration.
+//
+// One `\move` per pop phase was the first answer, and the product owner watched it and asked for
+// smoother. It was three or four straight lines across a whole pop, so a neighbour changed speed
+// three or four times while the word's own scale was interpolated smoothly — and mid-rise the
+// straight line sat a quarter of the neighbour's clearance away from the curve it was meant to be
+// following. The fix is more and shorter lines, subdivided until each one tracks the curve, and
+// the same pieces read by the preview so the two still agree between boundaries as well as at
+// them. The pop itself is untouched: the active word emits exactly the events it always did.
 
 /** How far aside a neighbour sits when the active word is at `scale`: 0 at rest, 1 at the peak. */
 export function shiftProgressForScale(scale: number): number {
@@ -221,7 +227,7 @@ export function shiftProgressForScale(scale: number): number {
   return Math.min(1, Math.max(0, progress));
 }
 
-/** The two offsets one phase moves between, which is exactly what a `\move` states. */
+/** The two offsets one phase moves between, which is where both renderers are exact. */
 export function popPhaseShiftProgress(phase: PopPhase): { from: number; to: number } {
   return {
     from: shiftProgressForScale(phase.fromScale),
@@ -230,24 +236,99 @@ export function popPhaseShiftProgress(phase: PopPhase): { from: number; to: numb
 }
 
 /**
+ * How far a straight piece may sit from the curve it approximates, as a fraction of a neighbour's
+ * clearance. Subdivision stops when every piece is inside this, or when the piece is one time step
+ * long and the file cannot state a shorter one.
+ *
+ * The floor is the format's, not a taste: an accelerated rise leaves rest at unbounded speed, so
+ * over the first `POP_TIME_STEP_MS` no straight line can be closer than 0.083 of the clearance.
+ * The tolerance sits just above that, and everywhere past that first step the achieved error is
+ * an order of magnitude smaller.
+ */
+export const POP_SHIFT_TOLERANCE = 0.09;
+
+/** One straight `\move`: where the neighbour is at each end, and when. */
+export type PopShiftSegment = {
+  /** Milliseconds since the activation began. */
+  startMs: number;
+  endMs: number;
+  from: number;
+  to: number;
+};
+
+/** The scale the active word is at, part way through one phase — the phase's own formula. */
+function scaleWithinPhase(phase: PopPhase, ms: number): number {
+  const span = phase.endMs - phase.startMs;
+  if (span <= 0) return phase.toScale;
+  const through = Math.min(1, Math.max(0, (ms - phase.startMs) / span));
+  return phase.fromScale + (phase.toScale - phase.fromScale) * Math.pow(through, phase.accel);
+}
+
+/** The offset the shared curve asks for, part way through one phase. */
+function shiftWithinPhase(phase: PopPhase, ms: number): number {
+  return shiftProgressForScale(scaleWithinPhase(phase, ms));
+}
+
+/** Splits one phase until each piece is within tolerance of the curve, appending in order. */
+function subdivideInto(out: PopShiftSegment[], phase: PopPhase, startMs: number, endMs: number) {
+  const from = shiftWithinPhase(phase, startMs);
+  const to = shiftWithinPhase(phase, endMs);
+  const middle = quantisePopTime((startMs + endMs) / 2);
+
+  // A piece one time step long cannot be split: the file has no shorter time to state. That is
+  // the floor on how closely a straight line can follow a curve that leaves rest at speed.
+  if (middle > startMs && middle < endMs) {
+    const chord = (from + to) / 2;
+    if (Math.abs(shiftWithinPhase(phase, middle) - chord) > POP_SHIFT_TOLERANCE) {
+      subdivideInto(out, phase, startMs, middle);
+      subdivideInto(out, phase, middle, endMs);
+      return;
+    }
+  }
+
+  out.push({ startMs, endMs, from, to });
+}
+
+/**
+ * The straight pieces a neighbour's motion is made of, in order and covering the activation.
+ *
+ * A phase whose offset already crosses in a straight line — a linear transform, or no change at
+ * all — is one piece. Splitting it would multiply the file and move nothing, and the difference
+ * between smoother and merely larger is exactly that restraint. Every phase boundary survives as a
+ * segment boundary, so the two renderers keep agreeing where they always did.
+ */
+export function popShiftSegments(activeDurationMs: number): PopShiftSegment[] {
+  const segments: PopShiftSegment[] = [];
+  for (const phase of popPhases(activeDurationMs)) {
+    if (phase.endMs <= phase.startMs) continue;
+    if (phase.accel === 1 || phase.fromScale === phase.toScale) {
+      const { from, to } = popPhaseShiftProgress(phase);
+      segments.push({ startMs: phase.startMs, endMs: phase.endMs, from, to });
+      continue;
+    }
+    subdivideInto(segments, phase, phase.startMs, phase.endMs);
+  }
+  return segments;
+}
+
+/**
  * The neighbour offset at a moment, for the preview.
  *
- * Straight within a phase, to match what the file can express. Outside the activation, and before
- * any phase begins, a neighbour is at rest.
+ * Straight within a segment, to match what the file can express. Outside the activation, and
+ * before any segment begins, a neighbour is at rest.
  */
 export function popShiftProgressAt(elapsedMs: number, activeDurationMs: number): number {
-  const phases = popPhases(activeDurationMs);
-  if (phases.length === 0) return 0;
+  const segments = popShiftSegments(activeDurationMs);
+  if (segments.length === 0) return 0;
   if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0;
 
-  const last = phases[phases.length - 1];
-  if (elapsedMs >= last.endMs) return shiftProgressForScale(last.toScale);
+  const last = segments[segments.length - 1];
+  if (elapsedMs >= last.endMs) return last.to;
 
-  const phase = phases.find((candidate) => elapsedMs < candidate.endMs) ?? last;
-  const span = phase.endMs - phase.startMs;
-  const { from, to } = popPhaseShiftProgress(phase);
-  if (span <= 0) return to;
+  const segment = segments.find((candidate) => elapsedMs < candidate.endMs) ?? last;
+  const span = segment.endMs - segment.startMs;
+  if (span <= 0) return segment.to;
 
-  const throughPhase = Math.min(1, Math.max(0, (elapsedMs - phase.startMs) / span));
-  return from + (to - from) * throughPhase;
+  const through = Math.min(1, Math.max(0, (elapsedMs - segment.startMs) / span));
+  return segment.from + (segment.to - segment.from) * through;
 }

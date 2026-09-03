@@ -1,8 +1,8 @@
 import {
   POP,
-  popPhaseShiftProgress,
   popPhases,
   popPhaseTags,
+  popShiftSegments,
   popResetTags,
 } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
@@ -223,8 +223,12 @@ export function generateAssSubtitles(
       maxWidth: videoWidth - MARGIN_H * 2,
     });
 
-    const phases =
-      activation.activeWordId === null ? [] : popPhases(activation.endMs - activation.startMs);
+    const activeDurationMs = activation.endMs - activation.startMs;
+    const phases = activation.activeWordId === null ? [] : popPhases(activeDurationMs);
+    // A neighbour is subdivided further than the pop is. `\move` carries no acceleration, so one
+    // straight line per phase changed a neighbour's speed three or four times across a pop and sat
+    // a quarter of its clearance from the curve mid-rise. The pop's own events are untouched.
+    const segments = activation.activeWordId === null ? [] : popShiftSegments(activeDurationMs);
 
     return layout.rows.flatMap((row, rowIndex) => {
       const place = rowPlacement(rowIndex, layout.rows.length);
@@ -246,27 +250,26 @@ export function generateAssSubtitles(
 
         const shiftPx = word.shiftedX - word.restX;
         // A word with nowhere to go — no active word on this line, or on another row entirely —
-        // is one event at rest. Splitting it into phases would multiply the file for no motion.
-        if (shiftPx === 0 || phases.length === 0) {
+        // is one event at rest. Splitting it into segments would multiply the file for no motion.
+        if (shiftPx === 0 || segments.length === 0) {
           return [
             `Dialogue: 0,${msToAssTime(activation.startMs)},${msToAssTime(activation.endMs)},Default,,0,0,0,,${at}${text}`,
           ];
         }
 
         // A neighbour moves aside and back. `\t` cannot animate a position, and `\move` is one
-        // straight motion per event with no acceleration, so the motion is split across the same
-        // phases the pop uses and is straight within each. The preview interpolates it the same
-        // straight way; both are exact at every boundary.
-        return phases.map((phase) => {
-          const shift = popPhaseShiftProgress(phase);
-          const from = Math.round(place.x + word.restX + shiftPx * shift.from);
-          const to = Math.round(place.x + word.restX + shiftPx * shift.to);
-          const span = Math.max(1, Math.round(phase.endMs - phase.startMs));
+        // straight motion per event with no acceleration, so the motion is split into short pieces
+        // that each track the shared curve, and is straight within each. The preview interpolates
+        // over the same pieces; both are exact at every boundary.
+        return segments.map((segment) => {
+          const from = Math.round(place.x + word.restX + shiftPx * segment.from);
+          const to = Math.round(place.x + word.restX + shiftPx * segment.to);
+          const span = Math.max(1, Math.round(segment.endMs - segment.startMs));
           const motion =
             from === to
               ? `{${place.tag}\\pos(${from},${place.y})}`
               : `{${place.tag}\\move(${from},${place.y},${to},${place.y},0,${span})}`;
-          return `Dialogue: 0,${msToAssTime(activation.startMs + phase.startMs)},${msToAssTime(activation.startMs + phase.endMs)},Default,,0,0,0,,${motion}${text}`;
+          return `Dialogue: 0,${msToAssTime(activation.startMs + segment.startMs)},${msToAssTime(activation.startMs + segment.endMs)},Default,,0,0,0,,${motion}${text}`;
         });
       });
     });
