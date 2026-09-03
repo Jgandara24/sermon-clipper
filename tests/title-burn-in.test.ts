@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { getCaptionPreset } from "@/lib/editor/caption-presets";
 import { createCaptionMeasurer } from "@/lib/export/font-metrics";
@@ -184,6 +186,31 @@ describe("the burn-in draws the title from the shared layout", () => {
     const captionsOf = (ass: string) =>
       ass.split("\n").filter((line) => line.startsWith("Dialogue:") && line.includes(",Default,"));
     expect(captionsOf(withTitle)).toEqual(captionsOf(without));
+  });
+});
+
+describe("the preview draws from the same layout the file does", () => {
+  // There is no test environment that renders this component, so the guard against the preview
+  // growing its own idea of where a title sits is the source itself. The browser behaviour is
+  // covered end to end.
+  const preview = readFileSync(
+    path.join(__dirname, "..", "src", "components", "editor", "video-preview.tsx"),
+    "utf8",
+  );
+
+  it("calls the shared layout rather than positioning a title itself", () => {
+    expect(preview).toContain("layOutTitleBanner");
+    expect(preview).toContain("readTitleBanner");
+  });
+
+  it("draws the title at the em, not at the font size", () => {
+    // An ASS font size is a height. Drawing at the number itself makes the preview about a sixth
+    // larger than the file, which is the bug the caption faces were corrected for.
+    expect(preview).toContain("titleMeasurer.emPx");
+  });
+
+  it("keeps the border inside the box, as the burn-in does", () => {
+    expect(preview).toContain('boxSizing: "border-box"');
   });
 });
 

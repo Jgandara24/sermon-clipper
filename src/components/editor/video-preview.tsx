@@ -45,6 +45,14 @@ import {
   lowerThirdGeometry,
   safeAreaGuideGeometry,
 } from "@/lib/editor/social-safe-area";
+import { readTitleBanner, TITLE_BANNER_FONT_FAMILY } from "@/lib/editor/title-banner";
+import { layOutTitleBanner } from "@/lib/editor/title-layout";
+import {
+  CAPTION_BOLD_WEIGHT,
+  CAPTION_REGULAR_WEIGHT,
+  isBoldCaptionWeight,
+  resolveCaptionFace,
+} from "@/lib/editor/caption-face";
 import { layOutCaptionRows } from "@/lib/editor/caption-layout";
 import { useCaptionTextMeasurer } from "@/components/editor/use-text-measurer";
 
@@ -55,6 +63,7 @@ import { useCaptionTextMeasurer } from "@/components/editor/use-text-measurer";
  * question and only the last step differs.
  */
 const FRAME_WIDTH = 1080;
+const FRAME_HEIGHT = 1920;
 /** Left and right margins the burn-in's style line declares. The usable row width is what is left. */
 /**
  * Used only before the canvas has been measured, for the one frame between mount and the first
@@ -166,6 +175,29 @@ export function VideoPreview({
   // nothing, and the caption keeps the CSS flow it has always used — a measurement taken before
   // the file arrives is the fallback's metrics, and it looks perfectly valid.
   const measurer = useCaptionTextMeasurer(style);
+
+  // The title overlay. Its times are on the source timeline, which is the timeline this preview
+  // plays on — the burn-in remaps them onto the cut output instead, and neither side does the
+  // other's arithmetic.
+  const titleBanner = readTitleBanner(state.overlays);
+  const titleMeasurer = useCaptionTextMeasurer(
+    titleBanner ?? { fontFamily: TITLE_BANNER_FONT_FAMILY, sizePx: 64, weight: 700 },
+  );
+  const titleLayout =
+    titleBanner && titleMeasurer.ready
+      ? layOutTitleBanner({
+          title: titleBanner,
+          videoWidth: FRAME_WIDTH,
+          videoHeight: FRAME_HEIGHT,
+          measure: titleMeasurer.measure,
+          spaceWidth: titleMeasurer.spaceWidth,
+        })
+      : null;
+  const titleIsOnScreen =
+    titleBanner !== null &&
+    titleLayout !== null &&
+    currentMs >= titleBanner.startMs &&
+    currentMs < titleBanner.endMs;
   const measuredRows =
     measurer.ready && style.activeWordHighlight && !captionIsRetyped
       ? layOutCaptionRows({
@@ -465,6 +497,65 @@ export function VideoPreview({
               data-testid="centre-guide"
               className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-teal-300"
             />
+          ) : null}
+
+          {/*
+            The title. Every number here comes from `layOutTitleBanner`, the same call the burn-in
+            makes — the box, the wrap, each line's centre, where the text is anchored. Nothing is
+            laid out by CSS flow, because flow is the thing the ASS file cannot reproduce.
+          */}
+          {titleIsOnScreen && titleBanner && titleLayout ? (
+            <div
+              data-testid="title-banner"
+              className="pointer-events-none absolute"
+              style={{
+                left: `${titleLayout.box.x * previewScale}px`,
+                top: `${titleLayout.box.y * previewScale}px`,
+                width: `${titleLayout.box.width * previewScale}px`,
+                height: `${titleLayout.box.height * previewScale}px`,
+                backgroundColor: titleBanner.backgroundColor,
+                // Inside the box, exactly as the burn-in draws it, so a border does not widen the
+                // width the member set.
+                boxSizing: "border-box",
+                border:
+                  titleLayout.border.widthPx > 0
+                    ? `${titleLayout.border.widthPx * previewScale}px solid ${titleLayout.border.color}`
+                    : undefined,
+                boxShadow: titleBanner.shadow
+                  ? `${4 * previewScale}px ${4 * previewScale}px 0 rgba(0,0,0,0.5)`
+                  : undefined,
+              }}
+            >
+              {titleLayout.lines.map((line, index) => (
+                <span
+                  key={index}
+                  data-testid="title-line"
+                  className="absolute whitespace-pre"
+                  style={{
+                    left: `${(titleLayout.textX - titleLayout.box.x) * previewScale}px`,
+                    top: `${(titleLayout.lineCentresY[index] - titleLayout.box.y) * previewScale}px`,
+                    transform: `translate(${
+                      titleBanner.align === "left"
+                        ? "0"
+                        : titleBanner.align === "right"
+                          ? "-100%"
+                          : "-50%"
+                    }, -50%)`,
+                    color: titleBanner.color,
+                    fontFamily: `"${resolveCaptionFace(titleBanner).family}"`,
+                    fontWeight: isBoldCaptionWeight(titleBanner.weight)
+                      ? CAPTION_BOLD_WEIGHT
+                      : CAPTION_REGULAR_WEIGHT,
+                    // The em, not the size: an ASS font size is a height, and drawing at the
+                    // number itself makes the preview about a sixth larger than the file.
+                    fontSize: `${titleMeasurer.emPx * previewScale}px`,
+                    lineHeight: 1,
+                  }}
+                >
+                  {line}
+                </span>
+              ))}
+            </div>
           ) : null}
 
           {/*
