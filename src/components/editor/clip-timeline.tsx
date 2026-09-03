@@ -81,6 +81,7 @@ export function ClipTimeline({
   title,
   zoom,
   onZoomChange,
+  transport,
   onTrim,
   onCommitTrim,
   onScrub,
@@ -101,6 +102,8 @@ export function ClipTimeline({
   /** Magnification of the window's padding. View state: never saved, never a trim limit. */
   zoom: number;
   onZoomChange: (zoom: number) => void;
+  /** The transport, rendered centred above the tracks. The preview owns what it drives. */
+  transport: React.ReactNode;
   onTrim: (startMs: number, endMs: number) => void;
   /** The drag or nudge is over: write what it produced. */
   onCommitTrim: () => void;
@@ -282,13 +285,18 @@ export function ClipTimeline({
       {/* The controls row, over the rows' own column so it lines up with them. */}
       <div className="mt-3 grid grid-cols-[3.5rem_1fr] gap-x-3">
         <span />
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center">
-          <span />
-          <span />
+        {/*
+          The transport is centred between two equal flexible sides. On a phone the two together
+          are wider than the column, so the zoom drops to a line of its own rather than pushing the
+          page wider than the screen — which zooms the whole page out and moves every target.
+        */}
+        <div className="flex flex-wrap items-center gap-y-2">
+          <span className="hidden sm:block sm:flex-1" />
+          <div className="mx-auto">{transport}</div>
           <div
             role="group"
             aria-label="Timeline zoom"
-            className="flex items-center justify-end gap-1"
+            className="flex w-full items-center justify-end gap-1 sm:w-auto sm:flex-1"
           >
             <ZoomButton
               label="Zoom out"

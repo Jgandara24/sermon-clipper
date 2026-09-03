@@ -164,4 +164,17 @@ test.describe("the timeline layout", () => {
     expect(await trimRange(page)).toEqual(before);
     expect(await trimLimits(page)).toEqual(limitsBefore);
   });
+
+  test("the transport controls sit centred above the tracks", async ({ page }) => {
+    const controls = page.getByTestId("transport-controls");
+    await controls.scrollIntoViewIfNeeded();
+    const bar = (await controls.boundingBox())!;
+    const tracks = (await videoRow(page).boundingBox())!;
+
+    expect(Math.abs(bar.x + bar.width / 2 - (tracks.x + tracks.width / 2))).toBeLessThan(2);
+    expect(bar.y + bar.height).toBeLessThanOrEqual(tracks.y);
+    await expect(controls.getByRole("button", { name: "Play clip" })).toBeVisible();
+    // Moved, not copied: the preview's own bar no longer carries them.
+    await expect(page.getByRole("button", { name: "Go to start" })).toHaveCount(1);
+  });
 });

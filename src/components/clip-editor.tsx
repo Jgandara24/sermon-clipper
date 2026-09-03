@@ -15,6 +15,10 @@ import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { TitlePanel } from "@/components/editor/title-panel";
 import {
+  type PreviewTransport,
+  TransportControls,
+} from "@/components/editor/transport-controls";
+import {
   defaultTitleBanner,
   readTitleBanner,
   type TitleRange,
@@ -95,6 +99,10 @@ export function ClipEditor({
   // How much source the timeline shows around the clip. View state, like the canvas zoom: it
   // changes nothing that is saved and nothing the clip may start or end at.
   const [timelineZoom, setTimelineZoom] = useState(1);
+  // The transport above the tracks drives the preview through this; the preview reports back
+  // whether it is playing so the button can say which comes next.
+  const transportRef = useRef<PreviewTransport | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   // The word open for correction. Selection is view state, not document state: choosing a word
   // changes nothing that is saved, so it must never write a version.
   const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
@@ -465,6 +473,8 @@ export function ClipEditor({
             }
             onTitleCommit={commitNow}
             seek={seek}
+            transportRef={transportRef}
+            onPlayingChange={setIsPlaying}
           />
           <label className="flex items-center gap-2 text-sm text-stone-600">
             <input
@@ -496,6 +506,13 @@ export function ClipEditor({
             }}
             zoom={timelineZoom}
             onZoomChange={setTimelineZoom}
+            transport={
+              <TransportControls
+                isPlaying={isPlaying}
+                clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+                transportRef={transportRef}
+              />
+            }
             onTrim={handleTrim}
             onCommitTrim={commitNow}
             onScrub={requestSeek}
