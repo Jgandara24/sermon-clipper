@@ -14,6 +14,8 @@ import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { TitlePanel } from "@/components/editor/title-panel";
+import { TitleTrack } from "@/components/editor/title-track";
+import { readTitleBanner, upsertTitleBanner } from "@/lib/editor/title-banner";
 import { VideoPreview } from "@/components/editor/video-preview";
 import {
   applyConfirmedSave,
@@ -76,6 +78,8 @@ export function ClipEditor({
   // History owns the working document: `history.present` is what the editor renders.
   const [history, setHistory] = useState(() => createHistory<EditorState>(initialState));
   const state = history.present;
+  // The title, read once: both the track and the panel work from the same entry in overlays.
+  const editorTitle = readTitleBanner(state.overlays);
   const [version, setVersion] = useState(initialVersion);
   const [savedState, setSavedState] = useState<EditorState>(initialState);
   const [savePhase, setSavePhase] = useState<SavePhase>("idle");
@@ -442,6 +446,22 @@ export function ClipEditor({
             onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
             onCommit={commitNow}
           />
+          {editorTitle ? (
+            <TitleTrack
+              title={editorTitle}
+              clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+              onChange={(range) =>
+                updateState(
+                  (prev) => ({
+                    ...prev,
+                    overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, ...range }),
+                  }),
+                  "idle",
+                )
+              }
+              onCommit={commitNow}
+            />
+          ) : null}
           <TitlePanel
             overlays={state.overlays}
             clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}

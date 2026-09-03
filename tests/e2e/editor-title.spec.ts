@@ -134,6 +134,49 @@ test.describe("the title overlay", () => {
     }).toBe(true);
   });
 
+  test("dragging the title's block moves when it shows, without changing its length", async ({
+    page,
+  }) => {
+    await addButton(page).click();
+    await textField(page).fill("GRACE");
+
+    const before = (await storedTitle(fixture.clipId))!;
+    const region = page.getByTestId("title-region");
+    const box = (await region.boundingBox())!;
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2, { steps: 6 });
+    await page.mouse.up();
+
+    await expect
+      .poll(async () => (await storedTitle(fixture.clipId))!.startMs, { timeout: 15_000 })
+      .toBeGreaterThan(before.startMs);
+
+    const after = (await storedTitle(fixture.clipId))!;
+    // The length is what a drag must not change.
+    expect(after.endMs - after.startMs).toBe(before.endMs - before.startMs);
+  });
+
+  test("dragging an edge trims that end and leaves the other alone", async ({ page }) => {
+    await addButton(page).click();
+    await textField(page).fill("GRACE");
+
+    const before = (await storedTitle(fixture.clipId))!;
+    const handle = page.getByTestId("title-handle-end");
+    const box = (await handle.boundingBox())!;
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 - 50, box.y + box.height / 2, { steps: 6 });
+    await page.mouse.up();
+
+    await expect
+      .poll(async () => (await storedTitle(fixture.clipId))!.endMs, { timeout: 15_000 })
+      .toBeLessThan(before.endMs);
+    expect((await storedTitle(fixture.clipId))!.startMs).toBe(before.startMs);
+  });
+
   test("changing the position moves the box, and the document records it", async ({ page }) => {
     await addButton(page).click();
     await textField(page).fill("GRACE");
