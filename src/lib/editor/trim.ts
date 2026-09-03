@@ -10,22 +10,50 @@ export const MIN_CLIP_MS = 3_000;
 export const VIEWPORT_PAD_MIN_MS = 15_000;
 export const VIEWPORT_PAD_MAX_MS = 60_000;
 
+// Timeline zoom is magnification: 2 shows half the padding on each side of the clip, 0.5 shows
+// twice as much. It is view state — never saved, never read by anything that decides what the
+// clip contains. The clamp helpers below do not take it, and that is deliberate: a window is a
+// view of the source, and the limits a handle stops at are the source itself.
+export const TIMELINE_ZOOM_MIN = 0.25;
+export const TIMELINE_ZOOM_MAX = 8;
+const TIMELINE_ZOOM_STEP = 2;
+
 export type TrimViewport = { start: number; end: number };
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** A zoom inside the supported range; anything that is not a number is the resting 1. */
+export function clampTimelineZoom(zoom: number): number {
+  if (!Number.isFinite(zoom)) return 1;
+  return clamp(zoom, TIMELINE_ZOOM_MIN, TIMELINE_ZOOM_MAX);
+}
+
+/** One press of the zoom buttons: doubles or halves, and stops at the ends of the range. */
+export function stepTimelineZoom(zoom: number, direction: "in" | "out"): number {
+  const current = clampTimelineZoom(zoom);
+  return clampTimelineZoom(
+    direction === "in" ? current * TIMELINE_ZOOM_STEP : current / TIMELINE_ZOOM_STEP,
+  );
+}
+
 /**
  * The visible source window for the timeline: the clip padded on both sides (clamped to the real
  * media bounds) so the in/out handles sit away from the edges and can be dragged either way.
+ *
+ * `zoom` scales only the padding. The clip itself is always inside the window whole, so both
+ * handles stay reachable at every zoom, and the media bounds clamp the window exactly as they do
+ * at 1.
  */
 export function computeTrimViewport(
   startMs: number,
   endMs: number,
   sourceDurationMs: number,
+  zoom = 1,
 ): TrimViewport {
-  const pad = clamp(endMs - startMs, VIEWPORT_PAD_MIN_MS, VIEWPORT_PAD_MAX_MS);
+  const basePad = clamp(endMs - startMs, VIEWPORT_PAD_MIN_MS, VIEWPORT_PAD_MAX_MS);
+  const pad = basePad / clampTimelineZoom(zoom);
   const start = Math.max(0, startMs - pad);
   const end = Math.min(sourceDurationMs, endMs + pad);
   // Degenerate guard (zero-length media / bad bounds): keep a non-empty window.
