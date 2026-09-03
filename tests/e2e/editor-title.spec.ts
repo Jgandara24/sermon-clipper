@@ -31,6 +31,18 @@ async function storedTitle(clipId: string) {
 }
 
 /**
+ * The stored title once the save that made it has landed. Adding a title writes at once, but "at
+ * once" is a request in flight, and on a cold built server the first write to the edit route can
+ * land after the next line of a test has already read the row.
+ */
+async function storedTitleSoon(clipId: string) {
+  await expect.poll(async () => (await storedTitle(clipId)) !== null, { timeout: 15_000 }).toBe(
+    true,
+  );
+  return (await storedTitle(clipId))!;
+}
+
+/**
  * The Title overlay, through the real editor.
  *
  * The model and the burn-in have unit and render coverage. What only a browser can answer is
@@ -144,7 +156,7 @@ test.describe("the title overlay", () => {
     await addButton(page).click();
     await textField(page).fill("GRACE");
 
-    const before = (await storedTitle(fixture.clipId))!;
+    const before = await storedTitleSoon(fixture.clipId);
     const region = page.getByTestId("title-region");
     // The Title row sits at the top of the timeline, above the panel that was just used, so it is
     // scrolled to first: boundingBox reports viewport coordinates, and the mouse uses them too.
@@ -169,7 +181,7 @@ test.describe("the title overlay", () => {
     await addButton(page).click();
     await textField(page).fill("GRACE");
 
-    const before = (await storedTitle(fixture.clipId))!;
+    const before = await storedTitleSoon(fixture.clipId);
     const handle = page.getByTestId("title-handle-end");
     await handle.scrollIntoViewIfNeeded();
     const box = (await handle.boundingBox())!;
