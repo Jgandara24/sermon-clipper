@@ -1,10 +1,21 @@
-import { popPhases, popPhaseTags, popResetTags } from "@/lib/editor/caption-animation";
+import {
+  POP,
+  popPhases,
+  popPhaseTags,
+  popShiftSegments,
+  popResetTags,
+} from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import { isBoldCaptionWeight, resolveCaptionFace } from "@/lib/editor/caption-face";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
 import { captionActivations } from "@/lib/editor/caption-timeline";
 import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
 import { layOutCaptionRows, type CaptionWordMeasurer } from "@/lib/editor/caption-layout";
+import {
+  captionMarginHPx,
+  captionMarginVPx,
+  captionMaxWidthPx,
+} from "@/lib/editor/social-safe-area";
 
 /**
  * Renders one ASS (Advanced SubStation Alpha) subtitle file per clip export, burned in via
@@ -35,12 +46,6 @@ function resolveAlignment(position: CaptionStyle["position"], alignment: Caption
   return row + col;
 }
 
-function marginVForPosition(position: CaptionStyle["position"], videoHeight: number): number {
-  if (position === "top") return Math.round(videoHeight * 0.08);
-  if (position === "middle") return 0;
-  return Math.round(videoHeight * 0.12);
-}
-
 function msToAssTime(ms: number): string {
   const clamped = Math.max(0, Math.round(ms));
   const totalCentiseconds = Math.round(clamped / 10);
@@ -58,9 +63,6 @@ function msToAssTime(ms: number): string {
 function escapeAssText(text: string): string {
   return text.replace(/\n/g, "\\N").replace(/\{/g, "(").replace(/\}/g, ")");
 }
-
-/** Left and right margins the style line declares. The usable row width is what is left. */
-const MARGIN_H = 40;
 
 /**
  * Measures caption text in the face the burn-in draws with, so each word can be given its own
@@ -115,7 +117,7 @@ export function generateAssSubtitles(
   measurer?: AssCaptionMeasurer | null,
 ): string {
   const alignment = resolveAlignment(style.position, style.alignment);
-  const marginV = marginVForPosition(style.position, videoHeight);
+  const marginV = captionMarginVPx(style.position, videoHeight);
   const borderStyle = style.background === "pill" ? 3 : 1;
   const primaryColor = hexToAssColor(style.textColor);
   const outlineColor = hexToAssColor(style.strokeColor);
@@ -134,7 +136,7 @@ export function generateAssSubtitles(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${isBoldCaptionWeight(style.weight) ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
+    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${isBoldCaptionWeight(style.weight) ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},${captionMarginHPx()},${captionMarginHPx()},${marginV},1`,
     `Style: LowerThird,${fontName},38,${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},1,0,0,0,100,100,0,0,3,8,1,1,70,70,400,1`,
     "",
     "[Events]",
@@ -213,33 +215,58 @@ export function generateAssSubtitles(
       measure: measurer!.measure,
       spaceWidth: measurer!.spaceWidth,
       activeWordId: activation.activeWordId,
-      // Slice 8a positions words; it does not move them. The neighbour shift arrives in 8b.
-      peakScale: 1,
-      maxWidth: videoWidth - MARGIN_H * 2,
+      peakScale: POP.peakScale,
+      maxWidth: captionMaxWidthPx(videoWidth),
     });
 
-    const phases =
-      activation.activeWordId === null ? [] : popPhases(activation.endMs - activation.startMs);
+    const activeDurationMs = activation.endMs - activation.startMs;
+    const phases = activation.activeWordId === null ? [] : popPhases(activeDurationMs);
+    // A neighbour is subdivided further than the pop is. `\move` carries no acceleration, so one
+    // straight line per phase changed a neighbour's speed three or four times across a pop and sat
+    // a quarter of its clearance from the curve mid-rise. The pop's own events are untouched.
+    const segments = activation.activeWordId === null ? [] : popShiftSegments(activeDurationMs);
 
     return layout.rows.flatMap((row, rowIndex) => {
       const place = rowPlacement(rowIndex, layout.rows.length);
       return row.words.flatMap((word) => {
-        const at = `{${place.tag}\\pos(${Math.round(place.x + word.restX)},${place.y})}`;
+        const restX = Math.round(place.x + word.restX);
+        const at = `{${place.tag}\\pos(${restX},${place.y})}`;
         const text = escapeAssText(word.text);
 
-        if (word.id !== activation.activeWordId || phases.length === 0) {
+        // The active word never moves. It grows about its own centre, which is the property the
+        // whole per-word arrangement exists to keep: nothing it does can drag anything with it.
+        if (word.id === activation.activeWordId && phases.length > 0) {
+          // libass gives no agreed meaning to two transforms over one property, so each event
+          // carries exactly one and states the value it starts from.
+          return phases.map(
+            (phase) =>
+              `Dialogue: 0,${msToAssTime(activation.startMs + phase.startMs)},${msToAssTime(activation.startMs + phase.endMs)},Default,,0,0,0,,${at}{${popPhaseTags(phase)}}${highlightTag}${text}`,
+          );
+        }
+
+        const shiftPx = word.shiftedX - word.restX;
+        // A word with nowhere to go — no active word on this line, or on another row entirely —
+        // is one event at rest. Splitting it into segments would multiply the file for no motion.
+        if (shiftPx === 0 || segments.length === 0) {
           return [
             `Dialogue: 0,${msToAssTime(activation.startMs)},${msToAssTime(activation.endMs)},Default,,0,0,0,,${at}${text}`,
           ];
         }
 
-        // The active word is the only one that animates, so it is the only one cut into phases.
-        // libass gives no agreed meaning to two transforms over one property, so each event
-        // carries exactly one and states the value it starts from.
-        return phases.map(
-          (phase) =>
-            `Dialogue: 0,${msToAssTime(activation.startMs + phase.startMs)},${msToAssTime(activation.startMs + phase.endMs)},Default,,0,0,0,,${at}{${popPhaseTags(phase)}}${highlightTag}${text}`,
-        );
+        // A neighbour moves aside and back. `\t` cannot animate a position, and `\move` is one
+        // straight motion per event with no acceleration, so the motion is split into short pieces
+        // that each track the shared curve, and is straight within each. The preview interpolates
+        // over the same pieces; both are exact at every boundary.
+        return segments.map((segment) => {
+          const from = Math.round(place.x + word.restX + shiftPx * segment.from);
+          const to = Math.round(place.x + word.restX + shiftPx * segment.to);
+          const span = Math.max(1, Math.round(segment.endMs - segment.startMs));
+          const motion =
+            from === to
+              ? `{${place.tag}\\pos(${from},${place.y})}`
+              : `{${place.tag}\\move(${from},${place.y},${to},${place.y},0,${span})}`;
+          return `Dialogue: 0,${msToAssTime(activation.startMs + segment.startMs)},${msToAssTime(activation.startMs + segment.endMs)},Default,,0,0,0,,${motion}${text}`;
+        });
       });
     });
   }

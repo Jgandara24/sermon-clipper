@@ -2563,3 +2563,167 @@ that disagrees with libass's would move an existing caption, so the acceptance t
 rendered frames rather than only the generated text.
 
 Status: Active.
+
+## 2026-09-02 - An ASS Font Size Is A Height, Not An Em
+
+Decision: the caption measurers size a face the way libass sizes it. An ASS `Fontsize` is not an em
+size: libass scales the face so that its ascent plus descent equals the number. The em is therefore
+`Fontsize x unitsPerEm / (ascent + descent)`, which for DejaVu Sans Bold at 48 is 41.23px, not 48px.
+
+Both measurers now use that em. The server one derives it from the font's own metrics. The browser
+one asks the face for its ascent and descent through the canvas at a probe size and derives the same
+number, so neither has to carry a table. The preview draws at that em as well.
+
+Nothing about the exported file's own sizing changes. The style line still states the same
+`Fontsize`, so every existing clip renders exactly as it did.
+
+Why: per-word positioning made this assumption load-bearing. Measuring at the nominal size made
+every advance 16.4 percent too wide, and rendered that put a gap of about 40px where libass puts 20.
+The product owner watched a render and said it looked as though the space bar had been pressed twice
+between every word. He was right, and the cause was arithmetic rather than taste.
+
+The evidence, three independent measurements agreeing on one ratio: the font's em over its ascent
+plus descent is 2048/2384 = 0.8591; the measured step from PEACE to IS in a libass run divided by
+the step the em-based math predicts is 163/189.84 = 0.8586; and the rendered ink span of that run
+divided by its em-based prediction is 201/234.35 = 0.8577. With the rule applied, the predicted step
+is 163.09px against 163 rendered, and the rendered gaps of a five-word line are 22, 20 and 18px
+against libass's own 21, 21 and 17.
+
+This also closes a second, older disagreement nobody had measured: the preview drew captions at the
+nominal size while the export drew them at the em, so the editor showed captions about a sixth
+larger than the file produced. It now shows the size the file produces.
+
+Tradeoff: editor captions get smaller again, on top of the earlier correction for the canvas scale.
+Both changes move the preview toward the exported file rather than away from it, and neither changes
+the file. A face whose ascent and descent equal its em is unaffected by this rule, so it is not a
+special case for one font.
+
+The guard is a render, not a unit test, because nothing about this is visible in the generated text:
+the same five words are burned in twice, once positioned per word and once laid out by libass, and
+the gaps must agree within a few pixels.
+
+Status: Active.
+
+## 2026-09-02 - A Neighbour's Motion Is Subdivided Until It Tracks The Pop Curve
+
+Decision: a neighbouring word's `\move` events are no longer one per pop phase. The motion is split
+recursively until every straight piece sits within `POP_SHIFT_TOLERANCE` of the shared curve, or
+until the piece is one `POP_TIME_STEP_MS` long and the file has no shorter time to state. Only a
+phase that actually curves is split; a phase a neighbour crosses in a straight line stays one event.
+
+Why: the product owner watched the first render and said the motion was "a lot better ... could be a
+little more smoother all together". Measured, the cause was not subtle. One straight line per phase
+put a neighbour **0.25 of its whole clearance** away from the curve it was meant to be following,
+mid-rise, and gave it three or four speed changes across a pop while the active word's own scale was
+interpolated smoothly by libass. The word was smooth; its neighbours were piecewise, and that is
+what reads as stepping.
+
+Subdividing takes that 0.25 down to 0.083, and the 0.083 is the format's floor rather than a choice:
+an accelerated rise leaves rest at unbounded speed, so across the first centisecond no straight line
+can do better. Past that first step the achieved error is under 0.018.
+
+Only the neighbour is subdivided. The active word emits exactly the events it emitted before, so the
+pop's own shape — the part already accepted — is untouched, and the three Clean fixtures are
+unchanged byte for byte.
+
+Tradeoff: **events per word on a five-word line rise from 20.0 to 36.0**, and the asserted budget
+rises from 20 to 45 per word with it. That is the direct cost of the smoothness and it is paid in
+file size, not in render time — libass reads thousands of events and x264 dominates. The restraint
+that keeps it from being worse is splitting only the curved phase: subdividing the settle, the hold
+and the return would have cost another 24 events per word and moved nothing, because a neighbour
+already crosses those in a straight line.
+
+Rejected: the stepped shift recorded as the fallback in the 2026-08-20 neighbour decision. It is the
+opposite of what was asked for, and it is now off the table rather than dormant.
+
+Status: Active. Amends the 2026-08-20 neighbour micro-shift decision, whose "one linear motion per
+phase" implementation constraint this replaces. Pending the product owner's verdict on a re-render.
+
+## 2026-09-02 - A Neighbour Follows Its Own Curve, Not The Active Word's Scale
+
+Decision: a neighbouring word is no longer pinned to `shiftProgressForScale(popScaleAt(t))`. It
+keeps up with the scale while the word is growing, then drifts back to rest across everything that
+follows in one continuous move, and comes home over the word's own return. Out, one turn, home.
+
+Why: subdividing the motion fixed how faithfully a neighbour followed its curve, and left untouched
+the fact that it was the wrong curve. The scale is a shape drawn for a word growing. Read as the
+motion of the word *beside* it, it said: dart out, reverse two thirds of the way back over 120ms,
+stop dead for the 200ms hold, then set off again for the return. Four changes of speed, three of
+them abrupt, and a full stop in the middle that a viewer reads as two separate movements. No amount
+of subdivision helps, because subdivision reproduces that shape more faithfully, not less.
+
+What makes the freedom legitimate: a neighbour's only obligation is to stay clear of the active
+word. Anywhere further aside than the clearance the word needs is safe, and the layout already
+reserves room out to the peak, so the offset is bounded above by 1 as well. Following the scale
+exactly was the cheapest way to satisfy that, not the only one.
+
+Measured on a five-word line, across one activation:
+
+| | before | after |
+|---|---|---|
+| speed changes | 4, one a full stop | 3, no stop |
+| the turn at the peak | -5.56/s | -2.08/s |
+| dead stop mid-pop | 200ms | none |
+| events per word | 36.0 | 32.0 |
+
+The gap around the active word stays a little wider than the word strictly needs through the middle
+of the activation. That is the deliberate cost, and it is what buys the missing stop.
+
+Tradeoff: the neighbour's corners are no longer the pop's phase boundaries, so "both renderers are
+exact at every phase boundary" is retired and replaced by the stronger statement that they are exact
+at every *segment* boundary — the boundaries they now both read. The rendered gate samples the
+neighbour's corners rather than the pop's for the same reason. The pop is untouched: the active word
+emits exactly the events it did before, and the Clean fixtures are unchanged byte for byte.
+
+Not done, and the next lever if this is still not enough: the return still starts and ends abruptly,
+and the rise still leaves rest at unbounded speed because `POP.riseAccel` is 0.5. Both are the pop's
+own accepted shape rather than the neighbour's, which is why neither was changed without asking.
+
+Status: Active. Amends the 2026-08-20 neighbour micro-shift decision and the subdivision decision
+above it. Pending the product owner's verdict on a re-render.
+
+## 2026-09-02 - The Social Safe Area Is One Versioned Datum
+
+Decision: `src/lib/editor/social-safe-area.ts` states the frame's reserved edges once, and every
+consumer derives its own geometry from it. The values themselves sit in a separate
+`social-safe-area-values.ts`, which is what makes "every consumer reads the datum" a property a test
+can prove: the test replaces that module and watches every consumer move.
+
+Why now: Slice 9 adds a title overlay, and "Top Safe" names a datum that did not exist. Before this,
+the same idea was written down in five places and disagreed with itself in three:
+
+| | the number it used | what it is |
+|---|---|---|
+| canvas guide | top 6%, bottom 12%, sides 6% | Tailwind literals in JSX |
+| burn-in caption margin | top 8%, bottom 12% | `videoHeight * 0.08` |
+| burn-in caption side margin | 40px (3.7% at 1080) | `const MARGIN_H` |
+| preview resting caption centre | top 10%, middle 45%, bottom 86% | a local function |
+| brand lower third | sides 6%, bottom 22% | Tailwind literals in JSX |
+
+Adding a sixth copy for the title is what this prevents.
+
+Two of those disagreements turn out to be a model rather than a mistake, and are now expressed as
+one: the bottom anchor **is** the chrome edge (both said 12%), and the top anchor sits a stated
+`topPadding` of 2% below the top band (6% + 2% = the 8% the burn-in always used). So `top-safe` and
+`bottom-safe` are derived, not listed.
+
+**Nothing moves.** Every value is what its consumer already used. The three Clean and three per-word
+Highlighter fixtures are unchanged byte for byte, which is the evidence: recording the numbers in
+one place re-rendered nothing.
+
+Two real disagreements are recorded rather than resolved, because resolving either re-renders clips
+churches have already approved and that is not a decision to take unattended:
+
+1. **The caption's side margin is not the guide's side margin.** 40px against 6%, so at 1080 wide a
+   full-width caption reaches about 25px into the side band the guide draws. Either the guide is
+   drawing the wrong zone or the caption is allowed too wide.
+2. **The preview's resting caption centre is not derivable from the burn-in's margin**, because one
+   is a block centre and the other an anchored edge, and the block's height depends on its text.
+   They are recorded side by side so the question is at least visible.
+
+Tradeoff: the datum carries two related families of number — what the platforms cover, and where a
+caption rests — rather than one. Collapsing them into one is the change that moves renders, so it
+waits for the product owner.
+
+Status: Active. The title overlay reads `top-safe` from this datum from birth, so it starts with no
+copy of its own.

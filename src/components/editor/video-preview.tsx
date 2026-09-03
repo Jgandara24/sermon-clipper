@@ -31,7 +31,7 @@ import {
   SKIP_STEP_MS,
 } from "@/lib/editor/playback";
 import { captionActivationAt } from "@/lib/editor/caption-timeline";
-import { popScaleAt } from "@/lib/editor/caption-animation";
+import { POP, popScaleAt, popShiftProgressAt } from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
@@ -39,6 +39,11 @@ import type { EditorState } from "@/lib/editor/types";
 import type { EditorWordWithDeletion } from "@/lib/editor/words";
 import type { EditorBrandTemplate } from "@/components/editor/brand-template-panel";
 import { CanvasObject, type CanvasObjectGesture } from "@/components/editor/canvas-object";
+import {
+  captionRestCentre,
+  lowerThirdGeometry,
+  safeAreaGuideGeometry,
+} from "@/lib/editor/social-safe-area";
 import { layOutCaptionRows } from "@/lib/editor/caption-layout";
 import { useCaptionTextMeasurer } from "@/components/editor/use-text-measurer";
 
@@ -60,16 +65,6 @@ const FALLBACK_PREVIEW_SCALE = 318 / FRAME_WIDTH;
 const CAPTION_MIN_SIZE_PX = 16;
 const CAPTION_MAX_SIZE_PX = 160;
 
-/**
- * Where a caption sits before anyone has dragged it, so the object has somewhere to be. These
- * mirror the CSS the caption used to be laid out with; the moment it is dragged the document
- * carries an exact point and the preview and the burn-in agree on it.
- */
-function defaultCaptionPoint(position: "top" | "middle" | "bottom"): CanvasPoint {
-  if (position === "top") return { xPct: 0.5, yPct: 0.1 };
-  if (position === "middle") return { xPct: 0.5, yPct: 0.45 };
-  return { xPct: 0.5, yPct: 0.86 };
-}
 
 export function VideoPreview({
   sourceVideoUrl,
@@ -161,7 +156,11 @@ export function VideoPreview({
   const previewScale = canvasWidthPx > 0 ? canvasWidthPx / FRAME_WIDTH : FALLBACK_PREVIEW_SCALE;
 
   const captionIsRetyped = currentWords.length === 0;
-  const captionPoint = style.box ?? defaultCaptionPoint(style.position);
+  // Where a caption sits before anyone has dragged it, so the object has somewhere to be. The
+  // moment it is dragged the document carries an exact point instead.
+  const captionPoint = style.box ?? captionRestCentre(style.position);
+  const guide = safeAreaGuideGeometry();
+  const lowerThirdBand = lowerThirdGeometry();
 
   // The browser half of the measured layout. Until the bundled face has loaded this reports
   // nothing, and the caption keeps the CSS flow it has always used — a measurement taken before
@@ -177,8 +176,7 @@ export function VideoPreview({
           measure: measurer.measure,
           spaceWidth: measurer.spaceWidth,
           activeWordId,
-          // Slice 8a positions words; it does not move them. The neighbour shift arrives in 8b.
-          peakScale: 1,
+          peakScale: POP.peakScale,
           maxWidth: FRAME_WIDTH - CAPTION_MARGIN_H * 2,
         })
       : null;
@@ -441,10 +439,24 @@ export function VideoPreview({
           {showSafeZones ? (
             <div data-testid="safe-zones" className="pointer-events-none absolute inset-0">
               {/* The area every platform keeps clear of its own chrome. */}
-              <div className="absolute inset-x-[6%] top-[6%] bottom-[12%] border border-dashed border-white/60" />
+              <div
+                className="absolute border border-dashed border-white/60"
+                style={{
+                  left: guide.left,
+                  right: guide.right,
+                  top: guide.top,
+                  bottom: guide.bottom,
+                }}
+              />
               {/* Where a feed's caption and action rail sit over the video. */}
-              <div className="absolute inset-x-0 bottom-0 h-[12%] bg-red-500/10" />
-              <div className="absolute inset-x-0 top-0 h-[6%] bg-red-500/10" />
+              <div
+                className="absolute inset-x-0 bottom-0 bg-red-500/10"
+                style={{ height: guide.bottomBandHeight }}
+              />
+              <div
+                className="absolute inset-x-0 top-0 bg-red-500/10"
+                style={{ height: guide.topBandHeight }}
+              />
             </div>
           ) : null}
 
@@ -500,7 +512,11 @@ export function VideoPreview({
                 className="block whitespace-nowrap rounded px-2 py-1 text-center"
                 style={{
                   fontFamily: style.fontFamily,
-                  fontSize: `${style.sizePx * previewScale}px`,
+                  // The em the burn-in draws at, not the caption's nominal size. An ASS font
+                  // size is a height, so a caption drawn at the number itself is about a sixth
+                  // larger than the exported file's. Before the face has loaded there is nothing
+                  // to ask, and the nominal size is the honest guess.
+                  fontSize: `${(measurer.ready ? measurer.emPx : style.sizePx) * previewScale}px`,
                   fontWeight: style.weight,
                   color: style.textColor,
                   // No text-transform: the preview lays out the same string the burn-in does, so
@@ -530,31 +546,45 @@ export function VideoPreview({
                     }}
                   >
                     {measuredRows.rows.map((row, rowIndex) =>
-                      row.words.map((word) => (
-                        <span
-                          key={word.id}
-                          data-testid="caption-word"
-                          data-active={word.id === activeWordId ? "true" : "false"}
-                          className="absolute whitespace-pre"
-                          style={{
-                            left: `${captionBlockWidthPx / 2 + word.restX * previewScale}px`,
-                            top: `${rowIndex * captionRowPitchPx + captionRowPitchPx / 2}px`,
-                            // The word is centred on its own point, so the pop scales it about
-                            // itself and nothing beside it can move.
-                            transform: `translate(-50%, -50%) scale(${
-                              word.id === activeWordId && activation
-                                ? popScaleAt(
-                                    currentMs - activation.startMs,
-                                    activation.endMs - activation.startMs,
-                                  )
-                                : 1
-                            })`,
-                            ...(word.id === activeWordId ? { color: style.highlightColor } : null),
-                          }}
-                        >
-                          {word.text}
-                        </span>
-                      )),
+                      row.words.map((word) => {
+                        const isActive = word.id === activeWordId;
+                        // How far this word has moved aside. Straight within each segment of the
+                        // subdivided motion, because that is all the burned-in file can express,
+                        // and both sides must agree between boundaries as well as at them.
+                        const shift =
+                          isActive || !activation
+                            ? 0
+                            : (word.shiftedX - word.restX) *
+                              popShiftProgressAt(
+                                currentMs - activation.startMs,
+                                activation.endMs - activation.startMs,
+                              );
+                        return (
+                          <span
+                            key={word.id}
+                            data-testid="caption-word"
+                            data-active={isActive ? "true" : "false"}
+                            className="absolute whitespace-pre"
+                            style={{
+                              left: `${captionBlockWidthPx / 2 + (word.restX + shift) * previewScale}px`,
+                              top: `${rowIndex * captionRowPitchPx + captionRowPitchPx / 2}px`,
+                              // The word is centred on its own point, so the pop scales it about
+                              // itself. The words beside it move; it does not.
+                              transform: `translate(-50%, -50%) scale(${
+                                isActive && activation
+                                  ? popScaleAt(
+                                      currentMs - activation.startMs,
+                                      activation.endMs - activation.startMs,
+                                    )
+                                  : 1
+                              })`,
+                              ...(isActive ? { color: style.highlightColor } : null),
+                            }}
+                          >
+                            {word.text}
+                          </span>
+                        );
+                      }),
                     )}
                   </span>
                 ) : captionIsRetyped || !style.activeWordHighlight ? (
@@ -597,7 +627,14 @@ export function VideoPreview({
           ) : null}
 
           {brandTemplate ? (
-            <div className="pointer-events-none absolute left-[6%] right-[6%] bottom-[22%] flex justify-start">
+            <div
+              className="pointer-events-none absolute flex justify-start"
+              style={{
+                left: lowerThirdBand.left,
+                right: lowerThirdBand.right,
+                bottom: lowerThirdBand.bottom,
+              }}
+            >
               <div
                 className="max-w-[88%] rounded-md px-3 py-2 text-white shadow-lg"
                 style={{ backgroundColor: `${brandTemplate.primaryColor}E6` }}
