@@ -340,6 +340,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         outputPath,
         outputWidth: OUTPUT_WIDTH,
         outputHeight: OUTPUT_HEIGHT,
+        originalVolume: state.audio.originalVolume,
       });
     } catch (error) {
       await recordRenderFact({
