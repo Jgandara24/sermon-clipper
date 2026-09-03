@@ -1,7 +1,7 @@
 "use client";
 
 import { positionFromPointer } from "@/lib/editor/playback";
-import { Scissors } from "lucide-react";
+import { Maximize, Scissors, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { TitleBanner, TitleRange } from "@/lib/editor/title-banner";
 import {
@@ -10,6 +10,9 @@ import {
   clampStart,
   computeTrimViewport,
   snapToBoundary,
+  stepTimelineZoom,
+  TIMELINE_ZOOM_MAX,
+  TIMELINE_ZOOM_MIN,
   type TrimViewport,
 } from "@/lib/editor/trim";
 import { chooseDensityBucketMs, wordDensityBars } from "@/lib/editor/word-density";
@@ -42,6 +45,10 @@ function formatClock(ms: number): string {
   return `${Math.floor(totalS / 60)}:${String(totalS % 60).padStart(2, "0")}`;
 }
 
+function formatZoom(zoom: number): string {
+  return `${zoom}×`;
+}
+
 function readKind(target: EventTarget | null): DragKind | null {
   const el = (target as HTMLElement | null)?.closest?.("[data-trim]");
   const kind = el?.getAttribute("data-trim");
@@ -72,6 +79,8 @@ export function ClipTimeline({
   wordBoundaries,
   wordStartsMs,
   title,
+  zoom,
+  onZoomChange,
   onTrim,
   onCommitTrim,
   onScrub,
@@ -89,6 +98,9 @@ export function ClipTimeline({
     onCommit: () => void;
     onAdd: () => void;
   };
+  /** Magnification of the window's padding. View state: never saved, never a trim limit. */
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
   onTrim: (startMs: number, endMs: number) => void;
   /** The drag or nudge is over: write what it produced. */
   onCommitTrim: () => void;
@@ -106,7 +118,7 @@ export function ClipTimeline({
   // the value captured at pointer-down (in `frozenView`) — so the pixel↔time scale doesn't shift
   // under the pointer as the clip edges move mid-gesture.
   const [frozenView, setFrozenView] = useState<TrimViewport | null>(null);
-  const view = frozenView ?? computeTrimViewport(startMs, endMs, sourceDurationMs);
+  const view = frozenView ?? computeTrimViewport(startMs, endMs, sourceDurationMs, zoom);
 
   const span = Math.max(1, view.end - view.start);
   const msToPct = useCallback(
@@ -165,7 +177,7 @@ export function ClipTimeline({
       originClientX: event.clientX,
       moved: false,
     };
-    setFrozenView(computeTrimViewport(startMs, endMs, sourceDurationMs));
+    setFrozenView(computeTrimViewport(startMs, endMs, sourceDurationMs, zoom));
     trackRef.current?.setPointerCapture(event.pointerId);
   };
 
@@ -263,10 +275,53 @@ export function ClipTimeline({
       <p className="mt-2 text-xs text-stone-500">
         Drag the handles on the Video row to set where the clip starts and ends, or drag the
         middle to move the whole clip. Drag the red marker, or click anywhere on the rows, to
-        preview a spot. Handles snap to the nearest spoken word.
+        preview a spot. Handles snap to the nearest spoken word. Zoom shows more or less of the
+        source around the clip; it never changes where the clip may start or end.
       </p>
 
+      {/* The controls row, over the rows' own column so it lines up with them. */}
       <div className="mt-3 grid grid-cols-[3.5rem_1fr] gap-x-3">
+        <span />
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center">
+          <span />
+          <span />
+          <div
+            role="group"
+            aria-label="Timeline zoom"
+            className="flex items-center justify-end gap-1"
+          >
+            <ZoomButton
+              label="Zoom out"
+              disabled={zoom <= TIMELINE_ZOOM_MIN}
+              onClick={() => onZoomChange(stepTimelineZoom(zoom, "out"))}
+            >
+              <ZoomOut size={16} aria-hidden="true" />
+            </ZoomButton>
+            <span
+              data-testid="timeline-zoom"
+              className="w-12 text-center font-mono text-xs tabular-nums text-stone-600"
+            >
+              {formatZoom(zoom)}
+            </span>
+            <ZoomButton
+              label="Zoom in"
+              disabled={zoom >= TIMELINE_ZOOM_MAX}
+              onClick={() => onZoomChange(stepTimelineZoom(zoom, "in"))}
+            >
+              <ZoomIn size={16} aria-hidden="true" />
+            </ZoomButton>
+            <ZoomButton
+              label="Reset timeline zoom"
+              disabled={zoom === 1}
+              onClick={() => onZoomChange(1)}
+            >
+              <Maximize size={16} aria-hidden="true" />
+            </ZoomButton>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2 grid grid-cols-[3.5rem_1fr] gap-x-3">
         {/* Labels, stacked to the same heights as the rows beside them. */}
         <div className="text-xs font-medium text-stone-600">
           <div className={RULER_CLASS} />
@@ -407,6 +462,31 @@ export function ClipTimeline({
 
 function RowLabel({ className, children }: { className: string; children: React.ReactNode }) {
   return <div className={`flex items-center ${className}`}>{children}</div>;
+}
+
+function ZoomButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="rounded-md border border-stone-300 p-1.5 text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
 }
 
 function TrimHandle({

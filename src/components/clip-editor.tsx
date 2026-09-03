@@ -92,6 +92,9 @@ export function ClipEditor({
   // Playback position (from the preview) and outgoing seek requests (from the trim timeline).
   const [currentMs, setCurrentMs] = useState(initialState.source.startMs);
   const [seek, setSeek] = useState<{ ms: number; token: number } | null>(null);
+  // How much source the timeline shows around the clip. View state, like the canvas zoom: it
+  // changes nothing that is saved and nothing the clip may start or end at.
+  const [timelineZoom, setTimelineZoom] = useState(1);
   // The word open for correction. Selection is view state, not document state: choosing a word
   // changes nothing that is saved, so it must never write a version.
   const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
@@ -491,6 +494,8 @@ export function ClipEditor({
               onCommit: commitNow,
               onAdd: handleAddTitle,
             }}
+            zoom={timelineZoom}
+            onZoomChange={setTimelineZoom}
             onTrim={handleTrim}
             onCommitTrim={commitNow}
             onScrub={requestSeek}

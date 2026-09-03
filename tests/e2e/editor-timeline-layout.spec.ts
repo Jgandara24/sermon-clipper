@@ -32,6 +32,21 @@ async function storedTitle(clipId: string) {
   return state ? readTitleBanner(state.overlays) : null;
 }
 
+async function trimRange(page: Page) {
+  return {
+    start: await startHandle(page).getAttribute("aria-valuenow"),
+    end: await endHandle(page).getAttribute("aria-valuenow"),
+  };
+}
+
+/** What the handles are allowed to reach: the media, whatever the window shows of it. */
+async function trimLimits(page: Page) {
+  return {
+    min: await startHandle(page).getAttribute("aria-valuemin"),
+    max: await endHandle(page).getAttribute("aria-valuemax"),
+  };
+}
+
 /**
  * The timeline as a layout: three rows on one scale, with the source around the clip.
  *
@@ -115,5 +130,38 @@ test.describe("the timeline layout", () => {
     const row = (await titleRow(page).boundingBox())!;
     const region = (await page.getByTestId("title-region").boundingBox())!;
     expect(Math.abs(region.width - row.width / 2)).toBeLessThan(4);
+  });
+
+  test("zoom shows less or more of the source, and never moves the trim limits", async ({
+    page,
+  }) => {
+    const before = await trimRange(page);
+    const limitsBefore = await trimLimits(page);
+    await expect(window_(page)).toHaveAttribute("data-end", String(SOURCE_MS));
+
+    // In, three times: the 15s of context becomes under two seconds, which a six-second source
+    // has room to show, so the window finally stops short of the media's end.
+    for (let step = 0; step < 3; step += 1) {
+      await page.getByRole("button", { name: "Zoom in" }).click();
+    }
+    await expect(page.getByTestId("timeline-zoom")).toHaveText("8×");
+    const zoomedEnd = Number(await window_(page).getAttribute("data-end"));
+    expect(zoomedEnd).toBeLessThan(SOURCE_MS);
+    expect(zoomedEnd).toBeGreaterThanOrEqual(CLIP_END_MS);
+
+    // The handles neither moved nor changed what they are allowed to reach.
+    expect(await trimRange(page)).toEqual(before);
+    expect(await trimLimits(page)).toEqual(limitsBefore);
+
+    // Back to rest, then out: more context than the source has is clamped to the source.
+    await page.getByRole("button", { name: "Reset timeline zoom" }).click();
+    await expect(page.getByTestId("timeline-zoom")).toHaveText("1×");
+    await expect(window_(page)).toHaveAttribute("data-end", String(SOURCE_MS));
+    await page.getByRole("button", { name: "Zoom out" }).click();
+    await expect(page.getByTestId("timeline-zoom")).toHaveText("0.5×");
+    await expect(window_(page)).toHaveAttribute("data-start", "0");
+    await expect(window_(page)).toHaveAttribute("data-end", String(SOURCE_MS));
+    expect(await trimRange(page)).toEqual(before);
+    expect(await trimLimits(page)).toEqual(limitsBefore);
   });
 });
