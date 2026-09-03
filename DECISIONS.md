@@ -2681,3 +2681,49 @@ own accepted shape rather than the neighbour's, which is why neither was changed
 
 Status: Active. Amends the 2026-08-20 neighbour micro-shift decision and the subdivision decision
 above it. Pending the product owner's verdict on a re-render.
+
+## 2026-09-02 - The Social Safe Area Is One Versioned Datum
+
+Decision: `src/lib/editor/social-safe-area.ts` states the frame's reserved edges once, and every
+consumer derives its own geometry from it. The values themselves sit in a separate
+`social-safe-area-values.ts`, which is what makes "every consumer reads the datum" a property a test
+can prove: the test replaces that module and watches every consumer move.
+
+Why now: Slice 9 adds a title overlay, and "Top Safe" names a datum that did not exist. Before this,
+the same idea was written down in five places and disagreed with itself in three:
+
+| | the number it used | what it is |
+|---|---|---|
+| canvas guide | top 6%, bottom 12%, sides 6% | Tailwind literals in JSX |
+| burn-in caption margin | top 8%, bottom 12% | `videoHeight * 0.08` |
+| burn-in caption side margin | 40px (3.7% at 1080) | `const MARGIN_H` |
+| preview resting caption centre | top 10%, middle 45%, bottom 86% | a local function |
+| brand lower third | sides 6%, bottom 22% | Tailwind literals in JSX |
+
+Adding a sixth copy for the title is what this prevents.
+
+Two of those disagreements turn out to be a model rather than a mistake, and are now expressed as
+one: the bottom anchor **is** the chrome edge (both said 12%), and the top anchor sits a stated
+`topPadding` of 2% below the top band (6% + 2% = the 8% the burn-in always used). So `top-safe` and
+`bottom-safe` are derived, not listed.
+
+**Nothing moves.** Every value is what its consumer already used. The three Clean and three per-word
+Highlighter fixtures are unchanged byte for byte, which is the evidence: recording the numbers in
+one place re-rendered nothing.
+
+Two real disagreements are recorded rather than resolved, because resolving either re-renders clips
+churches have already approved and that is not a decision to take unattended:
+
+1. **The caption's side margin is not the guide's side margin.** 40px against 6%, so at 1080 wide a
+   full-width caption reaches about 25px into the side band the guide draws. Either the guide is
+   drawing the wrong zone or the caption is allowed too wide.
+2. **The preview's resting caption centre is not derivable from the burn-in's margin**, because one
+   is a block centre and the other an anchored edge, and the block's height depends on its text.
+   They are recorded side by side so the question is at least visible.
+
+Tradeoff: the datum carries two related families of number — what the platforms cover, and where a
+caption rests — rather than one. Collapsing them into one is the change that moves renders, so it
+waits for the product owner.
+
+Status: Active. The title overlay reads `top-safe` from this datum from birth, so it starts with no
+copy of its own.

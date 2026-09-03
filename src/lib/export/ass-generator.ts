@@ -11,6 +11,11 @@ import type { CaptionStyle } from "@/lib/editor/caption-presets";
 import { captionActivations } from "@/lib/editor/caption-timeline";
 import type { CaptionLine, CaptionWord } from "@/lib/editor/caption-lines";
 import { layOutCaptionRows, type CaptionWordMeasurer } from "@/lib/editor/caption-layout";
+import {
+  captionMarginHPx,
+  captionMarginVPx,
+  captionMaxWidthPx,
+} from "@/lib/editor/social-safe-area";
 
 /**
  * Renders one ASS (Advanced SubStation Alpha) subtitle file per clip export, burned in via
@@ -41,12 +46,6 @@ function resolveAlignment(position: CaptionStyle["position"], alignment: Caption
   return row + col;
 }
 
-function marginVForPosition(position: CaptionStyle["position"], videoHeight: number): number {
-  if (position === "top") return Math.round(videoHeight * 0.08);
-  if (position === "middle") return 0;
-  return Math.round(videoHeight * 0.12);
-}
-
 function msToAssTime(ms: number): string {
   const clamped = Math.max(0, Math.round(ms));
   const totalCentiseconds = Math.round(clamped / 10);
@@ -64,9 +63,6 @@ function msToAssTime(ms: number): string {
 function escapeAssText(text: string): string {
   return text.replace(/\n/g, "\\N").replace(/\{/g, "(").replace(/\}/g, ")");
 }
-
-/** Left and right margins the style line declares. The usable row width is what is left. */
-const MARGIN_H = 40;
 
 /**
  * Measures caption text in the face the burn-in draws with, so each word can be given its own
@@ -121,7 +117,7 @@ export function generateAssSubtitles(
   measurer?: AssCaptionMeasurer | null,
 ): string {
   const alignment = resolveAlignment(style.position, style.alignment);
-  const marginV = marginVForPosition(style.position, videoHeight);
+  const marginV = captionMarginVPx(style.position, videoHeight);
   const borderStyle = style.background === "pill" ? 3 : 1;
   const primaryColor = hexToAssColor(style.textColor);
   const outlineColor = hexToAssColor(style.strokeColor);
@@ -140,7 +136,7 @@ export function generateAssSubtitles(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${isBoldCaptionWeight(style.weight) ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},40,40,${marginV},1`,
+    `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${isBoldCaptionWeight(style.weight) ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},${captionMarginHPx()},${captionMarginHPx()},${marginV},1`,
     `Style: LowerThird,${fontName},38,${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},1,0,0,0,100,100,0,0,3,8,1,1,70,70,400,1`,
     "",
     "[Events]",
@@ -220,7 +216,7 @@ export function generateAssSubtitles(
       spaceWidth: measurer!.spaceWidth,
       activeWordId: activation.activeWordId,
       peakScale: POP.peakScale,
-      maxWidth: videoWidth - MARGIN_H * 2,
+      maxWidth: captionMaxWidthPx(videoWidth),
     });
 
     const activeDurationMs = activation.endMs - activation.startMs;
