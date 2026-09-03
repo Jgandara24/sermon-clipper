@@ -40,6 +40,7 @@ import type { EditorWordWithDeletion } from "@/lib/editor/words";
 import type { EditorBrandTemplate } from "@/components/editor/brand-template-panel";
 import { CanvasObject, type CanvasObjectGesture } from "@/components/editor/canvas-object";
 import {
+  captionMaxWidthPx,
   captionRestCentre,
   lowerThirdGeometry,
   safeAreaGuideGeometry,
@@ -55,7 +56,6 @@ import { useCaptionTextMeasurer } from "@/components/editor/use-text-measurer";
  */
 const FRAME_WIDTH = 1080;
 /** Left and right margins the burn-in's style line declares. The usable row width is what is left. */
-const CAPTION_MARGIN_H = 40;
 /**
  * Used only before the canvas has been measured, for the one frame between mount and the first
  * resize observation.
@@ -177,7 +177,7 @@ export function VideoPreview({
           spaceWidth: measurer.spaceWidth,
           activeWordId,
           peakScale: POP.peakScale,
-          maxWidth: FRAME_WIDTH - CAPTION_MARGIN_H * 2,
+          maxWidth: captionMaxWidthPx(FRAME_WIDTH),
         })
       : null;
 
