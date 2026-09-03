@@ -333,6 +333,14 @@ export function VideoPreview({
     seekTo(seek.ms);
   }, [seek, seekTo]);
 
+  // The sermon's own sound, at the level the document says. Instant: the effect runs on the render
+  // the slider's own input event caused, with nothing between them. The element cannot play louder
+  // than its source, which is why the panel's control stops at 100 percent.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) video.volume = Math.min(1, Math.max(0, state.audio.originalVolume));
+  }, [state.audio.originalVolume]);
+
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;

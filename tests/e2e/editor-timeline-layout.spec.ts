@@ -26,6 +26,7 @@ const audioRow = (page: Page) => page.getByTestId("audio-track");
 const window_ = (page: Page) => page.getByTestId("timeline-window");
 const startHandle = (page: Page) => page.getByRole("slider", { name: "Clip start" });
 const endHandle = (page: Page) => page.getByRole("slider", { name: "Clip end" });
+const volumeSlider = (page: Page) => page.getByRole("slider", { name: "Original volume" });
 
 async function storedTitle(clipId: string) {
   const state = await storedState(clipId);
@@ -176,5 +177,22 @@ test.describe("the timeline layout", () => {
     await expect(controls.getByRole("button", { name: "Play clip" })).toBeVisible();
     // Moved, not copied: the preview's own bar no longer carries them.
     await expect(page.getByRole("button", { name: "Go to start" })).toHaveCount(1);
+  });
+
+  test("the original volume reaches the preview at once and the document soon after", async ({
+    page,
+  }) => {
+    await expect(volumeSlider(page)).toHaveValue("100");
+    expect(await page.evaluate(() => document.querySelector("video")!.volume)).toBe(1);
+
+    await volumeSlider(page).fill("40");
+
+    // The preview plays the sermon's own sound at the new level on the same input event.
+    expect(await page.evaluate(() => document.querySelector("video")!.volume)).toBeCloseTo(0.4, 5);
+    await expect
+      .poll(async () => (await storedState(fixture.clipId))?.audio.originalVolume, {
+        timeout: 15_000,
+      })
+      .toBe(0.4);
   });
 });

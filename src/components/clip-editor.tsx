@@ -3,6 +3,7 @@
 import { ChevronLeft, Redo2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AudioPanel } from "@/components/editor/audio-panel";
 import { CaptionStylePanel } from "@/components/editor/caption-style-panel";
 import {
   applyBrandTemplateToState,
@@ -538,6 +539,11 @@ export function ClipEditor({
             overlays={state.overlays}
             clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
             onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
+            onCommit={commitNow}
+          />
+          <AudioPanel
+            audio={state.audio}
+            onChange={(audio, mode) => updateState((prev) => ({ ...prev, audio }), mode)}
             onCommit={commitNow}
           />
           <BrandTemplatePanel
