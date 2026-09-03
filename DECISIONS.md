@@ -2727,3 +2727,47 @@ waits for the product owner.
 
 Status: Active. The title overlay reads `top-safe` from this datum from birth, so it starts with no
 copy of its own.
+
+## 2026-09-02 - The Title Overlay Parses Leniently And Writes Strictly
+
+Decision: `EditorState.overlays` keeps its `z.array(z.unknown())` schema. The title lives in it as a
+`{ type: "title" }` entry, found by `readTitleBanner`, which validates that one entry and steps over
+everything else untouched. Writing goes through `upsertTitleBanner`, which validates before it puts
+anything in.
+
+Why not a discriminated union in the schema: `overlays` has been `unknown[]` since the beginning and
+every stored document carries whatever was in it. A stricter parser that rejected an old shape would
+stop a clip loading — the worst failure this editor has, because the member cannot get to their work
+to fix it. An entry that claims to be a title but does not parse is treated as no title, so a
+document written by a later version degrades to "no title" rather than to "cannot open".
+
+**Removal needs two operations, not one.** The behaviour is that X removes the title and selecting
+the empty Title track recreates the default. Those pull in opposite directions: something has to
+create a default, and the member has to be able to say no permanently.
+
+- `removeTitleBanner` drops the title and nothing else.
+- `dismissTitleBanner` drops it and leaves a `{ type: "titleDismissed" }` marker. This is what X
+  does. Without the marker the title would reappear on the next load and the member would have to
+  remove it every time.
+- `ensureDefaultTitleBanner` adds the default only when there is no title **and** none was
+  dismissed.
+- `upsertTitleBanner` clears the marker, because putting a title back is the member asking for one.
+
+Defaults, from the plan: the clip's first three seconds, Top Safe, horizontally centred,
+centre-aligned, uppercase black on white, no border, no shadow. Two are decisions the plan did not
+state. A clip shorter than three seconds gets a title that **ends with the clip** rather than one
+that runs off the end and is never fully seen. And the default is *not* written into
+`buildDefaultEditorState`: a version-0 document is what an unedited clip is rendered from, so a
+title there would appear on every clip that already exists and was never opened.
+
+The anchor is a name in the shared safe area, not a number, so the title starts with no private copy
+of the frame's geometry. The face is `DejaVu Sans`, already bundled, already declared in
+`globals.css`, already in the worker image and already named in the `Dockerfile.worker` `fc-match`
+gate — so the gate guarding the caption faces guards this one unchanged.
+
+Tradeoff: reading is a linear scan that silently ignores a malformed title, so a member whose title
+was corrupted sees it vanish rather than sees an error. That is the right way round for a document
+they cannot otherwise open, but it means corruption is invisible rather than reported.
+
+Status: Active. The burn-in and the panel follow; the model lands first so parity is provable before
+there are controls to break it.
