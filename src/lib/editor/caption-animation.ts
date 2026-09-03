@@ -212,12 +212,25 @@ export function popResetTags(): string {
 // acceleration.
 //
 // One `\move` per pop phase was the first answer, and the product owner watched it and asked for
-// smoother. It was three or four straight lines across a whole pop, so a neighbour changed speed
+// smoother. Two separate things were wrong with it, and only one of them was the segmentation.
+//
+// **Too few lines.** Three or four straight lines across a whole pop, so a neighbour changed speed
 // three or four times while the word's own scale was interpolated smoothly — and mid-rise the
 // straight line sat a quarter of the neighbour's clearance away from the curve it was meant to be
-// following. The fix is more and shorter lines, subdivided until each one tracks the curve, and
-// the same pieces read by the preview so the two still agree between boundaries as well as at
-// them. The pop itself is untouched: the active word emits exactly the events it always did.
+// following. The fix is more and shorter lines, subdivided until each one tracks the curve.
+//
+// **The wrong curve.** A neighbour was pinned to the scale, and the scale is a shape drawn for a
+// word growing, not for a word beside it. Read as motion it said: dart out, reverse two thirds of
+// the way back, stop dead for the whole hold, then set off again — four changes of speed, three of
+// them abrupt, and none of them doing anything a viewer wanted. A neighbour has one job, to stay
+// clear of the word, and it is free to be anywhere further aside than that. So it keeps up with
+// the scale only while the word is growing, which is when the clearance is actually demanded, and
+// then drifts back across the whole span the word is held instead of finishing early and waiting.
+// Out, one gentle turn, home.
+//
+// The pop itself is untouched by all of this: the active word emits exactly the events it always
+// did, and the preview reads the same pieces as the file so the two agree between boundaries as
+// well as at them.
 
 /** How far aside a neighbour sits when the active word is at `scale`: 0 at rest, 1 at the peak. */
 export function shiftProgressForScale(scale: number): number {
@@ -225,14 +238,6 @@ export function shiftProgressForScale(scale: number): number {
   if (span <= 0) return 0;
   const progress = (scale - 1) / span;
   return Math.min(1, Math.max(0, progress));
-}
-
-/** The two offsets one phase moves between, which is where both renderers are exact. */
-export function popPhaseShiftProgress(phase: PopPhase): { from: number; to: number } {
-  return {
-    from: shiftProgressForScale(phase.fromScale),
-    to: shiftProgressForScale(phase.toScale),
-  };
 }
 
 /**
@@ -292,22 +297,53 @@ function subdivideInto(out: PopShiftSegment[], phase: PopPhase, startMs: number,
 /**
  * The straight pieces a neighbour's motion is made of, in order and covering the activation.
  *
- * A phase whose offset already crosses in a straight line — a linear transform, or no change at
- * all — is one piece. Splitting it would multiply the file and move nothing, and the difference
- * between smoother and merely larger is exactly that restraint. Every phase boundary survives as a
- * segment boundary, so the two renderers keep agreeing where they always did.
+ * Three legs, whatever the pop does. It keeps up with the word while the word grows, subdivided
+ * until it tracks that curve. It drifts back across everything between, in one line — the word
+ * stops shrinking part way through, but the neighbour has no reason to stop with it, and stopping
+ * is what a viewer notices. Then it comes home over the word's own return.
+ *
+ * A leg that is already straight is one piece. Splitting it would multiply the file and move
+ * nothing, and the difference between smoother and merely larger is exactly that restraint.
  */
 export function popShiftSegments(activeDurationMs: number): PopShiftSegment[] {
+  const phases = popPhases(activeDurationMs);
+  if (phases.length === 0) return [];
+
   const segments: PopShiftSegment[] = [];
-  for (const phase of popPhases(activeDurationMs)) {
+  for (const phase of phases.filter((candidate) => candidate.toScale > candidate.fromScale)) {
     if (phase.endMs <= phase.startMs) continue;
-    if (phase.accel === 1 || phase.fromScale === phase.toScale) {
-      const { from, to } = popPhaseShiftProgress(phase);
-      segments.push({ startMs: phase.startMs, endMs: phase.endMs, from, to });
+    if (phase.accel === 1) {
+      segments.push({
+        startMs: phase.startMs,
+        endMs: phase.endMs,
+        from: shiftProgressForScale(phase.fromScale),
+        to: shiftProgressForScale(phase.toScale),
+      });
       continue;
     }
     subdivideInto(segments, phase, phase.startMs, phase.endMs);
   }
+
+  // The word's return is the neighbour's too. An activation always ends with one, so this is where
+  // the neighbour reaches rest — and reaching rest exactly is what keeps spacing from creeping.
+  const home = phases[phases.length - 1];
+  const out = segments[segments.length - 1];
+  const asideMs = out ? out.endMs : home.startMs;
+  const aside = out ? out.to : shiftProgressForScale(home.fromScale);
+  const held = shiftProgressForScale(home.fromScale);
+
+  if (home.startMs > asideMs) {
+    segments.push({ startMs: asideMs, endMs: home.startMs, from: aside, to: held });
+  }
+  if (home.endMs > home.startMs) {
+    segments.push({
+      startMs: home.startMs,
+      endMs: home.endMs,
+      from: held,
+      to: shiftProgressForScale(home.toScale),
+    });
+  }
+
   return segments;
 }
 

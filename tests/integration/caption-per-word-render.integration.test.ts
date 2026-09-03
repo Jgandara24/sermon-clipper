@@ -8,7 +8,7 @@ import { resolveCaptionFace } from "@/lib/editor/caption-face";
 import { getCaptionPreset, type CaptionStyle } from "@/lib/editor/caption-presets";
 import { generateAssSubtitles, type AssCaptionLine } from "@/lib/export/ass-generator";
 import { createCaptionMeasurer } from "@/lib/export/font-metrics";
-import { POP, popPhases } from "@/lib/editor/caption-animation";
+import { POP, popPhases, popShiftSegments } from "@/lib/editor/caption-animation";
 
 const execFileAsync = promisify(execFile);
 
@@ -283,12 +283,18 @@ describe("the neighbour micro-shift, rendered", () => {
     const ass = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
     // Across the second word's activation, which is where a pop happens with a neighbour either
     // side of it — the case a shift can get wrong in both directions at once.
+    //
+    // Sampled at the neighbour's own corners, not the pop's. Since the neighbour stopped following
+    // the scale curve the two are different sets of moments, and it is where the neighbour changes
+    // direction that it can be caught short.
     const activationStart = 0.5;
-    const phases = popPhases(500);
+    const corners = popShiftSegments(500).flatMap((segment) => [segment.startMs, segment.endMs]);
     const samples = [
-      activationStart + 0.01,
-      ...phases.map((phase) => activationStart + phase.startMs / 1000 + 0.02),
-      ...phases.map((phase) => activationStart + phase.endMs / 1000 - 0.01),
+      ...new Set([
+        activationStart + 0.01,
+        ...corners.map((ms) => activationStart + ms / 1000),
+        ...popPhases(500).map((phase) => activationStart + phase.endMs / 1000 - 0.01),
+      ]),
     ].filter((at) => at > activationStart && at < activationStart + 0.5);
 
     for (const at of samples) {
@@ -339,11 +345,11 @@ describe("the neighbour micro-shift, rendered", () => {
   it("stays inside a stated event budget", async () => {
     // Measured, not guessed. A neighbour needs one event per straight piece of its motion, because
     // a move carries no acceleration, so the count is roughly (words on the row) x (segments) per
-    // activation. Subdividing the neighbour's motion so it tracks the curve took this five-word
-    // line from 20.0 events per word to 36.0 — the four pop phases became eight neighbour
-    // segments, and only the phase that actually curves was split. The budget is what that
-    // arithmetic gives with headroom, and it is asserted so a further change to the curve cannot
-    // quietly multiply the file.
+    // activation. Making that motion smooth took this five-word line from 20.0 events per word to
+    // 32.0: the rise is subdivided until it tracks the curve, which costs, and the settle, hold
+    // and return collapse into one drift and one return, which pays some of it back. The budget is
+    // what that arithmetic gives with headroom, and it is asserted so a further change to the
+    // curve cannot quietly multiply the file.
     const ass = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
     const events = ass.split("\n").filter((line) => line.startsWith("Dialogue:")).length;
 

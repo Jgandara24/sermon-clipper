@@ -3,7 +3,6 @@ import {
   POP,
   POP_SHIFT_TOLERANCE,
   POP_TIME_STEP_MS,
-  popPhaseShiftProgress,
   popPhases,
   popScaleAt,
   popShiftProgressAt,
@@ -22,11 +21,21 @@ import { generateAssSubtitles, type AssCaptionLine } from "@/lib/export/ass-gene
  *
  * The word's own scale is animated on an accelerated curve. Its neighbours' positions cannot be:
  * libass animates a position only through `\move`, which is one straight motion per event with no
- * acceleration. One straight line per pop phase left a neighbour a quarter of its clearance away
- * from the curve mid-rise, and changing speed three times across a pop read as stepping. So the
- * motion is subdivided until each straight piece tracks the curve within a stated tolerance, and
- * both renderers interpolate over the same pieces.
+ * acceleration. So the motion is subdivided until each straight piece tracks its curve within a
+ * stated tolerance, and both renderers interpolate over the same pieces.
+ *
+ * That curve is the neighbour's own, not the scale's. A neighbour has one job — stay clear of the
+ * word — and following the scale exactly made it dart out, reverse two thirds of the way back,
+ * stop dead for the whole hold, then set off again. It now tracks the scale while the word is
+ * growing, which is when the clearance is actually needed, and drifts back across the whole span
+ * the word is held rather than finishing early and waiting.
  */
+/** The moment the word stops growing, which is the last moment a neighbour has to keep up. */
+function riseEndMs(durationMs: number): number {
+  const growing = popPhases(durationMs).filter((phase) => phase.toScale > phase.fromScale);
+  return growing.length > 0 ? growing[growing.length - 1].endMs : 0;
+}
+
 describe("the neighbour shift tracks the pop curve, one straight line per segment", () => {
   const DURATION = 600;
 
@@ -60,16 +69,44 @@ describe("the neighbour shift tracks the pop curve, one straight line per segmen
     }
   });
 
-  it("tracks the shared curve within the stated tolerance, everywhere", () => {
+  it("tracks the scale curve within the stated tolerance while the word grows", () => {
     // This is the whole point of subdividing. One line per phase put the neighbour a quarter of
     // its clearance from where the curve says it is; the product owner saw that as stepping.
     let worst = 0;
-    for (let ms = 0; ms <= DURATION; ms += 0.5) {
+    for (let ms = 0; ms <= riseEndMs(DURATION); ms += 0.5) {
       const straight = popShiftProgressAt(ms, DURATION);
       const curve = shiftProgressForScale(popScaleAt(ms, DURATION));
       worst = Math.max(worst, Math.abs(straight - curve));
     }
     expect(worst).toBeLessThanOrEqual(POP_SHIFT_TOLERANCE);
+  });
+
+  it("never falls short of the clearance the word needs", () => {
+    // The safety property the whole shift exists for, and the one that lets the neighbour leave
+    // the scale curve at all: being further aside than the word needs is always safe, being
+    // nearer is a collision. The only shortfall allowed is the straight line's own tolerance,
+    // which lives in the first time step of the rise and nowhere else.
+    for (let ms = 0; ms <= DURATION; ms += 1) {
+      const needed = shiftProgressForScale(popScaleAt(ms, DURATION));
+      const actual = popShiftProgressAt(ms, DURATION);
+      expect(actual, `at ${ms}ms`).toBeGreaterThanOrEqual(needed - POP_SHIFT_TOLERANCE);
+      if (ms >= riseEndMs(DURATION)) {
+        expect(actual, `at ${ms}ms, past the rise`).toBeGreaterThanOrEqual(needed - 1e-9);
+      }
+    }
+  });
+
+  it("never stops and starts again in the middle of a pop", () => {
+    // Following the scale exactly gave a neighbour a dead stop for the whole hold, between two
+    // separate journeys back to rest. A viewer reads that as two movements, which is the opposite
+    // of what was asked for. It goes out once and comes back once.
+    const segments = popShiftSegments(DURATION);
+    const moving = segments.filter((segment) => segment.from !== segment.to);
+    expect(moving.length).toBe(segments.length);
+
+    const directions = moving.map((segment) => Math.sign(segment.to - segment.from));
+    const turns = directions.filter((way, index) => index > 0 && way !== directions[index - 1]);
+    expect(turns).toHaveLength(1);
   });
 
   it("puts what is left of that gap in the one step the format cannot subdivide", () => {
@@ -78,7 +115,7 @@ describe("the neighbour shift tracks the pop curve, one straight line per segmen
     // motion tracks the curve an order of magnitude more closely, and saying so here stops the
     // tolerance above from being read as the accuracy everywhere.
     let worst = 0;
-    for (let ms = POP_TIME_STEP_MS; ms <= DURATION; ms += 0.5) {
+    for (let ms = POP_TIME_STEP_MS; ms <= riseEndMs(DURATION); ms += 0.5) {
       const straight = popShiftProgressAt(ms, DURATION);
       const curve = shiftProgressForScale(popScaleAt(ms, DURATION));
       worst = Math.max(worst, Math.abs(straight - curve));
@@ -86,21 +123,19 @@ describe("the neighbour shift tracks the pop curve, one straight line per segmen
     expect(worst).toBeLessThanOrEqual(POP_SHIFT_TOLERANCE / 5);
   });
 
-  it("subdivides only where the curve bends, so a straight phase stays one event", () => {
-    // A phase the offset crosses in a straight line is already exact. Splitting it would multiply
-    // the file and move nothing, which is the difference between smoother and merely larger.
-    const straightPhases = popPhases(DURATION).filter(
-      (phase) => phase.accel === 1 || phase.fromScale === phase.toScale,
-    );
-    expect(straightPhases.length).toBeGreaterThan(0);
-
+  it("spends its events on the rise, and one each on the drift and the return", () => {
+    // A leg that is already straight is exact. Splitting it would multiply the file and move
+    // nothing, which is the difference between smoother and merely larger.
+    const home = popPhases(DURATION).at(-1)!;
     const segments = popShiftSegments(DURATION);
-    for (const phase of straightPhases) {
-      const within = segments.filter(
-        (segment) => segment.startMs >= phase.startMs && segment.endMs <= phase.endMs,
-      );
-      expect(within, `phase ${phase.startMs}-${phase.endMs} was split`).toHaveLength(1);
-    }
+    const rise = segments.filter((segment) => segment.endMs <= riseEndMs(DURATION));
+    const rest = segments.filter((segment) => segment.startMs >= riseEndMs(DURATION));
+
+    expect(rise.length).toBeGreaterThan(1);
+    expect(rest).toHaveLength(2);
+    expect(rest[0].startMs).toBe(riseEndMs(DURATION));
+    expect(rest[1].startMs).toBe(home.startMs);
+    expect(rest[1].endMs).toBe(home.endMs);
   });
 
   it("gives the curved rise more pieces than the one it had", () => {
@@ -127,13 +162,19 @@ describe("the neighbour shift tracks the pop curve, one straight line per segmen
     }
   });
 
-  it("keeps every phase boundary a segment boundary, where both renderers are exact", () => {
-    const segments = popShiftSegments(DURATION);
-    const bounds = new Set(segments.flatMap((segment) => [segment.startMs, segment.endMs]));
-    for (const phase of popPhases(DURATION)) {
-      expect(bounds.has(phase.startMs), `phase start ${phase.startMs} is not a boundary`).toBe(true);
-      expect(bounds.has(phase.endMs), `phase end ${phase.endMs} is not a boundary`).toBe(true);
-    }
+  it("turns where its own motion turns, not wherever the scale changes phase", () => {
+    // The end of the rise and the start of the return are the neighbour's own corners. The end of
+    // the settle is not: the word stops shrinking there, but the neighbour is still drifting back
+    // and has no reason to stop with it.
+    const phases = popPhases(DURATION);
+    const bounds = new Set(popShiftSegments(DURATION).flatMap((s) => [s.startMs, s.endMs]));
+
+    expect(bounds.has(riseEndMs(DURATION))).toBe(true);
+    expect(bounds.has(phases[phases.length - 1].startMs)).toBe(true);
+
+    const settle = phases[1];
+    expect(settle.toScale).toBeLessThan(settle.fromScale);
+    expect(bounds.has(settle.endMs), "the neighbour stopped where the settle ended").toBe(false);
   });
 
   it("gives an activation too short for any phase nothing to do", () => {
@@ -142,19 +183,10 @@ describe("the neighbour shift tracks the pop curve, one straight line per segmen
     expect(popShiftSegments(0)).toEqual([]);
   });
 
-  it("maps a phase's own scales to the offsets it starts and ends at", () => {
-    for (const phase of popPhases(DURATION)) {
-      const span = popPhaseShiftProgress(phase);
-      expect(span.from).toBeCloseTo(shiftProgressForScale(phase.fromScale), 10);
-      expect(span.to).toBeCloseTo(shiftProgressForScale(phase.toScale), 10);
-    }
-  });
-
-  it("agrees with the file at every phase boundary, which is where both are exact", () => {
-    for (const phase of popPhases(DURATION)) {
-      const span = popPhaseShiftProgress(phase);
-      expect(popShiftProgressAt(phase.startMs, DURATION)).toBeCloseTo(span.from, 10);
-      expect(popShiftProgressAt(phase.endMs, DURATION)).toBeCloseTo(span.to, 10);
+  it("agrees with the file at every segment boundary, which is where both are exact", () => {
+    for (const segment of popShiftSegments(DURATION)) {
+      expect(popShiftProgressAt(segment.startMs, DURATION)).toBeCloseTo(segment.from, 10);
+      expect(popShiftProgressAt(segment.endMs, DURATION)).toBeCloseTo(segment.to, 10);
     }
   });
 
@@ -172,12 +204,6 @@ describe("the neighbour shift tracks the pop curve, one straight line per segmen
     expect(popShiftProgressAt(short, short)).toBe(0);
     for (const segment of segments) {
       expect(popShiftProgressAt(segment.endMs, short)).toBeCloseTo(segment.to, 10);
-    }
-    for (const phase of popPhases(short)) {
-      expect(popShiftProgressAt(phase.endMs, short)).toBeCloseTo(
-        popPhaseShiftProgress(phase).to,
-        10,
-      );
     }
   });
 });
