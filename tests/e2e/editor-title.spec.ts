@@ -18,6 +18,8 @@ process.env.STORAGE_LOCAL_ROOT = path.join(process.cwd(), ".data", "e2e-storage"
 process.env.WHISPER_MODEL_PATH = "";
 
 const addButton = (page: Page) => page.getByTestId("title-add");
+/** The Title settings show while the Title track is selected; the editor opens on Video. */
+const openTitleSettings = (page: Page) => page.getByTestId("track-select-title").click();
 const removeButton = (page: Page) => page.getByTestId("title-remove");
 const textField = (page: Page) => page.getByTestId("title-text");
 const banner = (page: Page) => page.getByTestId("title-banner");
@@ -42,6 +44,7 @@ test.describe("the title overlay", () => {
     fixture = await createCanvasFixture(getStorageProvider());
     await signInAs(context, fixture.userId);
     await openCanvasEditor(page, fixture.clipId);
+    await openTitleSettings(page);
   });
 
   test.afterEach(async () => {
@@ -118,6 +121,7 @@ test.describe("the title overlay", () => {
     // The dismissal is the point: a default that came back would have to be removed every time.
     await openCanvasEditor(page, fixture.clipId);
     await expect(banner(page)).toHaveCount(0);
+    await openTitleSettings(page);
     await expect(addButton(page)).toBeVisible();
   });
 

@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { prisma } from "../../src/lib/prisma";
 import { signInAs, signOutTestSessions } from "./auth-session";
 import { getStorageProvider } from "../../src/lib/storage";
 import {
@@ -19,6 +20,8 @@ process.env.WHISPER_MODEL_PATH = "";
 
 /** The fixture's source is six seconds long, so the 15s of context clamps to the whole of it. */
 const SOURCE_MS = 6_000;
+/** Comfortably past the editor's 300ms idle save debounce. */
+const AFTER_AUTOSAVE_MS = 2_500;
 
 const titleRow = (page: Page) => page.getByTestId("title-track");
 const videoRow = (page: Page) => page.getByRole("group", { name: "Clip trim timeline" });
@@ -27,6 +30,11 @@ const window_ = (page: Page) => page.getByTestId("timeline-window");
 const startHandle = (page: Page) => page.getByRole("slider", { name: "Clip start" });
 const endHandle = (page: Page) => page.getByRole("slider", { name: "Clip end" });
 const volumeSlider = (page: Page) => page.getByRole("slider", { name: "Original volume" });
+const selectTrack = (page: Page, track: "title" | "video" | "audio") =>
+  page.getByTestId(`track-select-${track}`).click();
+const captionsPanel = (page: Page) => page.getByRole("heading", { name: "Captions" });
+const titlePanel = (page: Page) => page.getByRole("heading", { name: "Title", exact: true });
+const audioPanel = (page: Page) => page.getByRole("heading", { name: "Audio", exact: true });
 
 async function storedTitle(clipId: string) {
   const state = await storedState(clipId);
@@ -182,6 +190,7 @@ test.describe("the timeline layout", () => {
   test("the original volume reaches the preview at once and the document soon after", async ({
     page,
   }) => {
+    await selectTrack(page, "audio");
     await expect(volumeSlider(page)).toHaveValue("100");
     expect(await page.evaluate(() => document.querySelector("video")!.volume)).toBe(1);
 
@@ -194,5 +203,51 @@ test.describe("the timeline layout", () => {
         timeout: 15_000,
       })
       .toBe(0.4);
+  });
+
+  test("Title opens Title settings, Video returns to Captions, Audio opens Audio settings", async ({
+    page,
+  }) => {
+    // The editor opens on Video, which shows Captions: what every clip opened to before.
+    await expect(captionsPanel(page)).toBeVisible();
+    await expect(titlePanel(page)).toHaveCount(0);
+    await expect(audioPanel(page)).toHaveCount(0);
+
+    await selectTrack(page, "title");
+    await expect(titlePanel(page)).toBeVisible();
+    await expect(captionsPanel(page)).toHaveCount(0);
+
+    await selectTrack(page, "video");
+    await expect(captionsPanel(page)).toBeVisible();
+    await expect(titlePanel(page)).toHaveCount(0);
+
+    await selectTrack(page, "audio");
+    await expect(audioPanel(page)).toBeVisible();
+    await expect(captionsPanel(page)).toHaveCount(0);
+
+    // The panels the plan does not name stay where they are, whichever track is selected.
+    await expect(page.getByRole("heading", { name: "Layout" })).toBeVisible();
+  });
+
+  test("pressing a row selects its track too, and selecting is not an edit", async ({ page }) => {
+    const versionsBefore = await prisma.clipEdit.count({ where: { clipId: fixture.clipId } });
+    await audioRow(page).scrollIntoViewIfNeeded();
+    const box = (await audioRow(page).boundingBox())!;
+
+    await page.mouse.click(box.x + box.width * 0.2, box.y + box.height / 2);
+
+    await expect(audioPanel(page)).toBeVisible();
+    await expect(page.getByTestId("track-select-audio")).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(AFTER_AUTOSAVE_MS);
+    expect(await prisma.clipEdit.count({ where: { clipId: fixture.clipId } })).toBe(versionsBefore);
+  });
+
+  test("taking the Title row's offer opens Title settings on the new title", async ({ page }) => {
+    await titleRow(page).scrollIntoViewIfNeeded();
+    await page.getByTestId("title-track-add").click();
+
+    await expect(titlePanel(page)).toBeVisible();
+    await expect(page.getByTestId("title-text")).toBeVisible();
+    await expect(page.getByTestId("track-select-title")).toHaveAttribute("aria-pressed", "true");
   });
 });

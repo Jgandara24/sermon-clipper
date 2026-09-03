@@ -28,6 +28,9 @@ const NUDGE_LARGE_MS = 1_000;
 
 type DragKind = "start" | "end" | "region" | "playhead";
 
+/** The rows, which are also what the settings beside the timeline follow. */
+export type TimelineTrack = "title" | "video" | "audio";
+
 /** Pointer travel below this is a click, not a drag. */
 const CLICK_SLOP_PX = 3;
 
@@ -57,6 +60,12 @@ function readKind(target: EventTarget | null): DragKind | null {
     : null;
 }
 
+function readTrack(target: EventTarget | null): TimelineTrack | null {
+  const el = (target as HTMLElement | null)?.closest?.("[data-track]");
+  const track = el?.getAttribute("data-track");
+  return track === "title" || track === "video" || track === "audio" ? track : null;
+}
+
 /**
  * The timeline: Title, Video and Audio rows on one surface, one pixel↔time scale.
  *
@@ -82,6 +91,8 @@ export function ClipTimeline({
   zoom,
   onZoomChange,
   transport,
+  activeTrack,
+  onSelectTrack,
   onTrim,
   onCommitTrim,
   onScrub,
@@ -104,6 +115,9 @@ export function ClipTimeline({
   onZoomChange: (zoom: number) => void;
   /** The transport, rendered centred above the tracks. The preview owns what it drives. */
   transport: React.ReactNode;
+  /** Which row's settings are open. View state: pressing a row or its label changes it. */
+  activeTrack: TimelineTrack;
+  onSelectTrack: (track: TimelineTrack) => void;
   onTrim: (startMs: number, endMs: number) => void;
   /** The drag or nudge is over: write what it produced. */
   onCommitTrim: () => void;
@@ -330,17 +344,48 @@ export function ClipTimeline({
       </div>
 
       <div className="mt-2 grid grid-cols-[3.5rem_1fr] gap-x-3">
-        {/* Labels, stacked to the same heights as the rows beside them. */}
+        {/* Labels, stacked to the same heights as the rows beside them. Each selects its row. */}
         <div className="text-xs font-medium text-stone-600">
           <div className={RULER_CLASS} />
-          <RowLabel className={TITLE_ROW_CLASS}>Title</RowLabel>
-          <RowLabel className={VIDEO_ROW_CLASS}>Video</RowLabel>
-          <RowLabel className={AUDIO_ROW_CLASS}>Audio</RowLabel>
+          <RowLabel
+            track="title"
+            className={TITLE_ROW_CLASS}
+            active={activeTrack === "title"}
+            onSelect={onSelectTrack}
+          >
+            Title
+          </RowLabel>
+          <RowLabel
+            track="video"
+            className={VIDEO_ROW_CLASS}
+            active={activeTrack === "video"}
+            onSelect={onSelectTrack}
+          >
+            Video
+          </RowLabel>
+          <RowLabel
+            track="audio"
+            className={AUDIO_ROW_CLASS}
+            active={activeTrack === "audio"}
+            onSelect={onSelectTrack}
+          >
+            Audio
+          </RowLabel>
         </div>
 
-        {/* The surface: one set of pointer handlers, one pixel↔time scale for every row. */}
+        {/*
+          The surface: one set of pointer handlers, one pixel↔time scale for every row.
+
+          Selecting happens in the capture phase, so a press anywhere on a row selects it — a
+          title handle included, before the Title row stops that gesture propagating. Selecting
+          changes nothing in the document: it is which settings are open, and no more.
+        */}
         <div
           ref={trackRef}
+          onPointerDownCapture={(event) => {
+            const track = readTrack(event.target);
+            if (track) onSelectTrack(track);
+          }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={endDrag}
@@ -382,7 +427,10 @@ export function ClipTimeline({
             ) : null}
           </div>
 
-          <div className={`relative ${TITLE_ROW_CLASS}`} data-track="title">
+          <div
+            className={`relative ${TITLE_ROW_CLASS} ${rowRing(activeTrack === "title")}`}
+            data-track="title"
+          >
             <TitleTrack
               title={title.banner}
               clip={clip}
@@ -394,7 +442,7 @@ export function ClipTimeline({
           </div>
 
           <div
-            className={`relative ${VIDEO_ROW_CLASS} rounded-md bg-stone-100`}
+            className={`relative ${VIDEO_ROW_CLASS} rounded-md bg-stone-100 ${rowRing(activeTrack === "video")}`}
             data-track="video"
             role="group"
             aria-label="Clip trim timeline"
@@ -437,7 +485,10 @@ export function ClipTimeline({
             />
           </div>
 
-          <div className={`relative ${AUDIO_ROW_CLASS}`} data-track="audio">
+          <div
+            className={`relative ${AUDIO_ROW_CLASS} ${rowRing(activeTrack === "audio")}`}
+            data-track="audio"
+          >
             <AudioTrack bars={densityBars} clipStartPct={startPct} clipEndPct={endPct} />
           </div>
 
@@ -468,8 +519,41 @@ export function ClipTimeline({
   );
 }
 
-function RowLabel({ className, children }: { className: string; children: React.ReactNode }) {
-  return <div className={`flex items-center ${className}`}>{children}</div>;
+/** The selected row's outline. Inside the row's own box, so no row's size or place changes. */
+function rowRing(active: boolean): string {
+  return active ? "rounded-md ring-2 ring-inset ring-teal-500" : "";
+}
+
+function RowLabel({
+  track,
+  className,
+  active,
+  onSelect,
+  children,
+}: {
+  track: TimelineTrack;
+  className: string;
+  active: boolean;
+  onSelect: (track: TimelineTrack) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`flex items-center ${className}`}>
+      <button
+        type="button"
+        data-testid={`track-select-${track}`}
+        aria-pressed={active}
+        onClick={() => onSelect(track)}
+        className={`w-full rounded-md border px-2 py-1 text-left ${
+          active
+            ? "border-teal-700 bg-teal-700 text-white"
+            : "border-stone-300 text-stone-700 hover:bg-stone-50"
+        }`}
+      >
+        {children}
+      </button>
+    </div>
+  );
 }
 
 function ZoomButton({

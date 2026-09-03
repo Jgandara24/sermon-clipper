@@ -10,7 +10,7 @@ import {
   BrandTemplatePanel,
   type EditorBrandTemplate,
 } from "@/components/editor/brand-template-panel";
-import { ClipTimeline } from "@/components/editor/clip-timeline";
+import { ClipTimeline, type TimelineTrack } from "@/components/editor/clip-timeline";
 import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
@@ -100,6 +100,9 @@ export function ClipEditor({
   // How much source the timeline shows around the clip. View state, like the canvas zoom: it
   // changes nothing that is saved and nothing the clip may start or end at.
   const [timelineZoom, setTimelineZoom] = useState(1);
+  // Which row's settings are open. View state, never saved: the editor opens on Video, which
+  // shows Captions — what every clip opened to before the rows existed.
+  const [activeTrack, setActiveTrack] = useState<TimelineTrack>("video");
   // The transport above the tracks drives the preview through this; the preview reports back
   // whether it is playing so the button can say which comes next.
   const transportRef = useRef<PreviewTransport | null>(null);
@@ -326,7 +329,10 @@ export function ClipEditor({
     );
   }
 
-  /** The empty Title row's offer was taken: the default title, written and committed at once. */
+  /**
+   * The empty Title row's offer was taken: the default title, written and committed at once, and
+   * its settings opened so the next thing to do is right there.
+   */
   function handleAddTitle() {
     updateState((prev) => ({
       ...prev,
@@ -336,6 +342,7 @@ export function ClipEditor({
       ),
     }));
     commitNow();
+    setActiveTrack("title");
   }
 
   function handleExtend(direction: "before" | "after") {
@@ -507,6 +514,8 @@ export function ClipEditor({
             }}
             zoom={timelineZoom}
             onZoomChange={setTimelineZoom}
+            activeTrack={activeTrack}
+            onSelectTrack={setActiveTrack}
             transport={
               <TransportControls
                 isPlaying={isPlaying}
@@ -518,6 +527,27 @@ export function ClipEditor({
             onCommitTrim={commitNow}
             onScrub={requestSeek}
           />
+          {/* The selected row's settings. The plan names these three; every other panel stays. */}
+          {activeTrack === "title" ? (
+            <TitlePanel
+              overlays={state.overlays}
+              clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+              onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
+              onCommit={commitNow}
+            />
+          ) : activeTrack === "audio" ? (
+            <AudioPanel
+              audio={state.audio}
+              onChange={(audio, mode) => updateState((prev) => ({ ...prev, audio }), mode)}
+              onCommit={commitNow}
+            />
+          ) : (
+            <CaptionStylePanel
+              captions={state.captions}
+              onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
+              onCommit={commitNow}
+            />
+          )}
           <ScriptEditorPanel
             words={wordsInClip}
             selectedWordId={selectedWordId}
@@ -529,22 +559,6 @@ export function ClipEditor({
             onExtendAfter={() => handleExtend("after")}
             canExtendBefore={state.source.startMs > 0}
             canExtendAfter={state.source.endMs < sourceDurationMs}
-          />
-          <CaptionStylePanel
-            captions={state.captions}
-            onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
-            onCommit={commitNow}
-          />
-          <TitlePanel
-            overlays={state.overlays}
-            clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
-            onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
-            onCommit={commitNow}
-          />
-          <AudioPanel
-            audio={state.audio}
-            onChange={(audio, mode) => updateState((prev) => ({ ...prev, audio }), mode)}
-            onCommit={commitNow}
           />
           <BrandTemplatePanel
             templates={brandTemplates}
