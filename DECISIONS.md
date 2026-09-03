@@ -2842,3 +2842,97 @@ that is addressed, which is another reason not to invent a switching model ahead
 
 Status: Active. The Title track — region drag and start/end trim — follows in this slice; the
 track-to-panel switching is deferred to Slice 10 and should be listed there.
+
+## 2026-09-03 - The Timeline Is One Surface, And Every Row Is Drawn On Its Window
+
+Decision: the timeline is one pointer surface with a Title row, a Video row and an Audio row
+stacked inside it, all drawn on the one window `computeTrimViewport` produces. The row labels sit
+in a column outside the surface. The playhead's knob lives in a strip above the rows, and its line
+runs down through all three. Timeline zoom is a magnification of the window's padding — view
+state, never saved — and the trim clamps do not take it.
+
+Why: Slice 10 says the three rows are always shown separately, that clicking a row opens its
+settings, and that zoom exposes more or less of the source without changing the trim limits. Three
+separate tracks each with a pointer-to-time mapping of their own is three places for the rows to
+disagree about where a second is. One surface, one `getBoundingClientRect`, one `msToPct`: the
+Title row (`TitleTrack`) is mounted inside it and handed the same window, and it claims its own
+gestures and stops them propagating, so the surface underneath does not also take them as a scrub.
+The Audio row only draws what `wordDensityBars` hands it.
+
+The playhead's knob moved for the reason it was separated from the handles in the first place (the
+2026-08-21 entry): the handles own the Video row, the knob owns the strip above every row, and
+neither can take a gesture aimed at the other. With a Title row between them they are further
+apart than before, not closer.
+
+Three things found on the way that the plan does not say:
+
+1. **The plan's "15 seconds of unused source" is a floor, not the padding.** `computeTrimViewport`
+   pads by the clip's own length, clamped between 15s and 60s: a 30s clip shows 30s on each side,
+   a 5s clip shows 15s. That predates the plan and is what every test and every member has seen.
+   It stays. Zoom is the control for "more, or less", and the plan's number is exactly what a
+   short clip gets. Changing the default would move what every editor opens to for no behaviour
+   bullet's gain.
+2. **Zoom is magnification, applied to the padding only.** 2 halves the padding, 0.5 doubles it,
+   in steps of two between 0.25 and 8. The clip is inside the window whole at every zoom, so both
+   handles are always reachable, and the media bounds clamp exactly as they do at 1. The clamp
+   helpers do not take a zoom, and the trim test states that by their arity: a zoom parameter
+   added to any of them fails and has to explain itself.
+3. **The empty Title row offers a title rather than making one.** Slice 9's bullet says selecting
+   the empty Title track recreates the default. The row shows an "Add a title" offer inside the
+   clip's span; taking it writes the default and opens Title settings. Pressing the row anywhere
+   else only selects the track. A click that silently put a dismissed title back would undo what
+   the 2026-09-02 title-panel entry made sure of: a title the member removed stays removed.
+
+Tradeoff: the surface is one element with three rows in it, so a row cannot be mounted somewhere
+else on its own — the Title row is a child of the timeline, not the sibling of it that Slice 9
+shipped. That is the shape the plan describes. The ruler strip is the playhead's alone for now;
+tick marks can go there when they are wanted.
+
+Status: Active. Slice 11 replaces the Audio row's bars with real peaks and puts frames on the
+Video row; it changes what the rows draw, not the surface they draw on.
+
+## 2026-09-03 - Track Selection Is View State, And Video Is The Default
+
+Decision: which of Captions, Title or Audio settings is shown follows the selected track, held in
+the editor as view state. It is never saved. The editor opens on Video, which shows Captions —
+what every clip opened to before this slice, so nothing a member is used to moved. Brand, Layout,
+the transcript and Export stay where they are, always visible: the plan names only the three.
+
+Why: the bullet — Title opens Title settings, Video returns to Caption Style, Audio opens Audio
+settings — passed manual review in the prototype, so it is preserved, not designed. Saving the
+selection would make a version out of a click, and the playhead entry already settled that a
+gesture which changes nothing in the document writes nothing.
+
+The selection happens on a capture-phase pointer-down on the surface as well as on the labels, so
+dragging a title handle selects the Title track on the way, and it happens before the Title row
+stops the gesture propagating. The transport moved above the tracks in this slice as well: the
+video element stays in the preview and hands the timeline the three things the buttons may ask of
+it.
+
+Tradeoff: a member who wants Captions and Title settings side by side cannot have them. That is
+what the prototype had.
+
+Status: Active.
+
+## 2026-09-03 - Original Volume Is A Gain After Normalisation, Capped Where The Preview Can Follow
+
+Decision: `audio.originalVolume` — in the schema since the first document, read by nothing until
+now — is a factor applied to the sermon's own sound. The preview sets the video element's volume
+to it. The export applies it as a `volume` filter **after** `loudnorm`, and only when it is not 1,
+so a document that never touched the control renders the same bytes it always did. The panel's
+slider runs from 0 to 100 percent although the schema allows a factor of 2.
+
+Why: the export normalises loudness to a fixed target, so a gain applied before `loudnorm` would
+be undone by it. After it, "half as loud" means half as loud in the file, which is what it means in
+the preview. That is the parity this plan exists for: a control the preview shows and the export
+ignores is the defect the title work was built to avoid, so the Audio panel did not ship without
+the export reading the same number.
+
+The cap is the preview's: a video element cannot play louder than its source, and a boost the
+preview cannot play is a control the member cannot hear. A boost waits for a preview that can play
+one (a gain node), and the schema's 2 is already there for it.
+
+Tradeoff: a gain after normalisation can push peaks past the true-peak ceiling `loudnorm` set. Only
+a boost does that, and the control does not offer one yet.
+
+Status: Active.
