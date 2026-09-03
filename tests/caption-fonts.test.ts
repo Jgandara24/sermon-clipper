@@ -8,6 +8,8 @@ import {
   isBundledFontValue,
 } from "@/lib/editor/caption-fonts";
 import { CAPTION_PRESETS, getCaptionPreset } from "@/lib/editor/caption-presets";
+import { TITLE_BANNER_FONT_FAMILY } from "@/lib/editor/title-banner";
+import { resolveBundledFontFile } from "@/lib/export/font-metrics";
 
 /**
  * A font choice is only honest if the same file draws the preview and the burn-in. Naming a family
@@ -40,6 +42,28 @@ describe("bundled caption fonts", () => {
       expect(css, `${font.family} has no @font-face`).toContain(`font-family: "${font.family}"`);
       expect(css, `${font.regularFile} is not referenced`).toContain(font.regularFile);
       expect(css, `${font.boldFile} is not referenced`).toContain(font.boldFile);
+    }
+  });
+
+  it("names the title's face in the worker image's own gate", () => {
+    // The title has its own face, and the gate is what stops it being one the worker cannot draw.
+    // Changing TITLE_BANNER_FONT_FAMILY to a family the gate does not check would otherwise ship a
+    // title the preview renders and the burn-in silently substitutes another face for.
+    const dockerfile = read("Dockerfile.worker");
+    expect(
+      dockerfile.includes(`"${TITLE_BANNER_FONT_FAMILY}"`),
+      `the worker image does not check the title's face, ${TITLE_BANNER_FONT_FAMILY}`,
+    ).toBe(true);
+  });
+
+  it("resolves the title's face to a file this repository actually ships", () => {
+    // The runtime half of the same guarantee: the measurer opens a bundled file, or it throws
+    // rather than measuring a substitute.
+    for (const bold of [false, true]) {
+      expect(
+        resolveBundledFontFile(TITLE_BANNER_FONT_FAMILY, bold),
+        `${TITLE_BANNER_FONT_FAMILY}${bold ? " bold" : ""} is not bundled`,
+      ).toBeTruthy();
     }
   });
 

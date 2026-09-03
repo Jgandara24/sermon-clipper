@@ -104,6 +104,20 @@ describe("the social safe area is one datum, versioned", () => {
     expect(moved.lowerThirdGeometry().bottom).toBe("40%");
     expect(moved.captionRestCentre("bottom").yPct).toBe(0.77);
 
+    // The title is the consumer this datum was created for. It reads the anchor rather than a
+    // number, so moving the datum moves the title's box with everything else.
+    const { layOutTitleBanner } = await import("@/lib/editor/title-layout");
+    const { defaultTitleBanner } = await import("@/lib/editor/title-banner");
+    const laid = layOutTitleBanner({
+      title: { ...defaultTitleBanner({ startMs: 0, endMs: 9000 }), text: "GRACE" },
+      videoWidth: 1080,
+      videoHeight: 1000,
+      measure: (text: string) => text.length * 10,
+      spaceWidth: 10,
+    });
+    // chrome.top 0.2 plus topPadding 0.05, over a 1000px frame.
+    expect(laid.box.y).toBe(250);
+
     vi.doUnmock("@/lib/editor/social-safe-area-values");
     vi.resetModules();
   });
