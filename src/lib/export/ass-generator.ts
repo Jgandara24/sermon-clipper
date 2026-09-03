@@ -16,6 +16,8 @@ import {
   captionMarginVPx,
   captionMaxWidthPx,
 } from "@/lib/editor/social-safe-area";
+import type { TitleBanner } from "@/lib/editor/title-banner";
+import { layOutTitleBanner, type TitleLayout } from "@/lib/editor/title-layout";
 
 /**
  * Renders one ASS (Advanced SubStation Alpha) subtitle file per clip export, burned in via
@@ -101,6 +103,97 @@ export function countCaptionDialogueEvents(assContent: string): number {
   return count;
 }
 
+
+// --- The title overlay ------------------------------------------------------------------------
+//
+// The title is drawn as shapes plus text rather than as a styled box, because "box dimensions" is
+// a property the preview and the file have to agree on and an ASS opaque box hugs its text at a
+// size neither renderer states. A drawing is stated: the rectangle in the file is the rectangle
+// the layout computed, to the pixel.
+
+/** The style line the title's events draw with: its own face, size and weight. */
+function titleStyleLine(banner: TitleBanner): string {
+  const face = resolveCaptionFace(banner);
+  const colour = hexToAssColor(banner.color);
+  return `Style: Title,${face.family},${banner.sizePx},${colour},${colour},${colour},${colour},${face.bold ? -1 : 0},0,0,0,100,100,0,0,1,0,0,5,0,0,0,1`;
+}
+
+/**
+ * The form a colour takes in an override tag, which is not the form a style line takes.
+ *
+ * A style line carries alpha in the same field (`&H00BBGGRR`). An override does not: `\1c` sets
+ * the colour and `\1a` the alpha, and running them together makes libass read the pair wrong.
+ */
+function assColourTag(hex: string): string {
+  const clean = hex.replace("#", "").padEnd(6, "0").slice(0, 6);
+  const r = clean.slice(0, 2);
+  const g = clean.slice(2, 4);
+  const b = clean.slice(4, 6);
+  return `&H${b}${g}${r}&`.toUpperCase();
+}
+
+/** An `\p1` drawing of a filled rectangle, running from the event's own position. */
+function rectangleDrawing(width: number, height: number): string {
+  return `m 0 0 l ${width} 0 ${width} ${height} 0 ${height}`;
+}
+
+/** The `\an` a line of title text is anchored by, which is what alignment means in the file. */
+function titleAlignmentTag(align: TitleBanner["align"]): string {
+  if (align === "left") return "\\an4";
+  if (align === "right") return "\\an6";
+  return "\\an5";
+}
+
+/**
+ * Every event the title needs: the border shape, the background shape, then one event per line.
+ *
+ * Layers put the shapes under the text. The border is the full box and the background is inset by
+ * the border's width on every side, so a border is drawn *inside* the width the member set rather
+ * than growing the box past it.
+ */
+function titleDialogueLines(banner: TitleBanner, layout: TitleLayout): string[] {
+  const from = msToAssTime(banner.startMs);
+  const to = msToAssTime(banner.endMs);
+  const shadow = banner.shadow ? 4 : 0;
+  const lines: string[] = [];
+
+  const shape = (
+    layer: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    colour: string,
+  ) =>
+    `Dialogue: ${layer},${from},${to},Title,,0,0,0,,{\\an7\\pos(${x},${y})\\bord0\\shad${shadow}\\1c${assColourTag(colour)}\\p1}${rectangleDrawing(width, height)}{\\p0}`;
+
+  const border = layout.border.widthPx;
+  if (border > 0) {
+    lines.push(shape(1, layout.box.x, layout.box.y, layout.box.width, layout.box.height, layout.border.color));
+    lines.push(
+      shape(
+        2,
+        layout.box.x + border,
+        layout.box.y + border,
+        layout.box.width - border * 2,
+        layout.box.height - border * 2,
+        banner.backgroundColor,
+      ),
+    );
+  } else {
+    lines.push(shape(1, layout.box.x, layout.box.y, layout.box.width, layout.box.height, banner.backgroundColor));
+  }
+
+  const align = titleAlignmentTag(banner.align);
+  for (const [index, text] of layout.lines.entries()) {
+    lines.push(
+      `Dialogue: 3,${from},${to},Title,,0,0,0,,{${align}\\pos(${Math.round(layout.textX)},${Math.round(layout.lineCentresY[index])})\\bord0\\shad0\\1c${assColourTag(banner.color)}}${escapeAssText(text)}`,
+    );
+  }
+
+  return lines;
+}
+
 export function generateAssSubtitles(
   lines: AssCaptionLine[],
   style: CaptionStyle,
@@ -115,6 +208,12 @@ export function generateAssSubtitles(
     endMs: number;
   } | null,
   measurer?: AssCaptionMeasurer | null,
+  /**
+   * The title overlay and the measurer for its own face and size. Both or neither: a title cannot
+   * be laid out without measuring it, and drawing one from guessed widths is how a box comes out
+   * too small for the text inside it.
+   */
+  title?: { banner: TitleBanner; measurer: AssCaptionMeasurer } | null,
 ): string {
   const alignment = resolveAlignment(style.position, style.alignment);
   const marginV = captionMarginVPx(style.position, videoHeight);
@@ -137,6 +236,7 @@ export function generateAssSubtitles(
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
     `Style: Default,${fontName},${style.sizePx},${primaryColor},${primaryColor},${outlineColor},${backColor},${isBoldCaptionWeight(style.weight) ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},${captionMarginHPx()},${captionMarginHPx()},${marginV},1`,
+    ...(title ? [titleStyleLine(title.banner)] : []),
     `Style: LowerThird,${fontName},38,${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.accentColor ?? "#facc15")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},${hexToAssColor(lowerThird?.primaryColor ?? "#0f766e")},1,0,0,0,100,100,0,0,3,8,1,1,70,70,400,1`,
     "",
     "[Events]",
@@ -315,9 +415,21 @@ export function generateAssSubtitles(
       );
     })
     .join("\n");
+  const titleEvents = title
+    ? titleDialogueLines(
+        title.banner,
+        layOutTitleBanner({
+          title: title.banner,
+          videoWidth,
+          videoHeight,
+          ...title.measurer,
+        }),
+      )
+    : [];
+
   const lowerThirdEvent = lowerThird
     ? `Dialogue: 1,${msToAssTime(lowerThird.startMs)},${msToAssTime(lowerThird.endMs)},LowerThird,,0,0,0,,${escapeAssText(`${lowerThird.headline}\\N${lowerThird.subhead}`)}`
     : "";
 
-  return `${header}\n${events}${lowerThirdEvent ? `\n${lowerThirdEvent}` : ""}\n`;
+  return `${header}\n${events}${titleEvents.length > 0 ? `\n${titleEvents.join("\n")}` : ""}${lowerThirdEvent ? `\n${lowerThirdEvent}` : ""}\n`;
 }
