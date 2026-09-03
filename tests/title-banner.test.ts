@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   TITLE_BANNER_DEFAULT_DURATION_MS,
+  TITLE_BANNER_MIN_DURATION_MS,
+  moveTitleRange,
+  trimTitleRange,
   defaultTitleBanner,
   dismissTitleBanner,
   ensureDefaultTitleBanner,
@@ -142,6 +145,57 @@ describe("a title the member dismissed does not come back on its own", () => {
     const removed = removeTitleBanner(upsertTitleBanner([], defaultTitleBanner(CLIP)));
     expect(isTitleDismissed(removed)).toBe(false);
     expect(readTitleBanner(ensureDefaultTitleBanner(removed, CLIP))).not.toBeNull();
+  });
+});
+
+describe("dragging and trimming the title's range", () => {
+  const CLIP_RANGE = { startMs: 1_000, endMs: 11_000 };
+  const RANGE = { startMs: 2_000, endMs: 5_000 };
+
+  it("moves the whole title, keeping its length", () => {
+    expect(moveTitleRange(RANGE, 1_500, CLIP_RANGE)).toEqual({ startMs: 3_500, endMs: 6_500 });
+    expect(moveTitleRange(RANGE, -500, CLIP_RANGE)).toEqual({ startMs: 1_500, endMs: 4_500 });
+  });
+
+  it("stops at the clip's edges rather than being shortened by them", () => {
+    // A title dragged past the end that lost its length on the way would come back a different
+    // length, which is not what dragging something means.
+    const early = moveTitleRange(RANGE, -10_000, CLIP_RANGE);
+    expect(early).toEqual({ startMs: 1_000, endMs: 4_000 });
+
+    const late = moveTitleRange(RANGE, 10_000, CLIP_RANGE);
+    expect(late.endMs).toBe(CLIP_RANGE.endMs);
+    expect(late.endMs - late.startMs).toBe(RANGE.endMs - RANGE.startMs);
+  });
+
+  it("keeps a title longer than the clip from moving at all", () => {
+    const whole = { startMs: 1_000, endMs: 11_000 };
+    expect(moveTitleRange(whole, 5_000, CLIP_RANGE)).toEqual(whole);
+  });
+
+  it("trims one end without moving the other", () => {
+    expect(trimTitleRange(RANGE, "start", 3_000, CLIP_RANGE)).toEqual({
+      startMs: 3_000,
+      endMs: 5_000,
+    });
+    expect(trimTitleRange(RANGE, "end", 4_000, CLIP_RANGE)).toEqual({
+      startMs: 2_000,
+      endMs: 4_000,
+    });
+  });
+
+  it("will not let the two ends cross", () => {
+    const crossed = trimTitleRange(RANGE, "start", 9_000, CLIP_RANGE);
+    expect(crossed.startMs).toBe(RANGE.endMs - TITLE_BANNER_MIN_DURATION_MS);
+    expect(crossed.endMs).toBe(RANGE.endMs);
+
+    const other = trimTitleRange(RANGE, "end", 0, CLIP_RANGE);
+    expect(other.endMs).toBe(RANGE.startMs + TITLE_BANNER_MIN_DURATION_MS);
+  });
+
+  it("never trims outside the clip", () => {
+    expect(trimTitleRange(RANGE, "start", -5_000, CLIP_RANGE).startMs).toBe(CLIP_RANGE.startMs);
+    expect(trimTitleRange(RANGE, "end", 99_000, CLIP_RANGE).endMs).toBe(CLIP_RANGE.endMs);
   });
 });
 

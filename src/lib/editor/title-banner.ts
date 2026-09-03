@@ -139,6 +139,48 @@ export function isTitleDismissed(overlays: readonly unknown[]): boolean {
   return overlays.some(isDismissalEntry);
 }
 
+/** The shortest a title may be trimmed to. Below this it cannot be grabbed again. */
+export const TITLE_BANNER_MIN_DURATION_MS = 200;
+
+export type TitleRange = { startMs: number; endMs: number };
+
+/**
+ * Moves the whole title by an offset, keeping its length.
+ *
+ * It stops at the clip's edges rather than being shortened by them: a title dragged past the end
+ * that lost its length on the way would come back a different length, which is not what dragging
+ * something means.
+ */
+export function moveTitleRange(
+  range: TitleRange,
+  deltaMs: number,
+  clip: TitleRange,
+): TitleRange {
+  const length = range.endMs - range.startMs;
+  const room = Math.max(clip.startMs, clip.endMs - length);
+  const startMs = Math.round(Math.min(room, Math.max(clip.startMs, range.startMs + deltaMs)));
+  return { startMs, endMs: startMs + length };
+}
+
+/**
+ * Trims one end of the title.
+ *
+ * The other end does not move, and the two cannot cross: an edge dragged past its opposite stops a
+ * minimum duration short of it.
+ */
+export function trimTitleRange(
+  range: TitleRange,
+  edge: "start" | "end",
+  ms: number,
+  clip: TitleRange,
+): TitleRange {
+  const inClip = Math.min(clip.endMs, Math.max(clip.startMs, Math.round(ms)));
+  if (edge === "start") {
+    return { ...range, startMs: Math.min(inClip, range.endMs - TITLE_BANNER_MIN_DURATION_MS) };
+  }
+  return { ...range, endMs: Math.max(inClip, range.startMs + TITLE_BANNER_MIN_DURATION_MS) };
+}
+
 /**
  * Moves a title onto another timeline.
  *

@@ -72,6 +72,8 @@ const FRAME_HEIGHT = 1920;
 const FALLBACK_PREVIEW_SCALE = 318 / FRAME_WIDTH;
 
 const CAPTION_MIN_SIZE_PX = 16;
+const TITLE_MIN_SIZE_PX = 16;
+const TITLE_MAX_SIZE_PX = 200;
 const CAPTION_MAX_SIZE_PX = 160;
 
 
@@ -85,6 +87,9 @@ export function VideoPreview({
   onCaptionMove,
   onCaptionResize,
   onCaptionCommit,
+  onTitleMove,
+  onTitleResize,
+  onTitleCommit,
   seek,
 }: {
   sourceVideoUrl: string;
@@ -100,6 +105,11 @@ export function VideoPreview({
   onCaptionResize?: (sizePx: number) => void;
   /** The drag or resize ended: write it and close its undo entry. */
   onCaptionCommit?: (gesture: CanvasObjectGesture) => void;
+  /** A frame of a title drag. Writes a custom anchor: dragging is choosing a place. */
+  onTitleMove?: (point: CanvasPoint) => void;
+  /** A frame of a title corner-resize, which changes its type size. */
+  onTitleResize?: (sizePx: number) => void;
+  onTitleCommit?: (gesture: CanvasObjectGesture) => void;
   /** External seek request (from clicking/dragging the timeline). Bump `token` to re-seek. */
   seek?: { ms: number; token: number } | null;
 }) {
@@ -114,6 +124,7 @@ export function VideoPreview({
   // Selection and viewport are view state. Neither is ever written to the document — that is the
   // whole point of the canvas: how you are looking at the frame cannot change what is exported.
   const [captionSelected, setCaptionSelected] = useState(false);
+  const [titleSelected, setTitleSelected] = useState(false);
   const [showCentreGuide, setShowCentreGuide] = useState(false);
   const [viewport, setViewport] = useState<CanvasViewport>(CANVAS_VIEWPORT_RESET);
 
@@ -414,6 +425,7 @@ export function VideoPreview({
   /** A press on the frame itself, not on an object: the selection is over. */
   function clearSelection() {
     setCaptionSelected(false);
+    setTitleSelected(false);
     setShowCentreGuide(false);
   }
 
@@ -505,12 +517,39 @@ export function VideoPreview({
             laid out by CSS flow, because flow is the thing the ASS file cannot reproduce.
           */}
           {titleIsOnScreen && titleBanner && titleLayout ? (
+            <CanvasObject
+              label="Title"
+              // The box's own centre, wherever the anchor put it, so dragging starts from where
+              // the title is rather than from where it would be if it had been dragged before.
+              point={{
+                xPct: (titleLayout.box.x + titleLayout.box.width / 2) / FRAME_WIDTH,
+                yPct: (titleLayout.box.y + titleLayout.box.height / 2) / FRAME_HEIGHT,
+              }}
+              sizePx={titleBanner.sizePx}
+              minSizePx={TITLE_MIN_SIZE_PX}
+              maxSizePx={TITLE_MAX_SIZE_PX}
+              selected={titleSelected}
+              viewport={viewport}
+              rectRef={readCanvasRect}
+              onSelect={() => setTitleSelected(true)}
+              onMove={(point, snapped) => {
+                setShowCentreGuide(snapped);
+                onTitleMove?.(point);
+              }}
+              onResize={(sizePx) => onTitleResize?.(sizePx)}
+              onCommit={(gesture) => {
+                setShowCentreGuide(false);
+                onTitleCommit?.(gesture);
+              }}
+            >
+            {/*
+              Laid out in flow, not positioned: the object around it is what places it, and two
+              things placing one box is how a drag ends up fighting its own render.
+            */}
             <div
               data-testid="title-banner"
-              className="pointer-events-none absolute"
+              className="relative"
               style={{
-                left: `${titleLayout.box.x * previewScale}px`,
-                top: `${titleLayout.box.y * previewScale}px`,
                 width: `${titleLayout.box.width * previewScale}px`,
                 height: `${titleLayout.box.height * previewScale}px`,
                 backgroundColor: titleBanner.backgroundColor,
@@ -556,6 +595,7 @@ export function VideoPreview({
                 </span>
               ))}
             </div>
+            </CanvasObject>
           ) : null}
 
           {/*

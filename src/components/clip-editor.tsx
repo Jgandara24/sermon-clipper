@@ -13,6 +13,9 @@ import { ClipTimeline } from "@/components/editor/clip-timeline";
 import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
+import { TitlePanel } from "@/components/editor/title-panel";
+import { TitleTrack } from "@/components/editor/title-track";
+import { readTitleBanner, upsertTitleBanner } from "@/lib/editor/title-banner";
 import { VideoPreview } from "@/components/editor/video-preview";
 import {
   applyConfirmedSave,
@@ -75,6 +78,8 @@ export function ClipEditor({
   // History owns the working document: `history.present` is what the editor renders.
   const [history, setHistory] = useState(() => createHistory<EditorState>(initialState));
   const state = history.present;
+  // The title, read once: both the track and the panel work from the same entry in overlays.
+  const editorTitle = readTitleBanner(state.overlays);
   const [version, setVersion] = useState(initialVersion);
   const [savedState, setSavedState] = useState<EditorState>(initialState);
   const [savePhase, setSavePhase] = useState<SavePhase>("idle");
@@ -397,6 +402,34 @@ export function ClipEditor({
             onCaptionResize={handleCaptionResize}
             // The gesture is over: write what is pending and close its undo entry.
             onCaptionCommit={commitNow}
+            // Dragging a title is choosing where it goes, so it stops being anchored.
+            onTitleMove={(box) =>
+              editorTitle
+                ? updateState(
+                    (prev) => ({
+                      ...prev,
+                      overlays: upsertTitleBanner(prev.overlays, {
+                        ...editorTitle,
+                        anchor: "custom",
+                        box,
+                      }),
+                    }),
+                    "idle",
+                  )
+                : undefined
+            }
+            onTitleResize={(sizePx) =>
+              editorTitle
+                ? updateState(
+                    (prev) => ({
+                      ...prev,
+                      overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, sizePx }),
+                    }),
+                    "idle",
+                  )
+                : undefined
+            }
+            onTitleCommit={commitNow}
             seek={seek}
           />
           <label className="flex items-center gap-2 text-sm text-stone-600">
@@ -439,6 +472,28 @@ export function ClipEditor({
           <CaptionStylePanel
             captions={state.captions}
             onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
+            onCommit={commitNow}
+          />
+          {editorTitle ? (
+            <TitleTrack
+              title={editorTitle}
+              clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+              onChange={(range) =>
+                updateState(
+                  (prev) => ({
+                    ...prev,
+                    overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, ...range }),
+                  }),
+                  "idle",
+                )
+              }
+              onCommit={commitNow}
+            />
+          ) : null}
+          <TitlePanel
+            overlays={state.overlays}
+            clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+            onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
             onCommit={commitNow}
           />
           <BrandTemplatePanel
