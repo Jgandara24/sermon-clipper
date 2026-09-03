@@ -13,6 +13,7 @@ import { ClipTimeline } from "@/components/editor/clip-timeline";
 import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
+import { TitlePanel } from "@/components/editor/title-panel";
 import { VideoPreview } from "@/components/editor/video-preview";
 import {
   applyConfirmedSave,
@@ -439,6 +440,12 @@ export function ClipEditor({
           <CaptionStylePanel
             captions={state.captions}
             onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
+            onCommit={commitNow}
+          />
+          <TitlePanel
+            overlays={state.overlays}
+            clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+            onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
             onCommit={commitNow}
           />
           <BrandTemplatePanel

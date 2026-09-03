@@ -2810,3 +2810,35 @@ now carries a second layout path. Bought with it: every property in the parity l
 against one shared number rather than inferred, and the rendered frame is checked against it.
 
 Status: Active. The preview reads the same layout; the panel follows.
+
+## 2026-09-02 - Title Settings Ship As A Panel; Track Switching Waits For Slice 10
+
+Decision: the Title settings are a stacked panel alongside Captions, Brand and Layout, written the
+way every other panel in this editor is written. The behaviour bullet "Clicking Title opens Title
+settings; Video returns to Caption Style; Audio opens Audio settings" is **not** implemented, and
+waits for Slice 10.
+
+Why: that bullet describes switching between tracks, and there are no tracks to switch between. The
+timeline today is a single self-contained trim track — Title, Video and Audio rows are Slice 10's
+"Timeline layout". Building the switching now would mean inventing the row structure Slice 10 is
+supposed to decide, and then either the switching or the layout would have to be rebuilt. The plan
+notes the switching passed manual review, so it is a behaviour to preserve, not to design twice.
+
+What does ship: every control the behaviour bullets name — text, position, alignment, case, size,
+weight, width, text and background colour, border width and colour, drop shadow — and each of them
+updates the preview continuously. Sliders and colour inputs report on `idle`, so dragging through a
+colour picker moves the preview on every frame and saves once at the end. That is the same instant
+preview / coalesced save split the caption controls use.
+
+Two behaviours worth naming:
+
+- **X dismisses rather than removes.** The document keeps a marker, so the title does not reappear
+  on the next load. Proven end to end by removing a title, reloading, and finding it still gone.
+- **Choosing a position discards a dragged point.** A title dragged somewhere has `anchor: custom`;
+  pressing Top Safe means Top Safe, so the stored point goes with it.
+
+Tradeoff: the editor gains a fifth stacked panel, and the column is getting long. Slice 10 is where
+that is addressed, which is another reason not to invent a switching model ahead of it.
+
+Status: Active. The Title track — region drag and start/end trim — follows in this slice; the
+track-to-panel switching is deferred to Slice 10 and should be listed there.
