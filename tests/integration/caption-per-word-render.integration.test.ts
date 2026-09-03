@@ -222,12 +222,16 @@ const FIVE_WORDS: AssCaptionLine[] = [
 /**
  * The widest gap that still sits inside a word, in pixels.
  *
- * Measured on this fixture at Highlighter's 48px bold: the gaps between letters run 2 to 7px, and
- * the gaps between words run 33 to 44px. Scaling the active word widens its letter gaps by about
- * a fifth, so 16 sits clear of both, and a word gap would have to close by half before it could be
- * mistaken for a letter gap.
+ * Measured on this fixture at Highlighter's 48px bold, across four moments of a pop: gaps between
+ * letters run 2 to 8px, and gaps between words run 13 to 22px. Ten sits between them with a couple
+ * of pixels either side.
+ *
+ * The window is narrow because the spacing is now correct. Before the font-size fix the word gaps
+ * were 33 to 45px and any threshold would have done; a caption laid out the way libass lays it out
+ * simply has less room between the two populations. If a future change closes that window, this
+ * grouping stops being able to tell a word from a letter, and the count below is what will say so.
  */
-const WITHIN_WORD_GAP_PX = 16;
+const WITHIN_WORD_GAP_PX = 10;
 
 /**
  * The columns of drawn ink in one horizontal band, grouped into words.
@@ -317,7 +321,15 @@ describe("the neighbour micro-shift, rendered", () => {
       const atThird = await inkWords(third.png, ROW);
 
       expect(atSecond).toHaveLength(5);
-      expect(atThird).toEqual(atSecond);
+      expect(atThird).toHaveLength(5);
+
+      // Within a pixel per edge. A different word carries the highlight colour in each frame, and
+      // neon yellow and white do not cross the ink threshold at exactly the same subpixel, so one
+      // edge can read a pixel wider. That is the colour changing, not the word moving.
+      for (const [index, word] of atThird.entries()) {
+        expect(Math.abs(word[0] - atSecond[index][0])).toBeLessThanOrEqual(1);
+        expect(Math.abs(word[1] - atSecond[index][1])).toBeLessThanOrEqual(1);
+      }
     } finally {
       await rm(second.dir, { recursive: true, force: true });
       await rm(third.dir, { recursive: true, force: true });
@@ -365,4 +377,54 @@ describe("the neighbour micro-shift, rendered", () => {
     }
     expect(POP.peakScale).toBeGreaterThan(1);
   });
+});
+
+describe("per-word spacing matches what libass does with the same words", () => {
+  const style = getCaptionPreset("highlighter").style;
+  const ROW: [number, number] = [1600, 1700];
+
+  it("puts the words the same distance apart as libass's own layout", async () => {
+    // The bug this guards against, found by the product owner watching a render and measured
+    // afterwards: an ASS font size is a height, not an em. libass scales a face so its ascent
+    // plus descent equals the number, and measuring at the number itself made every advance
+    // 16.4 percent too wide. Rendered, that put a gap of about 40px where libass puts 20 — the
+    // line read as though the space bar had been pressed twice between every pair of words.
+    //
+    // Nothing about this is visible in the generated text, so it is asserted against pixels.
+    const withPositions = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
+    const libassOwn = generateAssSubtitles(FIVE_WORDS, style, W, H, null, null);
+
+    // At the instant an activation begins, nothing is scaled and nothing has moved.
+    const ours = await renderFrame(withPositions, 0);
+    const theirs = await renderFrame(libassOwn, 0);
+
+    try {
+      const oursWords = await inkWords(ours.png, ROW);
+      const theirsWords = await inkWords(theirs.png, ROW);
+
+      const gaps = (words: Array<[number, number]>) =>
+        words.slice(1).map((word, index) => word[0] - words[index][1] - 1);
+
+      const oursGaps = gaps(oursWords);
+      const theirsGaps = gaps(theirsWords);
+      expect(oursGaps.length).toBe(theirsGaps.length);
+
+      // Within a few pixels: the two lay out by different code, and a whole-number position
+      // rounds. What must not recur is a gap that is twice the other's.
+      for (const [index, gap] of oursGaps.entries()) {
+        expect(
+          Math.abs(gap - theirsGaps[index]),
+          `gap ${index}: ours ${gap}, libass ${theirsGaps[index]}`,
+        ).toBeLessThanOrEqual(4);
+      }
+
+      // And the line as a whole is the same width, which is the reading a viewer actually gets.
+      const width = (words: Array<[number, number]>) =>
+        words[words.length - 1][1] - words[0][0] + 1;
+      expect(Math.abs(width(oursWords) - width(theirsWords))).toBeLessThanOrEqual(6);
+    } finally {
+      await rm(ours.dir, { recursive: true, force: true });
+      await rm(theirs.dir, { recursive: true, force: true });
+    }
+  }, 180_000);
 });

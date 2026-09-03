@@ -2563,3 +2563,43 @@ that disagrees with libass's would move an existing caption, so the acceptance t
 rendered frames rather than only the generated text.
 
 Status: Active.
+
+## 2026-09-02 - An ASS Font Size Is A Height, Not An Em
+
+Decision: the caption measurers size a face the way libass sizes it. An ASS `Fontsize` is not an em
+size: libass scales the face so that its ascent plus descent equals the number. The em is therefore
+`Fontsize x unitsPerEm / (ascent + descent)`, which for DejaVu Sans Bold at 48 is 41.23px, not 48px.
+
+Both measurers now use that em. The server one derives it from the font's own metrics. The browser
+one asks the face for its ascent and descent through the canvas at a probe size and derives the same
+number, so neither has to carry a table. The preview draws at that em as well.
+
+Nothing about the exported file's own sizing changes. The style line still states the same
+`Fontsize`, so every existing clip renders exactly as it did.
+
+Why: per-word positioning made this assumption load-bearing. Measuring at the nominal size made
+every advance 16.4 percent too wide, and rendered that put a gap of about 40px where libass puts 20.
+The product owner watched a render and said it looked as though the space bar had been pressed twice
+between every word. He was right, and the cause was arithmetic rather than taste.
+
+The evidence, three independent measurements agreeing on one ratio: the font's em over its ascent
+plus descent is 2048/2384 = 0.8591; the measured step from PEACE to IS in a libass run divided by
+the step the em-based math predicts is 163/189.84 = 0.8586; and the rendered ink span of that run
+divided by its em-based prediction is 201/234.35 = 0.8577. With the rule applied, the predicted step
+is 163.09px against 163 rendered, and the rendered gaps of a five-word line are 22, 20 and 18px
+against libass's own 21, 21 and 17.
+
+This also closes a second, older disagreement nobody had measured: the preview drew captions at the
+nominal size while the export drew them at the em, so the editor showed captions about a sixth
+larger than the file produced. It now shows the size the file produces.
+
+Tradeoff: editor captions get smaller again, on top of the earlier correction for the canvas scale.
+Both changes move the preview toward the exported file rather than away from it, and neither changes
+the file. A face whose ascent and descent equal its em is unaffected by this rule, so it is not a
+special case for one font.
+
+The guard is a render, not a unit test, because nothing about this is visible in the generated text:
+the same five words are burned in twice, once positioned per word and once laid out by libass, and
+the gaps must agree within a few pixels.
+
+Status: Active.
