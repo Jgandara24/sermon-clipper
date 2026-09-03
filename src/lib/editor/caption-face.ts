@@ -43,7 +43,9 @@ export function resolveCaptionFace(
  */
 export function captionFontShorthand(face: CaptionFace, sizePx: number): string {
   const weight = face.bold ? CAPTION_BOLD_WEIGHT : CAPTION_REGULAR_WEIGHT;
-  return `${weight} ${Math.round(sizePx)}px "${face.family}"`;
+  // Two decimals rather than whole pixels: the em a caption is drawn at is not a round number
+  // (48 becomes 41.23 for DejaVu Sans), and rounding it moved every word by a fraction.
+  return `${weight} ${Math.round(sizePx * 100) / 100}px "${face.family}"`;
 }
 
 /**

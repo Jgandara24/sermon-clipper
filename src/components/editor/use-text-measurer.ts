@@ -29,10 +29,19 @@ export type CaptionTextMeasurer = {
   ready: boolean;
   /** The CSS shorthand measured with, so a caller can prove which face answered. */
   font: string;
+  /**
+   * The em to draw at, which is smaller than the caption's own size.
+   *
+   * An ASS font size is a height, not an em: libass scales the face so its ascent plus descent
+   * equals the number. Drawing the preview at the number itself made its captions about a sixth
+   * larger than the exported file's, and measuring at it put an extra space between every pair of
+   * words. Zero until `ready`.
+   */
+  emPx: number;
 };
 
 function unready(font: string): CaptionTextMeasurer {
-  return { measure: () => 0, spaceWidth: 0, ready: false, font };
+  return { measure: () => 0, spaceWidth: 0, ready: false, font, emPx: 0 };
 }
 
 export function useCaptionTextMeasurer(style: {
@@ -94,9 +103,18 @@ export function useCaptionTextMeasurer(style: {
     const context = document.createElement("canvas").getContext("2d");
     if (!context) return unready(font);
 
+    // What the caption's size means to the burn-in, asked of the face itself rather than assumed.
+    // A probe at the nominal size reports the face's ascent plus descent at that size; the em that
+    // makes that height equal the caption's size is what libass will draw.
     context.font = font;
+    const probe = context.measureText("M");
+    const boxHeight = probe.fontBoundingBoxAscent + probe.fontBoundingBoxDescent;
+    const emPx = boxHeight > 0 ? (sizePx * sizePx) / boxHeight : sizePx;
+
+    const drawFont = captionFontShorthand(face, emPx);
+    context.font = drawFont;
     const measure: CaptionWordMeasurer = (text) =>
       text.length === 0 ? 0 : context.measureText(text).width;
-    return { measure, spaceWidth: measure(" "), ready: true, font };
-  }, [loadedFont, font]);
+    return { measure, spaceWidth: measure(" "), ready: true, font: drawFont, emPx };
+  }, [loadedFont, font, face, sizePx]);
 }
