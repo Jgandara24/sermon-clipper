@@ -1,4 +1,10 @@
-import { popPhases, popPhaseTags, popResetTags } from "@/lib/editor/caption-animation";
+import {
+  POP,
+  popPhases,
+  popPhaseTags,
+  popShiftSegments,
+  popResetTags,
+} from "@/lib/editor/caption-animation";
 import { applyTextCase } from "@/lib/editor/text-case";
 import { isBoldCaptionWeight, resolveCaptionFace } from "@/lib/editor/caption-face";
 import type { CaptionStyle } from "@/lib/editor/caption-presets";
@@ -213,33 +219,58 @@ export function generateAssSubtitles(
       measure: measurer!.measure,
       spaceWidth: measurer!.spaceWidth,
       activeWordId: activation.activeWordId,
-      // Slice 8a positions words; it does not move them. The neighbour shift arrives in 8b.
-      peakScale: 1,
+      peakScale: POP.peakScale,
       maxWidth: videoWidth - MARGIN_H * 2,
     });
 
-    const phases =
-      activation.activeWordId === null ? [] : popPhases(activation.endMs - activation.startMs);
+    const activeDurationMs = activation.endMs - activation.startMs;
+    const phases = activation.activeWordId === null ? [] : popPhases(activeDurationMs);
+    // A neighbour is subdivided further than the pop is. `\move` carries no acceleration, so one
+    // straight line per phase changed a neighbour's speed three or four times across a pop and sat
+    // a quarter of its clearance from the curve mid-rise. The pop's own events are untouched.
+    const segments = activation.activeWordId === null ? [] : popShiftSegments(activeDurationMs);
 
     return layout.rows.flatMap((row, rowIndex) => {
       const place = rowPlacement(rowIndex, layout.rows.length);
       return row.words.flatMap((word) => {
-        const at = `{${place.tag}\\pos(${Math.round(place.x + word.restX)},${place.y})}`;
+        const restX = Math.round(place.x + word.restX);
+        const at = `{${place.tag}\\pos(${restX},${place.y})}`;
         const text = escapeAssText(word.text);
 
-        if (word.id !== activation.activeWordId || phases.length === 0) {
+        // The active word never moves. It grows about its own centre, which is the property the
+        // whole per-word arrangement exists to keep: nothing it does can drag anything with it.
+        if (word.id === activation.activeWordId && phases.length > 0) {
+          // libass gives no agreed meaning to two transforms over one property, so each event
+          // carries exactly one and states the value it starts from.
+          return phases.map(
+            (phase) =>
+              `Dialogue: 0,${msToAssTime(activation.startMs + phase.startMs)},${msToAssTime(activation.startMs + phase.endMs)},Default,,0,0,0,,${at}{${popPhaseTags(phase)}}${highlightTag}${text}`,
+          );
+        }
+
+        const shiftPx = word.shiftedX - word.restX;
+        // A word with nowhere to go — no active word on this line, or on another row entirely —
+        // is one event at rest. Splitting it into segments would multiply the file for no motion.
+        if (shiftPx === 0 || segments.length === 0) {
           return [
             `Dialogue: 0,${msToAssTime(activation.startMs)},${msToAssTime(activation.endMs)},Default,,0,0,0,,${at}${text}`,
           ];
         }
 
-        // The active word is the only one that animates, so it is the only one cut into phases.
-        // libass gives no agreed meaning to two transforms over one property, so each event
-        // carries exactly one and states the value it starts from.
-        return phases.map(
-          (phase) =>
-            `Dialogue: 0,${msToAssTime(activation.startMs + phase.startMs)},${msToAssTime(activation.startMs + phase.endMs)},Default,,0,0,0,,${at}{${popPhaseTags(phase)}}${highlightTag}${text}`,
-        );
+        // A neighbour moves aside and back. `\t` cannot animate a position, and `\move` is one
+        // straight motion per event with no acceleration, so the motion is split into short pieces
+        // that each track the shared curve, and is straight within each. The preview interpolates
+        // over the same pieces; both are exact at every boundary.
+        return segments.map((segment) => {
+          const from = Math.round(place.x + word.restX + shiftPx * segment.from);
+          const to = Math.round(place.x + word.restX + shiftPx * segment.to);
+          const span = Math.max(1, Math.round(segment.endMs - segment.startMs));
+          const motion =
+            from === to
+              ? `{${place.tag}\\pos(${from},${place.y})}`
+              : `{${place.tag}\\move(${from},${place.y},${to},${place.y},0,${span})}`;
+          return `Dialogue: 0,${msToAssTime(activation.startMs + segment.startMs)},${msToAssTime(activation.startMs + segment.endMs)},Default,,0,0,0,,${motion}${text}`;
+        });
       });
     });
   }

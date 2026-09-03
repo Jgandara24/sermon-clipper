@@ -2603,3 +2603,81 @@ the same five words are burned in twice, once positioned per word and once laid 
 the gaps must agree within a few pixels.
 
 Status: Active.
+
+## 2026-09-02 - A Neighbour's Motion Is Subdivided Until It Tracks The Pop Curve
+
+Decision: a neighbouring word's `\move` events are no longer one per pop phase. The motion is split
+recursively until every straight piece sits within `POP_SHIFT_TOLERANCE` of the shared curve, or
+until the piece is one `POP_TIME_STEP_MS` long and the file has no shorter time to state. Only a
+phase that actually curves is split; a phase a neighbour crosses in a straight line stays one event.
+
+Why: the product owner watched the first render and said the motion was "a lot better ... could be a
+little more smoother all together". Measured, the cause was not subtle. One straight line per phase
+put a neighbour **0.25 of its whole clearance** away from the curve it was meant to be following,
+mid-rise, and gave it three or four speed changes across a pop while the active word's own scale was
+interpolated smoothly by libass. The word was smooth; its neighbours were piecewise, and that is
+what reads as stepping.
+
+Subdividing takes that 0.25 down to 0.083, and the 0.083 is the format's floor rather than a choice:
+an accelerated rise leaves rest at unbounded speed, so across the first centisecond no straight line
+can do better. Past that first step the achieved error is under 0.018.
+
+Only the neighbour is subdivided. The active word emits exactly the events it emitted before, so the
+pop's own shape — the part already accepted — is untouched, and the three Clean fixtures are
+unchanged byte for byte.
+
+Tradeoff: **events per word on a five-word line rise from 20.0 to 36.0**, and the asserted budget
+rises from 20 to 45 per word with it. That is the direct cost of the smoothness and it is paid in
+file size, not in render time — libass reads thousands of events and x264 dominates. The restraint
+that keeps it from being worse is splitting only the curved phase: subdividing the settle, the hold
+and the return would have cost another 24 events per word and moved nothing, because a neighbour
+already crosses those in a straight line.
+
+Rejected: the stepped shift recorded as the fallback in the 2026-08-20 neighbour decision. It is the
+opposite of what was asked for, and it is now off the table rather than dormant.
+
+Status: Active. Amends the 2026-08-20 neighbour micro-shift decision, whose "one linear motion per
+phase" implementation constraint this replaces. Pending the product owner's verdict on a re-render.
+
+## 2026-09-02 - A Neighbour Follows Its Own Curve, Not The Active Word's Scale
+
+Decision: a neighbouring word is no longer pinned to `shiftProgressForScale(popScaleAt(t))`. It
+keeps up with the scale while the word is growing, then drifts back to rest across everything that
+follows in one continuous move, and comes home over the word's own return. Out, one turn, home.
+
+Why: subdividing the motion fixed how faithfully a neighbour followed its curve, and left untouched
+the fact that it was the wrong curve. The scale is a shape drawn for a word growing. Read as the
+motion of the word *beside* it, it said: dart out, reverse two thirds of the way back over 120ms,
+stop dead for the 200ms hold, then set off again for the return. Four changes of speed, three of
+them abrupt, and a full stop in the middle that a viewer reads as two separate movements. No amount
+of subdivision helps, because subdivision reproduces that shape more faithfully, not less.
+
+What makes the freedom legitimate: a neighbour's only obligation is to stay clear of the active
+word. Anywhere further aside than the clearance the word needs is safe, and the layout already
+reserves room out to the peak, so the offset is bounded above by 1 as well. Following the scale
+exactly was the cheapest way to satisfy that, not the only one.
+
+Measured on a five-word line, across one activation:
+
+| | before | after |
+|---|---|---|
+| speed changes | 4, one a full stop | 3, no stop |
+| the turn at the peak | -5.56/s | -2.08/s |
+| dead stop mid-pop | 200ms | none |
+| events per word | 36.0 | 32.0 |
+
+The gap around the active word stays a little wider than the word strictly needs through the middle
+of the activation. That is the deliberate cost, and it is what buys the missing stop.
+
+Tradeoff: the neighbour's corners are no longer the pop's phase boundaries, so "both renderers are
+exact at every phase boundary" is retired and replaced by the stronger statement that they are exact
+at every *segment* boundary — the boundaries they now both read. The rendered gate samples the
+neighbour's corners rather than the pop's for the same reason. The pop is untouched: the active word
+emits exactly the events it did before, and the Clean fixtures are unchanged byte for byte.
+
+Not done, and the next lever if this is still not enough: the return still starts and ends abruptly,
+and the rise still leaves rest at unbounded speed because `POP.riseAccel` is 0.5. Both are the pop's
+own accepted shape rather than the neighbour's, which is why neither was changed without asking.
+
+Status: Active. Amends the 2026-08-20 neighbour micro-shift decision and the subdivision decision
+above it. Pending the product owner's verdict on a re-render.

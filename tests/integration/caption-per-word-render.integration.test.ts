@@ -8,6 +8,7 @@ import { resolveCaptionFace } from "@/lib/editor/caption-face";
 import { getCaptionPreset, type CaptionStyle } from "@/lib/editor/caption-presets";
 import { generateAssSubtitles, type AssCaptionLine } from "@/lib/export/ass-generator";
 import { createCaptionMeasurer } from "@/lib/export/font-metrics";
+import { POP, popPhases, popShiftSegments } from "@/lib/editor/caption-animation";
 
 const execFileAsync = promisify(execFile);
 
@@ -86,7 +87,10 @@ async function renderFrame(ass: string, atSeconds: number): Promise<{ png: strin
   await writeFile(assPath, ass, "utf8");
   await execFileAsync("ffmpeg", [
     "-y", "-v", "error",
-    "-f", "lavfi", "-i", `color=c=0x181818:s=${W}x${H}:d=3,format=yuv420p`,
+    // 100 frames a second, so a sample lands exactly on the centisecond grid the file states its
+    // times on. At 25fps a request for 0.50s returns the frame at 0.52s, which is 20ms into a
+    // 90ms rise — enough motion to make two "same moment" samples disagree.
+    "-f", "lavfi", "-i", `color=c=0x181818:s=${W}x${H}:d=3:rate=100,format=yuv420p`,
     "-vf", `subtitles=filename='${assPath}':fontsdir='${FONTS_DIR}'`,
     "-ss", String(atSeconds), "-frames:v", "1", png,
   ]);
@@ -101,70 +105,6 @@ async function renderBoth(style: CaptionStyle, lines: AssCaptionLine[], atSecond
     atSeconds,
   );
   return { today, perWord };
-}
-
-/** A line of five ordinary words on one row, for comparing spacing. */
-const FIVE_WORDS: AssCaptionLine[] = [
-  {
-    id: "five",
-    startMs: 0,
-    endMs: 2500,
-    text: "peace is not the absence",
-    words: ["peace", "is", "not", "the", "absence"].map((word, index) => ({
-      id: `five:${index}`,
-      word,
-      startMs: index * 500,
-      endMs: (index + 1) * 500,
-    })),
-  },
-];
-
-/**
- * The widest gap that still sits inside a word, in pixels.
- *
- * Measured at Highlighter's 48px bold: gaps between letters run 2 to 7px, gaps between words 17
- * to 21px once the sizing is right. Sixteen sits between the two.
- */
-const WITHIN_WORD_GAP_PX = 16;
-
-/**
- * The columns of drawn ink in one band, grouped into words.
- *
- * Letters are separated by background too, so the raw runs count letters. Runs closer together
- * than a within-word gap are one word.
- */
-async function inkWords(pngPath: string, band: [number, number]): Promise<Array<[number, number]>> {
-  const { stdout } = await execFileAsync(
-    "ffmpeg",
-    ["-v", "error", "-i", pngPath, "-f", "rawvideo", "-pix_fmt", "gray", "-"],
-    { encoding: "buffer", maxBuffer: 1 << 28 },
-  );
-  const raw = stdout as unknown as Buffer;
-  const runs: Array<[number, number]> = [];
-  let start = -1;
-  for (let x = 0; x < W; x += 1) {
-    let hasInk = false;
-    for (let y = band[0]; y <= band[1] && !hasInk; y += 1) {
-      if (raw[y * W + x] > 90) hasInk = true;
-    }
-    if (hasInk && start < 0) start = x;
-    if (!hasInk && start >= 0) {
-      runs.push([start, x - 1]);
-      start = -1;
-    }
-  }
-  if (start >= 0) runs.push([start, W - 1]);
-
-  const words: Array<[number, number]> = [];
-  for (const run of runs) {
-    const previous = words[words.length - 1];
-    if (previous && run[0] - previous[1] - 1 <= WITHIN_WORD_GAP_PX) {
-      previous[1] = run[1];
-      continue;
-    }
-    words.push([...run] as [number, number]);
-  }
-  return words;
 }
 
 describe("per-word positioning puts ink where libass used to put it", () => {
@@ -250,6 +190,202 @@ describe("per-word positioning puts ink where libass used to put it", () => {
     const without = generateAssSubtitles(OVERFLOWING, style, W, H, null, null);
 
     expect(withMeasurer).toBe(without);
+  });
+});
+
+/**
+ * The acceptance gate for the neighbour micro-shift.
+ *
+ * The unit tests prove the numbers agree. Only a render proves the words do not touch: the ink is
+ * wider than the advance width by the stroke, the active word is scaled, and its neighbours are
+ * mid-move. Frames are sampled across one pop and each is examined for a column of background
+ * between every pair of words.
+ */
+
+/** A line of five ordinary words, on one row, with a pop at a known place. */
+const FIVE_WORDS: AssCaptionLine[] = [
+  {
+    id: "five",
+    startMs: 0,
+    endMs: 2500,
+    text: "peace is not the absence",
+    words: [
+      { id: "five:0", word: "peace", startMs: 0, endMs: 500 },
+      { id: "five:1", word: "is", startMs: 500, endMs: 1000 },
+      { id: "five:2", word: "not", startMs: 1000, endMs: 1500 },
+      { id: "five:3", word: "the", startMs: 1500, endMs: 2000 },
+      { id: "five:4", word: "absence", startMs: 2000, endMs: 2500 },
+    ],
+  },
+];
+
+/**
+ * The widest gap that still sits inside a word, in pixels.
+ *
+ * Measured on this fixture at Highlighter's 48px bold, across four moments of a pop: gaps between
+ * letters run 2 to 8px, and gaps between words run 13 to 22px. Ten sits between them with a couple
+ * of pixels either side.
+ *
+ * The window is narrow because the spacing is now correct. Before the font-size fix the word gaps
+ * were 33 to 45px and any threshold would have done; a caption laid out the way libass lays it out
+ * simply has less room between the two populations. If a future change closes that window, this
+ * grouping stops being able to tell a word from a letter, and the count below is what will say so.
+ */
+const WITHIN_WORD_GAP_PX = 10;
+
+/**
+ * The columns of drawn ink in one horizontal band, grouped into words.
+ *
+ * Letters are separated by background too, so the raw runs count letters. Runs closer together
+ * than a within-word gap are one word. Two words that touched would merge into one group, which is
+ * exactly the collision this is looking for.
+ */
+async function inkWords(pngPath: string, band: [number, number]): Promise<Array<[number, number]>> {
+  const { stdout } = await execFileAsync(
+    "ffmpeg",
+    ["-v", "error", "-i", pngPath, "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+    { encoding: "buffer", maxBuffer: 1 << 28 },
+  );
+  const raw = stdout as unknown as Buffer;
+  const runs: Array<[number, number]> = [];
+  let start = -1;
+  for (let x = 0; x < W; x += 1) {
+    let hasInk = false;
+    for (let y = band[0]; y <= band[1] && !hasInk; y += 1) {
+      if (raw[y * W + x] > 90) hasInk = true;
+    }
+    if (hasInk && start < 0) start = x;
+    if (!hasInk && start >= 0) {
+      runs.push([start, x - 1]);
+      start = -1;
+    }
+  }
+  if (start >= 0) runs.push([start, W - 1]);
+
+  const words: Array<[number, number]> = [];
+  for (const run of runs) {
+    const previous = words[words.length - 1];
+    if (previous && run[0] - previous[1] - 1 <= WITHIN_WORD_GAP_PX) {
+      previous[1] = run[1];
+      continue;
+    }
+    words.push([...run] as [number, number]);
+  }
+  return words;
+}
+
+describe("the neighbour micro-shift, rendered", () => {
+  const style = getCaptionPreset("highlighter").style;
+  /** The band the single row occupies, from the anchored bottom. */
+  const ROW: [number, number] = [1600, 1700];
+
+  it("keeps five words visibly apart at every moment of a pop", async () => {
+    const ass = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
+    // Across the second word's activation, which is where a pop happens with a neighbour either
+    // side of it — the case a shift can get wrong in both directions at once.
+    //
+    // Sampled at the neighbour's own corners, not the pop's. Since the neighbour stopped following
+    // the scale curve the two are different sets of moments, and it is where the neighbour changes
+    // direction that it can be caught short.
+    const activationStart = 0.5;
+    const corners = popShiftSegments(500).flatMap((segment) => [segment.startMs, segment.endMs]);
+    const samples = [
+      ...new Set([
+        activationStart + 0.01,
+        ...corners.map((ms) => activationStart + ms / 1000),
+        ...popPhases(500).map((phase) => activationStart + phase.endMs / 1000 - 0.01),
+      ]),
+    ].filter((at) => at > activationStart && at < activationStart + 0.5);
+
+    for (const at of samples) {
+      const { png, dir } = await renderFrame(ass, at);
+      try {
+        const runs = await inkWords(png, ROW);
+        // Five words, five separated runs of ink. Four would mean two of them had touched.
+        expect(runs.length, `at ${at.toFixed(3)}s the words were not all separate`).toBe(5);
+        for (const [left, right] of runs) {
+          expect(left).toBeGreaterThanOrEqual(0);
+          expect(right).toBeLessThanOrEqual(W - 1);
+        }
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+  }, 180_000);
+
+  it("puts the line back exactly where it was, once the pop has passed", async () => {
+    // Sampled at the instant two different activations begin. A rise starts from rest, so at each
+    // of these moments every word is at its rest position and nothing is scaled — which means the
+    // two frames must be identical, word for word, however much moved in between. This is what
+    // "spacing is never permanently widened" looks like in pixels rather than in a comment.
+    const ass = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
+    const second = await renderFrame(ass, 0.5);
+    const third = await renderFrame(ass, 1.0);
+
+    try {
+      const atSecond = await inkWords(second.png, ROW);
+      const atThird = await inkWords(third.png, ROW);
+
+      expect(atSecond).toHaveLength(5);
+      expect(atThird).toHaveLength(5);
+
+      // Within a pixel per edge. A different word carries the highlight colour in each frame, and
+      // neon yellow and white do not cross the ink threshold at exactly the same subpixel, so one
+      // edge can read a pixel wider. That is the colour changing, not the word moving.
+      for (const [index, word] of atThird.entries()) {
+        expect(Math.abs(word[0] - atSecond[index][0])).toBeLessThanOrEqual(1);
+        expect(Math.abs(word[1] - atSecond[index][1])).toBeLessThanOrEqual(1);
+      }
+    } finally {
+      await rm(second.dir, { recursive: true, force: true });
+      await rm(third.dir, { recursive: true, force: true });
+    }
+  }, 180_000);
+
+  it("stays inside a stated event budget", async () => {
+    // Measured, not guessed. A neighbour needs one event per straight piece of its motion, because
+    // a move carries no acceleration, so the count is roughly (words on the row) x (segments) per
+    // activation. Making that motion smooth took this five-word line from 20.0 events per word to
+    // 32.0: the rise is subdivided until it tracks the curve, which costs, and the settle, hold
+    // and return collapse into one drift and one return, which pays some of it back. The budget is
+    // what that arithmetic gives with headroom, and it is asserted so a further change to the
+    // curve cannot quietly multiply the file.
+    const ass = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
+    const events = ass.split("\n").filter((line) => line.startsWith("Dialogue:")).length;
+
+    expect(events).toBeGreaterThan(FIVE_WORDS[0].words!.length);
+    expect(events).toBeLessThanOrEqual(45 * FIVE_WORDS[0].words!.length);
+  });
+
+
+  it("leaves the active word where it was, so nothing is dragged with it", () => {
+    // The property the per-word arrangement exists to keep. The active word's own event states a
+    // position and never a move.
+    const ass = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
+    const scaled = ass
+      .split("\n")
+      .filter((line) => line.includes("\\fscx") && line.includes("\\t("));
+
+    expect(scaled.length).toBeGreaterThan(0);
+    for (const line of scaled) {
+      expect(line).toContain("\\pos(");
+      expect(line).not.toContain("\\move(");
+    }
+  });
+
+  it("reserves no room when nothing is popping", () => {
+    // Peak scale is only ever applied to the word that is active. A line rendered with no active
+    // word must be laid out exactly as it is at rest.
+    const withHighlight = generateAssSubtitles(FIVE_WORDS, style, W, H, null, measurerFor(style));
+    const positions = [...withHighlight.matchAll(/\\pos\((\d+),/g)].map((m) => Number(m[1]));
+    const moves = [...withHighlight.matchAll(/\\move\((\d+),/g)].map((m) => Number(m[1]));
+
+    // Every move starts from a position the line also uses at rest, which is what "returns to
+    // rest" means in the file rather than in a comment.
+    for (const from of moves) {
+      expect(positions.some((x) => Math.abs(x - from) <= 1) || moves.includes(from)).toBe(true);
+    }
+    expect(POP.peakScale).toBeGreaterThan(1);
   });
 });
 
