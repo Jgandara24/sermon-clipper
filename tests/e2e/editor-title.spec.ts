@@ -177,6 +177,51 @@ test.describe("the title overlay", () => {
     expect((await storedTitle(fixture.clipId))!.startMs).toBe(before.startMs);
   });
 
+  test("dragging the title on the canvas gives it a place of its own", async ({ page }) => {
+    await addButton(page).click();
+    await textField(page).fill("GRACE");
+
+    // Scrolled into view first: boundingBox reports viewport coordinates, and the mouse uses
+    // them too, so a box the page has not scrolled to is a point the pointer never reaches.
+    await banner(page).scrollIntoViewIfNeeded();
+    const before = (await banner(page).boundingBox())!;
+    await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+    await page.mouse.down();
+    for (const step of [0.3, 0.6, 1]) {
+      await page.mouse.move(
+        before.x + before.width / 2,
+        before.y + before.height / 2 + 80 * step,
+        { steps: 4 },
+      );
+    }
+    await page.mouse.up();
+
+    // Dragging is choosing a place, so the title stops being anchored.
+    await expect
+      .poll(async () => (await storedTitle(fixture.clipId))?.anchor, { timeout: 15_000 })
+      .toBe("custom");
+    expect((await storedTitle(fixture.clipId))!.box).toBeTruthy();
+    expect((await banner(page).boundingBox())!.y).toBeGreaterThan(before.y);
+  });
+
+  test("the title snaps to the horizontal centre with a visible guide", async ({ page }) => {
+    await addButton(page).click();
+    await textField(page).fill("GRACE");
+
+    await banner(page).scrollIntoViewIfNeeded();
+    const start = (await banner(page).boundingBox())!;
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+    await page.mouse.down();
+    // Nudged a few pixels off centre: near enough that the snap should claim it.
+    await page.mouse.move(start.x + start.width / 2 + 4, start.y + start.height / 2 + 40, {
+      steps: 6,
+    });
+
+    await expect(page.getByTestId("centre-guide")).toBeVisible();
+    await page.mouse.up();
+    await expect(page.getByTestId("centre-guide")).toHaveCount(0);
+  });
+
   test("changing the position moves the box, and the document records it", async ({ page }) => {
     await addButton(page).click();
     await textField(page).fill("GRACE");

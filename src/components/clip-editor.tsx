@@ -402,6 +402,34 @@ export function ClipEditor({
             onCaptionResize={handleCaptionResize}
             // The gesture is over: write what is pending and close its undo entry.
             onCaptionCommit={commitNow}
+            // Dragging a title is choosing where it goes, so it stops being anchored.
+            onTitleMove={(box) =>
+              editorTitle
+                ? updateState(
+                    (prev) => ({
+                      ...prev,
+                      overlays: upsertTitleBanner(prev.overlays, {
+                        ...editorTitle,
+                        anchor: "custom",
+                        box,
+                      }),
+                    }),
+                    "idle",
+                  )
+                : undefined
+            }
+            onTitleResize={(sizePx) =>
+              editorTitle
+                ? updateState(
+                    (prev) => ({
+                      ...prev,
+                      overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, sizePx }),
+                    }),
+                    "idle",
+                  )
+                : undefined
+            }
+            onTitleCommit={commitNow}
             seek={seek}
           />
           <label className="flex items-center gap-2 text-sm text-stone-600">
