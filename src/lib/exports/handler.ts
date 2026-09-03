@@ -21,6 +21,7 @@ import {
 import { resolveCaptionFace } from "@/lib/editor/caption-face";
 import { createCaptionMeasurer, UnbundledCaptionFaceError } from "@/lib/export/font-metrics";
 import { parseLowerThird } from "@/lib/brand-template";
+import { readTitleBanner, retimeTitleBanner, type TitleBanner } from "@/lib/editor/title-banner";
 import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
 import { computeKeptRanges, mapToKeptTimeline } from "@/lib/export/kept-ranges";
 import { renderClipExport } from "@/lib/export/render";
@@ -233,6 +234,32 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       if (!(error instanceof UnbundledCaptionFaceError)) throw error;
     }
   }
+  // The title, if this clip carries one. Its times are on the source timeline like every other
+  // time in the document, so they are remapped onto the cut output the same way the captions are —
+  // a title left on the source timeline drifts by however much was deleted before it.
+  const storedTitle = readTitleBanner(state.overlays);
+  let title: { banner: TitleBanner; measurer: AssCaptionMeasurer } | null = null;
+  if (storedTitle) {
+    const face = resolveCaptionFace(storedTitle);
+    try {
+      const measurer = createCaptionMeasurer({
+        family: face.family,
+        bold: face.bold,
+        sizePx: storedTitle.sizePx,
+      });
+      title = {
+        banner: retimeTitleBanner(storedTitle, (ms) => mapToKeptTimeline(ms, keptRanges)),
+        measurer: { measure: measurer.measure, spaceWidth: measurer.spaceWidth },
+      };
+    } catch (error) {
+      // A face this repository does not ship cannot be measured, and drawing the box from guessed
+      // widths would put text outside it. The bundled-font gate exists so this cannot happen in
+      // the worker image; if it somehow does, the clip renders without the title rather than with
+      // a broken one.
+      if (!(error instanceof UnbundledCaptionFaceError)) throw error;
+    }
+  }
+
   const brandTemplate = state.brandTemplateId
     ? await prisma.brandTemplate.findFirst({
         where: { id: state.brandTemplateId, workspaceId: job.workspaceId },
@@ -255,6 +282,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         }
       : null,
     captionMeasurer,
+    title,
   );
 
   const storage = getStorageProvider();

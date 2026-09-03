@@ -140,6 +140,20 @@ export function isTitleDismissed(overlays: readonly unknown[]): boolean {
 }
 
 /**
+ * Moves a title onto another timeline.
+ *
+ * Every time in an editor document is on the source's timeline. The rendered file plays the kept
+ * ranges concatenated, so a title left on the source timeline drifts by however much was deleted
+ * before it — the same remap the caption lines already go through, named rather than repeated.
+ */
+export function retimeTitleBanner(
+  title: TitleBanner,
+  mapMs: (ms: number) => number,
+): TitleBanner {
+  return { ...title, startMs: mapMs(title.startMs), endMs: mapMs(title.endMs) };
+}
+
+/**
  * Adds the default title when there is none and none was dismissed.
  *
  * Leaves an existing title exactly as it is — including one whose every setting has been changed.

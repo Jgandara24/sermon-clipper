@@ -2771,3 +2771,42 @@ they cannot otherwise open, but it means corruption is invisible rather than rep
 
 Status: Active. The burn-in and the panel follow; the model lands first so parity is provable before
 there are controls to break it.
+
+## 2026-09-02 - The Title Is Drawn As Shapes, Not As A Styled Box
+
+Decision: the burn-in draws the title as an explicit `\p1` rectangle with the text on a layer above
+it, not as an ASS opaque box (`BorderStyle: 3`). A border is a second, larger rectangle behind the
+first, and it is drawn **inside** the width the member set rather than growing the box past it.
+
+Why: "box dimensions" is one of the properties the preview and the file have to agree on. An opaque
+box hugs its own text at a size neither renderer states — it is libass's arithmetic over the glyphs,
+and the browser has no way to reproduce it. A drawing is stated: the rectangle in the file is the
+rectangle `layOutTitleBanner` computed, to the pixel, and the render test reads it back out of the
+frame to prove it.
+
+`src/lib/editor/title-layout.ts` is the single selector both renderers read, the same pattern
+`captionActivations` established in Slice 7. It owns the box, the wrap, the line height, where each
+line's centre sits and where the text is anchored. Neither renderer measures anything the other
+does not.
+
+Two rules inside it worth stating:
+
+- **A line's height is the font size.** An ASS `Fontsize` is a height — libass scales the face so
+  ascent plus descent equals it — so a line occupies exactly that many pixels and neither renderer
+  has to guess a leading. This is the same correction the caption measurers got earlier today.
+- **The case is applied before the text is measured.** Measuring "grace" and drawing "GRACE" is how
+  a box comes out too small for its own text.
+
+Also decided: an override colour is `&HBBGGRR&`, not the style line's `&H00BBGGRR`. A style line
+carries alpha in the same field; an override does not, and running them together makes libass read
+the pair wrong. That is a separate helper now rather than a reused one.
+
+The title's times are remapped onto the kept timeline through `retimeTitleBanner`, the same way
+caption lines already were. A title left on the source timeline drifts by however much was deleted
+before it.
+
+Tradeoff: a title costs three or more events where an opaque box would cost one, and the generator
+now carries a second layout path. Bought with it: every property in the parity list is asserted
+against one shared number rather than inferred, and the rendered frame is checked against it.
+
+Status: Active. The preview reads the same layout; the panel follows.

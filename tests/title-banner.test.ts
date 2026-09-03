@@ -7,6 +7,7 @@ import {
   isTitleDismissed,
   readTitleBanner,
   removeTitleBanner,
+  retimeTitleBanner,
   titleBannerSchema,
   upsertTitleBanner,
 } from "@/lib/editor/title-banner";
@@ -141,6 +142,25 @@ describe("a title the member dismissed does not come back on its own", () => {
     const removed = removeTitleBanner(upsertTitleBanner([], defaultTitleBanner(CLIP)));
     expect(isTitleDismissed(removed)).toBe(false);
     expect(readTitleBanner(ensureDefaultTitleBanner(removed, CLIP))).not.toBeNull();
+  });
+});
+
+describe("a title moves onto the timeline the file actually plays", () => {
+  it("remaps both ends through the same map the captions use", () => {
+    // Every time in the document is on the source timeline. The rendered file plays the kept
+    // ranges concatenated, so a title left on the source timeline drifts by whatever was cut
+    // before it.
+    const title = { ...defaultTitleBanner({ startMs: 8_000, endMs: 20_000 }) };
+    const retimed = retimeTitleBanner(title, (ms) => ms - 5_000);
+
+    expect(retimed.startMs).toBe(3_000);
+    expect(retimed.endMs).toBe(6_000);
+  });
+
+  it("changes nothing but the times", () => {
+    const title = { ...defaultTitleBanner(CLIP), text: "GRACE", sizePx: 96 };
+    const retimed = retimeTitleBanner(title, (ms) => ms + 100);
+    expect({ ...retimed, startMs: title.startMs, endMs: title.endMs }).toEqual(title);
   });
 });
 
