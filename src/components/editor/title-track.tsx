@@ -7,6 +7,7 @@ import {
   type TitleBanner,
   type TitleRange,
 } from "@/lib/editor/title-banner";
+import type { TrimViewport } from "@/lib/editor/trim";
 
 type DragKind = "region" | "start" | "end";
 
@@ -24,44 +25,59 @@ function formatClock(ms: number): string {
 /**
  * The Title track: where the title starts and ends, dragged.
  *
- * Mounted as its own self-contained track, which is the shape `ClipTimeline` was deliberately
- * built to be copied into. One set of pointer handlers on the track dispatches by the pressed
- * element's `data-title-drag`, and the track captures the pointer, so a fast drag that leaves a
- * handle keeps tracking.
+ * One row of the timeline, drawn on the window every row shares (`view`) and clamped to the clip
+ * (`clip`). A title lives inside the clip, so the source on either side of it is dimmed here
+ * exactly as it is on the Video row, and a drag stops at the clip's edges however far the window
+ * extends past them.
+ *
+ * One set of pointer handlers on the row dispatches by the pressed element's `data-title-drag`,
+ * and the row captures the pointer, so a fast drag that leaves a handle keeps tracking. A claimed
+ * gesture stops propagating, so the timeline surface underneath does not also take it as a scrub.
  *
  * Every number it produces comes from `moveTitleRange` and `trimTitleRange`, which are pure and
  * tested: the clamping is the part that goes wrong, and it should not live in a pointer handler.
+ *
+ * With no title the row offers one. Taking the offer is `onAdd`; what a new title is belongs to
+ * the parent, which owns the document.
  */
 export function TitleTrack({
   title,
   clip,
+  view,
   onChange,
   onCommit,
+  onAdd,
 }: {
-  title: TitleBanner;
+  title: TitleBanner | null;
   clip: TitleRange;
+  /** The visible window, shared with every row, so the rows line up. */
+  view: TrimViewport;
   onChange: (range: TitleRange) => void;
   /** The drag is over: write what it produced and close its undo entry. */
   onCommit: () => void;
+  /** The empty row's offer was taken. */
+  onAdd: () => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ kind: DragKind; grabbedAtMs: number; range: TitleRange } | null>(null);
 
-  const span = Math.max(1, clip.endMs - clip.startMs);
-  const pctOf = (ms: number) => ((ms - clip.startMs) / span) * 100;
-  const startPct = pctOf(title.startMs);
-  const endPct = pctOf(title.endMs);
+  const span = Math.max(1, view.end - view.start);
+  const pctOf = (ms: number) => Math.min(100, Math.max(0, ((ms - view.start) / span) * 100));
+  const clipStartPct = pctOf(clip.startMs);
+  const clipEndPct = pctOf(clip.endMs);
 
   function msAt(clientX: number): number {
     const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return clip.startMs;
+    if (!rect || rect.width === 0) return view.start;
     const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    return clip.startMs + fraction * span;
+    return view.start + fraction * span;
   }
 
   function handlePointerDown(event: React.PointerEvent) {
+    if (!title) return;
     const kind = readKind(event.target);
     if (!kind) return;
+    event.stopPropagation();
     dragRef.current = {
       kind,
       grabbedAtMs: msAt(event.clientX),
@@ -73,6 +89,7 @@ export function TitleTrack({
   function handlePointerMove(event: React.PointerEvent) {
     const drag = dragRef.current;
     if (!drag) return;
+    event.stopPropagation();
     const at = msAt(event.clientX);
     if (drag.kind === "region") {
       onChange(moveTitleRange(drag.range, at - drag.grabbedAtMs, clip));
@@ -83,67 +100,84 @@ export function TitleTrack({
 
   function endDrag(event: React.PointerEvent) {
     if (!dragRef.current) return;
+    event.stopPropagation();
     dragRef.current = null;
     trackRef.current?.releasePointerCapture?.(event.pointerId);
     onCommit();
   }
 
+  const startPct = title ? pctOf(title.startMs) : clipStartPct;
+  const endPct = title ? pctOf(title.endMs) : clipEndPct;
+
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
-      <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold">Title track</h3>
-        <p className="text-xs font-medium text-stone-600">
-          {formatClock(title.startMs)} – {formatClock(title.endMs)}
-          <span className="text-stone-400">
-            {" "}
-            · {((title.endMs - title.startMs) / 1000).toFixed(1)}s
-          </span>
-        </p>
-      </div>
-
+    <div
+      ref={trackRef}
+      data-testid="title-track"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      className="relative h-full w-full touch-none select-none rounded-md bg-stone-100"
+      role="group"
+      aria-label="Title track"
+    >
+      {/* Source the clip excludes, dimmed on each side exactly as on the Video row. */}
       <div
-        ref={trackRef}
-        data-testid="title-track"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        className="relative mt-3 h-10 w-full touch-none select-none rounded-md bg-stone-100"
-        role="group"
-        aria-label="Title track"
-      >
+        className="pointer-events-none absolute inset-y-0 left-0 rounded-l-md bg-stone-200/80"
+        style={{ width: `${clipStartPct}%` }}
+      />
+      <div
+        className="pointer-events-none absolute inset-y-0 right-0 rounded-r-md bg-stone-200/80"
+        style={{ left: `${clipEndPct}%` }}
+      />
+
+      {title ? (
+        <>
+          <div
+            data-title-drag="region"
+            data-testid="title-region"
+            title={`${formatClock(title.startMs)} – ${formatClock(title.endMs)}`}
+            className="absolute inset-y-0 cursor-grab rounded-md border-y-2 border-teal-500 bg-teal-500/15 active:cursor-grabbing"
+            style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
+          >
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center truncate px-6 text-xs font-medium text-teal-900">
+              {title.text || "Untitled"}
+            </span>
+          </div>
+
+          {/* The handles sit on the region's edges and take the pointer before the region does. */}
+          <div
+            data-title-drag="start"
+            data-testid="title-handle-start"
+            aria-label="Title start"
+            className="absolute inset-y-0 -ml-1.5 w-3 cursor-ew-resize rounded-l-md bg-teal-600"
+            style={{ left: `${startPct}%` }}
+          />
+          <div
+            data-title-drag="end"
+            data-testid="title-handle-end"
+            aria-label="Title end"
+            className="absolute inset-y-0 -ml-1.5 w-3 cursor-ew-resize rounded-r-md bg-teal-600"
+            style={{ left: `${endPct}%` }}
+          />
+        </>
+      ) : (
         <div
-          data-title-drag="region"
-          data-testid="title-region"
-          className="absolute inset-y-0 cursor-grab rounded-md border-y-2 border-teal-500 bg-teal-500/15 active:cursor-grabbing"
-          style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
+          className="absolute inset-y-1"
+          style={{ left: `${clipStartPct}%`, width: `${Math.max(0, clipEndPct - clipStartPct)}%` }}
         >
-          <span className="pointer-events-none absolute inset-0 flex items-center justify-center truncate px-6 text-xs font-medium text-teal-900">
-            {title.text || "Untitled"}
-          </span>
+          <button
+            type="button"
+            data-testid="title-track-add"
+            // A press here is taking the offer, not previewing that spot on the surface below.
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={onAdd}
+            className="flex h-full w-full items-center justify-center rounded-md border border-dashed border-stone-300 text-xs font-medium text-stone-500 hover:border-teal-500 hover:bg-white hover:text-teal-800"
+          >
+            Add a title
+          </button>
         </div>
-
-        {/* The handles sit on the region's edges and take the pointer before the region does. */}
-        <div
-          data-title-drag="start"
-          data-testid="title-handle-start"
-          aria-label="Title start"
-          className="absolute inset-y-0 -ml-1.5 w-3 cursor-ew-resize rounded-l-md bg-teal-600"
-          style={{ left: `${startPct}%` }}
-        />
-        <div
-          data-title-drag="end"
-          data-testid="title-handle-end"
-          aria-label="Title end"
-          className="absolute inset-y-0 -ml-1.5 w-3 cursor-ew-resize rounded-r-md bg-teal-600"
-          style={{ left: `${endPct}%` }}
-        />
-      </div>
-
-      <p className="mt-2 text-xs text-stone-500">
-        Drag the block to move when the title shows; drag either edge to change where it starts or
-        ends.
-      </p>
+      )}
     </div>
   );
 }

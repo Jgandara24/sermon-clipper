@@ -142,6 +142,9 @@ test.describe("the title overlay", () => {
 
     const before = (await storedTitle(fixture.clipId))!;
     const region = page.getByTestId("title-region");
+    // The Title row sits at the top of the timeline, above the panel that was just used, so it is
+    // scrolled to first: boundingBox reports viewport coordinates, and the mouse uses them too.
+    await region.scrollIntoViewIfNeeded();
     const box = (await region.boundingBox())!;
 
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -164,6 +167,7 @@ test.describe("the title overlay", () => {
 
     const before = (await storedTitle(fixture.clipId))!;
     const handle = page.getByTestId("title-handle-end");
+    await handle.scrollIntoViewIfNeeded();
     const box = (await handle.boundingBox())!;
 
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

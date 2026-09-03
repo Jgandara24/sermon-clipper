@@ -14,8 +14,12 @@ import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { TitlePanel } from "@/components/editor/title-panel";
-import { TitleTrack } from "@/components/editor/title-track";
-import { readTitleBanner, upsertTitleBanner } from "@/lib/editor/title-banner";
+import {
+  defaultTitleBanner,
+  readTitleBanner,
+  type TitleRange,
+  upsertTitleBanner,
+} from "@/lib/editor/title-banner";
 import { VideoPreview } from "@/components/editor/video-preview";
 import {
   applyConfirmedSave,
@@ -103,6 +107,9 @@ export function ClipEditor({
     }
     return [...boundaries].sort((a, b) => a - b);
   }, [allWords]);
+  // Where the speech is, for the Audio row: every word's start across the whole source, since the
+  // timeline shows source on both sides of the clip.
+  const wordStartsMs = useMemo(() => allWords.map((word) => word.startMs), [allWords]);
   const selectedBrandTemplate =
     brandTemplates.find((template) => template.id === state.brandTemplateId) ?? null;
 
@@ -295,6 +302,30 @@ export function ClipEditor({
     setSeek((prev) => ({ ms, token: (prev?.token ?? 0) + 1 }));
   }
 
+  /** A frame of a Title track drag: instant preview, one coalesced save, one undo entry. */
+  function handleTitleRange(range: TitleRange) {
+    if (!editorTitle) return;
+    updateState(
+      (prev) => ({
+        ...prev,
+        overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, ...range }),
+      }),
+      "idle",
+    );
+  }
+
+  /** The empty Title row's offer was taken: the default title, written and committed at once. */
+  function handleAddTitle() {
+    updateState((prev) => ({
+      ...prev,
+      overlays: upsertTitleBanner(
+        prev.overlays,
+        defaultTitleBanner({ startMs: prev.source.startMs, endMs: prev.source.endMs }),
+      ),
+    }));
+    commitNow();
+  }
+
   function handleExtend(direction: "before" | "after") {
     updateState((prev) => {
       const nextSource =
@@ -453,6 +484,13 @@ export function ClipEditor({
             endMs={state.source.endMs}
             currentMs={currentMs}
             wordBoundaries={wordBoundaries}
+            wordStartsMs={wordStartsMs}
+            title={{
+              banner: editorTitle,
+              onChange: handleTitleRange,
+              onCommit: commitNow,
+              onAdd: handleAddTitle,
+            }}
             onTrim={handleTrim}
             onCommitTrim={commitNow}
             onScrub={requestSeek}
@@ -474,22 +512,6 @@ export function ClipEditor({
             onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
             onCommit={commitNow}
           />
-          {editorTitle ? (
-            <TitleTrack
-              title={editorTitle}
-              clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
-              onChange={(range) =>
-                updateState(
-                  (prev) => ({
-                    ...prev,
-                    overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, ...range }),
-                  }),
-                  "idle",
-                )
-              }
-              onCommit={commitNow}
-            />
-          ) : null}
           <TitlePanel
             overlays={state.overlays}
             clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
