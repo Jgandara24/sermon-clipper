@@ -150,11 +150,23 @@ describe("GET /api/videos/[id]/peaks", () => {
     expect(json.data).toEqual({ fromMs: 0, toMs: 2_000, peaks: [0, 0, 0.5, 0] });
   });
 
-  it("rejects a bad window before touching the database", async () => {
+  it("rejects a bad window, once it knows the caller may see the video", async () => {
     const response = (await GET(request("fromMs=5&toMs=1&buckets=4"), { params })) as Response;
 
     expect(response.status).toBe(400);
-    expect(prisma.sourceVideo.findUnique).not.toHaveBeenCalled();
+    expect((await response.json()).error.code).toBe("INVALID_RANGE");
+  });
+
+  it("refuses a foreign video before looking at the query, as the authorization matrix probes", async () => {
+    (prisma.sourceVideo.findUnique as Mock).mockResolvedValue({
+      id: "video-1",
+      workspaceId: "ws-other",
+      audioKey: "audio/ws-other/video-1.wav",
+    });
+
+    const response = (await GET(request(""), { params })) as Response;
+
+    expect(response.status).toBe(403);
   });
 
   it("is 404 when the video has no extracted audio yet, so the row can fall back", async () => {

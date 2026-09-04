@@ -17,17 +17,11 @@ export const dynamic = "force-dynamic";
  * Nothing is stored: the WAV the probe already wrote is the only artifact.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  // Who is asking, and may they see this video, before what they want: the authorization matrix
+  // probes every route with a bare request, and a foreign tenant's answer must be a refusal, not
+  // a complaint about the query.
   const auth = await requireApiWorkspace();
   if ("error" in auth) return auth.error;
-
-  const query = parsePeaksQuery(new URL(request.url).searchParams);
-  if (!query) {
-    return apiError(
-      "INVALID_RANGE",
-      "fromMs, toMs and buckets must describe a window inside an hour, with up to 2000 bars.",
-      { status: 400 },
-    );
-  }
 
   const { id } = await params;
   const sourceVideo = await prisma.sourceVideo.findUnique({ where: { id } });
@@ -40,6 +34,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return apiError("PERMISSION_DENIED", "You don't have access to that workspace.", {
       status: 403,
     });
+  }
+
+  const query = parsePeaksQuery(new URL(request.url).searchParams);
+  if (!query) {
+    return apiError(
+      "INVALID_RANGE",
+      "fromMs, toMs and buckets must describe a window inside an hour, with up to 2000 bars.",
+      { status: 400 },
+    );
   }
   if (!sourceVideo.audioKey) {
     // Not a fault: the probe has not run, or ran before audio extraction existed. The row falls
