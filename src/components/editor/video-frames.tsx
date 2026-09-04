@@ -11,7 +11,7 @@ import {
 import type { TrimViewport } from "@/lib/editor/trim";
 
 /** Longer than any seek into a sermon should take; past it the frame is given up on. */
-const DECODE_TIMEOUT_MS = 5_000;
+const DECODE_TIMEOUT_MS = 8_000;
 /** Frames kept once made. Enough for a long browse; small enough not to matter. */
 const CACHE_LIMIT = 600;
 
@@ -25,7 +25,9 @@ const HAVE_CURRENT_DATA = 2;
  * and drawing on `seeked` alone is how the row once showed a blue strip. The guarantee the spec
  * does give is readyState: at HAVE_CURRENT_DATA the frame for the current position can be drawn.
  * So after the seek lands that is what is waited for — `loadeddata` announces it when it is not
- * already true — and one animation frame more. (requestVideoFrameCallback would be stronger, but
+ * already true — and a turn of the event loop more. Not an animation frame: a background tab gets
+ * none, and the first draft, which waited on one, turned every tile into a placeholder while the
+ * member was looking at something else. (requestVideoFrameCallback would be stronger still, but
  * it only reports frames the browser presents, and a video kept out of sight presents none.)
  * A source that errors, or a seek that never lands, rejects.
  */
@@ -47,7 +49,7 @@ function awaitDecodedFrame(video: HTMLVideoElement, targetMs: number): Promise<v
       DECODE_TIMEOUT_MS,
     );
     const onError = () => finish(new Error("The source could not be played."));
-    const onFrameAvailable = () => requestAnimationFrame(() => finish());
+    const onFrameAvailable = () => setTimeout(() => finish(), 0);
     const onSeeked = () => {
       if (video.readyState >= HAVE_CURRENT_DATA) onFrameAvailable();
       else video.addEventListener("loadeddata", onFrameAvailable, { once: true });
@@ -102,11 +104,14 @@ export function VideoFrames({
   sourceVideoUrl,
   view,
   settled,
+  focusMs,
 }: {
   sourceVideoUrl: string;
   view: TrimViewport;
   /** False while a trim drag is in progress: the window is moving, so nothing is extracted. */
   settled: boolean;
+  /** Where to start: the clip's own tiles come before the context around it. */
+  focusMs: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -155,7 +160,7 @@ export function VideoFrames({
 
     (async () => {
       const wanted = slotsKey === "" ? [] : slotsKey.split(",").map(Number);
-      for (const key of pendingFrameKeys(wanted, statesRef.current)) {
+      for (const key of pendingFrameKeys(wanted, statesRef.current, focusMs)) {
         if (cancelled) return;
         let frame: HTMLCanvasElement | null = null;
         for (let attempt = 0; attempt < 2 && !frame; attempt += 1) {
@@ -185,7 +190,7 @@ export function VideoFrames({
     return () => {
       cancelled = true;
     };
-  }, [slotsKey, settled, sourceFailed, width, sourceVideoUrl]);
+  }, [slotsKey, settled, sourceFailed, width, sourceVideoUrl, focusMs]);
 
   // Every visible tile shows the frame made for its time, or nothing.
   useEffect(() => {

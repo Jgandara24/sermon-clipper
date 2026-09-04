@@ -465,7 +465,12 @@ export function ClipTimeline({
             aria-label="Clip trim timeline"
           >
             {/* The source's own frames, under everything else the row draws. */}
-            <VideoFrames sourceVideoUrl={sourceVideoUrl} view={view} settled={frozenView === null} />
+            <VideoFrames
+              sourceVideoUrl={sourceVideoUrl}
+              view={view}
+              settled={frozenView === null}
+              focusMs={(startMs + endMs) / 2}
+            />
             {/* Trimmed-away source, dimmed on each side of the selection. */}
             <div
               className="pointer-events-none absolute inset-y-0 left-0 rounded-l-md bg-stone-200/80"

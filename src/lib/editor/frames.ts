@@ -33,12 +33,15 @@ export function frameSlots(view: TrimViewport, tileCount: number): number[] {
 }
 
 /**
- * The frames the window needs that are neither made nor given up on, left to right, once each.
- * A frame that could not be produced is not asked for again: the placeholder is the answer.
+ * The frames the window needs that are neither made nor given up on, once each. Nearest to
+ * `focusMs` first when it is given — the clip's own tiles before the context around it — and left
+ * to right otherwise. A frame that could not be produced is not asked for again: the placeholder
+ * is the answer.
  */
 export function pendingFrameKeys(
   slots: readonly number[],
   cache: ReadonlyMap<number, FrameState>,
+  focusMs?: number,
 ): number[] {
   const pending: number[] = [];
   const seen = new Set<number>();
@@ -47,5 +50,9 @@ export function pendingFrameKeys(
     seen.add(key);
     pending.push(key);
   }
-  return pending;
+  if (focusMs === undefined) return pending;
+  return pending
+    .map((key, order) => ({ key, order, distance: Math.abs(key - focusMs) }))
+    .sort((a, b) => a.distance - b.distance || a.order - b.order)
+    .map((entry) => entry.key);
 }

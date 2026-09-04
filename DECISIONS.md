@@ -2995,6 +2995,12 @@ what the blue strip lacked: the old code drew on `seeked` alone, before any fram
 Why the extractor is a second element and not the preview: seeking the preview to make thumbnails
 would move the member's playhead a dozen times on every window change.
 
+Why the wait after readyState is a timer and not an animation frame: a background tab gets no
+animation frames at all. The first version of this waited on one, and on the demo sermon — with
+the editor's tab behind another window — every seek landed within 160ms and every tile still
+turned into a placeholder, one eight-second timeout at a time. Timers run in a hidden tab, slowed
+but not stopped. The clip's own tiles are also made first, and the context around them after.
+
 Why metadata only: `preload="auto"` would download the sermon whole. A seek fetches the range it
 needs, which the media route already serves.
 

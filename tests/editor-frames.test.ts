@@ -53,4 +53,11 @@ describe("pendingFrameKeys", () => {
     const cache = new Map<number, "ready" | "placeholder">([[3_000, "placeholder"]]);
     expect(pendingFrameKeys([1_000, 3_000], cache)).toEqual([1_000]);
   });
+
+  it("starts nearest the focus, so the clip's own tiles come before the context around it", () => {
+    const slots = [1_000, 3_000, 5_000, 7_000, 9_000];
+    expect(pendingFrameKeys(slots, new Map(), 6_000)).toEqual([5_000, 7_000, 3_000, 9_000, 1_000]);
+    // A tie goes left to right.
+    expect(pendingFrameKeys(slots, new Map(), 4_000)).toEqual([3_000, 5_000, 1_000, 7_000, 9_000]);
+  });
 });
