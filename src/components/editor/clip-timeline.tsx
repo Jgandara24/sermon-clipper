@@ -296,10 +296,14 @@ export function ClipTimeline({
       aria-label="Timeline"
       className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm"
     >
+      {/*
+        No heading of its own: the editor names this area above it, and two "Timeline" headings on
+        one page is one more than the page has areas.
+      */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Scissors size={18} className="text-teal-800" aria-hidden="true" />
-          <h2 className="font-semibold">Timeline</h2>
+          <p className="text-sm font-semibold">Trim and preview</p>
         </div>
         <p className="text-xs font-medium text-stone-600">
           {formatClock(startMs)} – {formatClock(endMs)}

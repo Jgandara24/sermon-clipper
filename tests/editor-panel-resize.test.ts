@@ -37,6 +37,13 @@ describe("clampPanelWidths", () => {
     expect(style).toBeGreaterThanOrEqual(PANEL_LIMITS.style.min);
   });
 
+  it("stops a panel where a centred video would lose its minimum", () => {
+    // At 1000 wide, a centred video keeps its minimum only while neither panel passes 360.
+    const { transcript } = clampPanelWidths({ containerWidth: 1000, transcript: 460, style: 260 });
+    expect(transcript).toBe(360);
+    expect(1000 - 2 * Math.max(transcript, 260)).toBeGreaterThanOrEqual(VIDEO_MIN_PX);
+  });
+
   it("keeps the panels at their minimums rather than going negative in a tiny container", () => {
     const tiny = clampPanelWidths({ containerWidth: 200, transcript: 300, style: 300 });
     expect(tiny.transcript).toBe(PANEL_LIMITS.transcript.min);

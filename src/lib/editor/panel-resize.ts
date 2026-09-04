@@ -26,7 +26,8 @@ function round(value: number): number {
 }
 
 /**
- * Both panels inside their own bounds, and inside what the container can spare.
+ * Both panels inside their own bounds, inside what the container can spare, and inside what still
+ * leaves the video centred at its minimum.
  *
  * The video's minimum wins over a panel's width but never over a panel's minimum: in a container
  * too narrow for both, the panels sit at their minimums and the page scrolls rather than the
@@ -41,9 +42,14 @@ export function clampPanelWidths({
   transcript: number;
   style: number;
 }): PanelWidths {
+  // A panel may not grow past the point where a centred video would lose its minimum: the video
+  // stays centred while a panel changes width, so the divider is what stops, not the centring.
+  const centreCap = Math.floor((round(containerWidth) - VIDEO_MIN_PX) / 2);
+  const capped = (name: PanelName) => Math.max(PANEL_LIMITS[name].min, Math.min(PANEL_LIMITS[name].max, centreCap));
+
   const wanted = {
-    transcript: clamp(round(transcript), PANEL_LIMITS.transcript.min, PANEL_LIMITS.transcript.max),
-    style: clamp(round(style), PANEL_LIMITS.style.min, PANEL_LIMITS.style.max),
+    transcript: clamp(round(transcript), PANEL_LIMITS.transcript.min, capped("transcript")),
+    style: clamp(round(style), PANEL_LIMITS.style.min, capped("style")),
   };
 
   const spare = round(containerWidth) - VIDEO_MIN_PX;

@@ -11,6 +11,7 @@ import {
   type EditorBrandTemplate,
 } from "@/components/editor/brand-template-panel";
 import { ClipTimeline, type TimelineTrack } from "@/components/editor/clip-timeline";
+import { EditorColumns } from "@/components/editor/editor-columns";
 import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
@@ -439,66 +440,121 @@ export function ClipEditor({
         </p>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <div className="grid gap-3">
-          <VideoPreview
-            sourceVideoUrl={sourceVideoUrl}
-            state={state}
-            words={wordsInClip}
-            showSafeZones={showSafeZones}
-            brandTemplate={selectedBrandTemplate}
-            onCurrentMsChange={setCurrentMs}
-            onCaptionMove={handleCaptionMove}
-            onCaptionResize={handleCaptionResize}
-            // The gesture is over: write what is pending and close its undo entry.
-            onCaptionCommit={commitNow}
-            // Dragging a title is choosing where it goes, so it stops being anchored.
-            onTitleMove={(box) =>
-              editorTitle
-                ? updateState(
-                    (prev) => ({
-                      ...prev,
-                      overlays: upsertTitleBanner(prev.overlays, {
-                        ...editorTitle,
-                        anchor: "custom",
-                        box,
-                      }),
-                    }),
-                    "idle",
-                  )
-                : undefined
-            }
-            onTitleResize={(sizePx) =>
-              editorTitle
-                ? updateState(
-                    (prev) => ({
-                      ...prev,
-                      overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, sizePx }),
-                    }),
-                    "idle",
-                  )
-                : undefined
-            }
-            onTitleCommit={commitNow}
-            seek={seek}
-            transportRef={transportRef}
-            onPlayingChange={setIsPlaying}
-          />
-          <label className="flex items-center gap-2 text-sm text-stone-600">
-            <input
-              type="checkbox"
-              checked={showSafeZones}
-              onChange={(event) => setShowSafeZones(event.target.checked)}
+      <EditorColumns
+        transcript={
+          <>
+            <ScriptEditorPanel
+              words={wordsInClip}
+              selectedWordId={selectedWordId}
+              onSelectWord={handleSelectWord}
+              onChangeWordText={handleChangeWordText}
+              onCommitWordText={handleCommitWordText}
+              onRestoreAllWords={handleRestoreAllWords}
+              onExtendBefore={() => handleExtend("before")}
+              onExtendAfter={() => handleExtend("after")}
+              canExtendBefore={state.source.startMs > 0}
+              canExtendAfter={state.source.endMs < sourceDurationMs}
             />
-            Show safe zones
-          </label>
-          <p className="text-xs text-stone-500">
-            Version {version} · {hasUnsavedChanges ? "editing" : "saved"}. Preview approximates
-            the final render — captions and layout are precise, playback trims are approximate.
-          </p>
-        </div>
-
-        <div className="grid gap-4">
+          </>
+        }
+        video={
+          <div className="grid gap-3">
+            <VideoPreview
+              sourceVideoUrl={sourceVideoUrl}
+              state={state}
+              words={wordsInClip}
+              showSafeZones={showSafeZones}
+              brandTemplate={selectedBrandTemplate}
+              onCurrentMsChange={setCurrentMs}
+              onCaptionMove={handleCaptionMove}
+              onCaptionResize={handleCaptionResize}
+              // The gesture is over: write what is pending and close its undo entry.
+              onCaptionCommit={commitNow}
+              // Dragging a title is choosing where it goes, so it stops being anchored.
+              onTitleMove={(box) =>
+                editorTitle
+                  ? updateState(
+                      (prev) => ({
+                        ...prev,
+                        overlays: upsertTitleBanner(prev.overlays, {
+                          ...editorTitle,
+                          anchor: "custom",
+                          box,
+                        }),
+                      }),
+                      "idle",
+                    )
+                  : undefined
+              }
+              onTitleResize={(sizePx) =>
+                editorTitle
+                  ? updateState(
+                      (prev) => ({
+                        ...prev,
+                        overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, sizePx }),
+                      }),
+                      "idle",
+                    )
+                  : undefined
+              }
+              onTitleCommit={commitNow}
+              seek={seek}
+              transportRef={transportRef}
+              onPlayingChange={setIsPlaying}
+            />
+            <label className="flex items-center gap-2 text-sm text-stone-600">
+              <input
+                type="checkbox"
+                checked={showSafeZones}
+                onChange={(event) => setShowSafeZones(event.target.checked)}
+              />
+              Show safe zones
+            </label>
+            <p className="text-xs text-stone-500">
+              Version {version} · {hasUnsavedChanges ? "editing" : "saved"}. Preview approximates
+              the final render — captions and layout are precise, playback trims are approximate.
+            </p>
+          </div>
+        }
+        style={
+          <div className="grid gap-4">
+            {/* The selected row's settings. The plan names these three; every other panel stays. */}
+            {activeTrack === "title" ? (
+              <TitlePanel
+                overlays={state.overlays}
+                clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+                onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
+                onCommit={commitNow}
+              />
+            ) : activeTrack === "audio" ? (
+              <AudioPanel
+                audio={state.audio}
+                onChange={(audio, mode) => updateState((prev) => ({ ...prev, audio }), mode)}
+                onCommit={commitNow}
+              />
+            ) : (
+              <CaptionStylePanel
+                captions={state.captions}
+                onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
+                onCommit={commitNow}
+              />
+            )}
+            <BrandTemplatePanel
+              templates={brandTemplates}
+              selectedId={state.brandTemplateId}
+              onApply={(template) =>
+                updateState((prev) => applyBrandTemplateToState(prev, template))
+              }
+            />
+            <LayoutPanel
+              layout={state.layout}
+              onChange={(layout, mode) => updateState((prev) => ({ ...prev, layout }), mode)}
+              onCommit={commitNow}
+            />
+            <ExportPanel clipId={clipId} publishBlockedReason={publishReason} />
+          </div>
+        }
+        timeline={
           <ClipTimeline
             sourceVideoUrl={sourceVideoUrl}
             sourceDurationMs={sourceDurationMs}
@@ -529,54 +585,8 @@ export function ClipEditor({
             onCommitTrim={commitNow}
             onScrub={requestSeek}
           />
-          {/* The selected row's settings. The plan names these three; every other panel stays. */}
-          {activeTrack === "title" ? (
-            <TitlePanel
-              overlays={state.overlays}
-              clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
-              onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
-              onCommit={commitNow}
-            />
-          ) : activeTrack === "audio" ? (
-            <AudioPanel
-              audio={state.audio}
-              onChange={(audio, mode) => updateState((prev) => ({ ...prev, audio }), mode)}
-              onCommit={commitNow}
-            />
-          ) : (
-            <CaptionStylePanel
-              captions={state.captions}
-              onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
-              onCommit={commitNow}
-            />
-          )}
-          <ScriptEditorPanel
-            words={wordsInClip}
-            selectedWordId={selectedWordId}
-            onSelectWord={handleSelectWord}
-            onChangeWordText={handleChangeWordText}
-            onCommitWordText={handleCommitWordText}
-            onRestoreAllWords={handleRestoreAllWords}
-            onExtendBefore={() => handleExtend("before")}
-            onExtendAfter={() => handleExtend("after")}
-            canExtendBefore={state.source.startMs > 0}
-            canExtendAfter={state.source.endMs < sourceDurationMs}
-          />
-          <BrandTemplatePanel
-            templates={brandTemplates}
-            selectedId={state.brandTemplateId}
-            onApply={(template) =>
-              updateState((prev) => applyBrandTemplateToState(prev, template))
-            }
-          />
-          <LayoutPanel
-            layout={state.layout}
-            onChange={(layout, mode) => updateState((prev) => ({ ...prev, layout }), mode)}
-            onCommit={commitNow}
-          />
-          <ExportPanel clipId={clipId} publishBlockedReason={publishReason} />
-        </div>
-      </div>
+        }
+      />
     </div>
   );
 }
