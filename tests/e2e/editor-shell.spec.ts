@@ -225,4 +225,41 @@ test.describe("the editor shell", () => {
 
     expect(missing, `controls with no hover description: ${missing.join(" | ")}`).toEqual([]);
   });
+
+  test("the clip's title is edited in place, and the rename sticks", async ({ page }) => {
+    const header = page.getByTestId("editor-header");
+    await expect(header.getByRole("heading", { name: "Peace Stays With Us" })).toBeVisible();
+
+    await header.getByRole("button", { name: "Rename this clip" }).click();
+    const field = page.getByTestId("clip-title-input");
+    await expect(field).toBeFocused();
+    // Five words is a target the field counts against, not a limit it enforces.
+    await expect(page.getByTestId("clip-title-words")).toHaveText("4 of 5 words");
+
+    await field.fill("Peace That Outlasts The Storm On Sunday");
+    await expect(page.getByTestId("clip-title-words")).toHaveText("7 of 5 words");
+    await field.press("Enter");
+
+    await expect(
+      header.getByRole("heading", { name: "Peace That Outlasts The Storm On Sunday" }),
+    ).toBeVisible();
+    // Written to the clip itself, not to the edit document.
+    const { prisma } = await import("../../src/lib/prisma");
+    await expect
+      .poll(async () => (await prisma.generatedClip.findUnique({ where: { id: fixture.clipId } }))?.title, {
+        timeout: 15_000,
+      })
+      .toBe("Peace That Outlasts The Storm On Sunday");
+    expect(await prisma.clipEdit.count({ where: { clipId: fixture.clipId } })).toBe(0);
+  });
+
+  test("Escape leaves the title exactly as it was", async ({ page }) => {
+    const header = page.getByTestId("editor-header");
+    await header.getByRole("button", { name: "Rename this clip" }).click();
+
+    await page.getByTestId("clip-title-input").fill("Something else entirely");
+    await page.getByTestId("clip-title-input").press("Escape");
+
+    await expect(header.getByRole("heading", { name: "Peace Stays With Us" })).toBeVisible();
+  });
 });

@@ -11,6 +11,7 @@ import {
   type EditorBrandTemplate,
 } from "@/components/editor/brand-template-panel";
 import { ClipTimeline, type TimelineTrack } from "@/components/editor/clip-timeline";
+import { ClipTitleField } from "@/components/editor/clip-title-field";
 import { EditorColumns } from "@/components/editor/editor-columns";
 import { ExportDrawer } from "@/components/editor/export-drawer";
 import { LayoutPanel } from "@/components/editor/layout-panel";
@@ -105,6 +106,9 @@ export function ClipEditor({
   // shows Captions — what every clip opened to before the rows existed.
   const [activeTrack, setActiveTrack] = useState<TimelineTrack>("video");
   const [exportOpen, setExportOpen] = useState(false);
+  // The clip's name. It belongs to the clip, not to the edit document, so renaming it writes no
+  // editor version — but the header must show the new name at once.
+  const [title, setTitle] = useState(clipTitle);
   // The transport above the tracks drives the preview through this; the preview reports back
   // whether it is playing so the button can say which comes next.
   const transportRef = useRef<PreviewTransport | null>(null);
@@ -405,7 +409,7 @@ export function ClipEditor({
           </Link>
           <div>
             <p className="text-sm font-medium text-teal-800">Editing</p>
-            <h1 className="text-xl font-semibold">{clipTitle}</h1>
+            <ClipTitleField clipId={clipId} title={title} onRenamed={setTitle} />
           </div>
         </div>
         <div className="flex items-center gap-3">
