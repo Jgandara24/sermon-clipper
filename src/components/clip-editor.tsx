@@ -1,21 +1,32 @@
 "use client";
 
-import { ChevronLeft, Redo2, Undo2 } from "lucide-react";
+import { ChevronLeft, Download, Redo2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AudioPanel } from "@/components/editor/audio-panel";
 import { CaptionStylePanel } from "@/components/editor/caption-style-panel";
 import {
   applyBrandTemplateToState,
   BrandTemplatePanel,
   type EditorBrandTemplate,
 } from "@/components/editor/brand-template-panel";
-import { ClipTimeline } from "@/components/editor/clip-timeline";
-import { ExportPanel } from "@/components/editor/export-panel";
+import { ClipTimeline, type TimelineTrack } from "@/components/editor/clip-timeline";
+import { ClipTitleField } from "@/components/editor/clip-title-field";
+import { EditorColumns } from "@/components/editor/editor-columns";
+import { ExportDrawer } from "@/components/editor/export-drawer";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { TitlePanel } from "@/components/editor/title-panel";
-import { TitleTrack } from "@/components/editor/title-track";
-import { readTitleBanner, upsertTitleBanner } from "@/lib/editor/title-banner";
+import {
+  type PreviewTransport,
+  TransportControls,
+} from "@/components/editor/transport-controls";
+import {
+  defaultTitleBanner,
+  readTitleBanner,
+  type TitleRange,
+  upsertTitleBanner,
+} from "@/lib/editor/title-banner";
 import { VideoPreview } from "@/components/editor/video-preview";
 import {
   applyConfirmedSave,
@@ -88,6 +99,20 @@ export function ClipEditor({
   // Playback position (from the preview) and outgoing seek requests (from the trim timeline).
   const [currentMs, setCurrentMs] = useState(initialState.source.startMs);
   const [seek, setSeek] = useState<{ ms: number; token: number } | null>(null);
+  // How much source the timeline shows around the clip. View state, like the canvas zoom: it
+  // changes nothing that is saved and nothing the clip may start or end at.
+  const [timelineZoom, setTimelineZoom] = useState(1);
+  // Which row's settings are open. View state, never saved: the editor opens on Video, which
+  // shows Captions — what every clip opened to before the rows existed.
+  const [activeTrack, setActiveTrack] = useState<TimelineTrack>("video");
+  const [exportOpen, setExportOpen] = useState(false);
+  // The clip's name. It belongs to the clip, not to the edit document, so renaming it writes no
+  // editor version — but the header must show the new name at once.
+  const [title, setTitle] = useState(clipTitle);
+  // The transport above the tracks drives the preview through this; the preview reports back
+  // whether it is playing so the button can say which comes next.
+  const transportRef = useRef<PreviewTransport | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   // The word open for correction. Selection is view state, not document state: choosing a word
   // changes nothing that is saved, so it must never write a version.
   const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
@@ -103,6 +128,9 @@ export function ClipEditor({
     }
     return [...boundaries].sort((a, b) => a - b);
   }, [allWords]);
+  // Where the speech is, for the Audio row: every word's start across the whole source, since the
+  // timeline shows source on both sides of the clip.
+  const wordStartsMs = useMemo(() => allWords.map((word) => word.startMs), [allWords]);
   const selectedBrandTemplate =
     brandTemplates.find((template) => template.id === state.brandTemplateId) ?? null;
 
@@ -295,6 +323,34 @@ export function ClipEditor({
     setSeek((prev) => ({ ms, token: (prev?.token ?? 0) + 1 }));
   }
 
+  /** A frame of a Title track drag: instant preview, one coalesced save, one undo entry. */
+  function handleTitleRange(range: TitleRange) {
+    if (!editorTitle) return;
+    updateState(
+      (prev) => ({
+        ...prev,
+        overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, ...range }),
+      }),
+      "idle",
+    );
+  }
+
+  /**
+   * The empty Title row's offer was taken: the default title, written and committed at once, and
+   * its settings opened so the next thing to do is right there.
+   */
+  function handleAddTitle() {
+    updateState((prev) => ({
+      ...prev,
+      overlays: upsertTitleBanner(
+        prev.overlays,
+        defaultTitleBanner({ startMs: prev.source.startMs, endMs: prev.source.endMs }),
+      ),
+    }));
+    commitNow();
+    setActiveTrack("title");
+  }
+
   function handleExtend(direction: "before" | "after") {
     updateState((prev) => {
       const nextSource =
@@ -337,15 +393,23 @@ export function ClipEditor({
   const redoAvailable = canRedo(history);
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div data-testid="clip-editor" className="grid gap-6">
+      <header
+        data-testid="editor-header"
+        className="flex flex-wrap items-center justify-between gap-3"
+      >
         <div className="flex items-center gap-3">
-          <Link href="../../.." className="text-stone-500 hover:text-stone-700">
+          <Link
+            href="../../.."
+            aria-label="Back to clips"
+            title="Back to this project's clips"
+            className="text-stone-500 hover:text-stone-700"
+          >
             <ChevronLeft size={20} aria-hidden="true" />
           </Link>
           <div>
             <p className="text-sm font-medium text-teal-800">Editing</p>
-            <h1 className="text-xl font-semibold">{clipTitle}</h1>
+            <ClipTitleField clipId={clipId} title={title} onRenamed={setTitle} />
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -371,17 +435,44 @@ export function ClipEditor({
               <Redo2 size={16} aria-hidden="true" />
             </button>
           </div>
-          <SaveStatusLabel phase={savePhase} hasUnsavedChanges={hasUnsavedChanges} />
+          <span data-testid="save-status">
+            <SaveStatusLabel phase={savePhase} hasUnsavedChanges={hasUnsavedChanges} />
+          </span>
           <button
             type="button"
             onClick={handleSaveNow}
             disabled={savePhase === "saving"}
+            title="Write this edit now, rather than waiting for the editor to save it"
             className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
           >
-            Save
+            Save changes
+          </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            title="Render this clip as an MP4 you can download"
+            className="inline-flex items-center gap-2 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-50"
+          >
+            <Download size={16} aria-hidden="true" />
+            Export MP4
           </button>
         </div>
-      </div>
+      </header>
+
+      {exportOpen ? (
+        <ExportDrawer clipId={clipId} onClose={() => setExportOpen(false)} />
+      ) : null}
+
+      {/*
+        Approval gates publishing and scheduling, never a manual download — so this belongs to the
+        editor rather than to the export panel it used to sit in. Inside the drawer it would be
+        hidden until someone opened the one thing it does not apply to.
+      */}
+      {publishReason ? (
+        <p className="rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700">
+          {publishReason}
+        </p>
+      ) : null}
 
       {savePhase === "conflict" ? (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -389,128 +480,152 @@ export function ClipEditor({
         </p>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <div className="grid gap-3">
-          <VideoPreview
-            sourceVideoUrl={sourceVideoUrl}
-            state={state}
-            words={wordsInClip}
-            showSafeZones={showSafeZones}
-            brandTemplate={selectedBrandTemplate}
-            onCurrentMsChange={setCurrentMs}
-            onCaptionMove={handleCaptionMove}
-            onCaptionResize={handleCaptionResize}
-            // The gesture is over: write what is pending and close its undo entry.
-            onCaptionCommit={commitNow}
-            // Dragging a title is choosing where it goes, so it stops being anchored.
-            onTitleMove={(box) =>
-              editorTitle
-                ? updateState(
-                    (prev) => ({
-                      ...prev,
-                      overlays: upsertTitleBanner(prev.overlays, {
-                        ...editorTitle,
-                        anchor: "custom",
-                        box,
-                      }),
-                    }),
-                    "idle",
-                  )
-                : undefined
-            }
-            onTitleResize={(sizePx) =>
-              editorTitle
-                ? updateState(
-                    (prev) => ({
-                      ...prev,
-                      overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, sizePx }),
-                    }),
-                    "idle",
-                  )
-                : undefined
-            }
-            onTitleCommit={commitNow}
-            seek={seek}
-          />
-          <label className="flex items-center gap-2 text-sm text-stone-600">
-            <input
-              type="checkbox"
-              checked={showSafeZones}
-              onChange={(event) => setShowSafeZones(event.target.checked)}
+      <EditorColumns
+        transcript={
+          <>
+            <ScriptEditorPanel
+              words={wordsInClip}
+              selectedWordId={selectedWordId}
+              onSelectWord={handleSelectWord}
+              onChangeWordText={handleChangeWordText}
+              onCommitWordText={handleCommitWordText}
+              onRestoreAllWords={handleRestoreAllWords}
+              onExtendBefore={() => handleExtend("before")}
+              onExtendAfter={() => handleExtend("after")}
+              canExtendBefore={state.source.startMs > 0}
+              canExtendAfter={state.source.endMs < sourceDurationMs}
             />
-            Show safe zones
-          </label>
-          <p className="text-xs text-stone-500">
-            Version {version} · {hasUnsavedChanges ? "editing" : "saved"}. Preview approximates
-            the final render — captions and layout are precise, playback trims are approximate.
-          </p>
-        </div>
-
-        <div className="grid gap-4">
+          </>
+        }
+        video={
+          <div className="grid gap-3">
+            <VideoPreview
+              sourceVideoUrl={sourceVideoUrl}
+              state={state}
+              words={wordsInClip}
+              showSafeZones={showSafeZones}
+              brandTemplate={selectedBrandTemplate}
+              onCurrentMsChange={setCurrentMs}
+              onCaptionMove={handleCaptionMove}
+              onCaptionResize={handleCaptionResize}
+              // The gesture is over: write what is pending and close its undo entry.
+              onCaptionCommit={commitNow}
+              // Dragging a title is choosing where it goes, so it stops being anchored.
+              onTitleMove={(box) =>
+                editorTitle
+                  ? updateState(
+                      (prev) => ({
+                        ...prev,
+                        overlays: upsertTitleBanner(prev.overlays, {
+                          ...editorTitle,
+                          anchor: "custom",
+                          box,
+                        }),
+                      }),
+                      "idle",
+                    )
+                  : undefined
+              }
+              onTitleResize={(sizePx) =>
+                editorTitle
+                  ? updateState(
+                      (prev) => ({
+                        ...prev,
+                        overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, sizePx }),
+                      }),
+                      "idle",
+                    )
+                  : undefined
+              }
+              onTitleCommit={commitNow}
+              seek={seek}
+              transportRef={transportRef}
+              onPlayingChange={setIsPlaying}
+            />
+            <label className="flex items-center gap-2 text-sm text-stone-600">
+              <input
+                type="checkbox"
+                checked={showSafeZones}
+                onChange={(event) => setShowSafeZones(event.target.checked)}
+              />
+              Show safe zones
+            </label>
+            <p className="text-xs text-stone-500">
+              Version {version} · {hasUnsavedChanges ? "editing" : "saved"}. Preview approximates
+              the final render — captions and layout are precise, playback trims are approximate.
+            </p>
+          </div>
+        }
+        style={
+          <div className="grid gap-4">
+            {/* The selected row's settings. The plan names these three; every other panel stays. */}
+            {activeTrack === "title" ? (
+              <TitlePanel
+                overlays={state.overlays}
+                clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+                onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
+                onCommit={commitNow}
+              />
+            ) : activeTrack === "audio" ? (
+              <AudioPanel
+                audio={state.audio}
+                onChange={(audio, mode) => updateState((prev) => ({ ...prev, audio }), mode)}
+                onCommit={commitNow}
+              />
+            ) : (
+              <CaptionStylePanel
+                captions={state.captions}
+                onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
+                onCommit={commitNow}
+              />
+            )}
+            <BrandTemplatePanel
+              templates={brandTemplates}
+              selectedId={state.brandTemplateId}
+              onApply={(template) =>
+                updateState((prev) => applyBrandTemplateToState(prev, template))
+              }
+            />
+            <LayoutPanel
+              layout={state.layout}
+              onChange={(layout, mode) => updateState((prev) => ({ ...prev, layout }), mode)}
+              onCommit={commitNow}
+            />
+          </div>
+        }
+        timeline={
           <ClipTimeline
+            sourceVideoUrl={sourceVideoUrl}
             sourceDurationMs={sourceDurationMs}
             startMs={state.source.startMs}
             endMs={state.source.endMs}
             currentMs={currentMs}
             wordBoundaries={wordBoundaries}
+            wordStartsMs={wordStartsMs}
+            audio={{ videoId: state.source.videoId }}
+            title={{
+              banner: editorTitle,
+              onChange: handleTitleRange,
+              onCommit: commitNow,
+              onAdd: handleAddTitle,
+            }}
+            zoom={timelineZoom}
+            onZoomChange={setTimelineZoom}
+            activeTrack={activeTrack}
+            onSelectTrack={setActiveTrack}
+            transport={
+              <TransportControls
+                isPlaying={isPlaying}
+                clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+                transportRef={transportRef}
+              />
+            }
             onTrim={handleTrim}
             onCommitTrim={commitNow}
             onScrub={requestSeek}
           />
-          <ScriptEditorPanel
-            words={wordsInClip}
-            selectedWordId={selectedWordId}
-            onSelectWord={handleSelectWord}
-            onChangeWordText={handleChangeWordText}
-            onCommitWordText={handleCommitWordText}
-            onRestoreAllWords={handleRestoreAllWords}
-            onExtendBefore={() => handleExtend("before")}
-            onExtendAfter={() => handleExtend("after")}
-            canExtendBefore={state.source.startMs > 0}
-            canExtendAfter={state.source.endMs < sourceDurationMs}
-          />
-          <CaptionStylePanel
-            captions={state.captions}
-            onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
-            onCommit={commitNow}
-          />
-          {editorTitle ? (
-            <TitleTrack
-              title={editorTitle}
-              clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
-              onChange={(range) =>
-                updateState(
-                  (prev) => ({
-                    ...prev,
-                    overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, ...range }),
-                  }),
-                  "idle",
-                )
-              }
-              onCommit={commitNow}
-            />
-          ) : null}
-          <TitlePanel
-            overlays={state.overlays}
-            clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
-            onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
-            onCommit={commitNow}
-          />
-          <BrandTemplatePanel
-            templates={brandTemplates}
-            selectedId={state.brandTemplateId}
-            onApply={(template) =>
-              updateState((prev) => applyBrandTemplateToState(prev, template))
-            }
-          />
-          <LayoutPanel
-            layout={state.layout}
-            onChange={(layout, mode) => updateState((prev) => ({ ...prev, layout }), mode)}
-            onCommit={commitNow}
-          />
-          <ExportPanel clipId={clipId} publishBlockedReason={publishReason} />
-        </div>
-      </div>
+        }
+      />
     </div>
   );
 }

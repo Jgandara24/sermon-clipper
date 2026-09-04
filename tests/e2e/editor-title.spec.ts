@@ -18,6 +18,8 @@ process.env.STORAGE_LOCAL_ROOT = path.join(process.cwd(), ".data", "e2e-storage"
 process.env.WHISPER_MODEL_PATH = "";
 
 const addButton = (page: Page) => page.getByTestId("title-add");
+/** The Title settings show while the Title track is selected; the editor opens on Video. */
+const openTitleSettings = (page: Page) => page.getByTestId("track-select-title").click();
 const removeButton = (page: Page) => page.getByTestId("title-remove");
 const textField = (page: Page) => page.getByTestId("title-text");
 const banner = (page: Page) => page.getByTestId("title-banner");
@@ -26,6 +28,18 @@ const lines = (page: Page) => page.getByTestId("title-line");
 async function storedTitle(clipId: string) {
   const state = await storedState(clipId);
   return state ? readTitleBanner(state.overlays) : null;
+}
+
+/**
+ * The stored title once the save that made it has landed. Adding a title writes at once, but "at
+ * once" is a request in flight, and on a cold built server the first write to the edit route can
+ * land after the next line of a test has already read the row.
+ */
+async function storedTitleSoon(clipId: string) {
+  await expect.poll(async () => (await storedTitle(clipId)) !== null, { timeout: 15_000 }).toBe(
+    true,
+  );
+  return (await storedTitle(clipId))!;
 }
 
 /**
@@ -42,6 +56,7 @@ test.describe("the title overlay", () => {
     fixture = await createCanvasFixture(getStorageProvider());
     await signInAs(context, fixture.userId);
     await openCanvasEditor(page, fixture.clipId);
+    await openTitleSettings(page);
   });
 
   test.afterEach(async () => {
@@ -118,6 +133,7 @@ test.describe("the title overlay", () => {
     // The dismissal is the point: a default that came back would have to be removed every time.
     await openCanvasEditor(page, fixture.clipId);
     await expect(banner(page)).toHaveCount(0);
+    await openTitleSettings(page);
     await expect(addButton(page)).toBeVisible();
   });
 
@@ -140,8 +156,11 @@ test.describe("the title overlay", () => {
     await addButton(page).click();
     await textField(page).fill("GRACE");
 
-    const before = (await storedTitle(fixture.clipId))!;
+    const before = await storedTitleSoon(fixture.clipId);
     const region = page.getByTestId("title-region");
+    // The Title row sits at the top of the timeline, above the panel that was just used, so it is
+    // scrolled to first: boundingBox reports viewport coordinates, and the mouse uses them too.
+    await region.scrollIntoViewIfNeeded();
     const box = (await region.boundingBox())!;
 
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -162,8 +181,9 @@ test.describe("the title overlay", () => {
     await addButton(page).click();
     await textField(page).fill("GRACE");
 
-    const before = (await storedTitle(fixture.clipId))!;
+    const before = await storedTitleSoon(fixture.clipId);
     const handle = page.getByTestId("title-handle-end");
+    await handle.scrollIntoViewIfNeeded();
     const box = (await handle.boundingBox())!;
 
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

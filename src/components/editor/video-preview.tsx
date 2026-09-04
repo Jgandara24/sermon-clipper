@@ -1,15 +1,7 @@
 "use client";
 
-import {
-  ChevronFirst,
-  ChevronLast,
-  Maximize,
-  Pause,
-  Play,
-  RotateCcw,
-  RotateCw,
-} from "lucide-react";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Maximize, Play } from "lucide-react";
+import { Fragment, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   CANVAS_VIEWPORT_RESET,
   canvasTransform,
@@ -28,7 +20,6 @@ import {
   msToTimecode,
   playbackActionForTime,
   seekByMs,
-  SKIP_STEP_MS,
 } from "@/lib/editor/playback";
 import { captionActivationAt } from "@/lib/editor/caption-timeline";
 import { POP, popScaleAt, popShiftProgressAt } from "@/lib/editor/caption-animation";
@@ -38,6 +29,7 @@ import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
 import type { EditorWordWithDeletion } from "@/lib/editor/words";
 import type { EditorBrandTemplate } from "@/components/editor/brand-template-panel";
+import type { PreviewTransport } from "@/components/editor/transport-controls";
 import { CanvasObject, type CanvasObjectGesture } from "@/components/editor/canvas-object";
 import {
   captionMaxWidthPx,
@@ -91,6 +83,8 @@ export function VideoPreview({
   onTitleResize,
   onTitleCommit,
   seek,
+  transportRef,
+  onPlayingChange,
 }: {
   sourceVideoUrl: string;
   state: EditorState;
@@ -112,6 +106,10 @@ export function VideoPreview({
   onTitleCommit?: (gesture: CanvasObjectGesture) => void;
   /** External seek request (from clicking/dragging the timeline). Bump `token` to re-seek. */
   seek?: { ms: number; token: number } | null;
+  /** Filled after mounting with what the transport above the timeline may ask of this preview. */
+  transportRef?: React.Ref<PreviewTransport>;
+  /** Reports the element's own play and pause, so the transport's button can show which is next. */
+  onPlayingChange?: (playing: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -335,6 +333,14 @@ export function VideoPreview({
     seekTo(seek.ms);
   }, [seek, seekTo]);
 
+  // The sermon's own sound, at the level the document says. Instant: the effect runs on the render
+  // the slider's own input event caused, with nothing between them. The element cannot play louder
+  // than its source, which is why the panel's control stops at 100 percent.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) video.volume = Math.min(1, Math.max(0, state.audio.originalVolume));
+  }, [state.audio.originalVolume]);
+
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
@@ -350,6 +356,10 @@ export function VideoPreview({
   function skipBy(deltaMs: number) {
     seekTo(seekByMs(currentMs, deltaMs, state.source.startMs, state.source.endMs));
   }
+
+  // The transport lives above the timeline's tracks; the video element stays here. This is the
+  // whole of what it may ask, and each is the same function the preview's own bar used to call.
+  useImperativeHandle(transportRef, () => ({ togglePlay, seekTo, skipBy }));
 
   const readCanvasRect = useCallback((): CanvasRect | null => {
     const element = canvasRef.current;
@@ -461,8 +471,14 @@ export function VideoPreview({
             ref={videoRef}
             src={sourceVideoUrl}
             onTimeUpdate={handleTimeUpdate}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
+            onPlay={() => {
+              setIsPlaying(true);
+              onPlayingChange?.(true);
+            }}
+            onPause={() => {
+              setIsPlaying(false);
+              onPlayingChange?.(false);
+            }}
             onClick={() => {
               clearSelection();
               togglePlay();
@@ -610,6 +626,7 @@ export function VideoPreview({
                 togglePlay();
               }}
               aria-label="Play"
+              title="Play the clip"
               className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/55 p-4 text-white transition hover:bg-black/70"
               style={{ top: captionIsCentred ? "28%" : "50%" }}
             >
@@ -782,25 +799,19 @@ export function VideoPreview({
         </div>
       </div>
 
+      {/*
+        The transport — start, back, play, forward, end — lives above the timeline's tracks now
+        (TransportControls), driving this preview through `transportRef`. What stays here is what
+        belongs to the picture: where playback is, and how far the canvas is zoomed.
+      */}
       <div className="flex items-center justify-between gap-2 bg-stone-900 px-3 py-2 text-white">
-        <div className="flex items-center gap-1">
-          <TransportButton label="Go to start" onClick={() => seekTo(state.source.startMs)}>
-            <ChevronFirst size={16} aria-hidden="true" />
-          </TransportButton>
-          <TransportButton label="Back 3 seconds" onClick={() => skipBy(-SKIP_STEP_MS)}>
-            <RotateCcw size={16} aria-hidden="true" />
-          </TransportButton>
-          <TransportButton label={isPlaying ? "Pause" : "Play clip"} onClick={togglePlay}>
-            {isPlaying ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
-          </TransportButton>
-          <TransportButton label="Forward 3 seconds" onClick={() => skipBy(SKIP_STEP_MS)}>
-            <RotateCw size={16} aria-hidden="true" />
-          </TransportButton>
-          {/* Seeks to the clip end and stays there, rather than restarting the clip. */}
-          <TransportButton label="Go to end" onClick={() => seekTo(state.source.endMs)}>
-            <ChevronLast size={16} aria-hidden="true" />
-          </TransportButton>
-        </div>
+        <p className="font-mono text-xs tabular-nums text-white/80">
+          <span data-testid="playback-position">
+            {msToTimecode(currentMs - state.source.startMs)}
+          </span>
+          {" / "}
+          {msToTimecode(state.source.endMs - state.source.startMs)}
+        </p>
         <div className="flex items-center gap-2">
           {/* Canvas zoom only. The trim timeline has its own window and is not touched by this. */}
           <span data-testid="canvas-zoom" className="font-mono text-xs tabular-nums text-white/70">
@@ -809,13 +820,6 @@ export function VideoPreview({
           <TransportButton label="Reset zoom to 100%" onClick={resetZoom} disabled={atRest}>
             <Maximize size={16} aria-hidden="true" />
           </TransportButton>
-          <p className="font-mono text-xs tabular-nums text-white/80">
-            <span data-testid="playback-position">
-              {msToTimecode(currentMs - state.source.startMs)}
-            </span>
-            {" / "}
-            {msToTimecode(state.source.endMs - state.source.startMs)}
-          </p>
         </div>
       </div>
     </div>

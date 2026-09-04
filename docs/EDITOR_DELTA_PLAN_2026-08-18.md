@@ -527,6 +527,27 @@ from timeline layout.
 
 **Coverage:** the 15-second context with source-boundary clamps; zoom does not move trim limits.
 
+**Built 2026-09-03 (#65).** Every behaviour bullet, including the track-to-panel switching moved
+here from Slice 9. Landed in nine commits: the zoom maths and the word-density bars first, then
+the export honouring `audio.originalVolume` on its own, then the rows on one surface, the zoom
+controls, the transport above the tracks, the Audio panel with its instant preview, and the
+switching last — so the panels existed before the thing that shows one at a time.
+
+Three things found on the way that were not in the plan, all recorded in DECISIONS.md:
+
+- The plan's "15 seconds of unused source" is a floor, not the padding: `computeTrimViewport` pads
+  by the clip's own length between 15s and 60s, and that stays. Zoom is the control for more or
+  less, and it is a magnification of the padding only — the clamp helpers do not take it, and the
+  trim test states that by their arity.
+- The empty Title row **offers** a title rather than making one on selection, so a title the member
+  dismissed cannot come back from a stray click.
+- `originalVolume` was in the schema and read by nothing. It is now a gain **after** `loudnorm`
+  (before, the normaliser would undo it), written only when it is not 1 so existing renders are
+  byte-identical; and the panel stops at 100% because the preview cannot play a boost.
+
+The Audio row draws transcript word density until Slice 11 replaces it with real peaks; nothing in
+this slice generates media.
+
 ---
 
 ### Slice 11 — Timeline media evidence
@@ -542,6 +563,24 @@ from timeline layout.
 
 **Coverage:** peaks derive from audio rather than from transcript word density; a failed frame
 extraction produces a placeholder rather than a misleading solid colour.
+
+**Built 2026-09-04 (#67, stacked on #65).** Both behaviour bullets, with both coverage bullets as
+browser tests through the real editor and the reductions unit tested. Landed in six commits: the
+WAV range-and-peaks maths, then the peaks route with a ranged read on both storage providers, then
+the Audio row drawing from it, then the Video row's frames, then the decisions.
+
+Two things found on the way that were not in the plan, both recorded in DECISIONS.md:
+
+- **Peaks go through the app, by the minute.** The media route redirects to a signed object URL
+  in production, so a browser reading the probe's WAV would need the bucket to speak CORS; a
+  same-origin route reads the WAV by byte range instead, and the browser keeps a minute of peaks
+  at a time so any window is a local reduction and a drag never waits on a request. Nothing new
+  is stored, which keeps the thumbnails decision's line: the WAV the probe already writes is the
+  only artifact. Missing audio is a labelled fallback to the transcript's density, not a fault.
+- **A frame is drawn when `readyState` says it can be.** `requestVideoFrameCallback` reports only
+  frames the browser presents, and the extractor is kept out of sight, so the first draft timed out
+  on every seek. `seeked` plus HAVE_CURRENT_DATA is the spec's guarantee, and holds for a hidden
+  element; it is also exactly what the blue strip lacked.
 
 ---
 
@@ -565,6 +604,32 @@ protected billing block. Doing it last keeps that risk away from every functiona
 **Hard constraint:** the billing-state badge in the app shell is not touched by this slice or any
 other. It now resolves through an exhaustive `workspaceAccessLabel` switch, so dropping a state is a
 compile error; do not reintroduce an inline conditional there.
+
+**Built 2026-09-04 (#68, stacked on #67).** Every structural bullet, in six commits: the panel
+arithmetic, the four areas with their dividers, the header and its single export entry, the hover
+descriptions, the editable title, and the decisions. `panel-resize.ts` is created here, as §1 said
+it must be.
+
+**One bullet is not built, and two claims in this section turned out to be untrue of this
+repository.** All three are recorded in DECISIONS.md and are the product owner's to settle:
+
+- **The visual system.** "The black, white, and red visual system stays" describes the prototype in
+  `MOZI_REDESIGN_1_0_CLAUDE_HANDOFF_2026-08-17.md`, which is not in this repository. This
+  application has been stone and teal since Phase 1, and its timeline was reviewed and approved in
+  that palette on 2026-09-04. The area headings are set in the application's own accent, and
+  nothing was re-skinned.
+- **The hard constraint's own premise.** There is no `workspaceAccessLabel` anywhere, and the app
+  shell still holds the nested inline conditional the constraint forbids reintroducing. Since the
+  same sentence says the badge is touched by no slice, it was left exactly as it is. The risk it
+  warns about is live: a fifth access state would fall through to "Trial ended · Read-only" with no
+  compile error.
+- **Five words.** Kept as a target the title field counts against rather than a limit it enforces —
+  every clip generated before the rule has a longer title, the demo sermon's being nine words.
+
+Two smaller findings, also recorded: export opens in a drawer rather than a modal, because an
+export can be refused for something the member must fix in another panel; and the approval notice
+moved out of the export panel into the editor, since it is about publishing and not about the
+download it was hiding behind.
 
 ---
 

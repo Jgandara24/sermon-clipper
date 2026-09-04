@@ -48,6 +48,7 @@ export function ScriptEditorPanel({
             type="button"
             onClick={onExtendBefore}
             disabled={!canExtendBefore}
+            title="Take fifteen more seconds of the service before this clip"
             className="rounded-md border border-stone-300 px-2 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-40"
           >
             + Extend before
@@ -56,6 +57,7 @@ export function ScriptEditorPanel({
             type="button"
             onClick={onExtendAfter}
             disabled={!canExtendAfter}
+            title="Take fifteen more seconds of the service after this clip"
             className="rounded-md border border-stone-300 px-2 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-40"
           >
             + Extend after
@@ -78,6 +80,7 @@ export function ScriptEditorPanel({
           <button
             type="button"
             onClick={onRestoreAllWords}
+            title="Put back every word an older edit cut out of the middle"
             className="mt-2 rounded-md border border-amber-400 px-2 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
           >
             Restore all deleted words

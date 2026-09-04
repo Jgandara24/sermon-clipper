@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   AuthProvider,
   GeneratedClipStatus,
@@ -222,6 +222,13 @@ test.afterAll(async () => {
   await prisma.$disconnect();
 });
 
+/** Export is reached from the editor's header now, so the drawer has to be open first. */
+async function openExport(page: Page) {
+  if (await page.getByRole("button", { name: "Export 9:16 MP4" }).isVisible()) return;
+  await page.getByTestId("editor-header").getByRole("button", { name: "Export MP4" }).click();
+  await expect(page.getByTestId("export-dialog")).toBeVisible();
+}
+
 test.describe("Phase 6/7 browser workflow", () => {
   let fixture: Fixture;
 
@@ -268,6 +275,7 @@ test.describe("Phase 6/7 browser workflow", () => {
       page.getByText(/Send this clip for approval before publishing or scheduling it/i),
     ).toBeVisible();
     await expect(page.getByText(/before exporting/i)).toHaveCount(0);
+    await openExport(page);
     await expect(page.getByRole("button", { name: "Export 9:16 MP4" })).toBeEnabled();
 
     await page.goto(`/app/projects/${fixture.projectId}`);
@@ -281,6 +289,7 @@ test.describe("Phase 6/7 browser workflow", () => {
     await expect(page.getByText(/approved/i)).toBeVisible();
 
     await page.goto(`/app/clips/${fixture.clipId}/editor`);
+    await openExport(page);
     const exportButton = page.getByRole("button", { name: "Export 9:16 MP4" });
     await expect(exportButton).toBeEnabled();
     await exportButton.click();

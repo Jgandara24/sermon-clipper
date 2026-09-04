@@ -47,17 +47,7 @@ function StatusLine({ status }: { status: ExportStatus }) {
   return null;
 }
 
-export function ExportPanel({
-  clipId,
-  publishBlockedReason,
-}: {
-  clipId: string;
-  /**
-   * Informational only. Editorial approval gates publishing and scheduling, never a manual
-   * export — a downloaded MP4 reaches no audience by itself.
-   */
-  publishBlockedReason: string | null;
-}) {
+export function ExportPanel({ clipId }: { clipId: string }) {
   const [status, setStatus] = useState<ExportStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -120,6 +110,7 @@ export function ExportPanel({
           <button
             type="button"
             onClick={handleRetry}
+            title="Run this export again"
             className="inline-flex items-center gap-1 text-xs font-medium text-teal-800 hover:underline"
           >
             <RefreshCw size={12} aria-hidden="true" />
@@ -132,6 +123,7 @@ export function ExportPanel({
         <button
           type="button"
           onClick={handleExport}
+          title="Render this clip as an MP4 with the edits you have made"
           disabled={isStarting}
           className="inline-flex w-fit items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
         >
@@ -152,12 +144,6 @@ export function ExportPanel({
         Renders your saved edit — trim, crop, captions, and lower-third — into a downloadable MP4.
         Approval is not needed to download.
       </p>
-
-      {publishBlockedReason ? (
-        <p className="rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700">
-          {publishBlockedReason}
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -42,6 +42,7 @@ export function BrandTemplatePanel({
           <button
             type="button"
             onClick={() => onApply(null)}
+            title="Render this clip with no church branding"
             className={`rounded-md border px-3 py-2 text-left text-sm ${
               selectedId === null
                 ? "border-stone-900 bg-stone-100"
@@ -55,6 +56,7 @@ export function BrandTemplatePanel({
               key={template.id}
               type="button"
               onClick={() => onApply(template)}
+              title={`Use ${template.name}: its colours, caption style and lower third`}
               className={`rounded-md border px-3 py-2 text-left text-sm ${
                 selectedId === template.id
                   ? "border-teal-700 bg-teal-50 text-teal-900"

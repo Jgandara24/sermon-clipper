@@ -264,7 +264,7 @@ test.describe("Editor playback and transport", () => {
 
   test("clicking the video surface toggles play and pause", async ({ page }) => {
     await openEditor(page, fixture.clipId);
-    const video = page.locator("video");
+    const video = page.getByTestId("canvas-content").locator("video");
 
     await video.click({ position: { x: 20, y: 20 } });
     await expect(centrePlay(page)).toBeHidden();
@@ -283,6 +283,6 @@ test.describe("Editor playback and transport", () => {
     // It reaches the end and pauses there; it does not wrap round to 0:00 and keep going.
     await expect(centrePlay(page)).toBeVisible({ timeout: 20_000 });
     await expect(position(page)).toHaveText("0:04");
-    expect(await page.locator("video").evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
+    expect(await page.getByTestId("canvas-content").locator("video").evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
   });
 });

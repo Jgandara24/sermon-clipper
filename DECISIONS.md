@@ -2842,3 +2842,233 @@ that is addressed, which is another reason not to invent a switching model ahead
 
 Status: Active. The Title track — region drag and start/end trim — follows in this slice; the
 track-to-panel switching is deferred to Slice 10 and should be listed there.
+
+## 2026-09-03 - The Timeline Is One Surface, And Every Row Is Drawn On Its Window
+
+Decision: the timeline is one pointer surface with a Title row, a Video row and an Audio row
+stacked inside it, all drawn on the one window `computeTrimViewport` produces. The row labels sit
+in a column outside the surface. The playhead's knob lives in a strip above the rows, and its line
+runs down through all three. Timeline zoom is a magnification of the window's padding — view
+state, never saved — and the trim clamps do not take it.
+
+Why: Slice 10 says the three rows are always shown separately, that clicking a row opens its
+settings, and that zoom exposes more or less of the source without changing the trim limits. Three
+separate tracks each with a pointer-to-time mapping of their own is three places for the rows to
+disagree about where a second is. One surface, one `getBoundingClientRect`, one `msToPct`: the
+Title row (`TitleTrack`) is mounted inside it and handed the same window, and it claims its own
+gestures and stops them propagating, so the surface underneath does not also take them as a scrub.
+The Audio row only draws what `wordDensityBars` hands it.
+
+The playhead's knob moved for the reason it was separated from the handles in the first place (the
+2026-08-21 entry): the handles own the Video row, the knob owns the strip above every row, and
+neither can take a gesture aimed at the other. With a Title row between them they are further
+apart than before, not closer.
+
+Three things found on the way that the plan does not say:
+
+1. **The plan's "15 seconds of unused source" is a floor, not the padding.** `computeTrimViewport`
+   pads by the clip's own length, clamped between 15s and 60s: a 30s clip shows 30s on each side,
+   a 5s clip shows 15s. That predates the plan and is what every test and every member has seen.
+   It stays. Zoom is the control for "more, or less", and the plan's number is exactly what a
+   short clip gets. Changing the default would move what every editor opens to for no behaviour
+   bullet's gain.
+2. **Zoom is magnification, applied to the padding only.** 2 halves the padding, 0.5 doubles it,
+   in steps of two between 0.25 and 8. The clip is inside the window whole at every zoom, so both
+   handles are always reachable, and the media bounds clamp exactly as they do at 1. The clamp
+   helpers do not take a zoom, and the trim test states that by their arity: a zoom parameter
+   added to any of them fails and has to explain itself.
+3. **The empty Title row offers a title rather than making one.** Slice 9's bullet says selecting
+   the empty Title track recreates the default. The row shows an "Add a title" offer inside the
+   clip's span; taking it writes the default and opens Title settings. Pressing the row anywhere
+   else only selects the track. A click that silently put a dismissed title back would undo what
+   the 2026-09-02 title-panel entry made sure of: a title the member removed stays removed.
+
+Tradeoff: the surface is one element with three rows in it, so a row cannot be mounted somewhere
+else on its own — the Title row is a child of the timeline, not the sibling of it that Slice 9
+shipped. That is the shape the plan describes. The ruler strip is the playhead's alone for now;
+tick marks can go there when they are wanted.
+
+Status: Active. Slice 11 replaces the Audio row's bars with real peaks and puts frames on the
+Video row; it changes what the rows draw, not the surface they draw on.
+
+## 2026-09-03 - Track Selection Is View State, And Video Is The Default
+
+Decision: which of Captions, Title or Audio settings is shown follows the selected track, held in
+the editor as view state. It is never saved. The editor opens on Video, which shows Captions —
+what every clip opened to before this slice, so nothing a member is used to moved. Brand, Layout,
+the transcript and Export stay where they are, always visible: the plan names only the three.
+
+Why: the bullet — Title opens Title settings, Video returns to Caption Style, Audio opens Audio
+settings — passed manual review in the prototype, so it is preserved, not designed. Saving the
+selection would make a version out of a click, and the playhead entry already settled that a
+gesture which changes nothing in the document writes nothing.
+
+The selection happens on a capture-phase pointer-down on the surface as well as on the labels, so
+dragging a title handle selects the Title track on the way, and it happens before the Title row
+stops the gesture propagating. The transport moved above the tracks in this slice as well: the
+video element stays in the preview and hands the timeline the three things the buttons may ask of
+it.
+
+Tradeoff: a member who wants Captions and Title settings side by side cannot have them. That is
+what the prototype had.
+
+Status: Active.
+
+## 2026-09-03 - Original Volume Is A Gain After Normalisation, Capped Where The Preview Can Follow
+
+Decision: `audio.originalVolume` — in the schema since the first document, read by nothing until
+now — is a factor applied to the sermon's own sound. The preview sets the video element's volume
+to it. The export applies it as a `volume` filter **after** `loudnorm`, and only when it is not 1,
+so a document that never touched the control renders the same bytes it always did. The panel's
+slider runs from 0 to 100 percent although the schema allows a factor of 2.
+
+Why: the export normalises loudness to a fixed target, so a gain applied before `loudnorm` would
+be undone by it. After it, "half as loud" means half as loud in the file, which is what it means in
+the preview. That is the parity this plan exists for: a control the preview shows and the export
+ignores is the defect the title work was built to avoid, so the Audio panel did not ship without
+the export reading the same number.
+
+The cap is the preview's: a video element cannot play louder than its source, and a boost the
+preview cannot play is a control the member cannot hear. A boost waits for a preview that can play
+one (a gain node), and the schema's 2 is already there for it.
+
+Tradeoff: a gain after normalisation can push peaks past the true-peak ceiling `loudnorm` set. Only
+a boost does that, and the control does not offer one yet.
+
+Status: Active.
+
+## 2026-09-04 - Audio Peaks Are Read From The Probe's WAV By Range, Through The App
+
+Decision: the timeline's Audio row draws real amplitude from the 16kHz mono WAV the probe already
+writes for transcription. A same-origin route, `GET /api/videos/[id]/peaks`, reads the WAV by byte
+range — the header once, then only the frames of the window asked for — and answers one peak per
+bucket. The browser asks by the minute at twenty peaks a second, keeps every chunk for the life of
+the editor, and reduces whatever window it shows from those chunks locally. Nothing new is stored.
+
+Why through the app and not from the browser: in production the media route redirects to a signed
+object URL, and a browser reading the WAV from there would need the bucket to speak CORS. Reading
+the range on the server needs nothing new — both storage providers gained a ranged read shaped
+like an HTTP 206 — and the browser receives a few hundred numbers instead of megabytes of PCM.
+
+Why not a derived artifact: that is the line the 2026-08-20 thumbnails entry drew. A stored peaks
+file would need a storage key and a retention class, which is P4's `timeline_view` work. The WAV
+is the only artifact, and it is one the pipeline already owns.
+
+Why chunks on the source timeline rather than the window: a drag moves the window every frame,
+and a row that had to ask the server for each one would lag it. With chunks kept by minute, the
+bars for any window at any zoom are a pure reduction (`peakBars`, the same shape `wordDensityBars`
+has), and a window that has been looked at costs nothing to look at again.
+
+Two things worth naming:
+
+- **A window is scaled to its own loudest bar, with a floor.** Absolute amplitude made sermon
+  speech a row of short bars. `normalisePeaks` scales so the loudest bar in view is full height
+  and a quiet passage still reads as a shape, but never below a noise floor, so near-silence stays
+  flat instead of being blown up. Zooming rescales, as the density bars already did.
+- **Missing audio is a fallback, not a fault.** A video with no `audioKey`, or a key whose object
+  retention removed (extracted audio is "cheaply re-derivable"), is a 404: the row draws the
+  transcript's density instead and says so in `data-source`. A WAV that cannot be parsed is a
+  500, because the probe wrote something wrong and that is worth a report.
+
+Tradeoff: the first look at a window costs a server read of about two megabytes of WAV per minute
+shown, and the bars a member sees are relative to the window rather than to the file. Both are
+accepted for a row that moves with the drag.
+
+Status: Active.
+
+## 2026-09-04 - A Frame Is Drawn When readyState Says It Can Be, Not When The Browser Presents It
+
+Decision: the Video row's frames come from a second, hidden video element on the same signed URL,
+one seek at a time while the window is settled, and a frame is drawn only after `seeked` has fired
+and `readyState` has reached HAVE_CURRENT_DATA (waiting on `loadeddata` when it has not). A seek
+that fails is retried once; a frame that still cannot be produced is a neutral placeholder; a
+source that will not play makes every tile a placeholder and asks for nothing more. Tile times sit
+on a 250ms grid and made frames are kept, so a window that shifts a little reuses what it has.
+
+Why this and not `requestVideoFrameCallback`: the first draft waited on it, because "a frame was
+presented" is the strongest statement a browser makes. It only makes it for a video it is
+presenting, and the extractor is kept out of sight — one pixel, transparent — so every seek timed
+out and no tile was ever ready. The spec's other guarantee is readyState: at HAVE_CURRENT_DATA the
+frame for the current position is available to draw. That holds for a hidden element, and it is
+what the blue strip lacked: the old code drew on `seeked` alone, before any frame was decoded.
+
+Why the extractor is a second element and not the preview: seeking the preview to make thumbnails
+would move the member's playhead a dozen times on every window change.
+
+Why the wait after readyState is a timer and not an animation frame: a background tab gets no
+animation frames at all. The first version of this waited on one, and on the demo sermon — with
+the editor's tab behind another window — every seek landed within 160ms and every tile still
+turned into a placeholder, one eight-second timeout at a time. Timers run in a hidden tab, slowed
+but not stopped. The clip's own tiles are also made first, and the context around them after.
+
+Why metadata only: `preload="auto"` would download the sermon whole. A seek fetches the range it
+needs, which the media route already serves.
+
+Tradeoff: extraction is still browser-side and spends the viewer's bandwidth and CPU, as the
+2026-08-20 entry accepted until P4's worker filmstrips. And the browser tests read tile pixels to
+prove the frames are not a single colour, which they can only do against the local storage
+provider: in production the canvas is tainted by the cross-origin object URL, which is fine for
+showing frames and irrelevant to the test.
+
+Status: Active.
+
+## 2026-09-04 - The Plan's Visual System Is The Prototype's, Not This Application's
+
+Decision: Slice 12's structural bullets are built — four named areas, centred headings, draggable
+dividers, a header carrying every action, one export entry point, a hover description on every
+control — and its one colour bullet is not. The headings are set in the application's own accent
+rather than red, and the stone-and-teal system stays.
+
+Why: the bullet reads "The black, white, and red visual system **stays**", which describes
+something already true of the thing it was written about. It is not true of this application,
+which has been stone and teal since Phase 1, and whose timeline Jake reviewed and approved in
+exactly that palette on 2026-09-04. The plan's own §1 names its source as
+`MOZI_REDESIGN_1_0_CLAUDE_HANDOFF_2026-08-17.md`, a document that is not in this repository, so
+the prototype's palette cannot be read from anything here either. Re-skinning every screen a
+church sees, on a sentence that assumes the change has already happened, is not a call to make
+unattended — and "red headings" against a teal system would be the one wrong half of it.
+
+Tradeoff: if the prototype's palette really is where this product is going, that work is still to
+do, and this slice has added four headings that will need recolouring with everything else.
+
+Status: **Open for the product owner.** Everything else in Slice 12 is done.
+
+## 2026-09-04 - The Billing Badge's Exhaustive Switch Does Not Exist, And Was Left Alone
+
+Decision: `src/components/app-shell.tsx` still resolves the workspace's billing state through a
+nested inline conditional, and this slice did not touch it.
+
+Why: Slice 12's hard constraint says the badge "now resolves through an exhaustive
+`workspaceAccessLabel` switch, so dropping a state is a compile error; do not reintroduce an
+inline conditional there." No such function exists anywhere in the repository, and the inline
+conditional the constraint forbids reintroducing is what is there. The same sentence also says the
+badge "is not touched by this slice or any other" — so writing the switch it wishes existed would
+break the rule in order to satisfy the rule. The absolute half wins: nothing was touched.
+
+The risk the constraint is about is real and still open. Adding a fifth access state would leave
+that chain falling through to "Trial ended · Read-only", silently, with no compile error.
+
+Tradeoff: recording a defect rather than fixing a four-line function feels thin. Fixing it means
+editing the one file the plan protects, which is a change the product owner should authorise
+deliberately.
+
+Status: **Open for the product owner.** Named here so it is not lost.
+
+## 2026-09-04 - Five Words Is A Title Target, And Export Is Not A Modal
+
+Decision: two smaller calls made while building Slice 12.
+
+**A clip title of five words is a target, not a limit.** The header's field counts the words, says
+when a title has run past five, and saves it regardless. Every clip generated before this rule has
+a longer title — the demo sermon's is nine words — and refusing to save a name a church already
+approved, or truncating it on screen, would be a worse fault than a long title. Renaming writes
+straight to the clip and never creates an editor version: a clip's name is not part of what the
+clip contains.
+
+**The export drawer is not a modal.** An export can be refused for something the member must fix
+in another panel: a clip carrying old word cuts is refused, and the refusal names the control in
+the Script panel that puts them back. A dialog that swallowed the page would name a way out it had
+just taken away. The transcript suite proved it — the modal version timed out clicking the control
+its own refusal recommends. Escape still closes it, and the header button is still the only way in.
+
+Status: Active.
