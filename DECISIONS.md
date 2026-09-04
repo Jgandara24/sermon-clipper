@@ -2936,3 +2936,72 @@ Tradeoff: a gain after normalisation can push peaks past the true-peak ceiling `
 a boost does that, and the control does not offer one yet.
 
 Status: Active.
+
+## 2026-09-04 - Audio Peaks Are Read From The Probe's WAV By Range, Through The App
+
+Decision: the timeline's Audio row draws real amplitude from the 16kHz mono WAV the probe already
+writes for transcription. A same-origin route, `GET /api/videos/[id]/peaks`, reads the WAV by byte
+range — the header once, then only the frames of the window asked for — and answers one peak per
+bucket. The browser asks by the minute at twenty peaks a second, keeps every chunk for the life of
+the editor, and reduces whatever window it shows from those chunks locally. Nothing new is stored.
+
+Why through the app and not from the browser: in production the media route redirects to a signed
+object URL, and a browser reading the WAV from there would need the bucket to speak CORS. Reading
+the range on the server needs nothing new — both storage providers gained a ranged read shaped
+like an HTTP 206 — and the browser receives a few hundred numbers instead of megabytes of PCM.
+
+Why not a derived artifact: that is the line the 2026-08-20 thumbnails entry drew. A stored peaks
+file would need a storage key and a retention class, which is P4's `timeline_view` work. The WAV
+is the only artifact, and it is one the pipeline already owns.
+
+Why chunks on the source timeline rather than the window: a drag moves the window every frame,
+and a row that had to ask the server for each one would lag it. With chunks kept by minute, the
+bars for any window at any zoom are a pure reduction (`peakBars`, the same shape `wordDensityBars`
+has), and a window that has been looked at costs nothing to look at again.
+
+Two things worth naming:
+
+- **A window is scaled to its own loudest bar, with a floor.** Absolute amplitude made sermon
+  speech a row of short bars. `normalisePeaks` scales so the loudest bar in view is full height
+  and a quiet passage still reads as a shape, but never below a noise floor, so near-silence stays
+  flat instead of being blown up. Zooming rescales, as the density bars already did.
+- **Missing audio is a fallback, not a fault.** A video with no `audioKey`, or a key whose object
+  retention removed (extracted audio is "cheaply re-derivable"), is a 404: the row draws the
+  transcript's density instead and says so in `data-source`. A WAV that cannot be parsed is a
+  500, because the probe wrote something wrong and that is worth a report.
+
+Tradeoff: the first look at a window costs a server read of about two megabytes of WAV per minute
+shown, and the bars a member sees are relative to the window rather than to the file. Both are
+accepted for a row that moves with the drag.
+
+Status: Active.
+
+## 2026-09-04 - A Frame Is Drawn When readyState Says It Can Be, Not When The Browser Presents It
+
+Decision: the Video row's frames come from a second, hidden video element on the same signed URL,
+one seek at a time while the window is settled, and a frame is drawn only after `seeked` has fired
+and `readyState` has reached HAVE_CURRENT_DATA (waiting on `loadeddata` when it has not). A seek
+that fails is retried once; a frame that still cannot be produced is a neutral placeholder; a
+source that will not play makes every tile a placeholder and asks for nothing more. Tile times sit
+on a 250ms grid and made frames are kept, so a window that shifts a little reuses what it has.
+
+Why this and not `requestVideoFrameCallback`: the first draft waited on it, because "a frame was
+presented" is the strongest statement a browser makes. It only makes it for a video it is
+presenting, and the extractor is kept out of sight — one pixel, transparent — so every seek timed
+out and no tile was ever ready. The spec's other guarantee is readyState: at HAVE_CURRENT_DATA the
+frame for the current position is available to draw. That holds for a hidden element, and it is
+what the blue strip lacked: the old code drew on `seeked` alone, before any frame was decoded.
+
+Why the extractor is a second element and not the preview: seeking the preview to make thumbnails
+would move the member's playhead a dozen times on every window change.
+
+Why metadata only: `preload="auto"` would download the sermon whole. A seek fetches the range it
+needs, which the media route already serves.
+
+Tradeoff: extraction is still browser-side and spends the viewer's bandwidth and CPU, as the
+2026-08-20 entry accepted until P4's worker filmstrips. And the browser tests read tile pixels to
+prove the frames are not a single colour, which they can only do against the local storage
+provider: in production the canvas is tainted by the cross-origin object URL, which is fine for
+showing frames and irrelevant to the test.
+
+Status: Active.
