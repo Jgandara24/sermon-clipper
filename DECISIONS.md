@@ -3157,6 +3157,18 @@ point. They coincide at exactly one block height and diverge either side of it: 
 hangs below the burn-in's anchor, a shorter one sits above it. Nothing in the parity gate asserts
 this, deliberately — an assertion either way would freeze one of the two answers.
 
+**Measured on a real exported frame**, rather than only from the constants. A one-row caption at
+52px in a 1080x1920 export inks from x=84 to x=995 and from y=1642 to y=1693:
+
+- It sits *inside* the guide's side band, because it is not wide enough to reach the 40px margin.
+  The overlap is a permission, not a certainty: the margin lets ink reach x=40 and x=1040, which is
+  24.8px into the band on each side, and only a caption wide enough to fill the line gets there.
+- Its bottom edge lands on y=1693, three pixels of outline past the burn-in's y=1690 anchor and so
+  just inside the 12 percent bottom band the guide draws.
+- Its own centre is therefore y=1667.5, while the preview would centre the same block on y=1651.2 —
+  **16.3px higher**, for this caption. A two-row caption moves that number, in the opposite
+  direction, because the two anchors scale differently with block height.
+
 Tradeoff: the gate is silent about the one thing it is best placed to measure. Recording the
 measurement is the whole of what this slice is allowed to do with it.
 
