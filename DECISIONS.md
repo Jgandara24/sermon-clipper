@@ -3031,7 +3031,9 @@ unattended — and "red headings" against a teal system would be the one wrong h
 Tradeoff: if the prototype's palette really is where this product is going, that work is still to
 do, and this slice has added four headings that will need recolouring with everything else.
 
-Status: **Open for the product owner.** Everything else in Slice 12 is done.
+Status: **Settled by the product owner, 2026-09-04.** The application stays stone and teal. The
+prototype's black, white and red is not adopted, here or later, and the four area headings keep the
+application's own accent. Everything else in Slice 12 is done.
 
 ## 2026-09-04 - The Billing Badge's Exhaustive Switch Does Not Exist, And Was Left Alone
 

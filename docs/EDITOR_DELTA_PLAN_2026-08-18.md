@@ -617,7 +617,8 @@ repository.** All three are recorded in DECISIONS.md and are the product owner's
   `MOZI_REDESIGN_1_0_CLAUDE_HANDOFF_2026-08-17.md`, which is not in this repository. This
   application has been stone and teal since Phase 1, and its timeline was reviewed and approved in
   that palette on 2026-09-04. The area headings are set in the application's own accent, and
-  nothing was re-skinned.
+  nothing was re-skinned. **Settled 2026-09-04: the application stays stone and teal, and the
+  prototype's palette is not adopted.**
 - **The hard constraint's own premise.** There is no `workspaceAccessLabel` anywhere, and the app
   shell still holds the nested inline conditional the constraint forbids reintroducing. Since the
   same sentence says the badge is touched by no slice, it was left exactly as it is. The risk it
