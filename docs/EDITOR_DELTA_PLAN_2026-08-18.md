@@ -564,6 +564,24 @@ this slice generates media.
 **Coverage:** peaks derive from audio rather than from transcript word density; a failed frame
 extraction produces a placeholder rather than a misleading solid colour.
 
+**Built 2026-09-04 (#67, stacked on #65).** Both behaviour bullets, with both coverage bullets as
+browser tests through the real editor and the reductions unit tested. Landed in six commits: the
+WAV range-and-peaks maths, then the peaks route with a ranged read on both storage providers, then
+the Audio row drawing from it, then the Video row's frames, then the decisions.
+
+Two things found on the way that were not in the plan, both recorded in DECISIONS.md:
+
+- **Peaks go through the app, by the minute.** The media route redirects to a signed object URL
+  in production, so a browser reading the probe's WAV would need the bucket to speak CORS; a
+  same-origin route reads the WAV by byte range instead, and the browser keeps a minute of peaks
+  at a time so any window is a local reduction and a drag never waits on a request. Nothing new
+  is stored, which keeps the thumbnails decision's line: the WAV the probe already writes is the
+  only artifact. Missing audio is a labelled fallback to the transcript's density, not a fault.
+- **A frame is drawn when `readyState` says it can be.** `requestVideoFrameCallback` reports only
+  frames the browser presents, and the extractor is kept out of sight, so the first draft timed out
+  on every seek. `seeked` plus HAVE_CURRENT_DATA is the spec's guarantee, and holds for a hidden
+  element; it is also exactly what the blue strip lacked.
+
 ---
 
 ### Slice 12 — Shell and header polish
