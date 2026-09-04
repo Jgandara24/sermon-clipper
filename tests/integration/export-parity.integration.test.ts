@@ -625,3 +625,54 @@ describe("one real export, checked against the document the editor shows", () =>
     expect(whitePixels(await frameAt(filePath, afterS))).toBe(0);
   }, 180_000);
 });
+
+/**
+ * Audio volume is the newest thing in the document to reach both renderers, and the one with no
+ * pixels to check. `audio.originalVolume` sets the preview's video element volume and, in the
+ * export, a `volume` filter after loudnorm — so the claim to prove is arithmetic: half is half.
+ */
+describe("the document's original volume reaches the file", () => {
+  let atFullVolume: string;
+  let atHalfVolume: string;
+
+  beforeAll(async () => {
+    atFullVolume = (await exportDocument(parityDocument(sourceVideoId, 1), "volume-full")).filePath;
+    atHalfVolume = (await exportDocument(parityDocument(sourceVideoId, 0.5), "volume-half")).filePath;
+  }, 300_000);
+
+  it("renders a 0.5 document quieter than a 1.0 one by exactly the ratio", async () => {
+    const full = await rmsLevelDb(atFullVolume);
+    const half = await rmsLevelDb(atHalfVolume);
+
+    // A gain of 0.5 is -6.02dB. The gain is applied after loudnorm, so nothing normalises it away:
+    // before that decision it would have been, and these two files would have measured the same.
+    const expectedDrop = 20 * Math.log10(0.5);
+    expect(half - full).toBeCloseTo(expectedDrop, 1);
+  }, 180_000);
+
+  it("renders a 1.0 document byte-for-byte as it rendered before the control existed", async () => {
+    // "Before" is not a description: it is `originalVolume: undefined`, the argument shape that
+    // predates the control, which buildExportAudioFilter turns into a bare loudnorm. A 1.0
+    // document must take that same path, or every clip a church already approved re-renders.
+    const plan = renderPlanFor(parityDocument(sourceVideoId, 1));
+    const storage = getStorageProvider();
+    const workDir = await mkdtemp(path.join(os.tmpdir(), "parity-before-"));
+    try {
+      const beforePath = path.join(workDir, "before.mp4");
+      await renderClipExport({
+        sourceFilePath: storage.absolutePath(sourceStorageKey),
+        keptRanges: plan.keptRanges,
+        cropPixels: plan.cropPixels,
+        assFileContent: plan.assContent,
+        outputPath: beforePath,
+        outputWidth: OUT_W,
+        outputHeight: OUT_H,
+        originalVolume: undefined,
+      });
+
+      expect(await sha256(beforePath)).toBe(await sha256(atFullVolume));
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }, 300_000);
+});
