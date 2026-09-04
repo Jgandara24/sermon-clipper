@@ -3035,10 +3035,16 @@ Status: **Settled by the product owner, 2026-09-04.** The application stays ston
 prototype's black, white and red is not adopted, here or later, and the four area headings keep the
 application's own accent. Everything else in Slice 12 is done.
 
-## 2026-09-04 - The Billing Badge's Exhaustive Switch Does Not Exist, And Was Left Alone
+## 2026-09-04 - The Billing Badge's Exhaustive Switch Now Exists, By Authorised Exception
 
-Decision: `src/components/app-shell.tsx` still resolves the workspace's billing state through a
-nested inline conditional, and this slice did not touch it.
+Decision: `workspaceAccessLabel(state)` now exists in `src/lib/billing/access.ts` as an exhaustive
+`switch` with a `never` check, and `src/components/app-shell.tsx` calls it where the nested inline
+conditional used to be. Nothing else in that file changed.
+
+Slice 12 recorded this as a defect and left it, because the same sentence that demanded the switch
+also said the badge is touched by no slice. The product owner authorised the one deliberate
+exception on 2026-09-04, in Slice 13: write the function, unit-test every state and the exact four
+strings the badge already showed, swap the conditional for the call, and change nothing else.
 
 Why: Slice 12's hard constraint says the badge "now resolves through an exhaustive
 `workspaceAccessLabel` switch, so dropping a state is a compile error; do not reintroduce an
@@ -3050,11 +3056,12 @@ break the rule in order to satisfy the rule. The absolute half wins: nothing was
 The risk the constraint is about is real and still open. Adding a fifth access state would leave
 that chain falling through to "Trial ended · Read-only", silently, with no compile error.
 
-Tradeoff: recording a defect rather than fixing a four-line function feels thin. Fixing it means
-editing the one file the plan protects, which is a change the product owner should authorise
-deliberately.
+Tradeoff: one protected file was edited, on an explicit authorisation rather than on a slice's own
+judgement. The badge renders the same four strings it always did, and the unit test pins them, so
+the exception buys the compile error without changing what a church reads.
 
-Status: **Open for the product owner.** Named here so it is not lost.
+Status: **Settled by the product owner, 2026-09-04.** The exception was authorised; the switch is
+built and the risk the constraint warned about is closed.
 
 ## 2026-09-04 - Five Words Is A Title Target, And Export Is Not A Modal
 

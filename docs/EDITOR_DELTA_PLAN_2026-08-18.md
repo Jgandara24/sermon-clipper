@@ -623,7 +623,8 @@ repository.** All three are recorded in DECISIONS.md and are the product owner's
   shell still holds the nested inline conditional the constraint forbids reintroducing. Since the
   same sentence says the badge is touched by no slice, it was left exactly as it is. The risk it
   warns about is live: a fifth access state would fall through to "Trial ended · Read-only" with no
-  compile error.
+  compile error. **Settled 2026-09-04: Slice 13 wrote the switch under a one-time authorised
+  exception, so the constraint's premise is now true.**
 - **Five words.** Kept as a target the title field counts against rather than a limit it enforces —
   every clip generated before the rule has a longer title, the demo sermon's being nine words.
 
