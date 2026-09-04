@@ -460,11 +460,18 @@ export function ClipEditor({
       </header>
 
       {exportOpen ? (
-        <ExportDrawer
-          clipId={clipId}
-          publishBlockedReason={publishReason}
-          onClose={() => setExportOpen(false)}
-        />
+        <ExportDrawer clipId={clipId} onClose={() => setExportOpen(false)} />
+      ) : null}
+
+      {/*
+        Approval gates publishing and scheduling, never a manual download — so this belongs to the
+        editor rather than to the export panel it used to sit in. Inside the drawer it would be
+        hidden until someone opened the one thing it does not apply to.
+      */}
+      {publishReason ? (
+        <p className="rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700">
+          {publishReason}
+        </p>
       ) : null}
 
       {savePhase === "conflict" ? (

@@ -47,17 +47,7 @@ function StatusLine({ status }: { status: ExportStatus }) {
   return null;
 }
 
-export function ExportPanel({
-  clipId,
-  publishBlockedReason,
-}: {
-  clipId: string;
-  /**
-   * Informational only. Editorial approval gates publishing and scheduling, never a manual
-   * export — a downloaded MP4 reaches no audience by itself.
-   */
-  publishBlockedReason: string | null;
-}) {
+export function ExportPanel({ clipId }: { clipId: string }) {
   const [status, setStatus] = useState<ExportStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -154,12 +144,6 @@ export function ExportPanel({
         Renders your saved edit — trim, crop, captions, and lower-third — into a downloadable MP4.
         Approval is not needed to download.
       </p>
-
-      {publishBlockedReason ? (
-        <p className="rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700">
-          {publishBlockedReason}
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -18,11 +18,9 @@ import { ExportPanel } from "@/components/editor/export-panel";
  */
 export function ExportDrawer({
   clipId,
-  publishBlockedReason,
   onClose,
 }: {
   clipId: string;
-  publishBlockedReason: string | null;
   onClose: () => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -56,7 +54,7 @@ export function ExportDrawer({
         </button>
       </div>
       <div className="mt-3">
-        <ExportPanel clipId={clipId} publishBlockedReason={publishBlockedReason} />
+        <ExportPanel clipId={clipId} />
       </div>
     </section>
   );
