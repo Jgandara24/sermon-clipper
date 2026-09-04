@@ -169,6 +169,7 @@ export function TitleTrack({
           <button
             type="button"
             data-testid="title-track-add"
+            title="Add a three-second title at the top of the clip"
             // A press here is taking the offer, not previewing that spot on the surface below.
             onPointerDown={(event) => event.stopPropagation()}
             onClick={onAdd}

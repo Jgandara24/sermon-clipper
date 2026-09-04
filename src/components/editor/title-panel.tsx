@@ -90,6 +90,7 @@ export function TitlePanel({
           <button
             type="button"
             data-testid="title-add"
+            title="Add a three-second title at the top of the clip"
             onClick={() => {
               write(defaultTitleBanner(clip), "immediate");
               onCommit();
@@ -255,6 +256,7 @@ function Choice<T extends string>({
           <button
             key={option.value}
             type="button"
+            title={`${label}: ${option.label}`}
             aria-pressed={value === option.value}
             data-testid={`title-${label.toLowerCase()}-${option.value}`}
             onClick={() => onPick(option.value)}

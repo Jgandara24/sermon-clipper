@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, Redo2, Undo2 } from "lucide-react";
+import { ChevronLeft, Download, Redo2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioPanel } from "@/components/editor/audio-panel";
@@ -12,7 +12,7 @@ import {
 } from "@/components/editor/brand-template-panel";
 import { ClipTimeline, type TimelineTrack } from "@/components/editor/clip-timeline";
 import { EditorColumns } from "@/components/editor/editor-columns";
-import { ExportPanel } from "@/components/editor/export-panel";
+import { ExportDrawer } from "@/components/editor/export-drawer";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { TitlePanel } from "@/components/editor/title-panel";
@@ -104,6 +104,7 @@ export function ClipEditor({
   // Which row's settings are open. View state, never saved: the editor opens on Video, which
   // shows Captions — what every clip opened to before the rows existed.
   const [activeTrack, setActiveTrack] = useState<TimelineTrack>("video");
+  const [exportOpen, setExportOpen] = useState(false);
   // The transport above the tracks drives the preview through this; the preview reports back
   // whether it is playing so the button can say which comes next.
   const transportRef = useRef<PreviewTransport | null>(null);
@@ -388,10 +389,18 @@ export function ClipEditor({
   const redoAvailable = canRedo(history);
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div data-testid="clip-editor" className="grid gap-6">
+      <header
+        data-testid="editor-header"
+        className="flex flex-wrap items-center justify-between gap-3"
+      >
         <div className="flex items-center gap-3">
-          <Link href="../../.." className="text-stone-500 hover:text-stone-700">
+          <Link
+            href="../../.."
+            aria-label="Back to clips"
+            title="Back to this project's clips"
+            className="text-stone-500 hover:text-stone-700"
+          >
             <ChevronLeft size={20} aria-hidden="true" />
           </Link>
           <div>
@@ -422,17 +431,37 @@ export function ClipEditor({
               <Redo2 size={16} aria-hidden="true" />
             </button>
           </div>
-          <SaveStatusLabel phase={savePhase} hasUnsavedChanges={hasUnsavedChanges} />
+          <span data-testid="save-status">
+            <SaveStatusLabel phase={savePhase} hasUnsavedChanges={hasUnsavedChanges} />
+          </span>
           <button
             type="button"
             onClick={handleSaveNow}
             disabled={savePhase === "saving"}
+            title="Write this edit now, rather than waiting for the editor to save it"
             className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
           >
-            Save
+            Save changes
+          </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            title="Render this clip as an MP4 you can download"
+            className="inline-flex items-center gap-2 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-50"
+          >
+            <Download size={16} aria-hidden="true" />
+            Export MP4
           </button>
         </div>
-      </div>
+      </header>
+
+      {exportOpen ? (
+        <ExportDrawer
+          clipId={clipId}
+          publishBlockedReason={publishReason}
+          onClose={() => setExportOpen(false)}
+        />
+      ) : null}
 
       {savePhase === "conflict" ? (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -551,7 +580,6 @@ export function ClipEditor({
               onChange={(layout, mode) => updateState((prev) => ({ ...prev, layout }), mode)}
               onCommit={commitNow}
             />
-            <ExportPanel clipId={clipId} publishBlockedReason={publishReason} />
           </div>
         }
         timeline={

@@ -575,6 +575,7 @@ function RowLabel({
       <button
         type="button"
         data-testid={`track-select-${track}`}
+        title={`Show the ${track} settings`}
         aria-pressed={active}
         onClick={() => onSelect(track)}
         className={`w-full rounded-md border px-2 py-1 text-left ${

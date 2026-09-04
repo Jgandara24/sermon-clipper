@@ -120,6 +120,7 @@ export function ExportPanel({
           <button
             type="button"
             onClick={handleRetry}
+            title="Run this export again"
             className="inline-flex items-center gap-1 text-xs font-medium text-teal-800 hover:underline"
           >
             <RefreshCw size={12} aria-hidden="true" />
@@ -132,6 +133,7 @@ export function ExportPanel({
         <button
           type="button"
           onClick={handleExport}
+          title="Render this clip as an MP4 with the edits you have made"
           disabled={isStarting}
           className="inline-flex w-fit items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
         >

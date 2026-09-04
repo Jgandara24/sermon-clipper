@@ -150,6 +150,12 @@ const editing = (page: Page, original: string) =>
 const restoreButton = (page: Page) =>
   page.getByRole("button", { name: "Restore all deleted words" });
 const exportButton = (page: Page) => page.getByRole("button", { name: "Export 9:16 MP4" });
+/** Export is reached from the header now, so the dialog has to be open before it can be pressed. */
+async function openExport(page: Page) {
+  if (await exportButton(page).isVisible()) return;
+  await page.getByTestId("editor-header").getByRole("button", { name: "Export MP4" }).click();
+  await expect(page.getByTestId("export-dialog")).toBeVisible();
+}
 /** The export refusal. Matched on the clause the restore button's own label does not contain. */
 const exportRefusal = (page: Page) =>
   page.getByText(/still has words cut out of the middle/);
@@ -490,6 +496,7 @@ test.describe("Editor transcript behaviour", () => {
     await seedLegacyCut(fixture);
     await openEditor(page, fixture.clipId);
 
+    await openExport(page);
     await exportButton(page).click();
 
     await expect(exportRefusal(page)).toBeVisible();
@@ -528,6 +535,7 @@ test.describe("Editor transcript behaviour", () => {
     await seedLegacyCut(fixture);
     await openEditor(page, fixture.clipId);
 
+    await openExport(page);
     await exportButton(page).click();
     await expect(exportRefusal(page)).toBeVisible();
 
@@ -538,6 +546,7 @@ test.describe("Editor transcript behaviour", () => {
       })
       .toBe(0);
 
+    await openExport(page);
     await exportButton(page).click();
 
     // Accepted this time: the panel moves on to the queued state and the refusal is gone.

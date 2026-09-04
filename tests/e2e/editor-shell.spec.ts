@@ -162,4 +162,67 @@ test.describe("the editor shell", () => {
 
     expect(await prisma.clipEdit.count({ where: { clipId: fixture.clipId } })).toBe(before);
   });
+
+  test("the header carries every action the editor needs, and says what each does", async ({
+    page,
+  }) => {
+    const header = page.getByTestId("editor-header");
+    await expect(header).toBeVisible();
+
+    for (const name of [
+      "Back to clips",
+      "Undo",
+      "Redo",
+      "Save changes",
+      "Export MP4",
+    ]) {
+      const action = header.getByRole("button", { name }).or(header.getByRole("link", { name }));
+      await expect(action, `${name} is in the header`).toBeVisible();
+      await expect(action).toHaveAttribute("title", /\S/);
+    }
+
+    // The clip's own title, and whether it is saved, both sit here too.
+    await expect(header.getByRole("heading", { name: "Peace Stays With Us" })).toBeVisible();
+    await expect(header.getByTestId("save-status")).toBeVisible();
+  });
+
+  test("Export is reached from the header and nowhere else", async ({ page }) => {
+    // It used to sit at the foot of the Style column, where it was one panel among many.
+    await expect(area(page, "style").getByRole("heading", { name: "Export" })).toHaveCount(0);
+    await expect(page.getByTestId("export-dialog")).toHaveCount(0);
+
+    await page.getByTestId("editor-header").getByRole("button", { name: "Export MP4" }).click();
+
+    const dialog = page.getByTestId("export-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /Export|Start/ }).first()).toBeVisible();
+
+    // Not a modal: the rest of the editor stays reachable, because an export can be refused for
+    // something the member has to fix in another panel.
+    await expect(
+      area(page, "transcript").getByRole("heading", { name: "Script", exact: true }),
+    ).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("export-dialog")).toHaveCount(0);
+  });
+
+  test("every button in the editor says what it does on hover", async ({ page }) => {
+    // A short description on each control, which is the only help a member gets in a dense editor.
+    const missing = await page
+      .getByTestId("clip-editor")
+      .locator("button:visible, a[href]:visible")
+      .evaluateAll((elements) =>
+        elements
+          .filter((element) => !(element.getAttribute("title") ?? "").trim())
+          .map(
+            (element) =>
+              `${element.tagName.toLowerCase()}: ${
+                (element.getAttribute("aria-label") || element.textContent || "").trim().slice(0, 40)
+              }`,
+          ),
+      );
+
+    expect(missing, `controls with no hover description: ${missing.join(" | ")}`).toEqual([]);
+  });
 });
