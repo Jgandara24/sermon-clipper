@@ -500,6 +500,7 @@ export function ClipEditor({
 
         <div className="grid gap-4">
           <ClipTimeline
+            sourceVideoUrl={sourceVideoUrl}
             sourceDurationMs={sourceDurationMs}
             startMs={state.source.startMs}
             endMs={state.source.endMs}

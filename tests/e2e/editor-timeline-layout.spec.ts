@@ -195,12 +195,12 @@ test.describe("the timeline layout", () => {
   }) => {
     await selectTrack(page, "audio");
     await expect(volumeSlider(page)).toHaveValue("100");
-    expect(await page.evaluate(() => document.querySelector("video")!.volume)).toBe(1);
+    expect(await page.evaluate(() => document.querySelector<HTMLVideoElement>('[data-testid="canvas-content"] video')!.volume)).toBe(1);
 
     await volumeSlider(page).fill("40");
 
     // The preview plays the sermon's own sound at the new level on the same input event.
-    expect(await page.evaluate(() => document.querySelector("video")!.volume)).toBeCloseTo(0.4, 5);
+    expect(await page.evaluate(() => document.querySelector<HTMLVideoElement>('[data-testid="canvas-content"] video')!.volume)).toBeCloseTo(0.4, 5);
     await expect
       .poll(async () => (await storedState(fixture.clipId))?.audio.originalVolume, {
         timeout: 15_000,
@@ -296,5 +296,76 @@ test.describe("the Audio row with extracted audio", () => {
     await expect.poll(async () => audioRow(page).locator("rect").count()).toBeGreaterThanOrEqual(
       50,
     );
+  });
+});
+
+/** Every frame tile on the Video row, and the states they have settled into. */
+const frameTiles = (page: Page) => page.getByTestId("video-frame");
+async function frameStates(page: Page) {
+  return frameTiles(page).evaluateAll((tiles) =>
+    tiles.map((tile) => tile.getAttribute("data-state")),
+  );
+}
+
+test.describe("the Video row's frames", () => {
+  let fixture: CanvasFixture | undefined;
+
+  test.afterEach(async () => {
+    await signOutTestSessions();
+    await destroyCanvasFixture(fixture);
+    fixture = undefined;
+    if (process.env.STORAGE_LOCAL_ROOT) {
+      await rm(process.env.STORAGE_LOCAL_ROOT, { recursive: true, force: true });
+    }
+  });
+
+  test("shows recognisable frames from the source, and no blank or single-colour tile", async ({
+    context,
+    page,
+  }) => {
+    fixture = await createCanvasFixture(getStorageProvider());
+    await signInAs(context, fixture.userId);
+    await openCanvasEditor(page, fixture.clipId);
+    await videoRow(page).scrollIntoViewIfNeeded();
+
+    await expect.poll(async () => (await frameTiles(page).count()) >= 4).toBe(true);
+    await expect
+      .poll(async () => (await frameStates(page)).every((state) => state === "ready"), {
+        timeout: 30_000,
+      })
+      .toBe(true);
+
+    // The fixture's source is a colour test pattern. A decoded frame of it has many colours; the
+    // blue strip this guards against, and a frame drawn before decoding, have one.
+    const distinctColours = await frameTiles(page).evaluateAll((tiles) =>
+      tiles.map((tile) => {
+        const canvas = tile as HTMLCanvasElement;
+        const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+        const seen = new Set<number>();
+        for (let i = 0; i < data.length; i += 4) {
+          seen.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+        }
+        return seen.size;
+      }),
+    );
+    for (const count of distinctColours) expect(count).toBeGreaterThan(8);
+  });
+
+  test("shows a neutral placeholder, never a wrong image, when a frame cannot be produced", async ({
+    context,
+    page,
+  }) => {
+    fixture = await createCanvasFixture(getStorageProvider(), { brokenSource: true });
+    await signInAs(context, fixture.userId);
+    await openCanvasEditor(page, fixture.clipId);
+    await videoRow(page).scrollIntoViewIfNeeded();
+
+    await expect.poll(async () => (await frameTiles(page).count()) >= 4).toBe(true);
+    await expect
+      .poll(async () => (await frameStates(page)).every((state) => state === "placeholder"), {
+        timeout: 30_000,
+      })
+      .toBe(true);
+    await expect(frameTiles(page).filter({ has: page.locator('[data-state="ready"]') })).toHaveCount(0);
   });
 });

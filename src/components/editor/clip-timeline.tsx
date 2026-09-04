@@ -20,6 +20,7 @@ import { chooseDensityBucketMs, wordDensityBars } from "@/lib/editor/word-densit
 import { AudioTrack } from "./audio-track";
 import { TitleTrack } from "./title-track";
 import { useAudioPeaks } from "./use-audio-peaks";
+import { VideoFrames } from "./video-frames";
 
 // Nearest-boundary snap distance, as a fraction of the visible window — a couple percent, so it
 // grabs a word edge you're clearly aiming at without fighting fine adjustments.
@@ -83,6 +84,7 @@ function readTrack(target: EventTarget | null): TimelineTrack | null {
  * hands it. Neither row has a pointer↔time mapping of its own that could disagree with this one.
  */
 export function ClipTimeline({
+  sourceVideoUrl,
   sourceDurationMs,
   startMs,
   endMs,
@@ -100,6 +102,8 @@ export function ClipTimeline({
   onCommitTrim,
   onScrub,
 }: {
+  /** The signed source URL the preview plays, for the Video row's frames. */
+  sourceVideoUrl: string;
   sourceDurationMs: number;
   startMs: number;
   endMs: number;
@@ -460,6 +464,8 @@ export function ClipTimeline({
             role="group"
             aria-label="Clip trim timeline"
           >
+            {/* The source's own frames, under everything else the row draws. */}
+            <VideoFrames sourceVideoUrl={sourceVideoUrl} view={view} settled={frozenView === null} />
             {/* Trimmed-away source, dimmed on each side of the selection. */}
             <div
               className="pointer-events-none absolute inset-y-0 left-0 rounded-l-md bg-stone-200/80"

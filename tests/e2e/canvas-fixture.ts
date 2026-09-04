@@ -63,6 +63,8 @@ export async function createCanvasFixture(
     words?: FixtureWord[];
     /** Whether the probe's extracted audio exists. Off by default: most specs never look. */
     audio?: boolean;
+    /** Record a source key that has no file behind it, for what the editor does without one. */
+    brokenSource?: boolean;
   } = {},
 ): Promise<CanvasFixture> {
   const words = options.words ?? CANVAS_FIXTURE_WORDS;
@@ -98,7 +100,7 @@ export async function createCanvasFixture(
       width: 1280,
       height: 720,
       fps: new Prisma.Decimal("30.000"),
-      storageKey,
+      storageKey: options.brokenSource ? `canvas/${workspace.id}/missing.mp4` : storageKey,
       audioKey,
       language: "en",
     },
