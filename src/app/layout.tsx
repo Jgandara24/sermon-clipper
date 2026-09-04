@@ -23,9 +23,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
+    // Browser extensions (Dark Reader among them) add attributes to the root element before React
+    // hydrates, and React reports the difference as an error on every page in development. Only
+    // this element's attributes are exempted; a mismatch anywhere below it is still reported.
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
