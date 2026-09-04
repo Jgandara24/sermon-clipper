@@ -1,6 +1,6 @@
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
-import { parsePeaksQuery, readAudioPeaks } from "@/lib/media/audio-peaks";
+import { isMissingObjectError, parsePeaksQuery, readAudioPeaks } from "@/lib/media/audio-peaks";
 import { WavFormatError } from "@/lib/media/wav";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
@@ -56,6 +56,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       { headers: { "Cache-Control": "private, max-age=300" } },
     );
   } catch (error) {
+    if (isMissingObjectError(error)) {
+      // The key is recorded but the object is gone — retention treats extracted audio as cheaply
+      // re-derivable. The same fallback as never having had it.
+      return apiError("AUDIO_UNAVAILABLE", "This video's extracted audio is not available.", {
+        status: 404,
+      });
+    }
     if (error instanceof WavFormatError) {
       // The probe wrote something this cannot read. A fault worth a report, not a row drawn from
       // garbage.

@@ -113,9 +113,12 @@ test.describe("the timeline layout", () => {
     expect(Number(await startHandle(page).getAttribute("aria-valuenow"))).toBe(CLIP_START_MS);
   });
 
-  test("the Audio row shows where the speech is, from the transcript", async ({ page }) => {
-    // Four words begin in the fixture's six seconds, each in a bucket of its own; nothing is drawn
-    // for the silence after them.
+  test("the Audio row shows where the speech is, from the transcript, until audio exists", async ({
+    page,
+  }) => {
+    // This fixture has no extracted audio. Four words begin in its six seconds, each in a bucket
+    // of its own; nothing is drawn for the silence after them, and the row says what it drew from.
+    await expect(audioRow(page)).toHaveAttribute("data-source", "transcript");
     await expect(audioRow(page).locator("rect")).toHaveCount(4);
   });
 
@@ -249,5 +252,49 @@ test.describe("the timeline layout", () => {
     await expect(titlePanel(page)).toBeVisible();
     await expect(page.getByTestId("title-text")).toBeVisible();
     await expect(page.getByTestId("track-select-title")).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+test.describe("the Audio row with extracted audio", () => {
+  let fixture: CanvasFixture;
+
+  test.beforeEach(async ({ context, page }) => {
+    fixture = await createCanvasFixture(getStorageProvider(), { audio: true });
+    await signInAs(context, fixture.userId);
+    await openCanvasEditor(page, fixture.clipId);
+  });
+
+  test.afterEach(async () => {
+    await signOutTestSessions();
+    await destroyCanvasFixture(fixture);
+    if (process.env.STORAGE_LOCAL_ROOT) {
+      await rm(process.env.STORAGE_LOCAL_ROOT, { recursive: true, force: true });
+    }
+  });
+
+  test("draws the sermon's own sound rather than the transcript", async ({ page }) => {
+    await expect(audioRow(page)).toHaveAttribute("data-source", "audio", { timeout: 15_000 });
+
+    // A steady tone plays for all six seconds; the transcript's four words stop at 2.4. Bars past
+    // the last word can only have come from the audio.
+    const bars = audioRow(page).locator("rect");
+    await expect.poll(async () => bars.count()).toBeGreaterThanOrEqual(50);
+    const box = (await audioRow(page).boundingBox())!;
+    const last = (await bars.last().boundingBox())!;
+    expect(last.x + last.width).toBeGreaterThan(box.x + box.width * 0.9);
+  });
+
+  test("keeps drawing the sound while the window zooms", async ({ page }) => {
+    await expect(audioRow(page)).toHaveAttribute("data-source", "audio", { timeout: 15_000 });
+
+    for (let step = 0; step < 3; step += 1) {
+      await page.getByRole("button", { name: "Zoom in" }).click();
+    }
+    await expect(page.getByTestId("timeline-zoom")).toHaveText("8×");
+
+    await expect(audioRow(page)).toHaveAttribute("data-source", "audio");
+    await expect.poll(async () => audioRow(page).locator("rect").count()).toBeGreaterThanOrEqual(
+      50,
+    );
   });
 });

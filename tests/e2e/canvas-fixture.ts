@@ -46,13 +46,24 @@ async function createTinySourceVideo(outputPath: string) {
   ]);
 }
 
+/** The 16kHz mono WAV the probe extracts for transcription, from the fixture's own source. */
+async function extractFixtureAudio(sourcePath: string, outputPath: string) {
+  await execFileAsync("ffmpeg", [
+    "-y", "-i", sourcePath, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", outputPath,
+  ]);
+}
+
 /**
  * A clip whose first caption line covers the very start of the range, so the caption object is on
  * screen the moment the editor opens and every canvas gesture has something to act on.
  */
 export async function createCanvasFixture(
   storage: { absolutePath: (key: string) => string; size: (key: string) => Promise<number> },
-  options: { words?: FixtureWord[] } = {},
+  options: {
+    words?: FixtureWord[];
+    /** Whether the probe's extracted audio exists. Off by default: most specs never look. */
+    audio?: boolean;
+  } = {},
 ): Promise<CanvasFixture> {
   const words = options.words ?? CANVAS_FIXTURE_WORDS;
   const fullText = words.map((word) => word.word).join(" ");
@@ -72,6 +83,10 @@ export async function createCanvasFixture(
 
   const storageKey = `canvas/${workspace.id}/source.mp4`;
   await createTinySourceVideo(storage.absolutePath(storageKey));
+  const audioKey = options.audio ? `canvas/${workspace.id}/source.wav` : null;
+  if (audioKey) {
+    await extractFixtureAudio(storage.absolutePath(storageKey), storage.absolutePath(audioKey));
+  }
 
   const sourceVideo = await prisma.sourceVideo.create({
     data: {
@@ -84,6 +99,7 @@ export async function createCanvasFixture(
       height: 720,
       fps: new Prisma.Decimal("30.000"),
       storageKey,
+      audioKey,
       language: "en",
     },
   });

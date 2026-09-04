@@ -506,6 +506,7 @@ export function ClipEditor({
             currentMs={currentMs}
             wordBoundaries={wordBoundaries}
             wordStartsMs={wordStartsMs}
+            audio={{ videoId: state.source.videoId }}
             title={{
               banner: editorTitle,
               onChange: handleTitleRange,

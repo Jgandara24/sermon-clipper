@@ -16,6 +16,17 @@ export const MAX_PEAK_BUCKETS = 2_000;
 /** Longer than any window the timeline shows, and more WAV than one request should read. */
 export const MAX_PEAK_WINDOW_MS = 60 * 60_000;
 
+/**
+ * True when storage says the object is not there — a file that does not exist, or an S3 key that
+ * does not. Extracted audio is cheaply re-derivable and retention may remove it; that is a
+ * missing artifact to fall back from, not a fault.
+ */
+export function isMissingObjectError(error: unknown): boolean {
+  const code = (error as { code?: unknown; name?: unknown } | null)?.code;
+  const name = (error as { name?: unknown } | null)?.name;
+  return code === "ENOENT" || name === "NoSuchKey" || name === "NotFound";
+}
+
 /** Whatever can serve a byte range of an object — the storage provider, or a fake in a test. */
 export type RangeReader = {
   readRange(key: string, start: number, end: number): Promise<Uint8Array>;

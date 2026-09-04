@@ -15,9 +15,11 @@ import {
   TIMELINE_ZOOM_MIN,
   type TrimViewport,
 } from "@/lib/editor/trim";
+import { normalisePeaks } from "@/lib/media/wav";
 import { chooseDensityBucketMs, wordDensityBars } from "@/lib/editor/word-density";
 import { AudioTrack } from "./audio-track";
 import { TitleTrack } from "./title-track";
+import { useAudioPeaks } from "./use-audio-peaks";
 
 // Nearest-boundary snap distance, as a fraction of the visible window — a couple percent, so it
 // grabs a word edge you're clearly aiming at without fighting fine adjustments.
@@ -87,6 +89,7 @@ export function ClipTimeline({
   currentMs,
   wordBoundaries,
   wordStartsMs,
+  audio,
   title,
   zoom,
   onZoomChange,
@@ -102,8 +105,10 @@ export function ClipTimeline({
   endMs: number;
   currentMs: number;
   wordBoundaries: number[];
-  /** Every word's start on the source timeline, for the Audio row's density. */
+  /** Every word's start on the source timeline, for the Audio row until its audio arrives. */
   wordStartsMs: number[];
+  /** The source whose peaks the Audio row asks for. */
+  audio: { videoId: string };
   title: {
     banner: TitleBanner | null;
     onChange: (range: TitleRange) => void;
@@ -163,14 +168,22 @@ export function ClipTimeline({
     [wordBoundaries, span],
   );
 
-  const densityBars = useMemo(
+  // The Audio row: real peaks once the source's audio has arrived, speech density until then.
+  // Both are bucketed the same way, so the row does not change shape when the sound arrives.
+  const bucketMs = chooseDensityBucketMs(span);
+  const bucketCount = Math.ceil(span / bucketMs);
+  const audioPeaks = useAudioPeaks(
+    audio.videoId,
+    { start: view.start, end: view.start + span },
+    bucketCount,
+    sourceDurationMs,
+  );
+  const audioBars = useMemo(
     () =>
-      wordDensityBars(
-        wordStartsMs,
-        { start: view.start, end: view.start + span },
-        chooseDensityBucketMs(span),
-      ),
-    [wordStartsMs, view.start, span],
+      audioPeaks
+        ? normalisePeaks(audioPeaks)
+        : wordDensityBars(wordStartsMs, { start: view.start, end: view.start + span }, bucketMs),
+    [audioPeaks, wordStartsMs, view.start, span, bucketMs],
   );
 
   const handlePointerDown = (event: React.PointerEvent) => {
@@ -489,7 +502,12 @@ export function ClipTimeline({
             className={`relative ${AUDIO_ROW_CLASS} ${rowRing(activeTrack === "audio")}`}
             data-track="audio"
           >
-            <AudioTrack bars={densityBars} clipStartPct={startPct} clipEndPct={endPct} />
+            <AudioTrack
+              bars={audioBars}
+              source={audioPeaks ? "audio" : "transcript"}
+              clipStartPct={startPct}
+              clipEndPct={endPct}
+            />
           </div>
 
           {/* The playhead's line, down through every row from the knob's strip. */}

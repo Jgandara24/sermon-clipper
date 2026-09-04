@@ -182,6 +182,19 @@ describe("GET /api/videos/[id]/peaks", () => {
     expect(response.status).toBe(403);
   });
 
+  it("is 404 when the key is recorded but the object is gone, as retention may leave it", async () => {
+    (getStorageProvider as Mock).mockReturnValue({
+      async readRange() {
+        throw Object.assign(new Error("ENOENT: no such file"), { code: "ENOENT" });
+      },
+    });
+
+    const response = (await GET(request("fromMs=0&toMs=2000&buckets=4"), { params })) as Response;
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).error.code).toBe("AUDIO_UNAVAILABLE");
+  });
+
   it("reports an unreadable WAV as a server fault rather than drawing from garbage", async () => {
     (getStorageProvider as Mock).mockReturnValue(
       fakeStorage({ "audio/ws-1/video-1.wav": Buffer.from("this is not a wav file at all") }).reader,
