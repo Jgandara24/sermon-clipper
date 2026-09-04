@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { once } from "node:events";
 import { Readable } from "node:stream";
@@ -91,5 +91,19 @@ export class LocalDiskStorageProvider implements StorageProvider {
 
   async readAsBuffer(key: string): Promise<Buffer> {
     return readFile(this.absolutePath(key));
+  }
+
+  async readRange(key: string, start: number, end: number): Promise<Buffer> {
+    const handle = await open(this.absolutePath(key), "r");
+    try {
+      const { size } = await handle.stat();
+      const last = Math.min(end, size - 1);
+      if (start > last) return Buffer.alloc(0);
+      const buffer = Buffer.alloc(last - start + 1);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, start);
+      return bytesRead === buffer.length ? buffer : buffer.subarray(0, bytesRead);
+    } finally {
+      await handle.close();
+    }
   }
 }

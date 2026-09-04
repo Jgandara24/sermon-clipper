@@ -168,6 +168,27 @@ export class S3StorageProvider implements StorageProvider {
     }
     return Buffer.concat(chunks);
   }
+
+  async readRange(key: string, start: number, end: number): Promise<Buffer> {
+    let result;
+    try {
+      result = await this.client.send(
+        new GetObjectCommand({ Bucket: this.options.bucket, Key: key, Range: `bytes=${start}-${end}` }),
+      );
+    } catch (error) {
+      // A range that starts past the end is not an error here, any more than it is for a file.
+      if ((error as { name?: string }).name === "InvalidRange") return Buffer.alloc(0);
+      throw error;
+    }
+    if (!result.Body) {
+      throw new Error(`S3 object ${key} has no response body.`);
+    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of toNodeReadable(result.Body)) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
 }
 
 function toNodeReadable(body: unknown): NodeJS.ReadableStream {
