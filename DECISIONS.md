@@ -3080,4 +3080,5 @@ the Script panel that puts them back. A dialog that swallowed the page would nam
 just taken away. The transcript suite proved it — the modal version timed out clicking the control
 its own refusal recommends. Escape still closes it, and the header button is still the only way in.
 
-Status: Active.
+Status: **Settled by the product owner, 2026-09-04.** Five words stays a target the field counts
+against, not a limit it enforces; the export drawer stays a drawer. Both are active as written.
