@@ -676,3 +676,109 @@ describe("the document's original volume reaches the file", () => {
     }
   }, 300_000);
 });
+
+/**
+ * The editor draws selection handles, safe-zone guides and a centre guide over the video. None of
+ * them can reach an export, because the burn-in is an ASS subtitle file and an ASS file has no
+ * notion of them — but "cannot" is the kind of claim that stops being true quietly, so it is
+ * checked from both ends: what the script was told to draw, and what came out of libass.
+ */
+describe("no editor chrome reaches the MP4", () => {
+  let filePath: string;
+  let plan: ReturnType<typeof renderPlanFor>;
+
+  beforeAll(async () => {
+    const document = parityDocument(sourceVideoId, 1);
+    plan = renderPlanFor(document);
+    filePath = (await exportDocument(document, "chrome")).filePath;
+  }, 300_000);
+
+  it("emits caption and title events, and no other kind", () => {
+    const styles = new Set(assEvents(plan.assContent).map((event) => event.style));
+
+    expect([...styles].sort()).toEqual(["Default", "Title"]);
+  });
+
+  it("declares no style the editor's guides could be drawn in", () => {
+    const declared = plan.assContent
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("Style: "))
+      .map((line) => line.slice("Style: ".length).split(",")[0]);
+
+    // LowerThird is declared for every clip and drawn only when a brand template asks for it.
+    expect(declared.sort()).toEqual(["Default", "LowerThird", "Title"]);
+  });
+
+  it("draws no guide colour anywhere in a frame", async () => {
+    // The editor's centre guide and selection handles are teal-300 and teal-700. The source is a
+    // red-over-blue ramp with no green in it at all, so either colour in the file came from
+    // somewhere it should not have.
+    //
+    // This catches a filled shape — a handle, a tinted band. It does not catch a one-pixel line:
+    // 4:2:0 chroma subsampling averages a thin line's colour into its neighbours and it lands
+    // near-grey, measured. The two tests below are what catch those.
+    const TEAL_300 = { r: 94, g: 234, b: 212 };
+    const TEAL_700 = { r: 15, g: 118, b: 110 };
+    const frame = await frameAt(filePath, 4.5);
+
+    let nearTeal = 0;
+    for (let y = 0; y < OUT_H; y += 1) {
+      for (let x = 0; x < OUT_W; x += 1) {
+        const pixel = pixelAt(frame, x, y);
+        for (const teal of [TEAL_300, TEAL_700]) {
+          const distance =
+            Math.abs(pixel.r - teal.r) + Math.abs(pixel.g - teal.g) + Math.abs(pixel.b - teal.b);
+          if (distance < 60) nearTeal += 1;
+        }
+      }
+    }
+
+    expect(nearTeal).toBe(0);
+  }, 180_000);
+
+  it("leaves the picture untouched everywhere the captions and title are not", async () => {
+    // At 4.5s the title has been gone for a second and the captions sit on the bottom band, so
+    // every pixel from the top of the frame down to the captions should still be the flat source
+    // colour. A safe-zone rectangle, a centre guide, a selection box or a red band tint would all
+    // land inside this region.
+    const frame = await frameAt(filePath, 4.5);
+    const expected = secondColour(TRIM_START_MS / 1_000 + 4);
+    const strays: string[] = [];
+
+    // Every pixel, not a sample of them: the safe-zone rectangle's edges are one pixel wide, and
+    // a stride would step straight over them.
+    for (let y = 20; y < 1_600 && strays.length < 8; y += 1) {
+      for (let x = 0; x < OUT_W; x += 1) {
+        const pixel = pixelAt(frame, x, y);
+        const off =
+          Math.abs(pixel.r - expected.r) > 10 ||
+          Math.abs(pixel.g - expected.g) > 10 ||
+          Math.abs(pixel.b - expected.b) > 10;
+        if (off) {
+          strays.push(`(${x},${y}) rgb(${pixel.r},${pixel.g},${pixel.b})`);
+          break;
+        }
+      }
+    }
+
+    expect(strays).toEqual([]);
+  }, 180_000);
+
+  it("draws nothing down the centre column that its neighbours do not", async () => {
+    // The centre guide is one pixel wide at the exact middle of the frame, so it would hide inside
+    // any tolerance that looked at a region. This looks at the column itself.
+    const frame = await frameAt(filePath, 4.5);
+    const centre = OUT_W / 2;
+
+    for (let y = 200; y < 1_500; y += 25) {
+      const middle = pixelAt(frame, centre, y);
+      const left = pixelAt(frame, centre - 6, y);
+      const right = pixelAt(frame, centre + 6, y);
+
+      expect(Math.abs(middle.r - left.r)).toBeLessThanOrEqual(4);
+      expect(Math.abs(middle.g - left.g)).toBeLessThanOrEqual(4);
+      expect(Math.abs(middle.b - left.b)).toBeLessThanOrEqual(4);
+      expect(Math.abs(middle.r - right.r)).toBeLessThanOrEqual(4);
+    }
+  }, 180_000);
+});
