@@ -8,22 +8,8 @@ import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
-import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
-import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import type { EditorState } from "@/lib/editor/types";
-import { applyWordTextOverrides } from "@/lib/editor/transcript";
-import { applyEditorDeletions, flattenWords, wordsInRange } from "@/lib/editor/words";
-import {
-  countCaptionDialogueEvents,
-  generateAssSubtitles,
-  type AssCaptionMeasurer,
-} from "@/lib/export/ass-generator";
-import { resolveCaptionFace } from "@/lib/editor/caption-face";
-import { createCaptionMeasurer, UnbundledCaptionFaceError } from "@/lib/export/font-metrics";
-import { parseLowerThird } from "@/lib/brand-template";
-import { readTitleBanner, retimeTitleBanner, type TitleBanner } from "@/lib/editor/title-banner";
-import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
-import { computeKeptRanges, mapToKeptTimeline } from "@/lib/export/kept-ranges";
+import { countCaptionDialogueEvents } from "@/lib/export/ass-generator";
 import { renderClipExport } from "@/lib/export/render";
 import { probeVideoFile } from "@/lib/media/probe";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
@@ -39,6 +25,7 @@ import {
   storageTransferCostFact,
 } from "@/lib/storage";
 import { assertContinuousRange } from "./continuous-range";
+import { buildExportRenderPlan } from "./render-plan";
 import { loadPinnedEditorState } from "./edit-version";
 import { ExportFailureError } from "./errors";
 
@@ -172,118 +159,24 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   // and any other path that reaches the worker.
   assertContinuousRange(state, segments);
 
-  const allWords = flattenWords(segments);
-  // Corrections are applied here too, so the caption the member approved in the preview is the
-  // caption the rendered file burns in.
-  const wordsInClip = applyWordTextOverrides(
-    applyEditorDeletions(wordsInRange(allWords, state.source.startMs, state.source.endMs), state),
-    state,
-  );
-
-  const keptRanges = computeKeptRanges(wordsInClip, state.source.startMs, state.source.endMs);
-  if (keptRanges.length === 0) {
-    throw new ExportFailureError("RENDER_FAILED", "Export failed on our side — your clip is safe.");
-  }
-
-  const cropRect = resolveCropRect(state.layout, sourceVideo.width, sourceVideo.height);
-  const cropPixels = cropRectToPixels(cropRect, sourceVideo.width, sourceVideo.height);
-
-  const activeWords = wordsInClip.filter((word) => !word.effectiveDeleted);
-  const captionLines = applyCaptionTextOverrides(
-    buildCaptionLines(
-      activeWords.map((word) => ({
-        id: word.id,
-        word: word.word,
-        startMs: word.startMs,
-        endMs: word.endMs,
-      })),
-    ),
-    state.captions.textOverrides,
-  ).map((line) => ({
-    ...line,
-    // The words travel with the line so the burn-in can light the same word the preview does,
-    // remapped by the same function as the line itself — a word left on the source timeline
-    // would highlight at the wrong moment.
-    words: line.words.map((word) => ({
-      ...word,
-      startMs: mapToKeptTimeline(word.startMs, keptRanges),
-      endMs: mapToKeptTimeline(word.endMs, keptRanges),
-    })),
-    // Caption timestamps are on the original source timeline; remap to the concatenated
-    // (post-cut) output timeline the rendered file actually plays on.
-    startMs: mapToKeptTimeline(line.startMs, keptRanges),
-    endMs: mapToKeptTimeline(line.endMs, keptRanges),
-  }));
-
-  const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
-
-  // Per-word positioning needs the same file libass will draw with. A preset whose face this
-  // repository does not ship keeps the single run it has always emitted — measuring a face we do
-  // not have would be a guess, and libass would silently substitute another one anyway.
-  let captionMeasurer: AssCaptionMeasurer | null = null;
-  if (style.activeWordHighlight) {
-    const face = resolveCaptionFace(style);
-    try {
-      const measurer = createCaptionMeasurer({
-        family: face.family,
-        bold: face.bold,
-        sizePx: style.sizePx,
-      });
-      captionMeasurer = { measure: measurer.measure, spaceWidth: measurer.spaceWidth };
-    } catch (error) {
-      if (!(error instanceof UnbundledCaptionFaceError)) throw error;
-    }
-  }
-  // The title, if this clip carries one. Its times are on the source timeline like every other
-  // time in the document, so they are remapped onto the cut output the same way the captions are —
-  // a title left on the source timeline drifts by however much was deleted before it.
-  const storedTitle = readTitleBanner(state.overlays);
-  let title: { banner: TitleBanner; measurer: AssCaptionMeasurer } | null = null;
-  if (storedTitle) {
-    const face = resolveCaptionFace(storedTitle);
-    try {
-      const measurer = createCaptionMeasurer({
-        family: face.family,
-        bold: face.bold,
-        sizePx: storedTitle.sizePx,
-      });
-      title = {
-        banner: retimeTitleBanner(storedTitle, (ms) => mapToKeptTimeline(ms, keptRanges)),
-        measurer: { measure: measurer.measure, spaceWidth: measurer.spaceWidth },
-      };
-    } catch (error) {
-      // A face this repository does not ship cannot be measured, and drawing the box from guessed
-      // widths would put text outside it. The bundled-font gate exists so this cannot happen in
-      // the worker image; if it somehow does, the clip renders without the title rather than with
-      // a broken one.
-      if (!(error instanceof UnbundledCaptionFaceError)) throw error;
-    }
-  }
-
   const brandTemplate = state.brandTemplateId
     ? await prisma.brandTemplate.findFirst({
         where: { id: state.brandTemplateId, workspaceId: job.workspaceId },
       })
     : null;
-  const lowerThird = brandTemplate ? parseLowerThird(brandTemplate.lowerThird) : null;
-  const assContent = generateAssSubtitles(
-    captionLines,
-    style,
-    OUTPUT_WIDTH,
-    OUTPUT_HEIGHT,
-    brandTemplate && lowerThird
-      ? {
-          headline: lowerThird.headline || brandTemplate.churchName,
-          subhead: lowerThird.subhead || brandTemplate.speakerName || "",
-          primaryColor: brandTemplate.primaryColor,
-          accentColor: brandTemplate.accentColor,
-          startMs: 0,
-          endMs: Math.min(4000, Math.max(1000, state.source.endMs - state.source.startMs)),
-        }
-      : null,
-    captionMeasurer,
-    title,
-  );
+
+  // Every render decision the document implies, derived in one pure place. The parity gate drives
+  // the same function with the same document, so what it checks is what this job renders.
+  const plan = buildExportRenderPlan({
+    state,
+    segments,
+    sourceWidth: sourceVideo.width,
+    sourceHeight: sourceVideo.height,
+    outputWidth: OUTPUT_WIDTH,
+    outputHeight: OUTPUT_HEIGHT,
+    brandTemplate,
+  });
+  const { keptRanges, cropPixels, assContent } = plan;
 
   const storage = getStorageProvider();
   const exportsKey = `exports/${job.workspaceId}/${job.id}.mp4`;
@@ -298,10 +191,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   let bytes: number;
   let checksum: string;
   let sourceBytes = Number(sourceVideo.sizeBytes ?? BigInt(0));
-  const outputDurationS = keptRanges.reduce(
-    (total, range) => total + (range.endMs - range.startMs) / 1_000,
-    0,
-  );
+  const outputDurationS = plan.outputDurationS;
 
   try {
     const downloadStartedAt = Date.now();
@@ -340,7 +230,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         outputPath,
         outputWidth: OUTPUT_WIDTH,
         outputHeight: OUTPUT_HEIGHT,
-        originalVolume: state.audio.originalVolume,
+        originalVolume: plan.originalVolume,
       });
     } catch (error) {
       await recordRenderFact({
@@ -386,7 +276,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         height: OUTPUT_HEIGHT,
         durationS: outputDurationS,
         durationToleranceS: renderQcDurationToleranceS(outputDurationS),
-        captionLines: captionLines.length,
+        captionLines: plan.captionLineCount,
       },
     );
 
