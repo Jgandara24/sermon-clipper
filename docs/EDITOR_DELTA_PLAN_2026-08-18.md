@@ -527,6 +527,27 @@ from timeline layout.
 
 **Coverage:** the 15-second context with source-boundary clamps; zoom does not move trim limits.
 
+**Built 2026-09-03 (#65).** Every behaviour bullet, including the track-to-panel switching moved
+here from Slice 9. Landed in nine commits: the zoom maths and the word-density bars first, then
+the export honouring `audio.originalVolume` on its own, then the rows on one surface, the zoom
+controls, the transport above the tracks, the Audio panel with its instant preview, and the
+switching last — so the panels existed before the thing that shows one at a time.
+
+Three things found on the way that were not in the plan, all recorded in DECISIONS.md:
+
+- The plan's "15 seconds of unused source" is a floor, not the padding: `computeTrimViewport` pads
+  by the clip's own length between 15s and 60s, and that stays. Zoom is the control for more or
+  less, and it is a magnification of the padding only — the clamp helpers do not take it, and the
+  trim test states that by their arity.
+- The empty Title row **offers** a title rather than making one on selection, so a title the member
+  dismissed cannot come back from a stray click.
+- `originalVolume` was in the schema and read by nothing. It is now a gain **after** `loudnorm`
+  (before, the normaliser would undo it), written only when it is not 1 so existing renders are
+  byte-identical; and the panel stops at 100% because the preview cannot play a boost.
+
+The Audio row draws transcript word density until Slice 11 replaces it with real peaks; nothing in
+this slice generates media.
+
 ---
 
 ### Slice 11 — Timeline media evidence

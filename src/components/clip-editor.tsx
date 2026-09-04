@@ -3,19 +3,28 @@
 import { ChevronLeft, Redo2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AudioPanel } from "@/components/editor/audio-panel";
 import { CaptionStylePanel } from "@/components/editor/caption-style-panel";
 import {
   applyBrandTemplateToState,
   BrandTemplatePanel,
   type EditorBrandTemplate,
 } from "@/components/editor/brand-template-panel";
-import { ClipTimeline } from "@/components/editor/clip-timeline";
+import { ClipTimeline, type TimelineTrack } from "@/components/editor/clip-timeline";
 import { ExportPanel } from "@/components/editor/export-panel";
 import { LayoutPanel } from "@/components/editor/layout-panel";
 import { ScriptEditorPanel } from "@/components/editor/script-editor-panel";
 import { TitlePanel } from "@/components/editor/title-panel";
-import { TitleTrack } from "@/components/editor/title-track";
-import { readTitleBanner, upsertTitleBanner } from "@/lib/editor/title-banner";
+import {
+  type PreviewTransport,
+  TransportControls,
+} from "@/components/editor/transport-controls";
+import {
+  defaultTitleBanner,
+  readTitleBanner,
+  type TitleRange,
+  upsertTitleBanner,
+} from "@/lib/editor/title-banner";
 import { VideoPreview } from "@/components/editor/video-preview";
 import {
   applyConfirmedSave,
@@ -88,6 +97,16 @@ export function ClipEditor({
   // Playback position (from the preview) and outgoing seek requests (from the trim timeline).
   const [currentMs, setCurrentMs] = useState(initialState.source.startMs);
   const [seek, setSeek] = useState<{ ms: number; token: number } | null>(null);
+  // How much source the timeline shows around the clip. View state, like the canvas zoom: it
+  // changes nothing that is saved and nothing the clip may start or end at.
+  const [timelineZoom, setTimelineZoom] = useState(1);
+  // Which row's settings are open. View state, never saved: the editor opens on Video, which
+  // shows Captions — what every clip opened to before the rows existed.
+  const [activeTrack, setActiveTrack] = useState<TimelineTrack>("video");
+  // The transport above the tracks drives the preview through this; the preview reports back
+  // whether it is playing so the button can say which comes next.
+  const transportRef = useRef<PreviewTransport | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   // The word open for correction. Selection is view state, not document state: choosing a word
   // changes nothing that is saved, so it must never write a version.
   const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
@@ -103,6 +122,9 @@ export function ClipEditor({
     }
     return [...boundaries].sort((a, b) => a - b);
   }, [allWords]);
+  // Where the speech is, for the Audio row: every word's start across the whole source, since the
+  // timeline shows source on both sides of the clip.
+  const wordStartsMs = useMemo(() => allWords.map((word) => word.startMs), [allWords]);
   const selectedBrandTemplate =
     brandTemplates.find((template) => template.id === state.brandTemplateId) ?? null;
 
@@ -295,6 +317,34 @@ export function ClipEditor({
     setSeek((prev) => ({ ms, token: (prev?.token ?? 0) + 1 }));
   }
 
+  /** A frame of a Title track drag: instant preview, one coalesced save, one undo entry. */
+  function handleTitleRange(range: TitleRange) {
+    if (!editorTitle) return;
+    updateState(
+      (prev) => ({
+        ...prev,
+        overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, ...range }),
+      }),
+      "idle",
+    );
+  }
+
+  /**
+   * The empty Title row's offer was taken: the default title, written and committed at once, and
+   * its settings opened so the next thing to do is right there.
+   */
+  function handleAddTitle() {
+    updateState((prev) => ({
+      ...prev,
+      overlays: upsertTitleBanner(
+        prev.overlays,
+        defaultTitleBanner({ startMs: prev.source.startMs, endMs: prev.source.endMs }),
+      ),
+    }));
+    commitNow();
+    setActiveTrack("title");
+  }
+
   function handleExtend(direction: "before" | "after") {
     updateState((prev) => {
       const nextSource =
@@ -431,6 +481,8 @@ export function ClipEditor({
             }
             onTitleCommit={commitNow}
             seek={seek}
+            transportRef={transportRef}
+            onPlayingChange={setIsPlaying}
           />
           <label className="flex items-center gap-2 text-sm text-stone-600">
             <input
@@ -453,10 +505,49 @@ export function ClipEditor({
             endMs={state.source.endMs}
             currentMs={currentMs}
             wordBoundaries={wordBoundaries}
+            wordStartsMs={wordStartsMs}
+            title={{
+              banner: editorTitle,
+              onChange: handleTitleRange,
+              onCommit: commitNow,
+              onAdd: handleAddTitle,
+            }}
+            zoom={timelineZoom}
+            onZoomChange={setTimelineZoom}
+            activeTrack={activeTrack}
+            onSelectTrack={setActiveTrack}
+            transport={
+              <TransportControls
+                isPlaying={isPlaying}
+                clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+                transportRef={transportRef}
+              />
+            }
             onTrim={handleTrim}
             onCommitTrim={commitNow}
             onScrub={requestSeek}
           />
+          {/* The selected row's settings. The plan names these three; every other panel stays. */}
+          {activeTrack === "title" ? (
+            <TitlePanel
+              overlays={state.overlays}
+              clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
+              onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
+              onCommit={commitNow}
+            />
+          ) : activeTrack === "audio" ? (
+            <AudioPanel
+              audio={state.audio}
+              onChange={(audio, mode) => updateState((prev) => ({ ...prev, audio }), mode)}
+              onCommit={commitNow}
+            />
+          ) : (
+            <CaptionStylePanel
+              captions={state.captions}
+              onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
+              onCommit={commitNow}
+            />
+          )}
           <ScriptEditorPanel
             words={wordsInClip}
             selectedWordId={selectedWordId}
@@ -468,33 +559,6 @@ export function ClipEditor({
             onExtendAfter={() => handleExtend("after")}
             canExtendBefore={state.source.startMs > 0}
             canExtendAfter={state.source.endMs < sourceDurationMs}
-          />
-          <CaptionStylePanel
-            captions={state.captions}
-            onChange={(captions, mode) => updateState((prev) => ({ ...prev, captions }), mode)}
-            onCommit={commitNow}
-          />
-          {editorTitle ? (
-            <TitleTrack
-              title={editorTitle}
-              clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
-              onChange={(range) =>
-                updateState(
-                  (prev) => ({
-                    ...prev,
-                    overlays: upsertTitleBanner(prev.overlays, { ...editorTitle, ...range }),
-                  }),
-                  "idle",
-                )
-              }
-              onCommit={commitNow}
-            />
-          ) : null}
-          <TitlePanel
-            overlays={state.overlays}
-            clip={{ startMs: state.source.startMs, endMs: state.source.endMs }}
-            onChange={(overlays, mode) => updateState((prev) => ({ ...prev, overlays }), mode)}
-            onCommit={commitNow}
           />
           <BrandTemplatePanel
             templates={brandTemplates}

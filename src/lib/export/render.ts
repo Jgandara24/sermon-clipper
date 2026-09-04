@@ -33,6 +33,23 @@ export function buildExportFilterGraph(
   );
 }
 
+const LOUDNORM = "loudnorm=I=-16:TP=-1.5:LRA=11";
+
+/**
+ * The audio chain: loudness normalisation, then the clip's original volume as a gain.
+ *
+ * After, not before: `loudnorm` brings the programme to a fixed target, so a gain ahead of it
+ * would be undone by it. Applied after, "half as loud" is half as loud in the file — the same
+ * thing it is in the preview, which sets the video element's volume to the same factor. Only
+ * written when it is not 1, so a document that never touched the control renders exactly the
+ * bytes it always did.
+ */
+export function buildExportAudioFilter(originalVolume: number | undefined): string {
+  if (originalVolume === undefined || !Number.isFinite(originalVolume)) return LOUDNORM;
+  const volume = Math.min(2, Math.max(0, originalVolume));
+  return volume === 1 ? LOUDNORM : `${LOUDNORM},volume=${volume}`;
+}
+
 async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
   try {
     await execFileWithTimeout(ffmpegPath, args, {
@@ -54,6 +71,8 @@ export type RenderClipExportParams = {
   outputPath: string;
   outputWidth: number;
   outputHeight: number;
+  /** The document's `audio.originalVolume`. Absent means 1, which writes no filter at all. */
+  originalVolume?: number;
 };
 
 /**
@@ -132,7 +151,7 @@ export async function renderClipExport(params: RenderClipExportParams): Promise<
       "-vf",
       buildExportFilterGraph(params.cropPixels, params.outputWidth, params.outputHeight, assFilePath),
       "-af",
-      "loudnorm=I=-16:TP=-1.5:LRA=11",
+      buildExportAudioFilter(params.originalVolume),
       "-c:v",
       "libx264",
       "-preset",
