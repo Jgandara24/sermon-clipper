@@ -61,6 +61,7 @@ import * as stripeWebhookRoute from "@/app/api/stripe/webhook/route";
 import * as uploadCompleteRoute from "@/app/api/uploads/[uploadId]/complete/route";
 import * as uploadPutRoute from "@/app/api/uploads/[uploadId]/route";
 import * as uploadPresignRoute from "@/app/api/uploads/presign/route";
+import * as videoPeaksRoute from "@/app/api/videos/[id]/peaks/route";
 import * as videoSourceRoute from "@/app/api/videos/[id]/source/route";
 import * as videoSrtRoute from "@/app/api/videos/[id]/srt/route";
 import * as videoTranscriptRoute from "@/app/api/videos/[id]/transcript/route";
@@ -314,6 +315,13 @@ const ROUTES: RouteSpec[] = [
     module: uploadPresignRoute,
     handler: uploadPresignRoute.POST,
     auth: { kind: "session", permission: "IMPORT_MEDIA" },
+  },
+  {
+    file: "videos/[id]/peaks/route.ts",
+    method: "GET",
+    module: videoPeaksRoute,
+    handler: videoPeaksRoute.GET,
+    auth: { kind: "session", foreignParams: () => ({ id: fixtures.foreignVideoId }) },
   },
   {
     file: "videos/[id]/source/route.ts",

@@ -13,6 +13,11 @@ export interface StorageProvider {
   move(fromKey: string, toKey: string): Promise<void>;
   remove(key: string): Promise<void>;
   readAsBuffer(key: string): Promise<Buffer>;
+  /**
+   * The inclusive byte range `[start, end]` of an object. Shorter than asked when the object ends
+   * first, and empty when it starts past the end — the same shape as an HTTP 206.
+   */
+  readRange(key: string, start: number, end: number): Promise<Buffer>;
 }
 
 export class StorageLimitExceededError extends Error {}

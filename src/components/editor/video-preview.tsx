@@ -626,6 +626,7 @@ export function VideoPreview({
                 togglePlay();
               }}
               aria-label="Play"
+              title="Play the clip"
               className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/55 p-4 text-white transition hover:bg-black/70"
               style={{ top: captionIsCentred ? "28%" : "50%" }}
             >

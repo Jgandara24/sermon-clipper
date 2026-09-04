@@ -113,9 +113,12 @@ test.describe("the timeline layout", () => {
     expect(Number(await startHandle(page).getAttribute("aria-valuenow"))).toBe(CLIP_START_MS);
   });
 
-  test("the Audio row shows where the speech is, from the transcript", async ({ page }) => {
-    // Four words begin in the fixture's six seconds, each in a bucket of its own; nothing is drawn
-    // for the silence after them.
+  test("the Audio row shows where the speech is, from the transcript, until audio exists", async ({
+    page,
+  }) => {
+    // This fixture has no extracted audio. Four words begin in its six seconds, each in a bucket
+    // of its own; nothing is drawn for the silence after them, and the row says what it drew from.
+    await expect(audioRow(page)).toHaveAttribute("data-source", "transcript");
     await expect(audioRow(page).locator("rect")).toHaveCount(4);
   });
 
@@ -192,12 +195,12 @@ test.describe("the timeline layout", () => {
   }) => {
     await selectTrack(page, "audio");
     await expect(volumeSlider(page)).toHaveValue("100");
-    expect(await page.evaluate(() => document.querySelector("video")!.volume)).toBe(1);
+    expect(await page.evaluate(() => document.querySelector<HTMLVideoElement>('[data-testid="canvas-content"] video')!.volume)).toBe(1);
 
     await volumeSlider(page).fill("40");
 
     // The preview plays the sermon's own sound at the new level on the same input event.
-    expect(await page.evaluate(() => document.querySelector("video")!.volume)).toBeCloseTo(0.4, 5);
+    expect(await page.evaluate(() => document.querySelector<HTMLVideoElement>('[data-testid="canvas-content"] video')!.volume)).toBeCloseTo(0.4, 5);
     await expect
       .poll(async () => (await storedState(fixture.clipId))?.audio.originalVolume, {
         timeout: 15_000,
@@ -249,5 +252,120 @@ test.describe("the timeline layout", () => {
     await expect(titlePanel(page)).toBeVisible();
     await expect(page.getByTestId("title-text")).toBeVisible();
     await expect(page.getByTestId("track-select-title")).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+test.describe("the Audio row with extracted audio", () => {
+  let fixture: CanvasFixture;
+
+  test.beforeEach(async ({ context, page }) => {
+    fixture = await createCanvasFixture(getStorageProvider(), { audio: true });
+    await signInAs(context, fixture.userId);
+    await openCanvasEditor(page, fixture.clipId);
+  });
+
+  test.afterEach(async () => {
+    await signOutTestSessions();
+    await destroyCanvasFixture(fixture);
+    if (process.env.STORAGE_LOCAL_ROOT) {
+      await rm(process.env.STORAGE_LOCAL_ROOT, { recursive: true, force: true });
+    }
+  });
+
+  test("draws the sermon's own sound rather than the transcript", async ({ page }) => {
+    await expect(audioRow(page)).toHaveAttribute("data-source", "audio", { timeout: 15_000 });
+
+    // A steady tone plays for all six seconds; the transcript's four words stop at 2.4. Bars past
+    // the last word can only have come from the audio.
+    const bars = audioRow(page).locator("rect");
+    await expect.poll(async () => bars.count()).toBeGreaterThanOrEqual(50);
+    const box = (await audioRow(page).boundingBox())!;
+    const last = (await bars.last().boundingBox())!;
+    expect(last.x + last.width).toBeGreaterThan(box.x + box.width * 0.9);
+  });
+
+  test("keeps drawing the sound while the window zooms", async ({ page }) => {
+    await expect(audioRow(page)).toHaveAttribute("data-source", "audio", { timeout: 15_000 });
+
+    for (let step = 0; step < 3; step += 1) {
+      await page.getByRole("button", { name: "Zoom in" }).click();
+    }
+    await expect(page.getByTestId("timeline-zoom")).toHaveText("8×");
+
+    await expect(audioRow(page)).toHaveAttribute("data-source", "audio");
+    await expect.poll(async () => audioRow(page).locator("rect").count()).toBeGreaterThanOrEqual(
+      50,
+    );
+  });
+});
+
+/** Every frame tile on the Video row, and the states they have settled into. */
+const frameTiles = (page: Page) => page.getByTestId("video-frame");
+async function frameStates(page: Page) {
+  return frameTiles(page).evaluateAll((tiles) =>
+    tiles.map((tile) => tile.getAttribute("data-state")),
+  );
+}
+
+test.describe("the Video row's frames", () => {
+  let fixture: CanvasFixture | undefined;
+
+  test.afterEach(async () => {
+    await signOutTestSessions();
+    await destroyCanvasFixture(fixture);
+    fixture = undefined;
+    if (process.env.STORAGE_LOCAL_ROOT) {
+      await rm(process.env.STORAGE_LOCAL_ROOT, { recursive: true, force: true });
+    }
+  });
+
+  test("shows recognisable frames from the source, and no blank or single-colour tile", async ({
+    context,
+    page,
+  }) => {
+    fixture = await createCanvasFixture(getStorageProvider());
+    await signInAs(context, fixture.userId);
+    await openCanvasEditor(page, fixture.clipId);
+    await videoRow(page).scrollIntoViewIfNeeded();
+
+    await expect.poll(async () => (await frameTiles(page).count()) >= 4).toBe(true);
+    await expect
+      .poll(async () => (await frameStates(page)).every((state) => state === "ready"), {
+        timeout: 30_000,
+      })
+      .toBe(true);
+
+    // The fixture's source is a colour test pattern. A decoded frame of it has many colours; the
+    // blue strip this guards against, and a frame drawn before decoding, have one.
+    const distinctColours = await frameTiles(page).evaluateAll((tiles) =>
+      tiles.map((tile) => {
+        const canvas = tile as HTMLCanvasElement;
+        const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+        const seen = new Set<number>();
+        for (let i = 0; i < data.length; i += 4) {
+          seen.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+        }
+        return seen.size;
+      }),
+    );
+    for (const count of distinctColours) expect(count).toBeGreaterThan(8);
+  });
+
+  test("shows a neutral placeholder, never a wrong image, when a frame cannot be produced", async ({
+    context,
+    page,
+  }) => {
+    fixture = await createCanvasFixture(getStorageProvider(), { brokenSource: true });
+    await signInAs(context, fixture.userId);
+    await openCanvasEditor(page, fixture.clipId);
+    await videoRow(page).scrollIntoViewIfNeeded();
+
+    await expect.poll(async () => (await frameTiles(page).count()) >= 4).toBe(true);
+    await expect
+      .poll(async () => (await frameStates(page)).every((state) => state === "placeholder"), {
+        timeout: 30_000,
+      })
+      .toBe(true);
+    await expect(frameTiles(page).filter({ has: page.locator('[data-state="ready"]') })).toHaveCount(0);
   });
 });

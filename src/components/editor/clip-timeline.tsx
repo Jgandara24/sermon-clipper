@@ -15,9 +15,12 @@ import {
   TIMELINE_ZOOM_MIN,
   type TrimViewport,
 } from "@/lib/editor/trim";
+import { normalisePeaks } from "@/lib/media/wav";
 import { chooseDensityBucketMs, wordDensityBars } from "@/lib/editor/word-density";
 import { AudioTrack } from "./audio-track";
 import { TitleTrack } from "./title-track";
+import { useAudioPeaks } from "./use-audio-peaks";
+import { VideoFrames } from "./video-frames";
 
 // Nearest-boundary snap distance, as a fraction of the visible window — a couple percent, so it
 // grabs a word edge you're clearly aiming at without fighting fine adjustments.
@@ -81,12 +84,14 @@ function readTrack(target: EventTarget | null): TimelineTrack | null {
  * hands it. Neither row has a pointer↔time mapping of its own that could disagree with this one.
  */
 export function ClipTimeline({
+  sourceVideoUrl,
   sourceDurationMs,
   startMs,
   endMs,
   currentMs,
   wordBoundaries,
   wordStartsMs,
+  audio,
   title,
   zoom,
   onZoomChange,
@@ -97,13 +102,17 @@ export function ClipTimeline({
   onCommitTrim,
   onScrub,
 }: {
+  /** The signed source URL the preview plays, for the Video row's frames. */
+  sourceVideoUrl: string;
   sourceDurationMs: number;
   startMs: number;
   endMs: number;
   currentMs: number;
   wordBoundaries: number[];
-  /** Every word's start on the source timeline, for the Audio row's density. */
+  /** Every word's start on the source timeline, for the Audio row until its audio arrives. */
   wordStartsMs: number[];
+  /** The source whose peaks the Audio row asks for. */
+  audio: { videoId: string };
   title: {
     banner: TitleBanner | null;
     onChange: (range: TitleRange) => void;
@@ -163,14 +172,22 @@ export function ClipTimeline({
     [wordBoundaries, span],
   );
 
-  const densityBars = useMemo(
+  // The Audio row: real peaks once the source's audio has arrived, speech density until then.
+  // Both are bucketed the same way, so the row does not change shape when the sound arrives.
+  const bucketMs = chooseDensityBucketMs(span);
+  const bucketCount = Math.ceil(span / bucketMs);
+  const audioPeaks = useAudioPeaks(
+    audio.videoId,
+    { start: view.start, end: view.start + span },
+    bucketCount,
+    sourceDurationMs,
+  );
+  const audioBars = useMemo(
     () =>
-      wordDensityBars(
-        wordStartsMs,
-        { start: view.start, end: view.start + span },
-        chooseDensityBucketMs(span),
-      ),
-    [wordStartsMs, view.start, span],
+      audioPeaks
+        ? normalisePeaks(audioPeaks)
+        : wordDensityBars(wordStartsMs, { start: view.start, end: view.start + span }, bucketMs),
+    [audioPeaks, wordStartsMs, view.start, span, bucketMs],
   );
 
   const handlePointerDown = (event: React.PointerEvent) => {
@@ -279,10 +296,14 @@ export function ClipTimeline({
       aria-label="Timeline"
       className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm"
     >
+      {/*
+        No heading of its own: the editor names this area above it, and two "Timeline" headings on
+        one page is one more than the page has areas.
+      */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Scissors size={18} className="text-teal-800" aria-hidden="true" />
-          <h2 className="font-semibold">Timeline</h2>
+          <p className="text-sm font-semibold">Trim and preview</p>
         </div>
         <p className="text-xs font-medium text-stone-600">
           {formatClock(startMs)} – {formatClock(endMs)}
@@ -447,6 +468,13 @@ export function ClipTimeline({
             role="group"
             aria-label="Clip trim timeline"
           >
+            {/* The source's own frames, under everything else the row draws. */}
+            <VideoFrames
+              sourceVideoUrl={sourceVideoUrl}
+              view={view}
+              settled={frozenView === null}
+              focusMs={(startMs + endMs) / 2}
+            />
             {/* Trimmed-away source, dimmed on each side of the selection. */}
             <div
               className="pointer-events-none absolute inset-y-0 left-0 rounded-l-md bg-stone-200/80"
@@ -489,7 +517,12 @@ export function ClipTimeline({
             className={`relative ${AUDIO_ROW_CLASS} ${rowRing(activeTrack === "audio")}`}
             data-track="audio"
           >
-            <AudioTrack bars={densityBars} clipStartPct={startPct} clipEndPct={endPct} />
+            <AudioTrack
+              bars={audioBars}
+              source={audioPeaks ? "audio" : "transcript"}
+              clipStartPct={startPct}
+              clipEndPct={endPct}
+            />
           </div>
 
           {/* The playhead's line, down through every row from the knob's strip. */}
@@ -542,6 +575,7 @@ function RowLabel({
       <button
         type="button"
         data-testid={`track-select-${track}`}
+        title={`Show the ${track} settings`}
         aria-pressed={active}
         onClick={() => onSelect(track)}
         className={`w-full rounded-md border px-2 py-1 text-left ${

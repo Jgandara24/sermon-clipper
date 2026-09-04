@@ -69,6 +69,11 @@ export function CaptionStylePanel({
             type="button"
             aria-pressed={captions.presetId === option.id}
             onClick={() => onChange({ ...captions, presetId: option.id }, "immediate")}
+            title={
+              option.style.activeWordHighlight
+                ? "Lights each word as it is spoken"
+                : "Renders the whole line, with nothing lit"
+            }
             className={`rounded-md border px-2 py-2 text-xs font-medium ${
               captions.presetId === option.id
                 ? "border-teal-700 bg-teal-50 text-teal-800"
@@ -199,6 +204,7 @@ export function CaptionStylePanel({
           type="button"
           onClick={() => setAdvancedOpen((open) => !open)}
           aria-expanded={advancedOpen}
+          title="Font weight, outline, shadow and background"
           aria-controls="caption-advanced-styling"
           className="flex w-full items-center gap-1.5 text-xs font-medium text-stone-700 hover:text-stone-900"
         >
