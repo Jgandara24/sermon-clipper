@@ -3011,3 +3011,64 @@ provider: in production the canvas is tainted by the cross-origin object URL, wh
 showing frames and irrelevant to the test.
 
 Status: Active.
+
+## 2026-09-04 - The Plan's Visual System Is The Prototype's, Not This Application's
+
+Decision: Slice 12's structural bullets are built — four named areas, centred headings, draggable
+dividers, a header carrying every action, one export entry point, a hover description on every
+control — and its one colour bullet is not. The headings are set in the application's own accent
+rather than red, and the stone-and-teal system stays.
+
+Why: the bullet reads "The black, white, and red visual system **stays**", which describes
+something already true of the thing it was written about. It is not true of this application,
+which has been stone and teal since Phase 1, and whose timeline Jake reviewed and approved in
+exactly that palette on 2026-09-04. The plan's own §1 names its source as
+`MOZI_REDESIGN_1_0_CLAUDE_HANDOFF_2026-08-17.md`, a document that is not in this repository, so
+the prototype's palette cannot be read from anything here either. Re-skinning every screen a
+church sees, on a sentence that assumes the change has already happened, is not a call to make
+unattended — and "red headings" against a teal system would be the one wrong half of it.
+
+Tradeoff: if the prototype's palette really is where this product is going, that work is still to
+do, and this slice has added four headings that will need recolouring with everything else.
+
+Status: **Open for the product owner.** Everything else in Slice 12 is done.
+
+## 2026-09-04 - The Billing Badge's Exhaustive Switch Does Not Exist, And Was Left Alone
+
+Decision: `src/components/app-shell.tsx` still resolves the workspace's billing state through a
+nested inline conditional, and this slice did not touch it.
+
+Why: Slice 12's hard constraint says the badge "now resolves through an exhaustive
+`workspaceAccessLabel` switch, so dropping a state is a compile error; do not reintroduce an
+inline conditional there." No such function exists anywhere in the repository, and the inline
+conditional the constraint forbids reintroducing is what is there. The same sentence also says the
+badge "is not touched by this slice or any other" — so writing the switch it wishes existed would
+break the rule in order to satisfy the rule. The absolute half wins: nothing was touched.
+
+The risk the constraint is about is real and still open. Adding a fifth access state would leave
+that chain falling through to "Trial ended · Read-only", silently, with no compile error.
+
+Tradeoff: recording a defect rather than fixing a four-line function feels thin. Fixing it means
+editing the one file the plan protects, which is a change the product owner should authorise
+deliberately.
+
+Status: **Open for the product owner.** Named here so it is not lost.
+
+## 2026-09-04 - Five Words Is A Title Target, And Export Is Not A Modal
+
+Decision: two smaller calls made while building Slice 12.
+
+**A clip title of five words is a target, not a limit.** The header's field counts the words, says
+when a title has run past five, and saves it regardless. Every clip generated before this rule has
+a longer title — the demo sermon's is nine words — and refusing to save a name a church already
+approved, or truncating it on screen, would be a worse fault than a long title. Renaming writes
+straight to the clip and never creates an editor version: a clip's name is not part of what the
+clip contains.
+
+**The export drawer is not a modal.** An export can be refused for something the member must fix
+in another panel: a clip carrying old word cuts is refused, and the refusal names the control in
+the Script panel that puts them back. A dialog that swallowed the page would name a way out it had
+just taken away. The transcript suite proved it — the modal version timed out clicking the control
+its own refusal recommends. Escape still closes it, and the header button is still the only way in.
+
+Status: Active.
