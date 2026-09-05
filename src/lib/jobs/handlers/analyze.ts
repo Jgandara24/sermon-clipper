@@ -2,6 +2,7 @@ import { GeneratedClipStatus, ProjectStatus, type Prisma } from "@prisma/client"
 import { buildInitialEditorState } from "@/lib/editor/types";
 import { INITIAL_EDIT_VERSION } from "@/lib/exports/edit-version";
 import { getAnalysisProvider, type AnalysisProviderSelection } from "@/lib/analysis";
+import { assertReanalysisAllowed } from "@/lib/analysis/reanalysis-policy";
 import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidate-limit";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
@@ -110,6 +111,11 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       },
     },
   });
+
+  // P1.7. A rebuild deletes the project's clips and everything that cascades from them. Refused
+  // here, before a paid analysis call, if anyone has already done durable work on those clips;
+  // asked again inside the rebuild transaction, which is the answer that binds.
+  await assertReanalysisAllowed(prisma, { projectId: project.id });
 
   const transcript = project.sourceVideo?.transcript;
   if (!transcript || transcript.segments.length === 0) {
@@ -296,9 +302,14 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
   const kept = deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
 
   await prisma.$transaction(async (tx) => {
+    // The binding check. The early one saved the cost of analysis; this one closes the window
+    // between it and the deletes below, in which a person could have saved an edit. A refusal
+    // here rolls back nothing, because nothing has been written yet.
+    await assertReanalysisAllowed(tx, { projectId: project.id });
+
     await tx.scriptureReference.deleteMany({ where: { projectId: project.id } });
-    // Unfired calendar slots are re-derived below; published/in-flight rows survive the clip
-    // deleteMany as history (clip_id is ON DELETE SET NULL).
+    // Unfired calendar slots are re-derived below. Rows in any other state block the rebuild
+    // above, so none are left behind detached.
     await clearReschedulableScheduledPosts(tx, {
       workspaceId: project.workspaceId,
       projectId: project.id,

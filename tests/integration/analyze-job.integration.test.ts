@@ -1,5 +1,6 @@
 import {
   AuthProvider,
+  ClipApprovalState,
   PrismaClient,
   ProcessingJobState,
   ProcessingJobType,
@@ -9,6 +10,7 @@ import {
   WorkspaceRole,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { REANALYSIS_BLOCKED } from "@/lib/analysis/reanalysis-policy";
 import { createAnalyzeJobHandler, runAnalyzeJob } from "@/lib/jobs/handlers/analyze";
 import { JobFailureError } from "@/lib/jobs/types";
 
@@ -453,10 +455,39 @@ describe("ANALYZE charter — slot arming", () => {
   });
 });
 
-describe("ANALYZE charter — re-analysis is destructive", () => {
-  // DEFECT UNDER CHARTER — fixed by P1.7. Re-running ANALYZE deletes every existing clip for the
-  // project, taking any review, approval, or export linkage with it. P1.7 must refuse instead.
-  it("deletes prior clips and their unpublished slots on a second run", async () => {
+describe("ANALYZE — re-analysis after durable work", () => {
+  // INVERTED BY P1.7 (2026-09-05). The charter recorded that a second run deleted every clip,
+  // taking edits, approvals and exports with it, and left a published slot detached. A rebuild
+  // is now refused once any of that exists, and it changes nothing when it refuses. An untouched
+  // project still rebuilds, which is the only case the old behaviour was ever right about.
+
+  /** Everything a rebuild would touch, so a refusal can be shown to have touched none of it. */
+  async function snapshot(projectId: string) {
+    const [clips, posts, references, project] = await Promise.all([
+      prisma.generatedClip.findMany({ where: { projectId }, orderBy: { rank: "asc" } }),
+      prisma.scheduledPost.findMany({
+        where: { OR: [{ projectId }, { clip: { projectId } }] },
+        orderBy: { scheduledDate: "asc" },
+      }),
+      prisma.scriptureReference.findMany({ where: { projectId }, orderBy: { id: "asc" } }),
+      prisma.project.findUniqueOrThrow({ where: { id: projectId } }),
+    ]);
+    return { clips, posts, references, status: project.status };
+  }
+
+  async function rerun(projectId: string, label: string) {
+    const job = await prisma.processingJob.create({
+      data: {
+        projectId,
+        type: ProcessingJobType.ANALYZE,
+        state: ProcessingJobState.RUNNING,
+        idempotencyKey: unique(label),
+      },
+    });
+    return runAnalyzeJob({ job, prisma } as Parameters<typeof runAnalyzeJob>[0]);
+  }
+
+  async function seedFirstRun() {
     const workspaceId = await seedWorkspace();
     const first = await analyzeProject({
       workspaceId,
@@ -465,55 +496,106 @@ describe("ANALYZE charter — re-analysis is destructive", () => {
       targetClipCount: 3,
     });
     expect(first.clips.length).toBeGreaterThan(0);
+    return { workspaceId, first };
+  }
+
+  it("still rebuilds a project nobody has touched", async () => {
+    const { first } = await seedFirstRun();
     const originalClipIds = first.clips.map((c) => c.id);
 
-    const job = await prisma.processingJob.create({
-      data: {
-        projectId: first.projectId,
-        type: ProcessingJobType.ANALYZE,
-        state: ProcessingJobState.RUNNING,
-        idempotencyKey: unique("charter-rerun"),
-      },
-    });
-    await runAnalyzeJob({ job, prisma } as Parameters<typeof runAnalyzeJob>[0]);
+    await rerun(first.projectId, "rerun-untouched");
 
     const survivors = await prisma.generatedClip.findMany({ where: { id: { in: originalClipIds } } });
     expect(survivors).toHaveLength(0);
-
     const rebuilt = await prisma.generatedClip.findMany({ where: { projectId: first.projectId } });
     expect(rebuilt.length).toBeGreaterThan(0);
   });
 
-  it("preserves a slot that has already published", async () => {
-    const workspaceId = await seedWorkspace();
-    const first = await analyzeProject({
-      workspaceId,
-      segmentCount: 300,
-      sermonDate: new Date("2026-03-04T00:00:00.000Z"),
-      targetClipCount: 3,
+  it("refuses once a person has saved an edit, and changes nothing", async () => {
+    const { first } = await seedFirstRun();
+    // Version 2: the machine writes version 1 itself, and that one does not count.
+    await prisma.clipEdit.create({
+      data: { clipId: first.clips[0].id, version: 2, editorState: { version: 2 } },
+    });
+    const before = await snapshot(first.projectId);
+
+    await expect(rerun(first.projectId, "rerun-edited")).rejects.toMatchObject({
+      code: REANALYSIS_BLOCKED,
+      retryable: false,
+      preservesProject: true,
     });
 
+    expect(await snapshot(first.projectId)).toEqual(before);
+  });
+
+  it("refuses once a clip has an export job", async () => {
+    const { workspaceId, first } = await seedFirstRun();
+    await prisma.exportJob.create({
+      data: {
+        clipId: first.clips[0].id,
+        workspaceId,
+        filename: "sermon.mp4",
+        idempotencyKey: unique("export"),
+        editVersion: 1,
+      },
+    });
+    const before = await snapshot(first.projectId);
+
+    await expect(rerun(first.projectId, "rerun-exported")).rejects.toMatchObject({
+      code: REANALYSIS_BLOCKED,
+    });
+    expect(await snapshot(first.projectId)).toEqual(before);
+  });
+
+  it("refuses once a clip has an approval record, in any state", async () => {
+    const { workspaceId, first } = await seedFirstRun();
+    await prisma.clipApproval.create({
+      data: {
+        workspaceId,
+        clipId: first.clips[0].id,
+        state: ClipApprovalState.DRAFT,
+        reviewToken: unique("review-token"),
+        reviewTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    const before = await snapshot(first.projectId);
+
+    await expect(rerun(first.projectId, "rerun-approval")).rejects.toMatchObject({
+      code: REANALYSIS_BLOCKED,
+    });
+    expect(await snapshot(first.projectId)).toEqual(before);
+  });
+
+  it("refuses once a slot has published, and the slot keeps its clip", async () => {
+    const { first } = await seedFirstRun();
     const published = first.posts[0];
     await prisma.scheduledPost.update({
       where: { id: published.id },
       data: { publishStatus: SchedulePublishStatus.SUCCEEDED, facebookPostId: "charter-post" },
     });
+    const before = await snapshot(first.projectId);
 
-    const job = await prisma.processingJob.create({
-      data: {
-        projectId: first.projectId,
-        type: ProcessingJobType.ANALYZE,
-        state: ProcessingJobState.RUNNING,
-        idempotencyKey: unique("charter-rerun2"),
-      },
+    await expect(rerun(first.projectId, "rerun-published")).rejects.toMatchObject({
+      code: REANALYSIS_BLOCKED,
     });
-    await runAnalyzeJob({ job, prisma } as Parameters<typeof runAnalyzeJob>[0]);
 
-    const still = await prisma.scheduledPost.findUnique({ where: { id: published.id } });
-    expect(still).not.toBeNull();
-    expect(still?.publishStatus).toBe(SchedulePublishStatus.SUCCEEDED);
-    // The clip it pointed at is gone, so the row is now detached history.
-    expect(still?.clipId).toBeNull();
+    const still = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: published.id } });
+    expect(still.publishStatus).toBe(SchedulePublishStatus.SUCCEEDED);
+    // The charter's "detached history" — clipId null — no longer happens: the clip is still there.
+    expect(still.clipId).toBe(published.clipId);
+    expect(await snapshot(first.projectId)).toEqual(before);
+  });
+
+  it("refuses once a slot is in flight, before a claim could be orphaned", async () => {
+    const { first } = await seedFirstRun();
+    await prisma.scheduledPost.update({
+      where: { id: first.posts[0].id },
+      data: { publishStatus: SchedulePublishStatus.IN_PROGRESS },
+    });
+
+    await expect(rerun(first.projectId, "rerun-in-flight")).rejects.toMatchObject({
+      code: REANALYSIS_BLOCKED,
+    });
   });
 });
 

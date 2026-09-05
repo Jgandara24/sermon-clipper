@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ProcessingJobType } from "@prisma/client";
+import { assertReanalysisAllowed } from "@/lib/analysis/reanalysis-policy";
 import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import {
   finishRuntimeMeasurement,
@@ -122,6 +123,12 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   if (!sourceVideo) {
     throw new JobFailureError("STORAGE_UNAVAILABLE", "Storage hiccup — try again in a minute.");
   }
+
+  // P1.7. A new transcript repoints every positional word id and triggers a clip rebuild, so a
+  // re-run is refused before anything is downloaded or paid for once a person has done durable
+  // work on this project's clips. A first transcription has no clips and passes. Asked again
+  // inside the transaction that replaces the transcript, which is the answer that binds.
+  await assertReanalysisAllowed(prisma, { projectId: project.id });
 
   const storage = getStorageProvider();
   const transcriptionKeyterms = readScribeKeyterms(project.processingConfig);
@@ -384,6 +391,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   const fullText = segments.map((segment) => segment.text).join(" ");
 
   await prisma.$transaction(async (tx) => {
+    await assertReanalysisAllowed(tx, { projectId: project.id });
     await tx.transcript.deleteMany({ where: { sourceVideoId: sourceVideo.id } });
     const transcript = await tx.transcript.create({
       data: {

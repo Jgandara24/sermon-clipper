@@ -76,8 +76,17 @@ export async function runOnePendingJob(): Promise<boolean> {
 
     const failure =
       error instanceof JobFailureError
-        ? { code: error.code, message: error.userMessage, retryable: error.retryable }
-        : { code: "INTERNAL_ERROR", message: "Something went wrong processing this stage." };
+        ? {
+            code: error.code,
+            message: error.userMessage,
+            retryable: error.retryable,
+            preservesProject: error.preservesProject,
+          }
+        : {
+            code: "INTERNAL_ERROR",
+            message: "Something went wrong processing this stage.",
+            preservesProject: false,
+          };
 
     if (!(error instanceof JobFailureError)) {
       console.error(`[worker] job ${job.id} (${job.type}) failed unexpectedly`, error);
@@ -97,9 +106,14 @@ export async function runOnePendingJob(): Promise<boolean> {
       console.warn(`[worker] job ${job.id} (${job.type}) failed after losing its claim; state left untouched`);
       return true;
     }
-    // CLEANUP is background maintenance on a possibly-healthy project: its failure must not
-    // fail the project or touch minute reservations the way a pipeline-stage failure does.
-    if (outcome === "FAILED" && job.type !== ProcessingJobType.CLEANUP) {
+    // CLEANUP is background maintenance on a possibly-healthy project, and a refusal that
+    // preserves the project did nothing to it. Neither may fail the project or touch minute
+    // reservations the way a pipeline-stage failure does.
+    if (
+      outcome === "FAILED" &&
+      job.type !== ProcessingJobType.CLEANUP &&
+      !failure.preservesProject
+    ) {
       await releaseReservationsForProject(prisma, {
         projectId: job.projectId,
         note: `Released after failure: ${failure.code}`,
