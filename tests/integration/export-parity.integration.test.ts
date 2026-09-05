@@ -21,9 +21,9 @@ import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/capti
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import { applyTextCase } from "@/lib/editor/text-case";
 import { readTitleBanner } from "@/lib/editor/title-banner";
-import { buildDefaultEditorState, wordId, type EditorState } from "@/lib/editor/types";
+import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
 import { applyEditorDeletions, flattenWords, wordsInRange } from "@/lib/editor/words";
-import { mapToKeptTimeline } from "@/lib/export/kept-ranges";
+import { toOutputTimeline } from "@/lib/export/output-timeline";
 import { renderClipExport } from "@/lib/export/render";
 import { runExportJob } from "@/lib/exports/handler";
 import { buildExportRenderPlan } from "@/lib/exports/render-plan";
@@ -463,7 +463,7 @@ describe("one real export, checked against the document the editor shows", () =>
 
     // The document's own arithmetic, not a number copied into the test.
     expect(plan.outputDurationS).toBeCloseTo((TRIM_END_MS - TRIM_START_MS) / 1_000, 6);
-    expect(plan.keptRanges).toEqual([{ startMs: TRIM_START_MS, endMs: TRIM_END_MS }]);
+    expect(plan.range).toEqual({ startMs: TRIM_START_MS, endMs: TRIM_END_MS });
     expect(probed.durationS).toBeGreaterThan(plan.outputDurationS - 0.5);
     expect(probed.durationS).toBeLessThan(plan.outputDurationS + 0.5);
     // And shorter than the source it was cut from, which is the point of a trim.
@@ -534,8 +534,8 @@ describe("one real export, checked against the document the editor shows", () =>
     expect(captionEvents.length).toBeGreaterThan(0);
 
     const expectedSpan = {
-      startMs: mapToKeptTimeline(previewLines[0].startMs, plan.keptRanges),
-      endMs: mapToKeptTimeline(previewLines[previewLines.length - 1].endMs, plan.keptRanges),
+      startMs: toOutputTimeline(previewLines[0].startMs, plan.range),
+      endMs: toOutputTimeline(previewLines[previewLines.length - 1].endMs, plan.range),
     };
     const actualSpan = {
       startMs: Math.min(...captionEvents.map((event) => assTimeToMs(event.start))),
@@ -589,8 +589,8 @@ describe("one real export, checked against the document the editor shows", () =>
     const titleEvents = assEvents(plan.assContent).filter((event) => event.style === "Title");
     expect(titleEvents.length).toBeGreaterThan(0);
 
-    const expectedStartMs = mapToKeptTimeline(banner.startMs, plan.keptRanges);
-    const expectedEndMs = mapToKeptTimeline(banner.endMs, plan.keptRanges);
+    const expectedStartMs = toOutputTimeline(banner.startMs, plan.range);
+    const expectedEndMs = toOutputTimeline(banner.endMs, plan.range);
     expect(expectedStartMs).toBe(TITLE_START_MS - TRIM_START_MS);
     expect(expectedEndMs).toBe(TITLE_END_MS - TRIM_START_MS);
 
@@ -606,8 +606,8 @@ describe("one real export, checked against the document the editor shows", () =>
   it("shows the title while it is timed to be on screen, and nothing after it", async () => {
     const banner = readTitleBanner(document.overlays);
     if (!banner) throw new Error("the parity document carries a title");
-    const onScreenAtS = (mapToKeptTimeline(banner.startMs, plan.keptRanges) + 500) / 1_000;
-    const afterS = (mapToKeptTimeline(banner.endMs, plan.keptRanges) + 700) / 1_000;
+    const onScreenAtS = (toOutputTimeline(banner.startMs, plan.range) + 500) / 1_000;
+    const afterS = (toOutputTimeline(banner.endMs, plan.range) + 700) / 1_000;
 
     // The title's background is white, and nothing else in this render is.
     const whitePixels = (frame: Buffer) => {
@@ -661,7 +661,7 @@ describe("the document's original volume reaches the file", () => {
       const beforePath = path.join(workDir, "before.mp4");
       await renderClipExport({
         sourceFilePath: storage.absolutePath(sourceStorageKey),
-        keptRanges: plan.keptRanges,
+        range: plan.range,
         cropPixels: plan.cropPixels,
         assFileContent: plan.assContent,
         outputPath: beforePath,

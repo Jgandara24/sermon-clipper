@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { ffmpegPath as resolveFfmpegPath } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
-import type { TimeRange } from "./kept-ranges";
+import { rangeDurationMs, type TimeRange } from "./output-timeline";
 
 export class RenderError extends Error {}
 
@@ -50,24 +50,12 @@ export function buildExportAudioFilter(originalVolume: number | undefined): stri
   return volume === 1 ? LOUDNORM : `${LOUDNORM},volume=${volume}`;
 }
 
-async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
-  try {
-    await execFileWithTimeout(ffmpegPath, args, {
-      maxBuffer: 1024 * 1024 * 64,
-      // Per encode pass; clip exports are seconds-to-minutes of output, so a pass that runs
-      // this long is wedged, not slow.
-      timeoutMs: envTimeoutMs("EXPORT_FFMPEG_TIMEOUT_MS", 900_000),
-    });
-  } catch (error) {
-    throw new RenderError(`ffmpeg failed: ${(error as Error).message}`);
-  }
-}
-
-export type RenderClipExportParams = {
+export type ExportFfmpegArgsParams = {
   sourceFilePath: string;
-  keptRanges: TimeRange[];
+  /** The one span of the source the file contains, on the source timeline. */
+  range: TimeRange;
   cropPixels: { x: number; y: number; w: number; h: number };
-  assFileContent: string;
+  assFilePath: string;
   outputPath: string;
   outputWidth: number;
   outputHeight: number;
@@ -76,96 +64,90 @@ export type RenderClipExportParams = {
 };
 
 /**
- * Renders a clip export per guide §15 step 3: sub-range extraction (+concat for word-deletes)
- * → crop → scale → subtitles burn → loudnorm → x264/AAC encode. Three ffmpeg passes rather than
- * one filter_complex graph — simpler to reason about and debug, at the cost of one extra
- * encode; acceptable for short (seconds-to-minutes) clip exports.
+ * The whole render as one ffmpeg invocation, pure so a test can read it without running it.
+ *
+ * `-ss` before `-i` seeks the source and, because the output is transcoded, decodes from the
+ * keyframe before the seek point and discards up to it — a frame-accurate cut, which a stream
+ * copy could not make. It also restarts the clock: the first frame out is at zero, which is the
+ * timeline the subtitle script is written on. `-t` closes the file at the range's length. The
+ * filter graph then crops, fills, burns the captions and normalises the audio in the same pass,
+ * and the encode is the one the deliverable always had: x264 medium at CRF 18, AAC at 192k, the
+ * index moved to the front for playback that starts before the download finishes.
+ */
+export function buildExportFfmpegArgs(params: ExportFfmpegArgsParams): string[] {
+  return [
+    "-y",
+    "-ss",
+    (params.range.startMs / 1000).toFixed(3),
+    "-i",
+    params.sourceFilePath,
+    "-t",
+    (rangeDurationMs(params.range) / 1000).toFixed(3),
+    "-vf",
+    buildExportFilterGraph(
+      params.cropPixels,
+      params.outputWidth,
+      params.outputHeight,
+      params.assFilePath,
+    ),
+    "-af",
+    buildExportAudioFilter(params.originalVolume),
+    "-c:v",
+    "libx264",
+    "-preset",
+    "medium",
+    "-crf",
+    "18",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-movflags",
+    "+faststart",
+    params.outputPath,
+  ];
+}
+
+async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
+  try {
+    await execFileWithTimeout(ffmpegPath, args, {
+      maxBuffer: 1024 * 1024 * 64,
+      // One encode pass; clip exports are seconds-to-minutes of output, so a pass that runs
+      // this long is wedged, not slow.
+      timeoutMs: envTimeoutMs("EXPORT_FFMPEG_TIMEOUT_MS", 900_000),
+    });
+  } catch (error) {
+    throw new RenderError(`ffmpeg failed: ${(error as Error).message}`);
+  }
+}
+
+export type RenderClipExportParams = Omit<ExportFfmpegArgsParams, "assFilePath"> & {
+  assFileContent: string;
+};
+
+/**
+ * Renders a clip export: one continuous span of the source, in one ffmpeg pass.
+ *
+ * It used to be three — one re-encode per kept sub-range, a concat, then the final encode —
+ * because a document could cut words out of the middle and the file was the surviving pieces
+ * spliced together. The continuity gate now refuses such a document before anything is
+ * downloaded, so every deliverable is one range and the first two passes only re-encoded the
+ * source once more on its way to the third. One pass encodes the source once, which is both
+ * faster and a generation better.
  */
 export async function renderClipExport(params: RenderClipExportParams): Promise<void> {
-  if (params.keptRanges.length === 0) {
-    throw new RenderError("Nothing survived the edits — every word in this clip was deleted.");
+  if (rangeDurationMs(params.range) <= 0) {
+    throw new RenderError("The clip's range has no duration.");
   }
 
   const ffmpegPath = resolveFfmpegPath();
   const workDir = await mkdtemp(path.join(tmpdir(), "sermon-clipper-export-"));
 
   try {
-    // Pass 1: extract + re-encode each kept sub-range for frame-accurate cuts (stream copy can
-    // only cut at keyframes, which isn't precise enough for word-level deletes).
-    const segmentPaths: string[] = [];
-    for (const [index, range] of params.keptRanges.entries()) {
-      const segmentPath = path.join(workDir, `seg-${index}.mp4`);
-      await runFfmpeg(ffmpegPath, [
-        "-y",
-        "-ss",
-        (range.startMs / 1000).toFixed(3),
-        "-i",
-        params.sourceFilePath,
-        "-t",
-        ((range.endMs - range.startMs) / 1000).toFixed(3),
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "20",
-        "-c:a",
-        "aac",
-        "-avoid_negative_ts",
-        "make_zero",
-        segmentPath,
-      ]);
-      segmentPaths.push(segmentPath);
-    }
-
-    // Pass 2: concat via the concat demuxer — all segments share identical encode params, so a
-    // stream copy concat is lossless and fast even with just one segment (the no-deletes case).
-    const concatListPath = path.join(workDir, "concat.txt");
-    await writeFile(
-      concatListPath,
-      segmentPaths.map((segmentPath) => `file '${segmentPath.replace(/'/g, "'\\''")}'`).join("\n"),
-    );
-    const concatenatedPath = path.join(workDir, "concatenated.mp4");
-    await runFfmpeg(ffmpegPath, [
-      "-y",
-      "-f",
-      "concat",
-      "-safe",
-      "0",
-      "-i",
-      concatListPath,
-      "-c",
-      "copy",
-      concatenatedPath,
-    ]);
-
-    // Pass 3: crop/scale/caption-burn/loudnorm in one final encode.
     const assFilePath = path.join(workDir, "captions.ass");
     await writeFile(assFilePath, params.assFileContent, "utf8");
-
     await mkdir(path.dirname(params.outputPath), { recursive: true });
-    await runFfmpeg(ffmpegPath, [
-      "-y",
-      "-i",
-      concatenatedPath,
-      "-vf",
-      buildExportFilterGraph(params.cropPixels, params.outputWidth, params.outputHeight, assFilePath),
-      "-af",
-      buildExportAudioFilter(params.originalVolume),
-      "-c:v",
-      "libx264",
-      "-preset",
-      "medium",
-      "-crf",
-      "18",
-      "-c:a",
-      "aac",
-      "-b:a",
-      "192k",
-      "-movflags",
-      "+faststart",
-      params.outputPath,
-    ]);
+    await runFfmpeg(ffmpegPath, buildExportFfmpegArgs({ ...params, assFilePath }));
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }

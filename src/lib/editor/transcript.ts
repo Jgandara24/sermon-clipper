@@ -6,7 +6,7 @@
 // (see the 2026-08-12 decision "Filler Tags Never Delete Spoken Words by Default").
 
 import type { EditorState } from "./types";
-import type { EditorWordWithDeletion } from "./words";
+import type { EditorWord, EditorWordWithDeletion } from "./words";
 
 export type WordTextOverride = { wordId: string; text: string };
 
@@ -26,10 +26,10 @@ export type EditorWordWithText = EditorWordWithDeletion & { originalWord: string
  * Shows each word's correction in place of the transcribed text, keeping the transcribed text
  * reachable so typing it back can drop the correction rather than store a no-op.
  */
-export function applyWordTextOverrides(
-  words: EditorWordWithDeletion[],
+export function applyWordTextOverrides<W extends EditorWord>(
+  words: W[],
   state: EditorState,
-): EditorWordWithText[] {
+): Array<W & { originalWord: string }> {
   const corrections = new Map(
     wordTextOverrides(state).map((override) => [override.wordId, override.text]),
   );

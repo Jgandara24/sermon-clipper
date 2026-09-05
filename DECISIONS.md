@@ -3350,3 +3350,35 @@ This entry is the why.
 
 Status: Active. Revisit when Prisma 8 ships a stable release; that upgrade is then a planned
 major-version change, not a security patch.
+
+## 2026-09-05 - An Export Is One Range In One Pass
+
+Decision: `renderClipExport` runs one ffmpeg invocation. It seeks the source to the clip's start,
+closes the file at the clip's length, and crops, fills, burns the captions, normalises the audio
+and encodes in that same pass. The three-pass path — one re-encode per kept sub-range, a concat,
+then the final encode — is retired, and so is `mapToKeptTimeline`. The source-to-output
+conversion is `toOutputTimeline(ms, range)` in `src/lib/export/output-timeline.ts`, which the
+render plan and the parity gate both read. The render plan carries one `range`, the clip's own,
+and asserts the continuity gate itself, so it can never describe a render the gate would refuse.
+`computeKeptRanges` stays in `src/lib/export/kept-ranges.ts` as the gate's arithmetic and nothing
+else. This completes P1.5.
+
+Why: the continuity gate (2026-08-20) guarantees that every deliverable is one unbroken span of
+the source, so the first two passes only re-encoded the source once more on its way to the third.
+One pass encodes it once: faster, less CPU on the metered render stage, and a generation better
+in quality, because the old path went through x264 twice (CRF 20 veryfast, then CRF 18 medium).
+No test covered more than one range, and the plan's P1.5 named the retirement as its outcome.
+
+Two things the change settles on the way. A source instant before the clip's range — a title
+timed against a start that the trim has since moved past — now lands at the file's first frame,
+which is where the preview shows it; the old mapping pushed it to the end of the file, so the
+title vanished from the export while the preview drew it. And a word that starts inside the range
+and runs past its end still ends where the file ends, as before.
+
+Tradeoff: an export rendered after this deploy is not byte-identical to one rendered before it.
+Nothing stored changes — an existing export stays as it is, and a request for the same clip and
+edit version returns the same job — but a fresh render of an old clip differs in bytes and
+improves in quality. Nothing the gate or QC checks moves: the parity gate's colour clock, caption
+timing, title timing and audio measurements all hold, and they are what proves it.
+
+Status: Active. Never restore concatenated delivery.
