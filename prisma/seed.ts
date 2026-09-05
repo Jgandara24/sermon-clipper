@@ -1,6 +1,8 @@
 import {
   AuthProvider,
   ClipApprovalState,
+  EditorialCohort,
+  EditorialProgramState,
   GeneratedClipStatus,
   LedgerKind,
   Prisma,
@@ -15,15 +17,20 @@ import {
 const prisma = new PrismaClient();
 const demoEmail = "demo@sermonclipper.local";
 const reviewTokenExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+const humanReferenceProgramKey = "human_reference";
 
 async function main() {
+  // The demo user is a platform operator so a local checkout can open the operator review
+  // queue (P2.2, P2.5). Production grants the marker only through scripts/set-platform-operator.
   const user = await prisma.user.upsert({
     where: { email: demoEmail },
-    update: { name: "Demo Volunteer" },
+    update: { name: "Demo Volunteer", isPlatformOperator: true },
     create: {
       email: demoEmail,
       name: "Demo Volunteer",
       authProvider: AuthProvider.DEV,
+      isPlatformOperator: true,
+      platformOperatorGrantedAt: new Date(),
     },
   });
 
@@ -259,6 +266,38 @@ async function main() {
       note: "Seeded Phase 1 development balance.",
     },
   });
+
+  // The human-reference program row exists from the Wave 2 migration; the seed only makes a
+  // fresh local database match. It stays NOT_STARTED: the clock is an explicit recorded act
+  // (P2.9), never a side effect of seeding.
+  await prisma.editorialProgram.upsert({
+    where: { key: humanReferenceProgramKey },
+    update: {},
+    create: {
+      key: humanReferenceProgramKey,
+      state: EditorialProgramState.NOT_STARTED,
+      minimumDays: 30,
+    },
+  });
+
+  await prisma.editorialProgramWorkspace.upsert({
+    where: {
+      programKey_workspaceId: {
+        programKey: humanReferenceProgramKey,
+        workspaceId: workspace.id,
+      },
+    },
+    update: {},
+    create: {
+      programKey: humanReferenceProgramKey,
+      workspaceId: workspace.id,
+      cohort: EditorialCohort.HUMAN_ONLY,
+      reason: "Seeded demo workspace; every workspace starts human-only.",
+    },
+  });
+
+  // No ClipReview is seeded. A review is the standard of record for what may publish, and a
+  // fabricated one would be evidence of a decision nobody made.
 }
 
 main()

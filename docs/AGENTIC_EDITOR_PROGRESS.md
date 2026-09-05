@@ -11,7 +11,7 @@ build the whole implementation plan in order.
 
 ## Where the build stands
 
-`main` is at `bd934ca` (PR #72, 2026-09-05). Production web and worker both run that commit.
+`main` is at `9f5470b` (PR #81, 2026-09-05). Production web and worker both run P1's last commit.
 
 | Work | State | Evidence |
 |---|---|---|
@@ -30,7 +30,8 @@ build the whole implementation plan in order.
 | P1.10 capture and correct service occurrence | done | 2026-09-05; direct uploads state the service date and occurrence; correction gated at the reanalysis boundary |
 | P1.11 delivery eligibility module | done | 2026-09-05; `src/lib/delivery/{eligibility,settings,query}.ts`, wired into the publisher; the latest-export fallback is gone |
 | P1.12 harden publication claims | done | 2026-09-05; intent rows before the Meta call, exact claim, indeterminate outcomes block instead of retrying |
-| P2–P8 | not started | |
+| P2.1 deploy migration wave 2 | done | 2026-09-05; `clip_reviews`, `clip_review_feedback`, the platform-operator marker and the editorial program tables. Append-only enforced by a database trigger, not by the service that writes it |
+| P2.2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -196,6 +197,57 @@ image could not be checked either.
 named and again with the bundled family named, and compare the frames. Until then the head of each
 stack is frozen. The existing guard test was narrowed rather than deleted: it now asserts the first
 family of each retired preset, which is the part that reaches a file.
+
+### P2.1 deviations
+
+**Append-only is a database trigger, not a service rule.** The plan lists "append-only
+constraints" among P2.1's tests without saying where they live. They live in the migration:
+`editorial_evidence_is_append_only()` fires `BEFORE UPDATE` on `clip_reviews` and
+`clip_review_feedback` and refuses every update, with one exemption for a referential `SET NULL`
+clearing a live foreign key. Putting it in P2.3's service instead would leave the standard of
+record editable by any script, migration, or future route that forgot the rule.
+
+**`DELETE` is not blocked, and that is a deliberate limit.** Both tables cascade from
+`workspaces`. A trigger that refused the cascade would break tenant teardown — and every
+integration test that deletes its workspace in cleanup — with an error nobody could act on. The
+guarantee is that a decision cannot be silently altered; erasure is bounded by deleting a whole
+tenant, which is not a product feature today. Recorded in `DECISIONS.md`.
+
+**Seven feedback categories, not the six the plan lists.** The S15 actionability table names
+`CONTENT`, `FORBIDDEN_CONTENT`, `BOUNDARY`, visual crop, `CAPTION` and audio level. The editorial
+standard §7 also puts the machine-generated title and hook in front of the reviewer as fields
+under review, and none of the six is a home for a finding about them, so `title_hook` was added,
+revisable like the other metadata defects. Adding it now costs a line in an unshipped enum; adding
+it in P2.6 costs a migration.
+
+**Identity facts are typed columns; context is JSON.** Wave 1's `EditorialException` stores
+`projectSnapshot` and `slotSnapshot` as JSON. `ClipReview` splits them: the four facts P2.8 must
+match exactly — clip, edit version, the slot's bound export, and the QC-time checksum — are typed
+columns because they are query inputs, and the delivery gate has an index over
+(`export_job_id_snapshot`, `decision`, `created_at`) that JSON could not serve. Scheduled date,
+platform, title and hook stay in `slot_snapshot`.
+
+**No `ClipReview` is seeded, and the program row is.** The seed marks the demo user a platform
+operator and upserts the single `human_reference` program plus the demo workspace's `human_only`
+cohort row, but it seeds no review. A fabricated review would be evidence of a decision nobody
+made, in the one table delivery eligibility trusts. The program row itself is created by the
+migration, so P2.9's start command can only ever move an existing row's state.
+
+**The SQL was generated with `migrate diff`, not `migrate dev --create-only`.** The plan says to
+use `--create-only`, which needs a dev database in sync with the migration history. The local one
+is not: it carries `20260724120000_add_sermon_outline` from `feat/semantic-outline-pipeline` and
+is missing `20260814040000_gemini_31_flash_lite_price`, so `--create-only` offers to reset it.
+`prisma migrate diff --from-migrations --to-schema-datamodel` against a throwaway shadow database
+produces the same SQL without touching the dev database. Verified by replaying every migration
+into a fresh database and diffing it back against the datamodel: only the three known spurious
+statements remain, so Wave 2 introduces no drift.
+
+**One extra spurious statement had to be removed from the generated SQL.** The plan warns about
+"the two known bad tsvector statements". Prisma now also re-emits
+`ALTER TABLE "workspaces" ALTER COLUMN "trial_ends_at" SET DEFAULT (CURRENT_TIMESTAMP + interval
+'30 days')` — the identical default the column already carries, which Prisma cannot compare
+because it is `dbgenerated`. It is a no-op and was removed with the other two. Expect three, not
+two, in Wave 3.
 
 ### P1.12 deviations
 

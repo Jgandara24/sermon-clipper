@@ -221,12 +221,91 @@ enum ChannelImportPlatform {
   @@map("channel_import_platform")
 }
 
+// Wave 2 review vocabulary. `AGENT` exists so P7 can record an agent decision in the same
+// table without a migration; through P2 every row is written by a human.
+enum ReviewerKind {
+  HUMAN @map("human")
+  AGENT @map("agent")
+
+  @@map("reviewer_kind")
+}
+
+// The three decisions of the editorial standard (docs/PULPIT_ENGINE_EDITORIAL_STANDARD.md §7).
+// A bare REPLACE row is refused by the service layer: only P2.7's atomic command may write one,
+// together with supersession, reserve promotion, slot rebinding, and the priority export.
+enum ClipReviewDecision {
+  ACCEPT  @map("accept")
+  REVISE  @map("revise")
+  REPLACE @map("replace")
+
+  @@map("clip_review_decision")
+}
+
+// What the finding is about. The category decides the default actionability (S15):
+// CONTENT and mid-clip FORBIDDEN_CONTENT are replace-only; every other category is revisable.
+enum ReviewFeedbackCategory {
+  CONTENT           @map("content")
+  FORBIDDEN_CONTENT @map("forbidden_content")
+  BOUNDARY          @map("boundary")
+  VISUAL_CROP       @map("visual_crop")
+  CAPTION           @map("caption")
+  AUDIO_LEVEL       @map("audio_level")
+  TITLE_HOOK        @map("title_hook")
+
+  @@map("review_feedback_category")
+}
+
+enum ReviewFeedbackSeverity {
+  BLOCKER @map("blocker")
+  MAJOR   @map("major")
+  MINOR   @map("minor")
+  INFO    @map("info")
+
+  @@map("review_feedback_severity")
+}
+
+// Whether the finding can be fixed by re-editing the same clip, needs a different clip, or
+// records an observation that asks for nothing. Stored per row so the table-driven default in
+// src/lib/review/feedback-policy.ts (P2.3) stays auditable after the table changes.
+enum ReviewFeedbackActionability {
+  REVISABLE     @map("revisable")
+  REPLACE_ONLY  @map("replace_only")
+  INFORMATIONAL @map("informational")
+
+  @@map("review_feedback_actionability")
+}
+
+enum EditorialProgramState {
+  NOT_STARTED @map("not_started")
+  ACTIVE      @map("active")
+  PAUSED      @map("paused")
+  COMPLETED   @map("completed")
+
+  @@map("editorial_program_state")
+}
+
+// Per-workspace position in the program. Promotion past HUMAN_ONLY is a later explicit act
+// (P7); Wave 2 only reserves the vocabulary and the promotion/rollback record.
+enum EditorialCohort {
+  HUMAN_ONLY @map("human_only")
+  ASSISTED   @map("assisted")
+  AGENT_LED  @map("agent_led")
+
+  @@map("editorial_cohort")
+}
+
 model User {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String       @unique
   name         String?
   authProvider AuthProvider @default(DEV) @map("auth_provider")
   locale       String       @default("en")
+  // Platform staff, not a workspace role. The repo's permission model is workspace-scoped, so
+  // this marker is the only thing that can grant cross-workspace editorial review (P2.2). It
+  // implies no billing, membership, or destructive tenant authority. Grants and revokes are
+  // audited as OperationalEvent rows; this column is only the current state.
+  isPlatformOperator        Boolean   @default(false) @map("is_platform_operator")
+  platformOperatorGrantedAt DateTime? @map("platform_operator_granted_at")
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
@@ -237,7 +316,14 @@ model User {
   clipApprovalRequests        ClipApproval[]
   authSessions                AuthSession[]
   resolvedEditorialExceptions EditorialException[]  @relation("EditorialExceptionResolver")
+  clipReviews                 ClipReview[]          @relation("ClipReviewReviewer")
+  clipReviewFeedback          ClipReviewFeedback[]  @relation("ClipReviewFeedbackAuthor")
+  startedEditorialPrograms    EditorialProgram[]    @relation("EditorialProgramStarter")
+  completedEditorialPrograms  EditorialProgram[]    @relation("EditorialProgramCompleter")
+  promotedEditorialCohorts    EditorialProgramWorkspace[] @relation("EditorialCohortPromoter")
+  rolledBackEditorialCohorts  EditorialProgramWorkspace[] @relation("EditorialCohortRollbacker")
 
+  @@index([isPlatformOperator])
   @@map("users")
 }
 
@@ -318,6 +404,9 @@ model Workspace {
   scheduledPosts          ScheduledPost[]
   dailyCostRollups        DailyCostRollup[]
   editorialExceptions     EditorialException[]
+  clipReviews             ClipReview[]
+  clipReviewFeedback      ClipReviewFeedback[]
+  editorialProgramState   EditorialProgramWorkspace[]
 
   @@index([ownerId])
   @@map("workspaces")
@@ -484,6 +573,7 @@ model Project {
   channelImportedVideos ChannelImportedVideo[]
   scheduledPosts        ScheduledPost[]
   editorialExceptions   EditorialException[]
+  clipReviews           ClipReview[]
 
   @@index([workspaceId])
   @@index([sourceVideoId])
@@ -611,6 +701,8 @@ model GeneratedClip {
   scriptureReferences ScriptureReference[]
   approvals           ClipApproval[]
   scheduledPosts      ScheduledPost[]
+  clipReviews         ClipReview[]         @relation("ClipReviewSubject")
+  replacementReviews  ClipReview[]         @relation("ClipReviewReplacement")
 
   @@unique([projectId, rank])
   @@index([workspaceId])
@@ -650,6 +742,7 @@ model ScheduledPost {
   exportJob           ExportJob?           @relation("ScheduledPostExport", fields: [exportJobId], references: [id], onDelete: SetNull)
   publishAttempts     PublishAttempt[]
   editorialExceptions EditorialException[]
+  clipReviews         ClipReview[]
 
   @@index([workspaceId, scheduledDate])
   @@index([projectId])
@@ -734,6 +827,8 @@ model ExportJob {
   workspace            Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   outputFile           ExportedFile?  @relation(fields: [outputFileId], references: [id], onDelete: SetNull)
   scheduledPostBinding ScheduledPost? @relation("ScheduledPostExport")
+  clipReviews          ClipReview[]   @relation("ClipReviewSubjectExport")
+  replacementReviews   ClipReview[]   @relation("ClipReviewReplacementExport")
 
   @@index([workspaceId, createdAt])
   @@index([state, runAfter])
@@ -999,6 +1094,178 @@ model EditorialException {
   @@index([scheduledPostId])
   @@index([resolvedByUserId])
   @@map("editorial_exceptions")
+}
+
+// The standard of record: one human decision about one exact deliverable file
+// (docs/PULPIT_ENGINE_EDITORIAL_STANDARD.md §7). Rows are append-only — a database trigger
+// refuses UPDATE and DELETE, so a decision is corrected by appending a newer one, never by
+// rewriting this one. The trigger's single exemption is a referential SET NULL that clears a
+// live foreign key; the `*Snapshot` columns beside each live link keep the evidence readable
+// after the clip, export, slot, or user is gone.
+//
+// The reviewed clip is also the *prior* clip of a REPLACE: `replacement*` names the reserve
+// that P2.7 promotes in the same transaction, and stays null for ACCEPT and REVISE.
+model ClipReview {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+
+  // Live links. Every one is nullable and SET NULL: the evidence outlives the row it points at.
+  projectId            String? @map("project_id") @db.Uuid
+  scheduledPostId      String? @map("scheduled_post_id") @db.Uuid
+  clipId               String? @map("clip_id") @db.Uuid
+  exportJobId          String? @map("export_job_id") @db.Uuid
+  replacementClipId    String? @map("replacement_clip_id") @db.Uuid
+  replacementExportId  String? @map("replacement_export_id") @db.Uuid
+  reviewerUserId       String? @map("reviewer_user_id") @db.Uuid
+
+  reviewerKind ReviewerKind       @default(HUMAN) @map("reviewer_kind")
+  decision     ClipReviewDecision
+
+  // Immutable identity of what was reviewed. P2.8 gates delivery on an exact match of all four
+  // of clip, edit version, the slot's bound export, and the QC-time checksum.
+  projectIdSnapshot       String @map("project_id_snapshot") @db.Uuid
+  scheduledPostIdSnapshot String @map("scheduled_post_id_snapshot") @db.Uuid
+  clipIdSnapshot          String @map("clip_id_snapshot") @db.Uuid
+  clipRank                Int    @map("clip_rank")
+  clipStartMs             Int    @map("clip_start_ms")
+  clipEndMs               Int    @map("clip_end_ms")
+  exportJobIdSnapshot     String @map("export_job_id_snapshot") @db.Uuid
+  editVersion             Int    @map("edit_version")
+  checksum                String
+
+  // Immutable identity of the reserve a REPLACE promoted. Null for ACCEPT and REVISE, and null
+  // for the REPLACE that found no reserve and left the slot UNFILLED.
+  replacementClipIdSnapshot     String? @map("replacement_clip_id_snapshot") @db.Uuid
+  replacementClipRank           Int?    @map("replacement_clip_rank")
+  replacementClipStartMs        Int?    @map("replacement_clip_start_ms")
+  replacementClipEndMs          Int?    @map("replacement_clip_end_ms")
+  replacementExportJobIdSnapshot String? @map("replacement_export_job_id_snapshot") @db.Uuid
+
+  // Scheduled date, platform, title, and hook as they read at decision time. Context for
+  // replay and for the review UI; never an eligibility input.
+  slotSnapshot Json @default("{}") @map("slot_snapshot")
+  note         String?
+  metadata     Json @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  workspace         Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project           Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  scheduledPost     ScheduledPost? @relation(fields: [scheduledPostId], references: [id], onDelete: SetNull)
+  clip              GeneratedClip? @relation("ClipReviewSubject", fields: [clipId], references: [id], onDelete: SetNull)
+  exportJob         ExportJob?     @relation("ClipReviewSubjectExport", fields: [exportJobId], references: [id], onDelete: SetNull)
+  replacementClip   GeneratedClip? @relation("ClipReviewReplacement", fields: [replacementClipId], references: [id], onDelete: SetNull)
+  replacementExport ExportJob?     @relation("ClipReviewReplacementExport", fields: [replacementExportId], references: [id], onDelete: SetNull)
+  reviewer          User?          @relation("ClipReviewReviewer", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+  feedback          ClipReviewFeedback[]
+
+  @@index([workspaceId, createdAt])
+  @@index([scheduledPostIdSnapshot, createdAt])
+  @@index([exportJobIdSnapshot, decision, createdAt])
+  @@index([clipIdSnapshot, createdAt])
+  @@index([decision, createdAt])
+  @@index([projectId])
+  @@index([scheduledPostId])
+  @@index([clipId])
+  @@index([exportJobId])
+  @@index([replacementClipId])
+  @@index([replacementExportId])
+  @@index([reviewerUserId])
+  @@map("clip_reviews")
+}
+
+// Findings hang off a review and are appended independently of it, without a practical limit:
+// a reviewer may add more findings hours after the decision. Append-only under the same
+// trigger as ClipReview. `actionability` is stored per row so a later change to the S15
+// default table cannot rewrite what a past finding demanded.
+model ClipReviewFeedback {
+  id           String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clipReviewId String @map("clip_review_id") @db.Uuid
+  workspaceId  String @map("workspace_id") @db.Uuid
+
+  category      ReviewFeedbackCategory
+  severity      ReviewFeedbackSeverity      @default(MAJOR)
+  actionability ReviewFeedbackActionability
+  note          String
+
+  // Optional location of the finding inside the reviewed clip, in clip-relative milliseconds.
+  startMs Int? @map("start_ms")
+  endMs   Int? @map("end_ms")
+
+  authorKind   ReviewerKind @default(HUMAN) @map("author_kind")
+  authorUserId String?      @map("author_user_id") @db.Uuid
+  metadata     Json         @default("{}")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  clipReview ClipReview @relation(fields: [clipReviewId], references: [id], onDelete: Cascade)
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author     User?      @relation("ClipReviewFeedbackAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([clipReviewId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([category, createdAt])
+  @@index([actionability, createdAt])
+  @@index([authorUserId])
+  @@map("clip_review_feedback")
+}
+
+// Durable state of the fixed human-only reference phase (P2.9). One row per program, keyed by
+// `key`, so the clock survives deploys and cannot be inferred from review rows. The start is an
+// explicit recorded act; `pausedMs` accumulates so a pause extends the phase and never shortens
+// it. `startEvidence` holds the smoke-test and sandbox-publication proof the start required.
+model EditorialProgram {
+  key               String                @id
+  state             EditorialProgramState @default(NOT_STARTED)
+  minimumDays       Int                   @default(30) @map("minimum_days")
+  startedAt         DateTime?             @map("started_at")
+  startedByUserId   String?               @map("started_by_user_id") @db.Uuid
+  pausedAt          DateTime?             @map("paused_at")
+  pausedMs          BigInt                @default(0) @map("paused_ms")
+  completedAt       DateTime?             @map("completed_at")
+  completedByUserId String?               @map("completed_by_user_id") @db.Uuid
+  startEvidence     Json                  @default("{}") @map("start_evidence")
+  metadata          Json                  @default("{}")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  startedBy   User?                       @relation("EditorialProgramStarter", fields: [startedByUserId], references: [id], onDelete: SetNull)
+  completedBy User?                       @relation("EditorialProgramCompleter", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  workspaces  EditorialProgramWorkspace[]
+
+  @@index([state])
+  @@index([startedByUserId])
+  @@index([completedByUserId])
+  @@map("editorial_programs")
+}
+
+// One workspace's position in a program. Promotion past HUMAN_ONLY and rollback back to it are
+// both explicit acts with an actor and a reason; this row is current state, and the audit trail
+// is the matching OperationalEvent.
+model EditorialProgramWorkspace {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programKey  String @map("program_key")
+  workspaceId String @map("workspace_id") @db.Uuid
+
+  cohort              EditorialCohort @default(HUMAN_ONLY)
+  promotedAt          DateTime?       @map("promoted_at")
+  promotedByUserId    String?         @map("promoted_by_user_id") @db.Uuid
+  rolledBackAt        DateTime?       @map("rolled_back_at")
+  rolledBackByUserId  String?         @map("rolled_back_by_user_id") @db.Uuid
+  reason              String?
+  metadata            Json            @default("{}")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  program      EditorialProgram @relation(fields: [programKey], references: [key], onDelete: Cascade)
+  workspace    Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  promotedBy   User?            @relation("EditorialCohortPromoter", fields: [promotedByUserId], references: [id], onDelete: SetNull)
+  rolledBackBy User?            @relation("EditorialCohortRollbacker", fields: [rolledBackByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([programKey, workspaceId])
+  @@index([workspaceId])
+  @@index([cohort])
+  @@index([promotedByUserId])
+  @@index([rolledBackByUserId])
+  @@map("editorial_program_workspaces")
 }
 
 model ChannelImportSource {
