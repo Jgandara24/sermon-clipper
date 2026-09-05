@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { assessScheduledPostDelivery } from "@/lib/delivery/query";
+import { FacebookApiAuthError, FacebookApiError } from "@/lib/integrations/facebook";
 import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher";
 
 /**
@@ -53,6 +54,12 @@ function uniqueKey(label: string) {
 }
 
 afterAll(async () => {
+  // PublishAttempt.scheduledPost is onDelete: Restrict — a record that an external post may
+  // exist must outlive a cascade, so it blocks the workspace delete. Nothing in src/ deletes a
+  // workspace, so this is teardown's problem alone: clear the attempts first.
+  await prisma.publishAttempt.deleteMany({
+    where: { scheduledPost: { workspaceId: { in: createdWorkspaceIds } } },
+  });
   await prisma.workspace.deleteMany({ where: { id: { in: createdWorkspaceIds } } });
   await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
   await prisma.$disconnect();
@@ -280,7 +287,10 @@ describe("publishDueScheduledPosts", () => {
       assessDelivery: async () => ({ eligible: true as const }),
       resolvePageAccessToken: async () => "page-token-abc",
       publishScheduledVideo: async () => {
-        throw new Error("Facebook API rejected the request (HTTP 403, Invalid OAuth access token).");
+        // A definite refusal: nothing was created, so the backoff ladder is the right response.
+        throw new FacebookApiAuthError(
+          "Facebook API rejected the request (HTTP 403, Invalid OAuth access token).",
+        );
       },
     };
 
@@ -430,6 +440,144 @@ describe("delivery eligibility against a real database", () => {
 
     const verdict = await assessScheduledPostDelivery(prisma, { scheduledPostId });
     expect(verdict).toEqual({ eligible: false, reason: "export_edit_version_stale" });
+  });
+});
+
+/**
+ * P1.12: claims, intent rows, and the rule that no clip's other export is ever reachable.
+ */
+describe("publish claims and intent", () => {
+  it("no fallback to latest export", async () => {
+    const workspaceId = await createWorkspace("No Fallback", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "no-fallback");
+    const post = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    const boundExportJobId = post.exportJobId;
+
+    // A newer, perfectly good SUCCEEDED export of the very same clip, finished after the bound
+    // one. The old code ordered by finishedAt desc and would have chosen exactly this.
+    const newerFile = await prisma.exportedFile.create({
+      data: {
+        storageKey: `exports/${workspaceId}/newer.mp4`,
+        bytes: BigInt(2048),
+        width: 1080,
+        height: 1920,
+        checksum: "sha256-newer",
+        downloadExpiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const newerExport = await prisma.exportJob.create({
+      data: {
+        clipId: post.clipId!,
+        workspaceId,
+        state: ProcessingJobState.SUCCEEDED,
+        idempotencyKey: `newer-${Date.now()}`,
+        filename: "newer.mp4",
+        outputFileId: newerFile.id,
+        editVersion: 1,
+        qcStatus: RenderQcStatus.PASSED,
+        qcChecksum: "sha256-newer",
+        finishedAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    const fileUrls: string[] = [];
+    await publishDueScheduledPosts(prisma, {
+      now: () => new Date("2026-07-20T15:00:00Z"),
+      assessDelivery: async () => ({ eligible: true as const }),
+      resolvePageAccessToken: async () => "page-token",
+      publishScheduledVideo: async (input) => {
+        fileUrls.push(input.fileUrl);
+        return { facebookPostId: "fb-no-fallback" };
+      },
+    });
+
+    // Other cases in this file leave due rows behind, so assert on the property that matters
+    // rather than on how many posts this poll happened to pick up: the newer export is never the
+    // one chosen, for this slot or any other.
+    expect(fileUrls.some((url) => url.includes("newer.mp4"))).toBe(false);
+    const attempt = await prisma.publishAttempt.findFirstOrThrow({
+      where: { scheduledPostId },
+    });
+    expect(attempt.expectedExportJobId).toBe(boundExportJobId);
+    expect(attempt.expectedExportJobId).not.toBe(newerExport.id);
+  });
+
+  it("records intent before the call and settles it as SUCCEEDED after", async () => {
+    const workspaceId = await createWorkspace("Intent Settled", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "intent-settled");
+
+    await publishDueScheduledPosts(prisma, {
+      now: () => new Date("2026-07-20T15:00:00Z"),
+      assessDelivery: async () => ({ eligible: true as const }),
+      resolvePageAccessToken: async () => "page-token",
+      publishScheduledVideo: async () => {
+        // Mid-call, the intent row already exists and is unsettled.
+        const open = await prisma.publishAttempt.findFirstOrThrow({ where: { scheduledPostId } });
+        expect(open.state).toBe("INTENT");
+        return { facebookPostId: "fb-intent" };
+      },
+    });
+
+    const settled = await prisma.publishAttempt.findFirstOrThrow({ where: { scheduledPostId } });
+    expect(settled.state).toBe("SUCCEEDED");
+    expect(settled.providerPostId).toBe("fb-intent");
+  });
+
+  it("blocks the slot and opens an exception when the outcome cannot be read", async () => {
+    const workspaceId = await createWorkspace("Indeterminate", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "indeterminate");
+
+    const summary = await publishDueScheduledPosts(prisma, {
+      now: () => new Date("2026-07-20T15:00:00Z"),
+      assessDelivery: async () => ({ eligible: true as const }),
+      resolvePageAccessToken: async () => "page-token",
+      publishScheduledVideo: async () => {
+        throw new FacebookApiError("Facebook API request failed (HTTP 503).", {
+          indeterminate: true,
+        });
+      },
+    });
+
+    expect(summary.postsIndeterminate).toBe(1);
+    const slot = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    expect(slot.publishStatus).toBe("BLOCKED");
+    expect(slot.nextAttemptAt).toBeNull();
+
+    const exception = await prisma.editorialException.findFirstOrThrow({
+      where: { scheduledPostId, exceptionType: "indeterminate_publish_outcome" },
+    });
+    expect(exception.state).toBe("OPEN");
+
+    const attempt = await prisma.publishAttempt.findFirstOrThrow({ where: { scheduledPostId } });
+    expect(attempt.state).toBe("INDETERMINATE");
+  });
+
+  it("refuses the claim when the slot's clip changed after the decision", async () => {
+    const workspaceId = await createWorkspace("Replacement Race", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "race");
+    let metaCalls = 0;
+
+    await publishDueScheduledPosts(prisma, {
+      now: () => new Date("2026-07-20T15:00:00Z"),
+      // A reserve is swapped into the slot between the read and the claim.
+      assessDelivery: async () => {
+        await prisma.scheduledPost.update({
+          where: { id: scheduledPostId },
+          data: { clipId: null },
+        });
+        return { eligible: true as const };
+      },
+      resolvePageAccessToken: async () => "page-token",
+      publishScheduledVideo: async () => {
+        metaCalls++;
+        return { facebookPostId: "fb-race" };
+      },
+    });
+
+    expect(metaCalls).toBe(0);
+    const slot = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    expect(slot.publishStatus).toBe("NOT_STARTED");
+    expect(await prisma.publishAttempt.count({ where: { scheduledPostId } })).toBe(0);
   });
 });
 

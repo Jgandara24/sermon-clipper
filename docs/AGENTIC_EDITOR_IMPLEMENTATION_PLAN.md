@@ -21,8 +21,8 @@ its renderer half is not. The editor delta plan, `docs/EDITOR_DELTA_PLAN_2026-08
 complete and closed — Slices 1–13, PRs #43 through #72. `main` is at `bd934ca` and production
 runs it.
 
-P1.5's renderer and P1.6 through P1.11 all followed on 2026-09-05. **Next: P1.12.** Then P2, P3,
-P4, P5 and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
+P1.5's renderer and P1.6 through P1.12 all followed on 2026-09-05. **All of P1 is built. Next:
+P2**, then P3, P4, P5 and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
 Whole Plan In Order; No Customer Until Publishing Works").
 
 **The record of actual progress and deviations is `docs/AGENTIC_EDITOR_PROGRESS.md`.** Read it
@@ -1091,6 +1091,10 @@ ineligible until P2 records editorial reviews, as intended. Deviations in
 Until P2 exists, missing editorial review is ineligible. This is intentional.
 
 ### P1.12 — Harden publication claims and reconciliation
+
+**Built 2026-09-05.** The latest-export lookup was already deleted in P1.11. This commit added
+the exact claim, `src/lib/delivery/publish-attempts.ts`, and blocking on indeterminate outcomes.
+Deviations in `docs/AGENTIC_EDITOR_PROGRESS.md`.
 
 **Commit:** `fix(publishing): bind external attempts to exact slot intent`
 

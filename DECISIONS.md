@@ -3546,3 +3546,31 @@ publisher. Neither is a fact about whether a render is the right render, and fol
 a pure delivery rule would make it depend on plan state.
 
 Status: Active. Never reintroduce a fallback from a slot to any export it is not bound to.
+
+## 2026-09-05 - Intent Is Recorded Before A Publish, And An Unknown Outcome Never Retries
+
+A publish is a side effect on someone else's system, and the process making it can die at any
+point. A `PublishAttempt` row naming the slot, the expected clip and the expected export is now
+written *before* the Meta call and settled after it.
+
+Without that row, a worker that died mid-publish is indistinguishable from one that died before
+dialling — and the safe-looking recovery, re-queueing the slot, is the one that posts to a
+church's Page twice. Stale-claim recovery now asks whether an unsettled intent exists: if it does,
+the slot is BLOCKED with an open `EditorialException` rather than re-queued; if it does not, the
+existing backoff ladder still applies.
+
+**An indeterminate outcome is not a failure.** `FacebookApiError` now carries `indeterminate`,
+set for a network failure, a 5xx or 408, a 2xx whose body would not parse, and a 2xx that carried
+no post id. Those may all have created a post. They block the slot and open an exception; they
+never enter the retry ladder. A 4xx or a rejected token is a refusal — nothing was created — and
+still retries. Anything unrecognised is treated as indeterminate: a mistaken "indeterminate" costs
+an operator one look at the Page, a mistaken "failed" costs the church a duplicate post.
+
+This narrows the retry ladder, deliberately. It previously covered network failures, which are
+precisely the cases that can double-post.
+
+**The claim is bound to the exact intent.** `updateMany` now matches the slot id, `NOT_STARTED`,
+*and* the clip and export the eligibility decision was made about. A reserve swapped into the slot
+between the decision and the claim no longer inherits a verdict that was never about it.
+
+Status: Active. Never re-queue a slot with an unsettled publish intent.

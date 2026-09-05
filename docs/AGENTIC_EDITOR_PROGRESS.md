@@ -29,7 +29,7 @@ build the whole implementation plan in order.
 | P1.9 arm weekday slots, stage retention | done | 2026-09-05; `analyze.ts` arms from the allocator behind `AUTOMATIC_SCHEDULE_ARMING_ENABLED`; `expiresAt` set; source deletion report-only behind `SOURCE_RETENTION_DELETION_ENABLED`. Both flags default false |
 | P1.10 capture and correct service occurrence | done | 2026-09-05; direct uploads state the service date and occurrence; correction gated at the reanalysis boundary |
 | P1.11 delivery eligibility module | done | 2026-09-05; `src/lib/delivery/{eligibility,settings,query}.ts`, wired into the publisher; the latest-export fallback is gone |
-| P1.12 | **next** | not started |
+| P1.12 harden publication claims | done | 2026-09-05; intent rows before the Meta call, exact claim, indeterminate outcomes block instead of retrying |
 | P2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
@@ -173,6 +173,29 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
     is the record of what was built instead.
 
 ---
+
+### P1.12 deviations
+
+**Its first outcome had already landed in P1.11.** The plan opens P1.12 with "delete the
+latest-SUCCEEDED-export lookup", citing `facebook-publisher.ts:199-205`. P1.11 removed it, because
+leaving a forbidden path live while introducing the module that forbids it was not defensible.
+P1.12 covers the rest: the exact claim, intent rows, and indeterminate handling.
+
+**The retry ladder got narrower, and that is the point.** It previously caught network failures
+and 5xx responses — exactly the outcomes where a post may already exist on the Page. Those now
+block. What still retries is a refusal: a 4xx, or a rejected token, where Meta created nothing.
+Two existing tests described network failures and an HTTP 500 as "transient failures" to retry;
+both were respecified, because under the new rule those are the cases that must not retry.
+
+**An unrecognised error is treated as indeterminate.** `classifyPublishFailure` only calls an
+outcome definite when it recognises the error as a refusal. A mistaken "indeterminate" costs an
+operator one look at the Page; a mistaken "failed" costs the church a duplicate post.
+
+**`PublishAttempt.scheduledPost` is `onDelete: Restrict`, which blocks workspace deletion.**
+Surfaced by an integration teardown, not by product code: nothing in `src/` deletes a workspace,
+and the Restrict is deliberate — a record that an external post may exist must outlive a cascade.
+Fixed in the test teardown rather than by weakening the constraint. Worth knowing if workspace
+deletion ever becomes a real operation.
 
 ### P1.11 deviations
 
