@@ -14,7 +14,7 @@ import {
 import Link from "next/link";
 import { logoutAction } from "@/app/actions/auth";
 import { hasWorkspacePermission, type WorkspacePermission } from "@/lib/authorization";
-import { decideWorkspaceAccess } from "@/lib/billing/access";
+import { decideWorkspaceAccess, workspaceAccessLabel } from "@/lib/billing/access";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -85,13 +85,7 @@ export function AppShell({ children, workspace, user, role }: AppShellProps) {
             <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Workspace</p>
             <p className="mt-2 text-sm font-semibold">{workspace.name}</p>
             <p className="mt-3 text-sm font-semibold text-teal-800">
-              {access.state === "paid"
-                ? "Paid"
-                : access.state === "trial_active"
-                  ? "Trial active"
-                  : access.state === "lapsed"
-                    ? "Subscription ended · Read-only"
-                    : "Trial ended · Read-only"}
+              {workspaceAccessLabel(access.state)}
             </p>
           </div>
         </aside>

@@ -617,12 +617,14 @@ repository.** All three are recorded in DECISIONS.md and are the product owner's
   `MOZI_REDESIGN_1_0_CLAUDE_HANDOFF_2026-08-17.md`, which is not in this repository. This
   application has been stone and teal since Phase 1, and its timeline was reviewed and approved in
   that palette on 2026-09-04. The area headings are set in the application's own accent, and
-  nothing was re-skinned.
+  nothing was re-skinned. **Settled 2026-09-04: the application stays stone and teal, and the
+  prototype's palette is not adopted.**
 - **The hard constraint's own premise.** There is no `workspaceAccessLabel` anywhere, and the app
   shell still holds the nested inline conditional the constraint forbids reintroducing. Since the
   same sentence says the badge is touched by no slice, it was left exactly as it is. The risk it
   warns about is live: a fifth access state would fall through to "Trial ended · Read-only" with no
-  compile error.
+  compile error. **Settled 2026-09-04: Slice 13 wrote the switch under a one-time authorised
+  exception, so the constraint's premise is now true.**
 - **Five words.** Kept as a target the title field counts against rather than a limit it enforces —
   every clip generated before the rule has a longer title, the demo sermon's being nine words.
 
@@ -648,6 +650,38 @@ download it was hiding behind.
 
 **Coverage:** preview/export parity for captions, title, trim, and audio volume; manual export
 without editorial approval while billing and access restrictions stay enforced.
+
+**Built 2026-09-04 (#69).** The parity gate is
+`tests/integration/export-parity.integration.test.ts`: real MP4s rendered through `runExportJob`,
+read back against the same pure functions `video-preview.tsx` draws the preview with. The source is
+a colour clock — one flat colour per second — so a frame names the source second it came from and
+the trim is checked as a picture rather than as arithmetic. Audio parity is measured with astats: a
+0.5 document renders 6.02dB quieter than a 1.0 one, and a 1.0 document renders byte-for-byte
+identical to the pre-control path. The absence of editor chrome is checked from both ends, from the
+ASS script and from every pixel of a frame.
+
+Three of this section's assumptions did not hold, and are recorded in DECISIONS.md:
+
+- **A trim is a range, not a word cut.** P1.4's delivery gate refuses an export whose document cuts
+  words out of the middle, so such a document never reaches a renderer to be checked. The gate trims
+  by range only.
+- **The derivation had to exist before it could be checked.** Every render decision was computed
+  inline inside `runExportJob`. `buildExportRenderPlan` (`src/lib/exports/render-plan.ts`) is that
+  derivation, extracted whole and made pure; the handler and the gate both call it.
+- **The gate list is not in this repository.** "Re-run only the rejected gates plus Gate 11" points
+  at the handoff document. This section's own behaviour bullets were treated as the gates.
+
+`src/lib/qc/render-output.ts` was not extended: shape, duration, audio presence and caption events
+already cover every gate above.
+
+**Two things were measured and deliberately left alone**: both open halves of the safe-area
+disagreement. The caption's 40px side margin against the guide's 6% is a 24.8px overlap at 1080
+wide, and the preview's block-centred caption (y 1651.2) against the burn-in's anchored bottom edge
+(y 1690) are two different quantities that coincide at one block height. Resolving either re-renders
+approved clips.
+
+**Follow-up, by design:** Playwright coverage for Slice 13 is added after the final UI is approved,
+so the selectors are written once.
 
 ---
 

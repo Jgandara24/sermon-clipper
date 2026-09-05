@@ -1,6 +1,11 @@
 import { WorkspaceAccessPlan } from "@prisma/client";
 import { describe, expect, it } from "vitest";
-import { decideWorkspaceAccess, trialDates } from "@/lib/billing/access";
+import {
+  decideWorkspaceAccess,
+  trialDates,
+  workspaceAccessLabel,
+  type WorkspaceAccessDecision,
+} from "@/lib/billing/access";
 
 const startedAt = new Date("2026-08-01T12:00:00Z");
 const dates = trialDates(startedAt);
@@ -79,5 +84,34 @@ describe("workspace access", () => {
     expect(
       decideWorkspaceAccess(resubscribed, "import_media", new Date("2026-09-15T12:00:00Z")),
     ).toMatchObject({ allowed: true, state: "paid" });
+  });
+});
+
+/**
+ * The badge in the app shell is the only place a member reads their billing state, and the plan
+ * protects the file it lives in. The label it shows is a decision about billing, so it lives with
+ * the other one — and it is a `switch` with a `never` check rather than a conditional chain, so a
+ * fifth access state is a compile error instead of a workspace silently told its trial ended.
+ */
+describe("workspaceAccessLabel", () => {
+  it("labels every access state", () => {
+    expect(workspaceAccessLabel("paid")).toBe("Paid");
+    expect(workspaceAccessLabel("trial_active")).toBe("Trial active");
+    expect(workspaceAccessLabel("lapsed")).toBe("Subscription ended · Read-only");
+    expect(workspaceAccessLabel("trial_expired")).toBe("Trial ended · Read-only");
+  });
+
+  it("covers the decision's own state union, with no state left unlabelled", () => {
+    const states: WorkspaceAccessDecision["state"][] = [
+      "paid",
+      "trial_active",
+      "lapsed",
+      "trial_expired",
+    ];
+
+    for (const state of states) {
+      expect(workspaceAccessLabel(state).length).toBeGreaterThan(0);
+    }
+    expect(new Set(states.map(workspaceAccessLabel)).size).toBe(states.length);
   });
 });

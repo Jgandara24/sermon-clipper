@@ -3031,12 +3031,20 @@ unattended — and "red headings" against a teal system would be the one wrong h
 Tradeoff: if the prototype's palette really is where this product is going, that work is still to
 do, and this slice has added four headings that will need recolouring with everything else.
 
-Status: **Open for the product owner.** Everything else in Slice 12 is done.
+Status: **Settled by the product owner, 2026-09-04.** The application stays stone and teal. The
+prototype's black, white and red is not adopted, here or later, and the four area headings keep the
+application's own accent. Everything else in Slice 12 is done.
 
-## 2026-09-04 - The Billing Badge's Exhaustive Switch Does Not Exist, And Was Left Alone
+## 2026-09-04 - The Billing Badge's Exhaustive Switch Now Exists, By Authorised Exception
 
-Decision: `src/components/app-shell.tsx` still resolves the workspace's billing state through a
-nested inline conditional, and this slice did not touch it.
+Decision: `workspaceAccessLabel(state)` now exists in `src/lib/billing/access.ts` as an exhaustive
+`switch` with a `never` check, and `src/components/app-shell.tsx` calls it where the nested inline
+conditional used to be. Nothing else in that file changed.
+
+Slice 12 recorded this as a defect and left it, because the same sentence that demanded the switch
+also said the badge is touched by no slice. The product owner authorised the one deliberate
+exception on 2026-09-04, in Slice 13: write the function, unit-test every state and the exact four
+strings the badge already showed, swap the conditional for the call, and change nothing else.
 
 Why: Slice 12's hard constraint says the badge "now resolves through an exhaustive
 `workspaceAccessLabel` switch, so dropping a state is a compile error; do not reintroduce an
@@ -3048,11 +3056,12 @@ break the rule in order to satisfy the rule. The absolute half wins: nothing was
 The risk the constraint is about is real and still open. Adding a fifth access state would leave
 that chain falling through to "Trial ended · Read-only", silently, with no compile error.
 
-Tradeoff: recording a defect rather than fixing a four-line function feels thin. Fixing it means
-editing the one file the plan protects, which is a change the product owner should authorise
-deliberately.
+Tradeoff: one protected file was edited, on an explicit authorisation rather than on a slice's own
+judgement. The badge renders the same four strings it always did, and the unit test pins them, so
+the exception buys the compile error without changing what a church reads.
 
-Status: **Open for the product owner.** Named here so it is not lost.
+Status: **Settled by the product owner, 2026-09-04.** The exception was authorised; the switch is
+built and the risk the constraint warned about is closed.
 
 ## 2026-09-04 - Five Words Is A Title Target, And Export Is Not A Modal
 
@@ -3071,4 +3080,96 @@ the Script panel that puts them back. A dialog that swallowed the page would nam
 just taken away. The transcript suite proved it — the modal version timed out clicking the control
 its own refusal recommends. Escape still closes it, and the header button is still the only way in.
 
+Status: **Settled by the product owner, 2026-09-04.** Five words stays a target the field counts
+against, not a limit it enforces; the export drawer stays a drawer. Both are active as written.
+
+## 2026-09-04 - Export Parity Is Checked Against A Derivation, Not Against A Rendered Guess
+
+Decision: the derivation an export runs on is now a pure function of the document —
+`buildExportRenderPlan` in `src/lib/exports/render-plan.ts` — and Slice 13's parity gate drives it
+with the same document the preview holds. `runExportJob` calls it too, so the thing checked is the
+thing rendered.
+
+Why: Slice 13 asks for "one real MP4 export, verified against the preview state". Before this, the
+cut list, the crop, the subtitle script, the caption count QC counts and the audio gain were all
+computed inline inside `runExportJob`, between a storage download and three ffmpeg passes. There was
+no way to ask what an export would render without rendering one, and no way to compare it to the
+preview except by reading pixels and hoping the reading was fair. A parity test written against a
+copy of that derivation would have proved only that the copy agreed with itself.
+
+The gate reads the file from both ends. The ASS script says what libass was told to draw: caption
+and title events and nothing else, in the styles the document resolves to. The frames say what
+libass drew: the source is a colour clock, one flat colour per second, so a frame names the source
+second it came from and the trim stops being an arithmetic claim.
+
+Tradeoff: one more module, and `runExportJob` now reads a plan instead of building one in front of
+the reader. The handler is shorter for it and the derivation is testable without a database, a
+storage provider or an encoder.
+
 Status: Active.
+
+## 2026-09-04 - What Slice 13 Found: A Trim Is A Range, And A Thin Guide Has No Colour
+
+Decision: three corrections to what Slice 13's section assumes, recorded rather than worked around.
+
+**"Trim" in an export means the clip's source range, never a word cut.** The slice's first bullet
+lists trim among the things to verify against the preview, and the obvious reading — trim the clip,
+delete a word from the middle, check both survive — cannot be tested, because P1.4's delivery gate
+refuses that export before any render happens (`assertContinuousRange`). A document with a mid-clip
+cut never reaches a renderer, so there is nothing to check parity against. The gate trims by range
+only, and says so.
+
+**A one-pixel guide line has no colour in the file.** The obvious test for "no centre guide in the
+MP4" is to look for teal pixels. Measured: a two-pixel teal line burned into a flat frame comes out
+at rgb(186,184,206) — near-grey. 4:2:0 chroma subsampling averages a thin line's chroma into its
+neighbours, and a colour test cannot see it. The colour scan is kept for filled shapes (a selection
+handle, a tinted band) and two other checks carry the thin ones: every pixel outside the captions
+and title is compared against the flat source colour, and the centre column is compared against its
+neighbours. Both were confirmed against frames with a guide deliberately burned in.
+
+**The gate list Slice 13 refers to is not in this repository.** "Re-run only the rejected gates plus
+Gate 11" points at a handoff document that is not here; §2 already records Gate 11 (export policy) as
+unblocked. The slice's own behaviour bullets were treated as the gates.
+
+Tradeoff: the parity gate renders four real MP4s and reads whole frames out of them, so the
+integration suite is about a minute longer. It is the only kind of evidence that answers the
+question the slice asks.
+
+Status: Active.
+
+## 2026-09-04 - Two Safe-Area Disagreements, Measured And Left Alone
+
+Decision: Slice 13's parity work put numbers on both open halves of the 2026-09-02 entry "The Social
+Safe Area Is One Versioned Datum". Nothing was changed. Resolving either re-renders clips a church
+has already approved, and that is the product owner's call.
+
+**The side margin.** The burn-in writes `MarginL`/`MarginR` of 40px into the caption style
+(`captionMarginHPx()`), and the preview's guide draws its side band at `chrome.left` = 6 percent. At
+1080 wide that band is 64.8px, so a full-width caption reaches **24.8px** into the band the guide
+tells the member to keep clear. Both numbers are in `social-safe-area-values.ts`, beside a comment
+that already says they disagree.
+
+**The vertical anchor.** These are not two values of one quantity; they are two different
+quantities. The burn-in anchors the caption's **bottom edge**: `\an2` with `MarginV` = 230, so the
+edge sits at y = 1690 in a 1920-tall frame. The preview centres the whole caption **block** on
+`captionRestCentreY.bottom` = 0.86, so its centre sits at y = 1651.2 and the block grows about that
+point. They coincide at exactly one block height and diverge either side of it: a taller caption
+hangs below the burn-in's anchor, a shorter one sits above it. Nothing in the parity gate asserts
+this, deliberately — an assertion either way would freeze one of the two answers.
+
+**Measured on a real exported frame**, rather than only from the constants. A one-row caption at
+52px in a 1080x1920 export inks from x=84 to x=995 and from y=1642 to y=1693:
+
+- It sits *inside* the guide's side band, because it is not wide enough to reach the 40px margin.
+  The overlap is a permission, not a certainty: the margin lets ink reach x=40 and x=1040, which is
+  24.8px into the band on each side, and only a caption wide enough to fill the line gets there.
+- Its bottom edge lands on y=1693, three pixels of outline past the burn-in's y=1690 anchor and so
+  just inside the 12 percent bottom band the guide draws.
+- Its own centre is therefore y=1667.5, while the preview would centre the same block on y=1651.2 —
+  **16.3px higher**, for this caption. A two-row caption moves that number, in the opposite
+  direction, because the two anchors scale differently with block height.
+
+Tradeoff: the gate is silent about the one thing it is best placed to measure. Recording the
+measurement is the whole of what this slice is allowed to do with it.
+
+Status: **Open for the product owner**, unchanged from 2026-09-02. Now carrying measurements.

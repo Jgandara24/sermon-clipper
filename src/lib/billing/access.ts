@@ -26,6 +26,31 @@ export type WorkspaceAccessDecision = {
   reason: "allowed" | "trial_expired_read_only" | "subscription_ended_read_only";
 };
 
+/**
+ * The label the app shell's workspace badge shows for an access state.
+ *
+ * A `switch` with a `never` check, not a conditional chain: the shell used to resolve this inline,
+ * where a fifth access state would have fallen through to "Trial ended · Read-only" — a workspace
+ * told the wrong thing about its own billing, with nothing failing to say so. Here it is a compile
+ * error. The four strings are exactly the ones the badge has always shown.
+ */
+export function workspaceAccessLabel(state: WorkspaceAccessDecision["state"]): string {
+  switch (state) {
+    case "paid":
+      return "Paid";
+    case "trial_active":
+      return "Trial active";
+    case "lapsed":
+      return "Subscription ended · Read-only";
+    case "trial_expired":
+      return "Trial ended · Read-only";
+    default: {
+      const unhandled: never = state;
+      throw new Error(`Unhandled workspace access state: ${String(unhandled)}`);
+    }
+  }
+}
+
 export function workspaceAccessMessage(decision: WorkspaceAccessDecision): string {
   return decision.state === "lapsed"
     ? "The subscription ended. This workspace is read-only until it changes to Paid."
