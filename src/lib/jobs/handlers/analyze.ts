@@ -1,4 +1,10 @@
-import { GeneratedClipStatus, ProjectStatus, type Prisma } from "@prisma/client";
+import {
+  EditorialExceptionState,
+  GeneratedClipStatus,
+  ProjectStatus,
+  SchedulePublishStatus,
+  type Prisma,
+} from "@prisma/client";
 import { buildInitialEditorState } from "@/lib/editor/types";
 import { INITIAL_EDIT_VERSION } from "@/lib/exports/edit-version";
 import { getAnalysisProvider, type AnalysisProviderSelection } from "@/lib/analysis";
@@ -21,8 +27,13 @@ import {
 import {
   clearReschedulableScheduledPosts,
   findScheduledPostCollision,
-  scheduledDateForRank,
 } from "@/lib/scheduling";
+import { allocatePostingSlots, type PostingSlot } from "@/lib/schedule/posting-schedule";
+import { readProjectProcessingConfig } from "@/lib/project-service";
+import {
+  lockSourceVideoForRetention,
+  sourceExpiresAtForSchedule,
+} from "@/lib/retention";
 import { settleTranscriptionFallbackHold } from "@/lib/transcription/fallback-hold";
 import { resolveTranscriptionProviderPolicy } from "@/lib/transcription/policy";
 
@@ -314,6 +325,22 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       workspaceId: project.workspaceId,
       projectId: project.id,
     });
+    // The UNFILLED slots just cleared had open exceptions pointing at them. Their rows are gone,
+    // so the exceptions describe a slot that no longer exists; close them as superseded rather
+    // than leaving an operator queue that grows by one entry per re-analysis. The rebuild below
+    // opens fresh ones for whatever the new pool still cannot fill.
+    await tx.editorialException.updateMany({
+      where: {
+        projectId: project.id,
+        exceptionType: "unfilled_schedule_slot",
+        state: EditorialExceptionState.OPEN,
+      },
+      data: {
+        state: EditorialExceptionState.RESOLVED,
+        resolvedAt: new Date(),
+        resolutionReason: "superseded_by_reanalysis",
+      },
+    });
     // Before the clips go. ClipEdit, ClipApproval, and ExportJob all cascade from GeneratedClip,
     // so this delete destroys the very evidence of human work the hold needs to weigh. Settling
     // inside this transaction also means a rebuild that throws resolves nothing.
@@ -324,6 +351,136 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     });
 
     await tx.generatedClip.deleteMany({ where: { projectId: project.id } });
+
+    // Scheduling reads the project's own snapshot, never the live church profile: the profile
+    // may have changed since this sermon was imported, and a project must schedule the way it
+    // was configured when it was created (S9). readProjectProcessingConfig fills legacy gaps.
+    // Default false. When off, analysis keeps every candidate it scored and arms nothing; the
+    // fact is recorded below so a quiet calendar is never mistaken for a failed analysis.
+    const armingEnabled = env.AUTOMATIC_SCHEDULE_ARMING_ENABLED;
+    const scheduleSnapshot = readProjectProcessingConfig(project.processingConfig);
+    const postingSlots = allocatePostingSlots({
+      profile: {
+        timezone: scheduleSnapshot.timezone,
+        sermonsPerWeek: scheduleSnapshot.sermonsPerWeek,
+      },
+      serviceSlot: scheduleSnapshot.serviceOccurrence,
+      // The snapshot's own count, not one re-derived from a profile that may have moved on.
+      slotCount: targetClipCount,
+      // Legacy projects created before Project.sermonDate existed allocate nothing.
+      sermonDate: project.sermonDate,
+      now: new Date(),
+    });
+
+    /**
+     * Arms one allocated slot. Every row written here carries its owning projectId, including a
+     * slot with no clip, so the calendar can answer "which sermon owns this date" without going
+     * through the clip.
+     */
+    const armSlot = async (
+      client: typeof tx,
+      params: { slot: PostingSlot; clipId: string | null },
+    ) => {
+      const { slot, clipId } = params;
+      const scheduledDate = slot.date;
+      const isoDate = scheduledDate.toISOString().slice(0, 10);
+
+      // A date that has already passed is recorded as MISSED rather than armed. The ranks behind
+      // it keep their own dates — a late upload loses the days it slept through, it does not push
+      // a week of content back. Wave 1's partial unique index covers non-MISSED rows only, so
+      // several MISSED rows may share a date.
+      if (slot.state === "MISSED") {
+        await client.scheduledPost.create({
+          data: {
+            workspaceId: project.workspaceId,
+            projectId: project.id,
+            clipId,
+            scheduledDate,
+            publishStatus: SchedulePublishStatus.MISSED,
+          },
+        });
+        await recordOperationalEvent(client, {
+          workspaceId: project.workspaceId,
+          category: "scheduling",
+          eventType: "scheduled_post_missed",
+          severity: "warning",
+          message: "A posting date had already passed when the sermon was analyzed.",
+          projectId: project.id,
+          jobId: job.id,
+          clipId,
+          metadata: { scheduledDate: isoDate, rank: slot.rank },
+        });
+        return;
+      }
+
+      // The earliest armed row owns the date in every state; a later project keeps its analyzed
+      // candidates but cannot silently double-book. The DB is asked rather than the allocator
+      // because only the DB knows what other projects have reserved, and Wave 1's partial unique
+      // index backs this read-then-create at commit time.
+      const collision = await findScheduledPostCollision(client, {
+        workspaceId: project.workspaceId,
+        scheduledDate,
+      });
+      if (collision) {
+        await recordOperationalEvent(client, {
+          workspaceId: project.workspaceId,
+          category: "scheduling",
+          eventType: "scheduled_post_collision",
+          severity: "warning",
+          message: "A later project could not arm an already-reserved posting date.",
+          projectId: project.id,
+          jobId: job.id,
+          clipId,
+          metadata: {
+            scheduledDate: isoDate,
+            existingScheduledPostId: collision.id,
+            existingProjectId: collision.projectId,
+            existingPublishStatus: collision.publishStatus,
+            laterProjectId: project.id,
+            laterClipId: clipId,
+            rank: slot.rank,
+          },
+        });
+        return;
+      }
+
+      const created = await client.scheduledPost.create({
+        data: {
+          workspaceId: project.workspaceId,
+          projectId: project.id,
+          clipId,
+          scheduledDate,
+          publishStatus: clipId
+            ? SchedulePublishStatus.NOT_STARTED
+            : SchedulePublishStatus.UNFILLED,
+        },
+      });
+
+      if (!clipId) {
+        await client.editorialException.create({
+          data: {
+            workspaceId: project.workspaceId,
+            projectId: project.id,
+            scheduledPostId: created.id,
+            exceptionType: "unfilled_schedule_slot",
+            message:
+              "This sermon produced fewer clips than its posting week has days, so a date has no clip.",
+            projectSnapshot: { sermonDate: project.sermonDate?.toISOString() ?? null },
+            slotSnapshot: { scheduledDate: isoDate, rank: slot.rank },
+          },
+        });
+        await recordOperationalEvent(client, {
+          workspaceId: project.workspaceId,
+          category: "scheduling",
+          eventType: "scheduled_post_unfilled",
+          severity: "warning",
+          message: "A posting date was armed with no clip and needs an operator.",
+          projectId: project.id,
+          jobId: job.id,
+          metadata: { scheduledDate: isoDate, rank: slot.rank },
+        });
+      }
+    };
 
     for (const [idx, clip] of kept.entries()) {
       const created = await tx.generatedClip.create({
@@ -389,48 +546,41 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
         });
       }
 
-      // Only the primary daily-posting set (rank <= targetClipCount) gets a calendar slot;
-      // the rest of the candidate pool stays available as unscheduled extras. Skips
-      // legacy projects created before Project.sermonDate existed (schema default is nullable).
+      // The allocator decided this rank's date before the loop. A rank past the end of the
+      // allocation is a candidate the church keeps but does not post on a schedule.
       const rank = idx + 1;
-      if (rank <= targetClipCount && project.sermonDate) {
-        const scheduledDate = scheduledDateForRank(project.sermonDate, rank);
-        // The earliest armed row owns the date in every state; a later project keeps its
-        // analyzed candidates but cannot silently double-book. Wave 1's partial unique index
-        // (non-MISSED workspace/date) backs this read-then-create at commit time.
-        const collision = await findScheduledPostCollision(tx, {
-          workspaceId: project.workspaceId,
-          scheduledDate,
-        });
-        if (collision) {
-          await recordOperationalEvent(tx, {
-            workspaceId: project.workspaceId,
-            category: "scheduling",
-            eventType: "scheduled_post_collision",
-            severity: "warning",
-            message: "A later project could not arm an already-reserved posting date.",
-            projectId: project.id,
-            jobId: job.id,
-            metadata: {
-              scheduledDate: scheduledDate.toISOString().slice(0, 10),
-              existingScheduledPostId: collision.id,
-              existingProjectId: collision.projectId,
-              existingPublishStatus: collision.publishStatus,
-              laterProjectId: project.id,
-              laterClipId: created.id,
-              rank,
-            },
-          });
-        } else {
-          await tx.scheduledPost.create({
-            data: {
-              workspaceId: project.workspaceId,
-              clipId: created.id,
-              scheduledDate,
-            },
-          });
-        }
+      const slot = postingSlots[rank - 1];
+      if (armingEnabled && slot) {
+        await armSlot(tx, { slot, clipId: created.id });
       }
+    }
+
+    // Slots the candidate pool could not fill. They are armed anyway, with no clip and an open
+    // exception, because an empty Tuesday is a fact the operator has to see and act on — a
+    // missing row would read as a week that was never scheduled at all.
+    if (armingEnabled) {
+      for (const slot of postingSlots.slice(kept.length)) {
+        await armSlot(tx, { slot, clipId: null });
+      }
+    }
+
+    if (!armingEnabled && postingSlots.length > 0) {
+      await recordOperationalEvent(tx, {
+        workspaceId: project.workspaceId,
+        category: "scheduling",
+        eventType: "schedule_arming_disabled",
+        severity: "info",
+        message:
+          "Automatic schedule arming is off, so this sermon's clips were kept but no posting dates were reserved.",
+        projectId: project.id,
+        jobId: job.id,
+        metadata: {
+          plannedSlots: postingSlots.length,
+          firstPlannedDate: postingSlots[0].date.toISOString().slice(0, 10),
+          lastPlannedDate: postingSlots[postingSlots.length - 1].date.toISOString().slice(0, 10),
+          serviceOccurrence: scheduleSnapshot.serviceOccurrence,
+        },
+      });
     }
 
     if (holdOutcome.settled !== "no_hold") {
@@ -455,6 +605,29 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
             ? { reason: holdOutcome.reason }
             : { reason: "primary_rebuilt_clean" },
       });
+    }
+
+    // Retention. This is the first code that ever sets Project.expiresAt: the source media for
+    // this sermon may be purged fourteen days after the last post planned from it (S6b). Only
+    // dates that were actually armed count — a slot lost to a collision reserves nothing, so it
+    // must not extend how long the source is kept. The source-video row is locked first, because
+    // a sibling project sharing this source may be having its own expiry read by CLEANUP right
+    // now; whoever holds the lock decides, and the loser re-reads.
+    if (armingEnabled) {
+      const armedDates = postingSlots
+        .filter((slot) => slot.state === "SCHEDULED")
+        .map((slot) => slot.date);
+      const expiresAt = sourceExpiresAtForSchedule(armedDates);
+      if (expiresAt) {
+        if (project.sourceVideoId) {
+          await lockSourceVideoForRetention(tx, project.sourceVideoId);
+        }
+        // Never pull an expiry in: a project whose schedule shrank keeps the later date, so
+        // media a still-armed sibling slot needs cannot be deleted early.
+        if (project.expiresAt === null || project.expiresAt < expiresAt) {
+          await tx.project.update({ where: { id: project.id }, data: { expiresAt } });
+        }
+      }
     }
 
     await tx.project.update({ where: { id: project.id }, data: { status: ProjectStatus.READY } });

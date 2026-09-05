@@ -18,8 +18,9 @@ import { JobFailureError } from "@/lib/jobs/types";
  * CHARTER TESTS — these record what ANALYZE does *today*, defects included. P0.8 changed the
  * candidate-pool assertions from the old hard-coded ceiling to the accepted project snapshot.
  *
- * Nothing here asserts desired behavior. Several cases pin down bugs the plan intends to fix
- * (Sunday spill in P1.8/P1.9, destructive reanalysis in P1.7). The cross-project date collision
+ * Nothing here asserts desired behavior *unless a fix has landed and inverted it*. Sunday spill was
+ * inverted by P1.9 and destructive reanalysis by P1.7; both now assert the fixed rule. The
+ * cross-project date collision
  * case was inverted by P0.15 and now asserts the app-level guard; the remaining concurrency race
  * belongs to P1.9. When the owning commits land they must *change* these assertions and say so
  * — that is the point. An assertion that quietly still passes after a fix means the fix missed.
@@ -80,6 +81,7 @@ async function analyzeProject(options: {
   sermonDate: Date | null;
   targetClipCount?: number;
   candidateLimit?: number;
+  serviceOccurrence?: "PRIMARY" | "SECONDARY" | "UNMATCHED";
   handler?: typeof runAnalyzeJob;
 }) {
   const { workspaceId, segmentCount, sermonDate } = options;
@@ -114,6 +116,9 @@ async function analyzeProject(options: {
       processingConfig: {
         ...(options.targetClipCount === undefined ? {} : { targetClipCount: options.targetClipCount }),
         ...(options.candidateLimit === undefined ? {} : { candidateLimit: options.candidateLimit }),
+        ...(options.serviceOccurrence === undefined
+          ? {}
+          : { serviceOccurrence: options.serviceOccurrence }),
       },
     },
   });
@@ -134,8 +139,9 @@ async function analyzeProject(options: {
     where: { projectId: project.id },
     orderBy: { rank: "asc" },
   });
+  // By project, not by clip: an UNFILLED slot has no clip and must still be visible here.
   const posts = await prisma.scheduledPost.findMany({
-    where: { clipId: { in: clips.map((c) => c.id) } },
+    where: { projectId: project.id },
     orderBy: { scheduledDate: "asc" },
   });
 
@@ -143,6 +149,9 @@ async function analyzeProject(options: {
 }
 
 beforeAll(async () => {
+  // P1.9 ships AUTOMATIC_SCHEDULE_ARMING_ENABLED false. These cases describe what arming does,
+  // so the file turns it on; the one case that asserts the off state unsets it and restores it.
+  process.env.AUTOMATIC_SCHEDULE_ARMING_ENABLED = "true";
   await prisma.$connect();
 });
 
@@ -164,7 +173,7 @@ describe("ANALYZE charter — candidate pool", () => {
     const { clips, metadata } = await analyzeProject({
       workspaceId,
       segmentCount: 400, // 40 minutes
-      sermonDate: new Date("2026-03-04T00:00:00.000Z"), // a Wednesday
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"), // a Wednesday
     });
 
     expect(clips.length).toBeLessThanOrEqual(18);
@@ -177,7 +186,7 @@ describe("ANALYZE charter — candidate pool", () => {
     const { clips, metadata } = await analyzeProject({
       workspaceId,
       segmentCount: 400,
-      sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
       targetClipCount: 3,
       candidateLimit: 4,
     });
@@ -191,7 +200,7 @@ describe("ANALYZE charter — candidate pool", () => {
     const { clips, metadata } = await analyzeProject({
       workspaceId,
       segmentCount: 400,
-      sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
       targetClipCount: 6,
       candidateLimit: 3,
     });
@@ -205,7 +214,7 @@ describe("ANALYZE charter — candidate pool", () => {
     const { clips } = await analyzeProject({
       workspaceId,
       segmentCount: 8, // 48 seconds — at most one or two viable windows
-      sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
     });
 
     expect(clips.length).toBeLessThan(6);
@@ -216,7 +225,7 @@ describe("ANALYZE charter — candidate pool", () => {
     const { metadata, clips } = await analyzeProject({
       workspaceId,
       segmentCount: 120,
-      sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
       targetClipCount: 3,
     });
 
@@ -292,7 +301,7 @@ describe("ANALYZE provider policy", () => {
       const { metadata } = await analyzeProject({
         workspaceId,
         segmentCount: 20,
-        sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+        sermonDate: new Date("2027-03-03T00:00:00.000Z"),
       });
 
       expect(metadata).toMatchObject({
@@ -397,7 +406,7 @@ describe("ANALYZE charter — slot arming", () => {
     const { clips, posts } = await analyzeProject({
       workspaceId,
       segmentCount: 300,
-      sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
       targetClipCount: 3,
     });
 
@@ -422,36 +431,126 @@ describe("ANALYZE charter — slot arming", () => {
     expect(posts).toHaveLength(0);
   });
 
-  // DEFECT UNDER CHARTER — fixed by P1.8/P1.9.
-  // Posting dates are sermonDate + rank days with no weekday awareness, so a Wednesday service
-  // schedules onto the following Sunday. docs/BUSINESS_OVERVIEW.md promises Sunday is never used.
-  it("currently schedules onto Sunday, violating the no-Sunday rule", async () => {
+  // INVERTED BY P1.9 (2026-09-05). The charter recorded that posting dates were sermonDate + rank
+  // days with no weekday awareness, so a Wednesday service scheduled onto the following Sunday,
+  // against the promise in docs/BUSINESS_OVERVIEW.md. The allocator now skips Sunday.
+  it("never schedules onto Sunday, and skips it rather than dropping the day", async () => {
     const workspaceId = await seedWorkspace();
-    const { posts } = await analyzeProject({
-      workspaceId,
-      segmentCount: 300,
-      sermonDate: new Date("2026-03-04T00:00:00.000Z"), // Wednesday
-      targetClipCount: 6,
-    });
-
-    const weekdays = posts.map((p) => p.scheduledDate.getUTCDay());
-    expect(weekdays).toContain(0); // Sunday
-  });
-
-  it("currently spaces slots one day apart by rank", async () => {
-    const workspaceId = await seedWorkspace();
-    const sermonDate = new Date("2026-03-04T00:00:00.000Z");
+    const sermonDate = new Date("2027-03-03T00:00:00.000Z"); // Wednesday
     const { posts } = await analyzeProject({
       workspaceId,
       segmentCount: 300,
       sermonDate,
+      targetClipCount: 6,
+    });
+
+    expect(posts).toHaveLength(6);
+    expect(posts.map((p) => p.scheduledDate.getUTCDay())).not.toContain(0);
+    // Thu Fri Sat, Sunday 2027-03-07 skipped, Mon Tue Wed. Six days are still delivered.
+    expect(posts.map((p) => p.scheduledDate.toISOString().slice(0, 10))).toEqual([
+      "2027-03-04",
+      "2027-03-05",
+      "2027-03-06",
+      "2027-03-08",
+      "2027-03-09",
+      "2027-03-10",
+    ]);
+  });
+
+  it("arms nothing at all while the arming switch is off, and says so", async () => {
+    const workspaceId = await seedWorkspace();
+    delete process.env.AUTOMATIC_SCHEDULE_ARMING_ENABLED;
+    try {
+      const { clips, posts, projectId } = await analyzeProject({
+        workspaceId,
+        segmentCount: 300,
+        sermonDate: new Date("2027-03-03T00:00:00.000Z"),
+        targetClipCount: 3,
+      });
+
+      // The candidates survive; only the calendar rows are withheld.
+      expect(clips.length).toBeGreaterThan(0);
+      expect(posts).toHaveLength(0);
+
+      const disabled = await prisma.operationalEvent.findFirst({
+        where: { projectId, eventType: "schedule_arming_disabled" },
+      });
+      expect(disabled).not.toBeNull();
+      expect(disabled?.metadata).toMatchObject({ plannedSlots: 3 });
+    } finally {
+      process.env.AUTOMATIC_SCHEDULE_ARMING_ENABLED = "true";
+    }
+  });
+
+  it("marks a date that already passed MISSED and does not shift the ranks behind it", async () => {
+    const workspaceId = await seedWorkspace();
+    // Long past, so every allocated date is behind "now".
+    const { posts } = await analyzeProject({
+      workspaceId,
+      segmentCount: 300,
+      sermonDate: new Date("2020-03-04T00:00:00.000Z"),
       targetClipCount: 3,
     });
 
-    const dayOffsets = posts.map(
-      (p) => Math.round((p.scheduledDate.getTime() - sermonDate.getTime()) / 86_400_000),
-    );
-    expect(dayOffsets).toEqual([1, 2, 3]);
+    expect(posts).toHaveLength(3);
+    expect(posts.every((p) => p.publishStatus === SchedulePublishStatus.MISSED)).toBe(true);
+    expect(posts.map((p) => p.scheduledDate.toISOString().slice(0, 10))).toEqual([
+      "2020-03-05",
+      "2020-03-06",
+      "2020-03-07",
+    ]);
+  });
+
+  it("leaves an unmatched service as reserve, scheduling none of it", async () => {
+    const workspaceId = await seedWorkspace();
+    const { clips, posts } = await analyzeProject({
+      workspaceId,
+      segmentCount: 300,
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
+      targetClipCount: 3,
+      serviceOccurrence: "UNMATCHED",
+    });
+
+    expect(clips.length).toBeGreaterThan(0);
+    expect(posts).toHaveLength(0);
+  });
+
+  it("arms an UNFILLED slot with an open exception when the pool is thinner than the week", async () => {
+    const workspaceId = await seedWorkspace();
+    // 48 seconds of source: at most one or two viable windows, well short of a six-day week.
+    const { clips, posts, projectId } = await analyzeProject({
+      workspaceId,
+      segmentCount: 8,
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
+      targetClipCount: 6,
+    });
+
+    expect(clips.length).toBeLessThan(6);
+    const unfilled = posts.filter((p) => p.publishStatus === SchedulePublishStatus.UNFILLED);
+    expect(unfilled.length).toBe(6 - clips.length);
+    for (const slot of unfilled) expect(slot.clipId).toBeNull();
+    // Every row carries its owning project, clip or no clip.
+    for (const slot of posts) expect(slot.projectId).toBe(projectId);
+
+    const exceptions = await prisma.editorialException.findMany({
+      where: { projectId, exceptionType: "unfilled_schedule_slot" },
+    });
+    expect(exceptions).toHaveLength(unfilled.length);
+    expect(exceptions.every((e) => e.state === "OPEN")).toBe(true);
+  });
+
+  it("sets the source retention date to fourteen days after the last armed post", async () => {
+    const workspaceId = await seedWorkspace();
+    const { projectId } = await analyzeProject({
+      workspaceId,
+      segmentCount: 300,
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
+      targetClipCount: 3,
+    });
+
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+    // Slots are Thu 03-04, Fri 03-05, Sat 03-06; the last one plus fourteen days.
+    expect(project.expiresAt?.toISOString().slice(0, 10)).toBe("2027-03-20");
   });
 });
 
@@ -492,7 +591,7 @@ describe("ANALYZE — re-analysis after durable work", () => {
     const first = await analyzeProject({
       workspaceId,
       segmentCount: 300,
-      sermonDate: new Date("2026-03-04T00:00:00.000Z"),
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
       targetClipCount: 3,
     });
     expect(first.clips.length).toBeGreaterThan(0);
@@ -602,7 +701,7 @@ describe("ANALYZE — re-analysis after durable work", () => {
 describe("ANALYZE preflight — cross-project date collision", () => {
   it("keeps earlier rows and records every later-project collision without hiding analysis", async () => {
     const workspaceId = await seedWorkspace();
-    const sermonDate = new Date("2026-03-04T00:00:00.000Z");
+    const sermonDate = new Date("2027-03-03T00:00:00.000Z");
 
     const a = await analyzeProject({ workspaceId, segmentCount: 300, sermonDate, targetClipCount: 3 });
     const b = await analyzeProject({ workspaceId, segmentCount: 300, sermonDate, targetClipCount: 3 });

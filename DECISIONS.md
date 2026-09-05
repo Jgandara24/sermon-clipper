@@ -3447,3 +3447,66 @@ tells them to upload it as a new project. Versioned analysis — old clips kept 
 remedy, and it is later work.
 
 Status: Active. Do not restore destructive deletion after history exists.
+
+## 2026-09-05 - Posting Days Come From The Calendar, Not From Rank Arithmetic
+
+Scheduling used `sermonDate + rank` days. It had no weekday awareness, so every church that did
+not stream on a Saturday eventually posted on a Sunday, against the promise in
+`docs/BUSINESS_OVERVIEW.md` that Sunday is always off.
+
+A sermon's posting days are now allocated by `allocatePostingSlots`
+(`src/lib/schedule/posting-schedule.ts`): start the day after the service, skip every Sunday, take
+the next N days, where N is the project's own snapshotted `targetClipCount` — six for a church
+with one weekly service, three for each of two. Two services interleave without either knowing the
+other's dates.
+
+Three rules go with it. A date that has already passed is `MISSED`, and the ranks behind it do not
+shift up: a late upload loses the days it slept through instead of pushing a week of content back.
+A date another project armed first is a recorded collision, never a silent move. A service that
+falls on no configured day is `UNMATCHED` and is held as reserve, scheduled by nobody.
+
+Arming is behind `AUTOMATIC_SCHEDULE_ARMING_ENABLED`, default false. False means analysis keeps
+every candidate it scored, arms no calendar rows, and records one visible fact saying so. Rank
+arithmetic is deleted, not switched: turning the flag off does not bring it back.
+
+Status: Active. Do not reintroduce rank-plus-date scheduling.
+
+## 2026-09-05 - A Slot With No Clip Is Armed Anyway, And Says So
+
+When a sermon produces fewer clips than its posting week has days, the empty days are armed with
+`UNFILLED` rows carrying no clip, plus an open `EditorialException` and an operational event.
+
+The alternative — writing no row — was rejected. A missing row is indistinguishable from a week
+that was never scheduled, so a thin pool would fail silently and the operator would find out when
+nothing posted. Every slot also carries its owning `projectId`, clip or no clip, so the calendar
+can name the sermon a bare day belongs to.
+
+Re-analysis clears `UNFILLED` and `MISSED` rows and closes their open exceptions as
+`superseded_by_reanalysis`, then re-derives whatever the new pool still cannot fill. P1.7 had
+listed both states as durable work, which was correct while nothing created them; once P1.9
+creates them routinely, treating them as durable would have made the first analysis of any past
+sermon permanently un-re-analysable. Neither state records anything reaching an audience.
+
+Status: Active.
+
+## 2026-09-05 - Source Deletion Is Report-Only Until It Has Proved Itself
+
+P1.9 is the first code that ever sets `Project.expiresAt` — fourteen days after the last post
+actually armed from that sermon. Only armed dates count; a date lost to a collision reserves
+nothing and must not extend how long media is kept. An expiry is never pulled in, only pushed out.
+
+Because nothing had ever set that column, the entire CLEANUP source-purge path had zero production
+mileage: it could delete a church's sermon media the first time it ran with real data.
+`SOURCE_RETENTION_DELETION_ENABLED` therefore defaults false, and false means CLEANUP reports the
+exact keys it would delete in a `retention_cleanup_report_only` event and removes nothing. Run at
+least one complete report-only cycle in production, read the reported keys back, and only then set
+the switch to the exact string `true`.
+
+Deletion happens under a row lock on the source video, and the objects go before the lock is
+released. Without it there was a live race: CLEANUP reads a project as expired, an operator or a
+replacement concurrently extends retention on a sibling project sharing that source video, and
+CLEANUP then deletes media the sibling still needs. Expiry values are re-read inside the lock
+rather than trusted from the earlier read. Anything that extends `expiresAt` must take the same
+lock — `lockSourceVideoForRetention` in `src/lib/retention.ts`.
+
+Status: Active. Do not set `SOURCE_RETENTION_DELETION_ENABLED=true` before a report-only cycle.

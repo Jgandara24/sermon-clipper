@@ -1,4 +1,4 @@
-import { ProcessingJobType, type PrismaClient } from "@prisma/client";
+import { ProcessingJobType, type Prisma, type PrismaClient } from "@prisma/client";
 import { env } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { getStorageProvider } from "@/lib/storage";
@@ -39,6 +39,53 @@ export function shouldPurgeSourceMedia(
   return (
     projects.length > 0 && projects.every((p) => p.expiresAt !== null && p.expiresAt <= now)
   );
+}
+
+/** Days a source video is kept past the last post planned from it (S6b). */
+export const SOURCE_RETENTION_TAIL_DAYS = 14;
+
+/**
+ * When the source media for a sermon may be purged: fourteen days after the last post planned
+ * from it. Pure. Returns null when the sermon has no planned posts at all, which means "do not
+ * set an expiry" rather than "expire now" — a project with nothing scheduled must never become
+ * a deletion candidate by omission.
+ *
+ * Callers must push this out whenever the schedule extends (a replacement, a promotion, a P3
+ * prior-service fill), and must hold the source-video row lock while they do — see
+ * `lockSourceVideoForRetention`.
+ */
+export function sourceExpiresAtForSchedule(plannedDates: readonly Date[]): Date | null {
+  if (plannedDates.length === 0) return null;
+  const last = plannedDates.reduce((a, b) => (a.getTime() >= b.getTime() ? a : b));
+  const expires = new Date(last);
+  expires.setUTCDate(expires.getUTCDate() + SOURCE_RETENTION_TAIL_DAYS);
+  return expires;
+}
+
+/** Only the exact string "true" permits a source object to be deleted. Anything else reports. */
+export function sourceRetentionDeletionEnabled(): boolean {
+  return env.SOURCE_RETENTION_DELETION_ENABLED;
+}
+
+/**
+ * Takes the row lock that makes source purging safe against a concurrent retention extension.
+ *
+ * Without it there is a live race: cleanup reads a project as expired, an operator or a
+ * replacement extends `expiresAt` on another project sharing the same source video, and cleanup
+ * then deletes media the extended project still needs. Everything that reads expiry to decide a
+ * deletion, and everything that extends expiry, must take this lock first and hold it until the
+ * decision is committed.
+ *
+ * Returns false when the row is gone, so the caller can stop rather than assume.
+ */
+export async function lockSourceVideoForRetention(
+  tx: Prisma.TransactionClient,
+  sourceVideoId: string,
+): Promise<boolean> {
+  const locked = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM source_videos WHERE id = ${sourceVideoId}::uuid FOR UPDATE
+  `;
+  return locked.length > 0;
 }
 
 /** Idempotent storage removal: missing objects are fine (an earlier attempt already removed them). */
