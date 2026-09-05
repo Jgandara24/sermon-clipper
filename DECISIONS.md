@@ -3600,3 +3600,64 @@ with the first family named and again with the bundled family named, and compare
 does that, the head of each stack is frozen and only the tail is ours to move.
 
 Status: Active. Do not change the first family of a caption preset without that comparison.
+
+## 2026-09-05 - A Review Is Append-Only, And Its Snapshots Outlive What They Point At
+
+Migration Wave 2 adds `clip_reviews` and `clip_review_feedback`, the tables the editorial standard
+calls the standard of record: a delivered clip must have been accepted against the exact file that
+will publish (`docs/PULPIT_ENGINE_EDITORIAL_STANDARD.md` §7). P2.8 later gates delivery on them.
+Two properties make that record worth trusting, and both are enforced in the database rather than
+in the service that writes it.
+
+**A decision cannot be rewritten.** A `BEFORE UPDATE` trigger refuses every update to either
+table. A reviewer who changes their mind appends a newer decision; the older one stays readable
+beside it, and the "current" verdict is the latest applicable row, never a mutated one. The single
+exemption is a referential `SET NULL` clearing a live foreign key: the trigger permits a link to
+go to null and refuses it moving to a different value, so a deleted clip can release its reference
+without opening a hole through which a row could be re-pointed at a different clip.
+
+**The evidence survives the rows it names.** Every live link — project, slot, clip, export,
+reviewer, and the promoted reserve of a `REPLACE` — is nullable and `SET NULL`, and beside each
+sits an immutable snapshot. Reanalysis deletes and recreates clips; retention deletes exports.
+Neither may make a past decision unreadable. The four identity facts P2.8 must match exactly
+(clip, edit version, the slot's bound export, and the QC-time checksum) are typed columns rather
+than JSON, because they are query inputs and not just context. Scheduled date, platform, title and
+hook go in `slot_snapshot`, because they are context and never an eligibility input.
+
+**`DELETE` is deliberately not blocked.** Both tables carry `ON DELETE CASCADE` from `workspaces`,
+and a trigger that refused the cascade would make tenant teardown fail with an error nobody could
+act on — including in every integration test that cleans up after itself. Erasure is therefore
+bounded by deleting a whole tenant, which is not a product feature today. The guarantee is that a
+decision cannot be *silently altered*, which is the property delivery eligibility rests on.
+
+**One category was added beyond the S15 table.** The plan lists six feedback categories. The
+editorial standard also puts the machine-generated title and hook in front of the reviewer as
+fields under review, and none of the six is a home for a finding about them, so
+`review_feedback_category` carries a seventh, `title_hook`, revisable like the other metadata
+defects. Actionability is stored per feedback row rather than derived at read time, so a later
+change to the default table cannot rewrite what a past finding demanded.
+
+Status: Active. Correct a review by appending one, never by editing it.
+
+## 2026-09-05 - Platform Staff Is Not A Workspace Role
+
+Every permission in this repo is workspace-scoped: `MANAGE_OPERATIONS` shows one church's data,
+not the deployment's. Reviewing renders across every pilot church needs authority that no
+workspace role can express, and inventing a "super workspace" or making Jake an owner of each
+church would hand him billing, membership and destructive tenant powers he must not have to do
+editorial review.
+
+Wave 2 therefore adds `users.is_platform_operator`, a marker beside the workspace model rather
+than inside it. It grants exactly one thing: the cross-workspace editorial surfaces P2.2 and P2.5
+build on top of it. It implies no billing, no workspace settings, no membership changes, and no
+destructive authority anywhere. Grants and revokes are audited as `OperationalEvent` rows and made
+only through a script; the column is current state, not the audit trail.
+
+`editorial_programs` and `editorial_program_workspaces` follow the same split. The program row
+holds the fixed human-only clock — explicitly started, with `paused_ms` accumulating so a pause
+extends the phase and never shortens it — and the per-workspace row holds that workspace's cohort,
+so a later promotion past `human_only` and a rollback back to it are both explicit recorded acts.
+The single `human_reference` row is created by the migration so P2.9's start command can only ever
+move an existing row's state and can never race two programs into existence.
+
+Status: Active. Do not grant editorial review through a workspace role.
