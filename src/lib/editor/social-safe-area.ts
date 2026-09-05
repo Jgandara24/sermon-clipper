@@ -61,12 +61,34 @@ export function captionMaxWidthPx(videoWidth: number): number {
   return videoWidth - captionMarginHPx() * 2;
 }
 
-/** Where an undragged caption sits in the preview, as a point on the canvas. */
-export function captionRestCentre(position: "top" | "middle" | "bottom"): {
-  xPct: number;
-  yPct: number;
-} {
-  return { xPct: 0.5, yPct: SAFE_AREA_VALUES.captionRestCentreY[position] };
+/**
+ * Where an undragged caption sits in the preview, as the centre of its block on the canvas.
+ *
+ * Derived from the burn-in's own margin, not listed. The burn-in anchors an edge: a bottom
+ * caption's last row sits on the bottom margin line and rows grow upward, a top caption's first
+ * row sits on the top margin line and rows grow downward, and a middle caption is centred on the
+ * frame. The canvas object is positioned by its centre, so the centre is that edge moved in by
+ * half the block, where the block is `rows` rows pitched at the caption's size, which is the pitch
+ * the burn-in uses.
+ *
+ * Until 2026-09-05 this returned its own set of fractions (0.86, 0.1, 0.45), and the preview then
+ * shifted multi-row blocks to keep an edge still. The two renderers disagreed by a constant per
+ * position, 96px in the middle case. Nothing rendered reads this function, so changing it moved
+ * no stored clip; it moved the preview onto the file.
+ */
+export function captionRestCentre(
+  position: "top" | "middle" | "bottom",
+  block: { rows: number; sizePx: number; videoHeight: number },
+): { xPct: number; yPct: number } {
+  const halfBlock = (Math.max(1, block.rows) * block.sizePx) / 2;
+  const margin = captionMarginVPx(position, block.videoHeight);
+  const centreY =
+    position === "top"
+      ? margin + halfBlock
+      : position === "middle"
+        ? block.videoHeight / 2
+        : block.videoHeight - margin - halfBlock;
+  return { xPct: 0.5, yPct: centreY / block.videoHeight };
 }
 
 /** The canvas guide, as the percentages the overlay is drawn with. */

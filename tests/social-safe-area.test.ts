@@ -56,10 +56,14 @@ describe("the social safe area is one datum, versioned", () => {
     expect(captionMaxWidthPx(1080)).toBe(1080 - 80);
   });
 
-  it("keeps the preview's resting caption centres where they have always been", () => {
-    expect(captionRestCentre("top")).toEqual({ xPct: 0.5, yPct: 0.1 });
-    expect(captionRestCentre("middle")).toEqual({ xPct: 0.5, yPct: 0.45 });
-    expect(captionRestCentre("bottom")).toEqual({ xPct: 0.5, yPct: 0.86 });
+  it("rests the preview's caption on the burn-in's own margin line", () => {
+    // Derived, not listed: the preview used to keep its own fractions (0.86, 0.1, 0.45) here and
+    // disagreed with the file by a constant per position. A one-row block of `sizePx` whose
+    // anchored edge sits on the margin line has its centre half a row in from it.
+    const block = { rows: 1, sizePx: 48, videoHeight: 1920 };
+    expect(captionRestCentre("bottom", block).yPct * 1920).toBe(1920 - Math.round(1920 * 0.12) - 24);
+    expect(captionRestCentre("top", block).yPct * 1920).toBe(Math.round(1920 * 0.08) + 24);
+    expect(captionRestCentre("middle", block)).toEqual({ xPct: 0.5, yPct: 0.5 });
   });
 
   it("gives the canvas guide its geometry as percentages of the frame", () => {
@@ -89,7 +93,6 @@ describe("the social safe area is one datum, versioned", () => {
         chrome: { top: 0.2, right: 0.1, bottom: 0.3, left: 0.1 },
         topPadding: 0.05,
         captionMarginHPx: 10,
-        captionRestCentreY: { top: 0.11, middle: 0.44, bottom: 0.77 },
         lowerThirdBottom: 0.4,
       },
     }));
@@ -102,7 +105,11 @@ describe("the social safe area is one datum, versioned", () => {
     expect(moved.captionMaxWidthPx(1080)).toBe(1060);
     expect(moved.safeAreaGuideGeometry().top).toBe("20%");
     expect(moved.lowerThirdGeometry().bottom).toBe("40%");
-    expect(moved.captionRestCentre("bottom").yPct).toBe(0.77);
+    // The preview's rest follows the moved bottom margin (300px on a 1000px frame): a one-row
+    // 50px block anchored there has its centre 25px above the margin line.
+    expect(
+      moved.captionRestCentre("bottom", { rows: 1, sizePx: 50, videoHeight: 1000 }).yPct * 1000,
+    ).toBe(1000 - 300 - 25);
 
     // The title is the consumer this datum was created for. It reads the anchor rather than a
     // number, so moving the datum moves the title's box with everything else.

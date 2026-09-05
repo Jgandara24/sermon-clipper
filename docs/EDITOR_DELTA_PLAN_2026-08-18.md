@@ -678,7 +678,9 @@ already cover every gate above.
 disagreement. The caption's 40px side margin against the guide's 6% is a 24.8px overlap at 1080
 wide, and the preview's block-centred caption (y 1651.2) against the burn-in's anchored bottom edge
 (y 1690) are two different quantities that coincide at one block height. Resolving either re-renders
-approved clips.
+approved clips. **Settled 2026-09-05 (#70):** the side margin stays, deliberately; the preview
+now derives its resting caption from the burn-in's own margin, which re-rendered nothing because the
+burn-in never read the preview's number. Both are recorded in DECISIONS.md under that date.
 
 **Follow-up, by design:** Playwright coverage for Slice 13 is added after the final UI is approved,
 so the selectors are written once.
