@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { computeKeptRanges, mapToKeptTimeline } from "@/lib/export/kept-ranges";
+import { computeKeptRanges } from "@/lib/export/kept-ranges";
 
+// The continuity gate's arithmetic. The renderer no longer reads these ranges — a deliverable is
+// one span rendered in one pass — but the gate still has to say what a document's cuts would have
+// left, so that it can refuse the two shapes that are not one full span.
 describe("computeKeptRanges", () => {
   it("returns the full range when nothing is deleted", () => {
     const ranges = computeKeptRanges([{ startMs: 1000, endMs: 1500, effectiveDeleted: false }], 0, 5000);
     expect(ranges).toEqual([{ startMs: 0, endMs: 5000 }]);
   });
 
-  it("splits around a single deleted word", () => {
+  it("splits around a single deleted word — the shape the gate refuses", () => {
     const ranges = computeKeptRanges(
       [
         { startMs: 1000, endMs: 1500, effectiveDeleted: false },
@@ -39,7 +42,7 @@ describe("computeKeptRanges", () => {
     ]);
   });
 
-  it("drops a leading kept range entirely if the cut starts at the source start", () => {
+  it("narrows the span when the cut starts at the source start — the other shape the gate refuses", () => {
     const ranges = computeKeptRanges([{ startMs: 0, endMs: 1000, effectiveDeleted: true }], 0, 5000);
     expect(ranges).toEqual([{ startMs: 1000, endMs: 5000 }]);
   });
@@ -47,26 +50,5 @@ describe("computeKeptRanges", () => {
   it("returns an empty array when the whole range is deleted", () => {
     const ranges = computeKeptRanges([{ startMs: 0, endMs: 5000, effectiveDeleted: true }], 0, 5000);
     expect(ranges).toEqual([]);
-  });
-});
-
-describe("mapToKeptTimeline", () => {
-  const ranges = [
-    { startMs: 0, endMs: 2000 },
-    { startMs: 2500, endMs: 5000 },
-  ];
-
-  it("maps a timestamp in the first kept range to itself", () => {
-    expect(mapToKeptTimeline(500, ranges)).toBe(500);
-  });
-
-  it("maps a timestamp in the second kept range past the compressed gap", () => {
-    // 3000 is 500ms into the second range; output timeline continues right after the first
-    // range's 2000ms, so it should land at 2000 + 500 = 2500.
-    expect(mapToKeptTimeline(3000, ranges)).toBe(2500);
-  });
-
-  it("maps the very end of the last range to the total kept duration", () => {
-    expect(mapToKeptTimeline(5000, ranges)).toBe(4500);
   });
 });

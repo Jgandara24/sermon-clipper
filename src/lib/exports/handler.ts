@@ -109,9 +109,9 @@ function hashFile(filePath: string): Promise<string> {
 
 /**
  * Renders one clip export end to end (guide §15 step 3): loads the exact editor state the job
- * was enqueued against (ExportJob.editVersion) plus the transcript, derives kept sub-ranges + crop + captions exactly like the editor preview does
- * (same pure helpers), renders via ffmpeg, then records the resulting file. Returns the new
- * ExportedFile id.
+ * was enqueued against (ExportJob.editVersion) plus the transcript, derives the one source range,
+ * the crop and the captions exactly like the editor preview does (same pure helpers), renders via
+ * ffmpeg in one pass, then records the resulting file. Returns the new ExportedFile id.
  */
 export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promise<string> {
   const clip = await prisma.generatedClip.findUniqueOrThrow({
@@ -176,7 +176,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     outputHeight: OUTPUT_HEIGHT,
     brandTemplate,
   });
-  const { keptRanges, cropPixels, assContent } = plan;
+  const { range, cropPixels, assContent } = plan;
 
   const storage = getStorageProvider();
   const exportsKey = `exports/${job.workspaceId}/${job.id}.mp4`;
@@ -224,7 +224,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     try {
       await renderClipExport({
         sourceFilePath,
-        keptRanges,
+        range,
         cropPixels,
         assFileContent: assContent,
         outputPath,

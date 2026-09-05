@@ -5,12 +5,16 @@ import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import { readTitleBanner, retimeTitleBanner, type TitleBanner } from "@/lib/editor/title-banner";
 import { applyWordTextOverrides } from "@/lib/editor/transcript";
 import type { EditorState } from "@/lib/editor/types";
-import { applyEditorDeletions, flattenWords, wordsInRange } from "@/lib/editor/words";
+import { flattenWords, wordsInRange } from "@/lib/editor/words";
 import { generateAssSubtitles, type AssCaptionMeasurer } from "@/lib/export/ass-generator";
 import { cropRectToPixels, resolveCropRect } from "@/lib/export/crop";
 import { createCaptionMeasurer, UnbundledCaptionFaceError } from "@/lib/export/font-metrics";
-import { computeKeptRanges, mapToKeptTimeline, type TimeRange } from "@/lib/export/kept-ranges";
-import { ExportFailureError } from "./errors";
+import {
+  rangeDurationMs,
+  toOutputTimeline,
+  type TimeRange,
+} from "@/lib/export/output-timeline";
+import { assertContinuousRange } from "./continuous-range";
 
 /**
  * Everything a render is derived from, and nothing that has to be fetched.
@@ -20,9 +24,11 @@ import { ExportFailureError } from "./errors";
  * the pixels. Slice 13 needs to ask it directly: the parity gate drives this function with the
  * same document the preview holds and compares what it produced against what the preview shows.
  *
- * It is pure. Given a document it returns the cut list, the crop, and the subtitle script — the
- * three things the renderer consumes — and it throws the same terminal failure the handler threw
- * when a document deletes every word.
+ * It is pure. Given a document it returns the range, the crop, and the subtitle script — the
+ * three things the renderer consumes — and it refuses, with the continuity gate's own failure, a
+ * document that still cuts words out of the middle of the clip. The handler asks that question
+ * first, before it downloads anything; asking it here as well means the plan can never describe
+ * a render the gate would not allow, whoever calls it.
  */
 
 /** The transcript, in the shape the editor's word helpers read. */
@@ -60,14 +66,14 @@ export type ExportRenderPlanInput = {
 };
 
 export type ExportRenderPlan = {
-  /** The sub-ranges of the source that survive the trim and the word deletes, in order. */
-  keptRanges: TimeRange[];
+  /** The one span of the source the file contains: the clip's own range, on the source timeline. */
+  range: TimeRange;
   cropPixels: { x: number; y: number; w: number; h: number };
   /** The subtitle script the burn-in draws: captions, the title, and nothing else. */
   assContent: string;
   /** Caption lines on the output timeline. Render QC counts them. */
   captionLineCount: number;
-  /** How long the rendered file should be, in seconds: the kept ranges, summed. */
+  /** How long the rendered file should be, in seconds: the range's length. */
   outputDurationS: number;
   /** The gain the export applies after loudness normalisation, and the preview applies to the
    * video element. One number, read once, so the two cannot drift. */
@@ -77,26 +83,24 @@ export type ExportRenderPlan = {
 export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRenderPlan {
   const { state, segments, outputWidth, outputHeight } = input;
 
-  const allWords = flattenWords(segments);
+  // A deliverable is one unbroken span of the source. A document that would render as anything
+  // else is refused here with the gate's own code, so nothing below has to reason about cuts.
+  assertContinuousRange(state, segments);
+  const range: TimeRange = { startMs: state.source.startMs, endMs: state.source.endMs };
+
   // Corrections are applied here too, so the caption the member approved in the preview is the
   // caption the rendered file burns in.
   const wordsInClip = applyWordTextOverrides(
-    applyEditorDeletions(wordsInRange(allWords, state.source.startMs, state.source.endMs), state),
+    wordsInRange(flattenWords(segments), range.startMs, range.endMs),
     state,
   );
-
-  const keptRanges = computeKeptRanges(wordsInClip, state.source.startMs, state.source.endMs);
-  if (keptRanges.length === 0) {
-    throw new ExportFailureError("RENDER_FAILED", "Export failed on our side — your clip is safe.");
-  }
 
   const cropRect = resolveCropRect(state.layout, input.sourceWidth, input.sourceHeight);
   const cropPixels = cropRectToPixels(cropRect, input.sourceWidth, input.sourceHeight);
 
-  const activeWords = wordsInClip.filter((word) => !word.effectiveDeleted);
   const captionLines = applyCaptionTextOverrides(
     buildCaptionLines(
-      activeWords.map((word) => ({
+      wordsInClip.map((word) => ({
         id: word.id,
         word: word.word,
         startMs: word.startMs,
@@ -107,17 +111,16 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
   ).map((line) => ({
     ...line,
     // The words travel with the line so the burn-in can light the same word the preview does,
-    // remapped by the same function as the line itself — a word left on the source timeline
-    // would highlight at the wrong moment.
+    // moved onto the file's clock by the same function as the line itself — a word left on the
+    // source timeline would highlight at the wrong moment.
     words: line.words.map((word) => ({
       ...word,
-      startMs: mapToKeptTimeline(word.startMs, keptRanges),
-      endMs: mapToKeptTimeline(word.endMs, keptRanges),
+      startMs: toOutputTimeline(word.startMs, range),
+      endMs: toOutputTimeline(word.endMs, range),
     })),
-    // Caption timestamps are on the original source timeline; remap to the concatenated
-    // (post-cut) output timeline the rendered file actually plays on.
-    startMs: mapToKeptTimeline(line.startMs, keptRanges),
-    endMs: mapToKeptTimeline(line.endMs, keptRanges),
+    // Caption timestamps are on the source timeline; the rendered file starts at zero.
+    startMs: toOutputTimeline(line.startMs, range),
+    endMs: toOutputTimeline(line.endMs, range),
   }));
 
   const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
@@ -140,8 +143,8 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
     }
   }
   // The title, if this clip carries one. Its times are on the source timeline like every other
-  // time in the document, so they are remapped onto the cut output the same way the captions are —
-  // a title left on the source timeline drifts by however much was deleted before it.
+  // time in the document, so they move onto the file's clock the same way the captions do — a
+  // title left on the source timeline would appear late by the length of the trimmed-off start.
   const storedTitle = readTitleBanner(state.overlays);
   let title: { banner: TitleBanner; measurer: AssCaptionMeasurer } | null = null;
   if (storedTitle) {
@@ -153,7 +156,7 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
         sizePx: storedTitle.sizePx,
       });
       title = {
-        banner: retimeTitleBanner(storedTitle, (ms) => mapToKeptTimeline(ms, keptRanges)),
+        banner: retimeTitleBanner(storedTitle, (ms) => toOutputTimeline(ms, range)),
         measurer: { measure: measurer.measure, spaceWidth: measurer.spaceWidth },
       };
     } catch (error) {
@@ -179,21 +182,18 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
           primaryColor: brandTemplate.primaryColor,
           accentColor: brandTemplate.accentColor,
           startMs: 0,
-          endMs: Math.min(4000, Math.max(1000, state.source.endMs - state.source.startMs)),
+          endMs: Math.min(4000, Math.max(1000, rangeDurationMs(range))),
         }
       : null,
     captionMeasurer,
     title,
   );
   return {
-    keptRanges,
+    range,
     cropPixels,
     assContent,
     captionLineCount: captionLines.length,
-    outputDurationS: keptRanges.reduce(
-      (total, range) => total + (range.endMs - range.startMs) / 1_000,
-      0,
-    ),
+    outputDurationS: rangeDurationMs(range) / 1_000,
     originalVolume: state.audio.originalVolume,
   };
 }
