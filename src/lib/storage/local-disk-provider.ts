@@ -1,10 +1,14 @@
 import { createWriteStream } from "node:fs";
-import { copyFile, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { once } from "node:events";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeWebReadableStream } from "node:stream/web";
-import { StorageLimitExceededError, type StorageProvider } from "./types";
+import {
+  StorageLimitExceededError,
+  type StorageObjectListing,
+  type StorageProvider,
+} from "./types";
 
 export class LocalDiskStorageProvider implements StorageProvider {
   constructor(private readonly root: string) {}
@@ -83,6 +87,36 @@ export class LocalDiskStorageProvider implements StorageProvider {
     const to = this.absolutePath(toKey);
     await mkdir(path.dirname(to), { recursive: true });
     await rename(from, to);
+  }
+
+  /** Walks the prefix directory. A missing directory lists nothing rather than throwing. */
+  async list(prefix: string): Promise<StorageObjectListing[]> {
+    const base = this.absolutePath(prefix);
+    const out: StorageObjectListing[] = [];
+
+    const walk = async (dir: string): Promise<void> => {
+      let entries;
+      try {
+        entries = await readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+          continue;
+        }
+        const info = await stat(full);
+        out.push({
+          key: path.relative(path.resolve(this.root), full).split(path.sep).join("/"),
+          lastModified: info.mtime,
+        });
+      }
+    };
+
+    await walk(base);
+    return out;
   }
 
   async remove(key: string): Promise<void> {

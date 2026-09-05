@@ -23,6 +23,10 @@ export function UploadDropzone() {
   const [series, setSeries] = useState("");
   const [speaker, setSpeaker] = useState("");
   const [stage, setStage] = useState<UploadStage>("idle");
+  const [sermonDate, setSermonDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [serviceOccurrence, setServiceOccurrence] = useState<"PRIMARY" | "SECONDARY" | "UNMATCHED">(
+    "PRIMARY",
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -75,6 +79,8 @@ export function UploadDropzone() {
       formData.set("name", name || file.name);
       formData.set("series", series);
       formData.set("speaker", speaker);
+      formData.set("sermonDate", sermonDate);
+      formData.set("serviceOccurrence", serviceOccurrence);
 
       startTransition(() => {
         createProjectFromUploadAction(formData);
@@ -138,6 +144,47 @@ export function UploadDropzone() {
           placeholder="Speaker"
           className="rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100 disabled:opacity-50"
         />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor="upload-sermon-date" className="text-sm font-medium">
+            Service date
+          </label>
+          <input
+            id="upload-sermon-date"
+            type="date"
+            value={sermonDate}
+            onChange={(event) => setSermonDate(event.target.value)}
+            disabled={busy}
+            required
+            className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100 disabled:opacity-50"
+          />
+          <p className="mt-1 text-xs text-stone-500">
+            The day the service happened, not the day you are uploading it.
+          </p>
+        </div>
+        <div>
+          <label htmlFor="upload-service-occurrence" className="text-sm font-medium">
+            Which service
+          </label>
+          <select
+            id="upload-service-occurrence"
+            value={serviceOccurrence}
+            onChange={(event) =>
+              setServiceOccurrence(event.target.value as "PRIMARY" | "SECONDARY" | "UNMATCHED")
+            }
+            disabled={busy}
+            className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2 outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-100 disabled:opacity-50"
+          >
+            <option value="PRIMARY">Main weekly service</option>
+            <option value="SECONDARY">Second weekly service</option>
+            <option value="UNMATCHED">Special service</option>
+          </select>
+          <p className="mt-1 text-xs text-stone-500">
+            A special service is clipped but never scheduled automatically.
+          </p>
+        </div>
       </div>
 
       {error ? (

@@ -27,8 +27,9 @@ build the whole implementation plan in order.
 | P1.7 block destructive reanalysis | done | 2026-09-05; `reanalysis-policy.ts` refuses a rebuild once durable work exists, at the route and in both handlers |
 | P1.8 posting schedule module | done | 2026-09-05; `src/lib/schedule/posting-schedule.ts` allocates weekday slots and `deriveServiceSlot` returns `UNMATCHED`. Pure — no production caller until P1.9 |
 | P1.9 arm weekday slots, stage retention | done | 2026-09-05; `analyze.ts` arms from the allocator behind `AUTOMATIC_SCHEDULE_ARMING_ENABLED`; `expiresAt` set; source deletion report-only behind `SOURCE_RETENTION_DELETION_ENABLED`. Both flags default false |
-| P1.10 capture and correct service occurrence | **next** | not started |
-| P1.11–P1.12 | not started | none of their named modules exist |
+| P1.10 capture and correct service occurrence | done | 2026-09-05; direct uploads state the service date and occurrence; correction gated at the reanalysis boundary |
+| P1.11 delivery eligibility module | **next** | not started |
+| P1.12 | not started | its named module does not exist |
 | P2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
@@ -172,6 +173,28 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
     is the record of what was built instead.
 
 ---
+
+### P1.10 deviations
+
+**A stated calendar date must have its weekday read in UTC.** `buildStatedServiceContext` derives
+the occurrence from the date the uploader picked, which is stored at UTC midnight. Passing it
+straight to `deriveServiceSlot`, which reads the weekday in the church's timezone, applied the
+offset a second time and reported the previous day — a Wednesday service came back `UNMATCHED`
+for a Chicago church. Same trap as P1.8, opposite direction. Caught by a unit test.
+
+**The correction writes the snapshot as well as the columns.** P1.9 schedules from
+`processingConfig.serviceOccurrence`, so a correction that updated only `Project.serviceSlot`
+would have looked applied and changed nothing about the schedule.
+
+**Abandoned uploads now have a cleanup path (added on request, outside the plan's P1.10 scope).**
+`tmp/{workspaceId}/{uploadId}` was the one class of object no database row pointed at, so the
+project-scoped CLEANUP job could never reach it. Two fixes: the `complete` route now removes the
+partial object on the size-mismatch rejection instead of leaving it, and `purgeAbandonedUploads`
+sweeps the `tmp/` prefix for anything older than a day — well past the fifteen-minute upload URL
+TTL — on the worker's existing retention interval. This required a `list(prefix)` method on
+`StorageProvider`, implemented for both the local-disk and S3 providers; S3 pages through
+`ListObjectsV2`. Storage is the only index these objects have, which is why the sweep is by prefix
+and age rather than by row.
 
 ### P1.9 deviations
 

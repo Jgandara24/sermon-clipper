@@ -4,6 +4,7 @@ import {
   buildDefaultProcessingConfig,
   buildDraftProjectRecord,
   normalizeProjectName,
+  buildStatedServiceContext,
   readProjectProcessingConfig,
 } from "@/lib/project-service";
 import type { ChurchProfile } from "@/lib/church-profile";
@@ -115,5 +116,45 @@ describe("draft project creation data", () => {
       sermonsPerWeek: 1,
       serviceOccurrence: "PRIMARY",
     });
+  });
+});
+
+describe("buildStatedServiceContext", () => {
+  const profile: ChurchProfile = {
+    timezone: "America/Chicago",
+    serviceDay: "Sunday",
+    sermonsPerWeek: 2,
+    secondServiceDay: "Wednesday",
+    postsPerDay: 1,
+  };
+
+  it("keeps the stated date exactly, without re-reading it through the church timezone", () => {
+    const context = buildStatedServiceContext(profile, {
+      sermonDate: new Date("2026-07-19T00:00:00.000Z"),
+    });
+    expect(context.sermonDate.toISOString()).toBe("2026-07-19T00:00:00.000Z");
+  });
+
+  it("derives the occurrence from the stated date when none is given", () => {
+    expect(
+      buildStatedServiceContext(profile, { sermonDate: new Date("2026-07-22T00:00:00.000Z") })
+        .serviceSlot,
+    ).toBe("SECONDARY");
+  });
+
+  it("prefers a stated occurrence over the one the date would imply", () => {
+    // A Sunday date the uploader says is a special service. What the person states wins.
+    expect(
+      buildStatedServiceContext(profile, {
+        sermonDate: new Date("2026-07-19T00:00:00.000Z"),
+        serviceOccurrence: "UNMATCHED",
+      }).serviceSlot,
+    ).toBe("UNMATCHED");
+  });
+
+  it("falls back to ingestion time only when no date is stated at all", () => {
+    const context = buildStatedServiceContext(profile, {});
+    expect(context.sermonDate).toBeInstanceOf(Date);
+    expect(["PRIMARY", "SECONDARY", "UNMATCHED"]).toContain(context.serviceSlot);
   });
 });

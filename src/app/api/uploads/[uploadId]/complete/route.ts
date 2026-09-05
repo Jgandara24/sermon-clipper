@@ -61,6 +61,11 @@ export async function POST(
         actualBytes: actualSize,
       },
     });
+    // Remove the partial object before answering. Without this the rejected bytes stay under
+    // tmp/ with nothing referencing them: the SourceVideo row is only created below, so no
+    // project-scoped cleanup could ever reach them. The prefix sweep would eventually catch it,
+    // a day later; a rejection we detect here should not wait for that.
+    await storage.remove(tempKey).catch(() => undefined);
     return apiError("UPLOAD_INTERRUPTED", "Upload lost connection — resume?");
   }
 
