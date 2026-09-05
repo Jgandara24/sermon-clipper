@@ -25,8 +25,9 @@ build the whole implementation plan in order.
 | Editor delta plan, Slices 1–13 | done | PRs #43–#51, #55, #58, #60–#65, #67–#72; plan closed 2026-09-05 |
 | P1.6 stable caption override identity | done | 2026-09-05; `captionLineId` names a line by its words; legacy `line-N` is read by position, never written |
 | P1.7 block destructive reanalysis | done | 2026-09-05; `reanalysis-policy.ts` refuses a rebuild once durable work exists, at the route and in both handlers |
-| P1.8 posting schedule module | **next** | not started; no `src/lib/schedule/` |
-| P1.9–P1.12 | not started | none of their named modules exist |
+| P1.8 posting schedule module | done | 2026-09-05; `src/lib/schedule/posting-schedule.ts` allocates weekday slots and `deriveServiceSlot` returns `UNMATCHED`. Pure — no production caller until P1.9 |
+| P1.9 integrate the allocator | **next** | not started; `analyze.ts` still calls `scheduledDateForRank` |
+| P1.10–P1.12 | not started | none of their named modules exist |
 | P2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
@@ -170,6 +171,29 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
     is the record of what was built instead.
 
 ---
+
+### P1.8 deviations
+
+**Fixed a second misfile site the plan does not list.** P1.8's file list names only
+`church-profile.ts`, but `readProjectProcessingConfig` (`project-service.ts`) collapsed any
+occurrence that was not the exact string `"SECONDARY"` back to `PRIMARY`. P1.9 reads occurrence
+from the project snapshot rather than the live profile, so leaving that in place would have read
+every `UNMATCHED` project back as `PRIMARY` and made the new derivation inert — the exact failure
+the plan warns about in its own preamble. `readServiceOccurrence` now recognises all three values
+and still falls back for anything unrecognised, so legacy rows are unaffected.
+
+**The allocator takes a stored calendar date, not a service instant.** `Project.sermonDate` is
+already normalised to UTC midnight in the church's timezone at project creation. Running it
+through `calendarDateInTimezone` a second time moves a west-of-UTC church back one day and posts
+the whole week early, so `allocatePostingSlots` truncates in UTC instead and only converts `now`.
+This is the same contract `scheduledDateForRank` documents; it is stated on the input type and
+covered by tests across four timezones.
+
+**`serviceOccurrence` is spelled a third way elsewhere, and was left alone.**
+`src/lib/evaluation/benchmark-manifest.ts` validates `z.enum(["PRIMARY", "SECONDARY", "SPECIAL"])`
+— `SPECIAL` is the pre-Wave-1 name for `UNMATCHED`. That file is a versioned manifest format
+belonging to the P5 evaluation work, so renaming the value is a format break rather than a P1.8
+edit. Recorded here instead; fold it into the P5 work that owns the manifest.
 
 ## Conventions established during the build that the plan does not state
 

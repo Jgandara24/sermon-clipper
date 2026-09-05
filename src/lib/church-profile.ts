@@ -78,7 +78,12 @@ export function targetClipCountFor(sermonsPerWeek: SermonsPerWeek): number {
   return sermonsPerWeek === 2 ? 3 : 6;
 }
 
-export type ServiceSlot = "PRIMARY" | "SECONDARY";
+/**
+ * Which of a church's weekly services a sermon belongs to. `UNMATCHED` is a real answer, not an
+ * error: a funeral, a conference session, or a midweek special lands on no configured service day
+ * and must not take a weekly service's posting slots. Mirrors the Prisma `ServiceSlot` enum.
+ */
+export type ServiceSlot = "PRIMARY" | "SECONDARY" | "UNMATCHED";
 
 /**
  * Normalizes an instant to the calendar date (Y-M-D, midnight UTC) it falls on in the
@@ -100,24 +105,40 @@ export function calendarDateInTimezone(date: Date, timezone: string): Date {
   return new Date(Date.UTC(year, month - 1, day));
 }
 
-function weekdayNameInTimezone(date: Date, timezone: string): string {
+/** The weekday a moment falls on where the church is, e.g. "Sunday". */
+export function weekdayNameInTimezone(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: resolveTimezone(timezone) }).format(
     date,
   );
 }
 
+/** Weekday names are compared case- and whitespace-insensitively; they are free text in settings. */
+function normalizeDay(day: string): string {
+  return day.trim().toLowerCase();
+}
+
 /**
- * Classifies a sermon date as the church's primary or secondary weekly service by
- * comparing its weekday (in the church's own timezone) against serviceDay/secondServiceDay.
- * Falls back to PRIMARY for a once-a-week church, or when the date lands on neither
- * configured day (e.g. a sermon uploaded on an atypical day).
+ * Classifies a sermon as the church's primary service, its second weekly service, or neither, by
+ * comparing the sermon's weekday in the church's own timezone against the configured days.
+ *
+ * Both configured days are compared explicitly. The previous rule assumed anything unrecognised
+ * was the primary service, so a Tuesday funeral at a Sunday church was filed as that week's
+ * Sunday sermon and claimed its posting slots. An unmatched service is now named as such and is
+ * held as reserve instead (P1.9 is the first reader of that distinction).
  */
 export function deriveServiceSlot(date: Date, profile: ChurchProfile): ServiceSlot {
-  if (profile.sermonsPerWeek !== 2 || !profile.secondServiceDay) return "PRIMARY";
+  const weekday = normalizeDay(weekdayNameInTimezone(date, profile.timezone));
 
-  const weekday = weekdayNameInTimezone(date, profile.timezone).trim().toLowerCase();
-  const secondDay = profile.secondServiceDay.trim().toLowerCase();
-  return weekday === secondDay ? "SECONDARY" : "PRIMARY";
+  if (weekday === normalizeDay(profile.serviceDay)) return "PRIMARY";
+
+  // `sermonsPerWeek` gates this, not just the presence of `secondServiceDay`: the two fields are
+  // parsed independently, so a church that drops back to one service can leave a stale second day
+  // behind in Workspace.settings, and without the gate that stale value keeps producing SECONDARY.
+  if (profile.sermonsPerWeek === 2 && profile.secondServiceDay) {
+    if (weekday === normalizeDay(profile.secondServiceDay)) return "SECONDARY";
+  }
+
+  return "UNMATCHED";
 }
 
 /**

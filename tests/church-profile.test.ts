@@ -80,21 +80,51 @@ describe("deriveServiceSlot", () => {
     secondServiceDay: "Wednesday",
     postsPerDay: 1,
   };
+  const onceWeekly: ChurchProfile = { ...twiceWeekly, sermonsPerWeek: 1, secondServiceDay: null };
 
-  it("classifies a Sunday sermon as PRIMARY", () => {
-    const sunday = new Date("2026-07-19T18:00:00Z");
-    expect(deriveServiceSlot(sunday, twiceWeekly)).toBe("PRIMARY");
+  it("classifies a sermon on the configured primary day as PRIMARY", () => {
+    expect(deriveServiceSlot(new Date("2026-07-19T18:00:00Z"), twiceWeekly)).toBe("PRIMARY");
   });
 
-  it("classifies a Wednesday sermon as SECONDARY", () => {
-    const wednesday = new Date("2026-07-22T18:00:00Z");
-    expect(deriveServiceSlot(wednesday, twiceWeekly)).toBe("SECONDARY");
+  it("classifies a sermon on the configured second day as SECONDARY", () => {
+    expect(deriveServiceSlot(new Date("2026-07-22T18:00:00Z"), twiceWeekly)).toBe("SECONDARY");
   });
 
-  it("always returns PRIMARY for a once-a-week church regardless of weekday", () => {
-    const onceWeekly: ChurchProfile = { ...twiceWeekly, sermonsPerWeek: 1, secondServiceDay: null };
-    const wednesday = new Date("2026-07-22T18:00:00Z");
-    expect(deriveServiceSlot(wednesday, onceWeekly)).toBe("PRIMARY");
+  // The regression P1.8 exists to fix: anything unrecognised used to be filed as PRIMARY, so a
+  // midweek special service claimed the Sunday service's posting slots.
+  it("returns UNMATCHED for a two-service church on neither configured day", () => {
+    expect(deriveServiceSlot(new Date("2026-07-21T18:00:00Z"), twiceWeekly)).toBe("UNMATCHED");
+  });
+
+  it("returns UNMATCHED for a one-service church away from its service day", () => {
+    expect(deriveServiceSlot(new Date("2026-07-22T18:00:00Z"), onceWeekly)).toBe("UNMATCHED");
+  });
+
+  it("still classifies a one-service church's own service day as PRIMARY", () => {
+    expect(deriveServiceSlot(new Date("2026-07-19T18:00:00Z"), onceWeekly)).toBe("PRIMARY");
+  });
+
+  it("honours a configured day pair that is not the Sunday/Wednesday default", () => {
+    const saturdayTuesday: ChurchProfile = {
+      ...twiceWeekly,
+      serviceDay: "Saturday",
+      secondServiceDay: "Tuesday",
+    };
+    expect(deriveServiceSlot(new Date("2026-07-18T18:00:00Z"), saturdayTuesday)).toBe("PRIMARY");
+    expect(deriveServiceSlot(new Date("2026-07-21T18:00:00Z"), saturdayTuesday)).toBe("SECONDARY");
+    expect(deriveServiceSlot(new Date("2026-07-19T18:00:00Z"), saturdayTuesday)).toBe("UNMATCHED");
+  });
+
+  // A church that drops to one service can leave secondServiceDay behind in workspace settings.
+  it("ignores a stale second day once the church reports one service a week", () => {
+    expect(deriveServiceSlot(new Date("2026-07-22T18:00:00Z"), { ...twiceWeekly, sermonsPerWeek: 1 })).toBe(
+      "UNMATCHED",
+    );
+  });
+
+  it("reads the weekday where the church is, not in UTC", () => {
+    // 01:30Z Monday is still Sunday evening in Chicago.
+    expect(deriveServiceSlot(new Date("2026-07-20T01:30:00Z"), onceWeekly)).toBe("PRIMARY");
   });
 });
 

@@ -21,8 +21,8 @@ its renderer half is not. The editor delta plan, `docs/EDITOR_DELTA_PLAN_2026-08
 complete and closed — Slices 1–13, PRs #43 through #72. `main` is at `bd934ca` and production
 runs it.
 
-P1.5's renderer and P1.6 followed on 2026-09-05. **Next: P1.7.** Then P1.8–P1.12, P2, P3, P4, P5
-and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
+P1.5's renderer, P1.6, P1.7 and P1.8 all followed on 2026-09-05. **Next: P1.9.** Then P1.10–P1.12,
+P2, P3, P4, P5 and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
 Whole Plan In Order; No Customer Until Publishing Works").
 
 **The record of actual progress and deviations is `docs/AGENTIC_EDITOR_PROGRESS.md`.** Read it
@@ -1015,6 +1015,12 @@ runner honours it. The P0.4 charter's two destructive-reanalysis tests are inver
 provenance row — and is named there as the policy's known gap.
 
 ### P1.8 — Add a pure weekday Posting Schedule Module and fix unmatched service derivation
+
+**Built 2026-09-05.** `src/lib/schedule/posting-schedule.ts` (`allocatePostingSlots`,
+`postingSlotCountFor`) and the `UNMATCHED` derivation. Two deviations are recorded in
+`docs/AGENTIC_EDITOR_PROGRESS.md`: the snapshot reader in `project-service.ts` also had to be
+fixed or P1.9 would read every unmatched project as PRIMARY, and the allocator takes an
+already-normalised calendar date rather than a service instant.
 
 **Commit:** `feat(schedule): allocate configured weekday posting slots`
 

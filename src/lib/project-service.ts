@@ -86,6 +86,17 @@ export function buildDefaultProcessingConfig(
   };
 }
 
+/**
+ * Reads the occurrence a project was created with. This must recognise every ServiceSlot value:
+ * it previously collapsed anything that was not the exact string "SECONDARY" back to PRIMARY,
+ * which would silently undo P1.8's UNMATCHED derivation for every reader of the snapshot — and
+ * P1.9 reads occurrence from the snapshot, not the live profile. An unrecognised value still
+ * falls back, so legacy rows keep working.
+ */
+function readServiceOccurrence(value: unknown, fallback: ServiceSlot): ServiceSlot {
+  return value === "SECONDARY" || value === "UNMATCHED" || value === "PRIMARY" ? value : fallback;
+}
+
 function readObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -129,7 +140,7 @@ export function readProjectProcessingConfig(processingConfig: unknown) {
     secondServiceDay:
       typeof raw.secondServiceDay === "string" ? raw.secondServiceDay : defaults.secondServiceDay,
     sermonsPerWeek: raw.sermonsPerWeek === 2 ? 2 : defaults.sermonsPerWeek,
-    serviceOccurrence: raw.serviceOccurrence === "SECONDARY" ? "SECONDARY" : defaults.serviceOccurrence,
+    serviceOccurrence: readServiceOccurrence(raw.serviceOccurrence, defaults.serviceOccurrence),
   };
 }
 
