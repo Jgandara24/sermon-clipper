@@ -276,6 +276,32 @@ produced 2 clips, both announcements, both at minute 0.
 
 ---
 
+## Branches that are not `main`, and why they still exist
+
+Settled 2026-09-05. Three branches are kept on purpose; do not "tidy" them away, and do not
+re-ask this question. None of them is a candidate to merge — each is a record, and the code that
+matters is read off it by hand.
+
+| Branch | Tip | Why it is kept |
+|---|---|---|
+| `p1/kinetic-captions-and-editor` | `914d23d` (2026-08-18) | The origin of the P1 caption work, 14 commits ahead of its merge-base. Holds two things `main` never absorbed: the self-hosted OFL burn-in fonts (Inter, Poppins, Source Serif 4) and the whisper sub-word token merge in `src/lib/transcription/token-merge.ts`. Also carries the canvas-desk editor redesign (`5b687ca`) as an explicit **prototype, not accepted** — Jake ran eleven manual acceptance gates and rejected eight. `main`'s editor was rebuilt from the accepted parts, not from this branch. |
+| `rebase/p1-editor-tree` | `e7787a5` (2026-08-17) | A separate lineage, not an ancestor of the branch above. It is the merge of Jake's uncommitted editor/captions/transcription tree onto `main`, and it is what makes the deleted `wip/uncommitted-p1-editor-snapshot` safe to lose — that snapshot is contained in this branch. It also keeps `SESSION_SUMMARY_2026-08-13.md`, which exists nowhere else. |
+| `feat/semantic-outline-pipeline` | `80002e4` (2026-07-24) | The only implementation of the semantic outline and Stage A discovery pipeline: `src/lib/analysis/outline/`, `src/lib/analysis/semantic/`, a `sermon_outline` Prisma migration, a live validation harness (`scripts/validate-semantic-run.ts`), and eight test files. `main` has no outline or semantic module at all. Stage A recall is the known product bottleneck and P5's target — this branch is the prototype P5 starts from. |
+
+**Deleted on 2026-09-05, after checking that nothing unique was lost.**
+`wip/uncommitted-p1-editor-snapshot` (`abbebfe`) was an ancestor of `rebase/p1-editor-tree`.
+`feat/editor-trim-and-caption-typography` (`5617755`) held `trim-timeline.tsx`, superseded on
+`main` by the larger `src/components/editor/clip-timeline.tsx` plus `src/lib/editor/trim.ts`.
+`slice7-prerebase-backup` (`099258d`, local only) had every distinctive file land on `main` at
+equal or greater size — `active-word.ts`, `numeric-field.ts` and its four test files.
+
+**One live gap this surfaced.** `src/lib/editor/caption-presets.ts` on `main` names `Inter` as a
+font family, but `main` ships only the six DejaVu faces in `public/fonts/`. The Inter, Poppins and
+Source Serif 4 files exist solely on the two editor branches above. Whether burn-in silently falls
+back to DejaVu is unverified — worth a look before P2 publishing, not a P1.8 blocker.
+
+---
+
 ## Open items not owned by any commit yet
 
 - **OpenAI adapter.** The policy schema reserves `openai`, but the activation command refuses it
