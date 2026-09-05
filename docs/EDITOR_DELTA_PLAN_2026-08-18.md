@@ -682,8 +682,15 @@ approved clips. **Settled 2026-09-05 (#70):** the side margin stays, deliberatel
 now derives its resting caption from the burn-in's own margin, which re-rendered nothing because the
 burn-in never read the preview's number. Both are recorded in DECISIONS.md under that date.
 
-**Follow-up, by design:** Playwright coverage for Slice 13 is added after the final UI is approved,
-so the selectors are written once.
+**Follow-up, by design, now done:** Playwright coverage for Slice 13 was added after the final UI
+was approved, so the selectors were written once. **Built 2026-09-05 (#71):**
+`tests/e2e/editor-export-parity.spec.ts`, nine tests. Export is reached from the header and nowhere
+else and is a drawer rather than a modal; the caption on screen rests where the burn-in anchors it,
+measured in frame coordinates against the generator's own output at a two-pixel tolerance; a
+download needs no approval while the billing gate still refuses one; and selecting the caption draws
+handles around it without moving it.
+
+With this, every bullet of the delta plan is built. Slices 1 through 13 are merged.
 
 ---
 
