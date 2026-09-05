@@ -2,6 +2,8 @@ import type { PrismaClient } from "@prisma/client";
 import { parseChurchProfile, wallClockInstantInTimezone } from "@/lib/church-profile";
 import { env } from "@/lib/env";
 import { decideWorkspaceAccess } from "@/lib/billing/access";
+import { describeDeliveryIneligibility } from "@/lib/delivery/eligibility";
+import { assessScheduledPostDelivery } from "@/lib/delivery/query";
 import { isEligibleForAutoPost, parseFacebookConnection } from "@/lib/facebook-connection";
 import {
   publishScheduledVideo as defaultPublishScheduledVideo,
@@ -116,6 +118,13 @@ export type FacebookPublisherDeps = {
   publishScheduledVideo?: (
     input: PublishScheduledVideoInput,
   ) => Promise<{ facebookPostId: string }>;
+  /**
+   * The delivery decision, defaulting to the real module. Injectable only so tests for the
+   * clamp, retry and misconfiguration paths can reach the code past it: until P2 records
+   * editorial reviews, the real rule refuses every slot, and that is deliberate. Nothing in
+   * production passes this — the default is the single authority.
+   */
+  assessDelivery?: typeof assessScheduledPostDelivery;
 };
 
 // A claim older than this with no terminal update means the worker died mid-publish
@@ -207,6 +216,7 @@ export async function publishDueScheduledPosts(
   const now = deps.now ?? (() => new Date());
   const resolvePageAccessToken = deps.resolvePageAccessToken ?? defaultResolvePageAccessToken;
   const publishScheduledVideo = deps.publishScheduledVideo ?? defaultPublishScheduledVideo;
+  const assessDelivery = deps.assessDelivery ?? assessScheduledPostDelivery;
 
   const duePosts = await client.scheduledPost.findMany({
     where: {
@@ -233,14 +243,13 @@ export async function publishDueScheduledPosts(
           projectId: true,
           title: true,
           hookText: true,
-          exportJobs: {
-            where: { state: "SUCCEEDED" },
-            orderBy: { finishedAt: "desc" },
-            take: 1,
-            select: { outputFile: { select: { storageKey: true } } },
-          },
         },
       },
+      // The export this slot is bound to, and only that one. This replaced a lookup for the
+      // clip's most recently finished SUCCEEDED export, which could hand the publisher a render
+      // of a cut nobody reviewed — the "latest successful export" path Rev2 §6 forbids. There is
+      // deliberately no ordering and no fallback here: if the binding is absent, nothing posts.
+      exportJob: { select: { outputFile: { select: { storageKey: true } } } },
     },
   });
 
@@ -306,7 +315,34 @@ export async function publishDueScheduledPosts(
         continue;
       }
 
-      const exportedStorageKey = clip.exportJobs[0]?.outputFile?.storageKey;
+      // One module decides whether this slot may reach an audience. It re-reads the slot's own
+      // facts rather than trusting the batch query above, so the decision is made against the
+      // state at the moment of publishing, and so the rule has exactly one implementation.
+      //
+      // Workspace billing access and the transcription hold stay outside it, above: neither is a
+      // fact about whether this render is the right render, and folding billing into a pure
+      // delivery rule would make it depend on plan state.
+      const eligibility = await assessDelivery(client, { scheduledPostId: post.id });
+      if (!eligibility || !eligibility.eligible) {
+        summary.postsSkippedNotEligible++;
+        await recordOperationalEventSafely(client, {
+          workspaceId: post.workspaceId,
+          category: "facebook_publish",
+          eventType: "facebook_publish_ineligible",
+          severity: "warning",
+          message: eligibility
+            ? describeDeliveryIneligibility(eligibility.reason)
+            : "The scheduled post disappeared between being read and being checked.",
+          projectId: clip.projectId,
+          metadata: {
+            scheduledPostId: post.id,
+            reason: eligibility ? eligibility.reason : "slot_missing",
+          },
+        });
+        continue;
+      }
+
+      const exportedStorageKey = post.exportJob?.outputFile?.storageKey;
       if (!exportedStorageKey) {
         summary.postsSkippedNotExported++;
         continue;

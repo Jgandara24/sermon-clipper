@@ -47,8 +47,9 @@ function makeClient(options: { heldProjectIds: string[] }) {
             projectId: "proj-1",
             title: "Clip title",
             hookText: "You need to hear this.",
-            exportJobs: [{ outputFile: { storageKey: "exports/ws-1/clip.mp4" } }],
           },
+          // The slot's own binding: the publisher no longer looks up the clip's newest export.
+          exportJob: { outputFile: { storageKey: "exports/ws-1/clip.mp4" } },
         },
       ],
       updateMany: async ({ where }: { where: { id: string } }) => {
@@ -75,6 +76,10 @@ async function run(heldProjectIds: string[]) {
   let metaCalls = 0;
   const summary = await publishDueScheduledPosts(client as never, {
     now: () => new Date("2026-07-20T15:00:00Z"),
+    // These cases are about the transcription-fallback hold, which sits ahead of the delivery
+    // gate in the publisher. The real rule refuses everything until P2 records editorial reviews,
+    // so it is stubbed eligible; tests/delivery-eligibility.test.ts covers the rule itself.
+    assessDelivery: async () => ({ eligible: true as const }),
     resolvePageAccessToken: async () => "page-token-abc",
     publishScheduledVideo: async () => {
       metaCalls++;

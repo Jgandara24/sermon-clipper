@@ -28,6 +28,10 @@ const eligibleSettings = {
   facebookConnection: { pageId: "1128280933691493", autoPostEnabled: true },
 };
 
+const CLIP_ID = "11111111-1111-4111-8111-111111111111";
+const EXPORT_ID = "22222222-2222-4222-8222-222222222222";
+const PROJECT_ID = "33333333-3333-4333-8333-333333333333";
+
 /** One due row + capture of the scheduledPost query/update payloads; no real DB. */
 function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } = {}) {
   const updates: Array<Record<string, unknown>> = [];
@@ -50,10 +54,13 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
               trialEndsAt: new Date("2026-01-31T00:00:00Z"),
             },
             clip: {
+              projectId: PROJECT_ID,
               title: "Clip title",
               hookText: "You need to hear this.",
-              exportJobs: [{ outputFile: { storageKey: "exports/ws-1/clip.mp4" } }],
             },
+            // The slot's own binding. The publisher no longer looks for the clip's newest
+            // successful export, so this is the only route to a file.
+            exportJob: { outputFile: { storageKey: "exports/ws-1/clip.mp4" } },
           },
         ];
       },
@@ -63,6 +70,9 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
         return {};
       },
     },
+    // The clip now carries a projectId, so the transcription-fallback hold check actually runs.
+    // No project is held in these cases.
+    editorialException: { findMany: async () => [] },
     operationalEvent: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         events.push(data);
@@ -83,6 +93,10 @@ async function runPoller(
 
   const summary = await publishDueScheduledPosts(client as never, {
     now: () => new Date(nowIso),
+    // These cases are about clamping, retry and misconfiguration — the code past the delivery
+    // gate. The real rule refuses every slot until P2 records editorial reviews, so it is stubbed
+    // eligible here; tests/delivery-eligibility.test.ts covers the rule itself exhaustively.
+    assessDelivery: async () => ({ eligible: true as const }),
     resolvePageAccessToken: async () => "page-token-abc",
     publishScheduledVideo: async (input) => {
       if (options.publishError) throw options.publishError;
@@ -228,5 +242,98 @@ describe("publishDueScheduledPosts retry behavior", () => {
     ]);
     // Detached history rows (clip regenerated after publish) are never selected as due.
     expect(findManyWheres[0].clipId).toEqual({ not: null });
+  });
+});
+
+/**
+ * The wiring itself, with nothing stubbed.
+ *
+ * Every case above injects an eligible verdict so it can reach the clamp and retry code. These
+ * two prove the injection is not hiding anything: with the real module in place the publisher
+ * consults it, refuses, and never claims the row.
+ */
+describe("publishDueScheduledPosts delivery gate", () => {
+  it("refuses through the real rule, because no editorial review exists before P2", async () => {
+    const { client, updates, events } = makeFakeClient(new Date("2026-03-02T00:00:00.000Z"));
+    let claimed = false;
+    const publishCalls: unknown[] = [];
+
+    const summary = await publishDueScheduledPosts(
+      {
+        ...client,
+        scheduledPost: {
+          ...client.scheduledPost,
+          // The real loader reads the slot back before deciding.
+          findUnique: async () => ({
+            workspaceId: "ws-1",
+            projectId: PROJECT_ID,
+            clipId: CLIP_ID,
+            exportJobId: EXPORT_ID,
+            publishStatus: "NOT_STARTED",
+            workspace: { settings: eligibleSettings },
+            clip: {
+              id: CLIP_ID,
+              workspaceId: "ws-1",
+              projectId: PROJECT_ID,
+              supersededAt: null,
+              edits: [{ version: 2 }],
+              approvals: [{ state: "APPROVED" }],
+            },
+            exportJob: {
+              id: EXPORT_ID,
+              workspaceId: "ws-1",
+              clipId: CLIP_ID,
+              state: "SUCCEEDED",
+              editVersion: 2,
+              qcStatus: "PASSED",
+              qcChecksum: "sha256:fixture",
+              outputFile: { checksum: "sha256:fixture" },
+            },
+          }),
+          updateMany: async () => {
+            claimed = true;
+            return { count: 1 };
+          },
+        },
+      } as never,
+      {
+        now: () => new Date("2026-03-02T12:00:00.000Z"),
+        resolvePageAccessToken: async () => "page-token-abc",
+        publishScheduledVideo: async (input) => {
+          publishCalls.push(input);
+          return { facebookPostId: "fb-video-123" };
+        },
+      },
+    );
+
+    expect(summary.postsPublished).toBe(0);
+    expect(summary.postsSkippedNotEligible).toBe(1);
+    expect(publishCalls).toHaveLength(0);
+    // Nothing was claimed, so the slot stays available for when P2 makes it eligible.
+    expect(claimed).toBe(false);
+    expect(updates).toHaveLength(0);
+    expect(
+      events.some((event) => event.eventType === "facebook_publish_ineligible"),
+    ).toBe(true);
+  });
+
+  it("reads the file from the slot's bound export, never from the clip's newest one", async () => {
+    const { client } = makeFakeClient(new Date("2026-03-02T00:00:00.000Z"));
+    const captured: string[] = [];
+
+    await publishDueScheduledPosts(client as never, {
+      now: () => new Date("2026-03-02T12:00:00.000Z"),
+      assessDelivery: async () => ({ eligible: true as const }),
+      resolvePageAccessToken: async () => "page-token-abc",
+      publishScheduledVideo: async (input) => {
+        captured.push(input.fileUrl);
+        return { facebookPostId: "fb-video-123" };
+      },
+    });
+
+    // The fixture's only export is the bound one; the clip carries no exportJobs list at all,
+    // so a reintroduced "latest successful export" lookup would find nothing and fail this.
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toContain("exports%2Fws-1%2Fclip.mp4");
   });
 });
