@@ -18,12 +18,24 @@ export class JobFailureError extends Error {
   code: string;
   userMessage: string;
   retryable: boolean;
+  /**
+   * True when the handler refused to act and changed nothing — the project is exactly as it was,
+   * so the runner must not mark it failed or release its reservations. A rebuild refused because
+   * a person has already worked on the clips is the case: the clips are intact and the project
+   * is healthy; only the request to replace them was declined.
+   */
+  preservesProject: boolean;
 
-  constructor(code: string, userMessage: string, options?: { cause?: unknown; retryable?: boolean }) {
+  constructor(
+    code: string,
+    userMessage: string,
+    options?: { cause?: unknown; retryable?: boolean; preservesProject?: boolean },
+  ) {
     super(userMessage);
     this.code = code;
     this.userMessage = userMessage;
     this.retryable = options?.retryable ?? true;
+    this.preservesProject = options?.preservesProject ?? false;
     if (options?.cause) {
       this.cause = options.cause;
     }

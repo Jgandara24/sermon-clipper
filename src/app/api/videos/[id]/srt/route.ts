@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { ProcessingJobType } from "@prisma/client";
 import { after } from "next/server";
+import {
+  REANALYSIS_BLOCKED,
+  REANALYSIS_BLOCKED_MESSAGE,
+  assessReanalysis,
+} from "@/lib/analysis/reanalysis-policy";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
 import { enqueueJob } from "@/lib/jobs/queue";
@@ -27,6 +32,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     assertWorkspaceScope(sourceVideo.workspaceId, workspace.id, "source video");
   } catch {
     return apiError("PERMISSION_DENIED", "You don't have access to that workspace.", { status: 403 });
+  }
+
+  // A new transcript means new clips, and a rebuild destroys the work done on the old ones. Asked
+  // before anything is written, so a refused upload leaves no file behind and no job queued. The
+  // worker asks the same question again before it deletes anything; this is the answer at request
+  // time, so the member is told now rather than watching a job fail later.
+  const project = await prisma.project.findFirst({ where: { sourceVideoId: sourceVideo.id } });
+  if (project) {
+    const assessment = await assessReanalysis(prisma, { projectId: project.id });
+    if (!assessment.allowed) {
+      return apiError(REANALYSIS_BLOCKED, REANALYSIS_BLOCKED_MESSAGE, { status: 409 });
+    }
   }
 
   if (!request.body) {
@@ -56,7 +73,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     data: { srtOverrideKey: srtKey },
   });
 
-  const project = await prisma.project.findFirst({ where: { sourceVideoId: sourceVideo.id } });
   if (project) {
     await prisma.processingJob.deleteMany({
       where: { projectId: project.id, type: ProcessingJobType.TRANSCRIBE },

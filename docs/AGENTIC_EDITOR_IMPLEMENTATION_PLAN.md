@@ -1000,6 +1000,20 @@ Caption Line Is Named By Its Words, Not By Its Position".
 - **Rollback:** Disable reanalysis entirely. Do not restore destructive deletion after history exists.
 - **Trace:** Rev2 §3.3; Addendum Decision C and S9.
 
+**Built 2026-09-05.** `src/lib/analysis/reanalysis-policy.ts` counts a project's durable work in
+the database — human `ClipEdit` rows (the machine's `systemInitial` document excluded),
+`ClipApproval` and `ExportJob` rows in any state, and `ScheduledPost` rows in every state except
+`NOT_STARTED` and `FAILED` — and `assertReanalysisAllowed` refuses with `REANALYSIS_BLOCKED`. The
+ANALYZE handler asks before the paid call and again inside the rebuild transaction; the TRANSCRIBE
+handler asks before it transcribes and again before it replaces the transcript; the SRT route asks
+at request time and answers 409 before writing anything. One addition the bullets did not name:
+a refusal must not fail a healthy project, so `JobFailureError` gains `preservesProject` and the
+runner honours it. The P0.4 charter's two destructive-reanalysis tests are inverted in
+`tests/integration/analyze-job.integration.test.ts`; `tests/reanalysis-policy.test.ts` and
+`tests/integration/reanalysis-refusal.integration.test.ts` are new. Recorded in `DECISIONS.md` as
+"Reanalysis Is Refused Once Durable Work Exists". A clip title rename is not counted — it has no
+provenance row — and is named there as the policy's known gap.
+
 ### P1.8 — Add a pure weekday Posting Schedule Module and fix unmatched service derivation
 
 **Commit:** `feat(schedule): allocate configured weekday posting slots`

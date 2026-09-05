@@ -24,8 +24,9 @@ build the whole implementation plan in order.
 | P1.5 one continuous range at export | done | the gate landed with Slice 5 (`1d4b8e3`); the one-pass renderer on 2026-09-05 — see below |
 | Editor delta plan, Slices 1–13 | done | PRs #43–#51, #55, #58, #60–#65, #67–#72; plan closed 2026-09-05 |
 | P1.6 stable caption override identity | done | 2026-09-05; `captionLineId` names a line by its words; legacy `line-N` is read by position, never written |
-| P1.7 block destructive reanalysis | **next** | not started; no `src/lib/analysis/reanalysis-policy.ts` |
-| P1.8–P1.12 | not started | none of their named modules exist |
+| P1.7 block destructive reanalysis | done | 2026-09-05; `reanalysis-policy.ts` refuses a rebuild once durable work exists, at the route and in both handlers |
+| P1.8 posting schedule module | **next** | not started; no `src/lib/schedule/` |
+| P1.9–P1.12 | not started | none of their named modules exist |
 | P2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
@@ -272,6 +273,32 @@ container.
 `z4FCS3JcZPs`, 49:41, 6 clips spanning 1:25–10:58, `candidateCount` 500, `scoredCount` 6,
 `keptCount` 6, `targetClipCount` 6, $0.157 analysis cost. The pre-fix run on the same source
 produced 2 clips, both announcements, both at minute 0.
+
+---
+
+## Branches that are not `main`, and why they still exist
+
+Settled 2026-09-05. Three branches are kept on purpose; do not "tidy" them away, and do not
+re-ask this question. None of them is a candidate to merge — each is a record, and the code that
+matters is read off it by hand.
+
+| Branch | Tip | Why it is kept |
+|---|---|---|
+| `p1/kinetic-captions-and-editor` | `914d23d` (2026-08-18) | The origin of the P1 caption work, 14 commits ahead of its merge-base. Holds two things `main` never absorbed: the self-hosted OFL burn-in fonts (Inter, Poppins, Source Serif 4) and the whisper sub-word token merge in `src/lib/transcription/token-merge.ts`. Also carries the canvas-desk editor redesign (`5b687ca`) as an explicit **prototype, not accepted** — Jake ran eleven manual acceptance gates and rejected eight. `main`'s editor was rebuilt from the accepted parts, not from this branch. |
+| `rebase/p1-editor-tree` | `e7787a5` (2026-08-17) | A separate lineage, not an ancestor of the branch above. It is the merge of Jake's uncommitted editor/captions/transcription tree onto `main`, and it is what makes the deleted `wip/uncommitted-p1-editor-snapshot` safe to lose — that snapshot is contained in this branch. It also keeps `SESSION_SUMMARY_2026-08-13.md`, which exists nowhere else. |
+| `feat/semantic-outline-pipeline` | `80002e4` (2026-07-24) | The only implementation of the semantic outline and Stage A discovery pipeline: `src/lib/analysis/outline/`, `src/lib/analysis/semantic/`, a `sermon_outline` Prisma migration, a live validation harness (`scripts/validate-semantic-run.ts`), and eight test files. `main` has no outline or semantic module at all. Stage A recall is the known product bottleneck and P5's target — this branch is the prototype P5 starts from. |
+
+**Deleted on 2026-09-05, after checking that nothing unique was lost.**
+`wip/uncommitted-p1-editor-snapshot` (`abbebfe`) was an ancestor of `rebase/p1-editor-tree`.
+`feat/editor-trim-and-caption-typography` (`5617755`) held `trim-timeline.tsx`, superseded on
+`main` by the larger `src/components/editor/clip-timeline.tsx` plus `src/lib/editor/trim.ts`.
+`slice7-prerebase-backup` (`099258d`, local only) had every distinctive file land on `main` at
+equal or greater size — `active-word.ts`, `numeric-field.ts` and its four test files.
+
+**One live gap this surfaced.** `src/lib/editor/caption-presets.ts` on `main` names `Inter` as a
+font family, but `main` ships only the six DejaVu faces in `public/fonts/`. The Inter, Poppins and
+Source Serif 4 files exist solely on the two editor branches above. Whether burn-in silently falls
+back to DejaVu is unverified — worth a look before P2 publishing, not a P1.8 blocker.
 
 ---
 
