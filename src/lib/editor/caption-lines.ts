@@ -17,6 +17,32 @@ const GAP_SPLIT_MS = 500;
 const SENTENCE_END_PATTERN = /[.!?]["')\]]?$/;
 
 /**
+ * A line's identity, from the words it holds.
+ *
+ * `line-N` named a line by its position in the list, so anything that changed the list ahead of
+ * it — a trim that dropped the first line, a regrouping — renamed every line after it, and a text
+ * override written against one line silently moved onto another. The name is now the first
+ * word's id (the transcript's segment and index, which no trim or regrouping changes) followed by
+ * a hash of every word id in the line: a line means the same words, or it is not the same line.
+ * Deterministic and dependency-free, because the preview computes it in the browser and the
+ * burn-in in the worker, and an override has to match on both sides.
+ */
+export function captionLineId(words: ReadonlyArray<Pick<CaptionWord, "id">>): string {
+  const ids = words.map((word) => word.id);
+  return `line:${ids[0] ?? ""}:${fnv1a32(ids.join("|"))}`;
+}
+
+/** FNV-1a, 32-bit, as eight hex digits. Small, stable, and the same in every runtime. */
+function fnv1a32(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/**
  * Greedy line-fill from surviving (non-deleted) words: breaks at maxWordsPerLine, a >=500ms gap,
  * or sentence-ending punctuation (guide §13 step 1). Karaoke timing is preserved per word.
  */
@@ -31,7 +57,7 @@ export function buildCaptionLines(
   function flush() {
     if (current.length === 0) return;
     lines.push({
-      id: `line-${lines.length}`,
+      id: captionLineId(current),
       startMs: current[0].startMs,
       endMs: current[current.length - 1].endMs,
       words: current,
@@ -80,15 +106,32 @@ export function exclusiveLineSpans(lines: CaptionLine[]): CaptionLine[] {
   });
 }
 
-/** Applies manual text overrides (keyed by caption line id) without touching word timing. */
+/** The name lines carried before they were named by their words: their position in the list. */
+const LEGACY_POSITIONAL_ID = /^line-(\d+)$/;
+
+/**
+ * Applies manual text overrides without touching word timing.
+ *
+ * An override names its line by the stable id above. A document written when lines were named by
+ * position — `line-N` — is still read: that override applies to the line at that position, unless
+ * a stable-id override already claims the line, so a document carrying both cannot have two
+ * answers for one line. Nothing writes a positional id any more.
+ */
 export function applyCaptionTextOverrides(
   lines: CaptionLine[],
   textOverrides: Array<{ segmentId: string; text: string }>,
 ): CaptionLine[] {
-  const overrideMap = new Map(textOverrides.map((o) => [o.segmentId, o.text]));
-  return lines.map((line) =>
-    overrideMap.has(line.id) ? { ...line, text: overrideMap.get(line.id)! } : line,
-  );
+  const byId = new Map<string, string>();
+  const byPosition = new Map<number, string>();
+  for (const override of textOverrides) {
+    const positional = LEGACY_POSITIONAL_ID.exec(override.segmentId);
+    if (positional) byPosition.set(Number(positional[1]), override.text);
+    else byId.set(override.segmentId, override.text);
+  }
+  return lines.map((line, index) => {
+    const text = byId.get(line.id) ?? byPosition.get(index);
+    return text === undefined ? line : { ...line, text };
+  });
 }
 
 /**

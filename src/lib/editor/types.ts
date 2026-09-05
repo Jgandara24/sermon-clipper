@@ -62,6 +62,9 @@ export const editorStateSchema = z.object({
       shadow: z.boolean().optional(),
       background: z.enum(["none", "pill"]).optional(),
     }),
+    // Keyed by caption line id. A line's id names its words (`captionLineId`), so an override stays
+    // with the words it was written for through a trim or a regrouping. Documents from before that
+    // carry positional `line-N` ids; those are still read, by position, and never written again.
     textOverrides: z.array(z.object({ segmentId: z.string(), text: z.string() })),
   }),
   layout: z.object({
