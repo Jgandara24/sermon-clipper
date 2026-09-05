@@ -112,6 +112,13 @@ export default async function SettingsPage({
         <p className="mt-1 text-sm text-stone-500">
           Controls how many clips we generate per sermon and how many posts go out per day.
         </p>
+        {/* S9: each project keeps the profile it was created with, so a change here cannot
+            silently re-date or re-schedule sermons that are already in flight. */}
+        <p className="mt-1 text-sm text-stone-500">
+          Changes here apply to sermons you upload from now on. Sermons already in the system keep
+          the settings they were created with — to change one of those, open the project and edit
+          its service details.
+        </p>
         {profileStatusMessage ? (
           <div className="mt-4 rounded-md border border-teal-100 bg-teal-50 p-3 text-sm text-teal-900">
             {profileStatusMessage}

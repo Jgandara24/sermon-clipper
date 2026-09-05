@@ -9,11 +9,16 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { StorageLimitExceededError, type StorageProvider } from "./types";
+import {
+  StorageLimitExceededError,
+  type StorageObjectListing,
+  type StorageProvider,
+} from "./types";
 
 type S3StorageProviderOptions = {
   bucket: string;
@@ -149,6 +154,28 @@ export class S3StorageProvider implements StorageProvider {
       }),
     );
     await this.remove(fromKey);
+  }
+
+  /** Pages through the prefix; S3 caps a single response at 1000 keys. */
+  async list(prefix: string): Promise<StorageObjectListing[]> {
+    const out: StorageObjectListing[] = [];
+    let continuationToken: string | undefined;
+    do {
+      const page = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.options.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      for (const object of page.Contents ?? []) {
+        if (object.Key) {
+          out.push({ key: object.Key, lastModified: object.LastModified ?? new Date(0) });
+        }
+      }
+      continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (continuationToken);
+    return out;
   }
 
   async remove(key: string): Promise<void> {

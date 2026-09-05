@@ -17,7 +17,11 @@ import {
 } from "@/lib/observability/error-reporting";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
-import { enqueueDueCleanupJobs, sweepOrphanedExportedFiles } from "@/lib/retention";
+import {
+  enqueueDueCleanupJobs,
+  purgeAbandonedUploads,
+  sweepOrphanedExportedFiles,
+} from "@/lib/retention";
 import { releaseReservationForJob } from "@/lib/usage-ledger";
 import {
   assertWorkerRuntimeReady,
@@ -119,13 +123,20 @@ async function loop() {
           run: async () => {
             const cleanupScan = await enqueueDueCleanupJobs(prisma);
             const orphanSweep = await sweepOrphanedExportedFiles(prisma);
-            if (cleanupScan.enqueued || orphanSweep.rowsDeleted) {
-              console.log("[worker] retention cleanup scan", { cleanupScan, orphanSweep });
+            // Abandoned uploads have no project and no row, so no CLEANUP job can reach them.
+            // Swept here, on the same interval, straight from the storage prefix. A storage
+            // failure must not stop the row-based sweeps above from being reported.
+            const uploadSweep = await purgeAbandonedUploads().catch((error: unknown) => {
+              console.error("[worker] abandoned upload sweep failed", error);
+              return { scanned: 0, removed: [] as string[] };
+            });
+            if (cleanupScan.enqueued || orphanSweep.rowsDeleted || uploadSweep.removed.length) {
+              console.log("[worker] retention cleanup scan", { cleanupScan, orphanSweep, uploadSweep });
               await recordOperationalEventSafely(prisma, {
                 category: "worker",
                 eventType: "retention_scan",
                 message: "Retention scan enqueued cleanup work.",
-                metadata: { cleanupScan, orphanSweep },
+                metadata: { cleanupScan, orphanSweep, uploadSweep },
               });
             }
           },

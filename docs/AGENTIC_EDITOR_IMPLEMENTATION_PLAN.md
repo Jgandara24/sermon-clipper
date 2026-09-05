@@ -21,8 +21,8 @@ its renderer half is not. The editor delta plan, `docs/EDITOR_DELTA_PLAN_2026-08
 complete and closed — Slices 1–13, PRs #43 through #72. `main` is at `bd934ca` and production
 runs it.
 
-P1.5's renderer, P1.6, P1.7, P1.8 and P1.9 all followed on 2026-09-05. **Next: P1.10.** Then
-P1.11–P1.12, P2, P3, P4, P5 and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
+P1.5's renderer, P1.6, P1.7, P1.8, P1.9 and P1.10 all followed on 2026-09-05. **Next: P1.11.**
+Then P1.12, P2, P3, P4, P5 and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
 Whole Plan In Order; No Customer Until Publishing Works").
 
 **The record of actual progress and deviations is `docs/AGENTIC_EDITOR_PROGRESS.md`.** Read it
@@ -1052,6 +1052,11 @@ takes the snapshotted slot count, and `scheduledDateForRank` was deleted rather 
 Before this UI edit, read the relevant bundled Next 16 server-component guide.
 
 ### P1.10 — Capture and correct service occurrence before scheduling
+
+**Built 2026-09-05.** Uploads state the service date and occurrence; correction is gated at the
+reanalysis boundary and writes the snapshot as well as the columns. Deviations in
+`docs/AGENTIC_EDITOR_PROGRESS.md`, including an out-of-scope cleanup path for abandoned `tmp/`
+uploads.
 
 **Commit:** `feat(projects): require service date and occurrence context`
 

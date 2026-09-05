@@ -1,8 +1,12 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { access, mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanupIdempotencyKey,
   exportFileGraceCutoff,
   exportFileRetentionGraceMs,
+  purgeAbandonedUploads,
   shouldPurgeSourceMedia,
 } from "@/lib/retention";
 
@@ -71,5 +75,57 @@ describe("shouldPurgeSourceMedia", () => {
 
   it("never purges media that no project references", () => {
     expect(shouldPurgeSourceMedia([], now)).toBe(false);
+  });
+});
+
+describe("purgeAbandonedUploads", () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), "upload-sweep-"));
+    process.env.STORAGE_LOCAL_ROOT = root;
+    delete process.env.STORAGE_PROVIDER;
+  });
+
+  afterEach(async () => {
+    delete process.env.STORAGE_LOCAL_ROOT;
+    await rm(root, { recursive: true, force: true });
+  });
+
+  async function writeTemp(key: string, ageMs: number) {
+    const full = path.join(root, key);
+    await mkdir(path.dirname(full), { recursive: true });
+    await writeFile(full, "x");
+    const when = new Date(Date.now() - ageMs);
+    await utimes(full, when, when);
+    return key;
+  }
+
+  it("removes an unfinished upload older than a day", async () => {
+    const key = await writeTemp("tmp/ws-1/abandoned", 2 * DAY_MS);
+    const result = await purgeAbandonedUploads();
+    expect(result.removed).toEqual([key]);
+    await expect(access(path.join(root, key))).rejects.toThrow();
+  });
+
+  it("leaves an upload that is still in progress alone", async () => {
+    const key = await writeTemp("tmp/ws-1/in-flight", 60_000);
+    const result = await purgeAbandonedUploads();
+    expect(result.removed).toEqual([]);
+    await expect(access(path.join(root, key))).resolves.toBeUndefined();
+  });
+
+  // The sweep is by prefix because these objects have no database row to scan from. It must not
+  // wander outside tmp/ — everything else is referenced by a column and purged by project.
+  it("never touches anything outside the tmp prefix", async () => {
+    await writeTemp("src/ws-1/real-source.mp4", 400 * DAY_MS);
+    await writeTemp("audio/ws-1/real-audio.wav", 400 * DAY_MS);
+    const result = await purgeAbandonedUploads();
+    expect(result.removed).toEqual([]);
+    await expect(access(path.join(root, "src/ws-1/real-source.mp4"))).resolves.toBeUndefined();
+  });
+
+  it("reports nothing when no upload has ever been started", async () => {
+    await expect(purgeAbandonedUploads()).resolves.toEqual({ scanned: 0, removed: [] });
   });
 });

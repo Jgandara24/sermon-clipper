@@ -88,6 +88,49 @@ export async function lockSourceVideoForRetention(
   return locked.length > 0;
 }
 
+/**
+ * Prefix every in-progress upload is written under, before `complete` moves it to `src/`.
+ * `src/app/api/uploads/[uploadId]/route.ts` writes here; nothing records the key in the database.
+ */
+export const UPLOAD_TEMP_PREFIX = "tmp/";
+
+/**
+ * How long an unfinished upload is left alone. The signed upload URL lives fifteen minutes, so a
+ * day is far past any upload that is still going, while staying short enough that abandoned files
+ * do not accumulate storage cost.
+ */
+export const UPLOAD_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Deletes abandoned in-progress uploads.
+ *
+ * These are the one class of object no database row points at: `complete` moves the temp object
+ * to its permanent key and only then creates the `SourceVideo` row, so an upload that is never
+ * completed — the browser closed, the tab crashed, the size check rejected it — leaves a file
+ * with nothing referencing it. The project-scoped CLEANUP job can never find them, because there
+ * is no project. Storage itself is therefore the only index, which is why this sweeps by prefix
+ * and age rather than by row.
+ *
+ * Safe to run beside live uploads: anything younger than the cutoff is left alone.
+ */
+export async function purgeAbandonedUploads(
+  now = new Date(),
+  maxAgeMs = UPLOAD_TEMP_MAX_AGE_MS,
+): Promise<{ scanned: number; removed: string[] }> {
+  const storage = getStorageProvider();
+  const cutoff = new Date(now.getTime() - maxAgeMs);
+
+  const objects = await storage.list(UPLOAD_TEMP_PREFIX);
+  const removed: string[] = [];
+  for (const object of objects) {
+    if (object.lastModified > cutoff) continue;
+    if (await removeStorageObjectIfExists(object.key)) {
+      removed.push(object.key);
+    }
+  }
+  return { scanned: objects.length, removed };
+}
+
 /** Idempotent storage removal: missing objects are fine (an earlier attempt already removed them). */
 export async function removeStorageObjectIfExists(key: string): Promise<boolean> {
   const storage = getStorageProvider();

@@ -1,3 +1,5 @@
+export type StorageObjectListing = { key: string; lastModified: Date };
+
 export interface StorageProvider {
   /** Absolute filesystem path for a storage key. Only meaningful to local-disk-style providers. */
   absolutePath(key: string): string;
@@ -11,6 +13,11 @@ export interface StorageProvider {
     options: { expiresInSeconds: number; contentType?: string; filename?: string | null; disposition?: "inline" | "attachment" },
   ): Promise<string>;
   move(fromKey: string, toKey: string): Promise<void>;
+  /**
+   * Every object under a key prefix, with when it was last written. Used by retention to find
+   * objects no database row points at — an abandoned upload leaves no row to scan from.
+   */
+  list(prefix: string): Promise<StorageObjectListing[]>;
   remove(key: string): Promise<void>;
   readAsBuffer(key: string): Promise<Buffer>;
   /**

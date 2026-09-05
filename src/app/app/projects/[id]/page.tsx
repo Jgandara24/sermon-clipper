@@ -8,7 +8,9 @@ import { TranscriptViewer } from "@/components/transcript-viewer";
 import { requireCurrentUser, requirePrimaryWorkspace } from "@/lib/auth";
 import { formatDate, titleCaseStatus } from "@/lib/format";
 import { createSignedMediaUrl } from "@/lib/media/signed-url";
-import { assertWorkspaceScope } from "@/lib/project-service";
+import { ProjectServiceContextForm } from "@/components/project-service-context-form";
+import { assessReanalysis } from "@/lib/analysis/reanalysis-policy";
+import { assertWorkspaceScope, readProjectProcessingConfig } from "@/lib/project-service";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +45,11 @@ export default async function ProjectPage({
   }
 
   assertWorkspaceScope(project.workspaceId, workspace.id, "project");
+  // The same boundary that governs re-analysis governs correcting the service: both change which
+  // days this sermon owns. Read here only to decide whether to offer the control — the action
+  // checks it again, because a Server Action is reachable without the UI.
+  const serviceContextLocked = !(await assessReanalysis(prisma, { projectId: project.id })).allowed;
+  const snapshot = readProjectProcessingConfig(project.processingConfig);
   const transcriptionUnavailable = project.processingJobs.some(
     (job) =>
       job.errorCode === "TRANSCRIBE_PROVIDER_UNAVAILABLE" ||
@@ -65,6 +72,13 @@ export default async function ProjectPage({
           <StatusBadge status={project.status} />
         </div>
       </section>
+
+      <ProjectServiceContextForm
+        projectId={project.id}
+        sermonDate={project.sermonDate}
+        serviceOccurrence={snapshot.serviceOccurrence}
+        locked={serviceContextLocked}
+      />
 
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
