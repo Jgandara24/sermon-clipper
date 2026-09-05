@@ -11,6 +11,13 @@ final commit is labelled `PROTOTYPE, NOT ACCEPTED`.
 micro-shift, which becomes its own slice with a real render test; D2 resolved to hardened browser
 extraction. Both are recorded in `DECISIONS.md`, so the reasoning survives this document.
 
+**Closed 2026-09-05.** Every slice is built and merged. Slice 13 landed in PRs #69–#72 and `main`
+is at `bd934ca`. Nothing in this document is pending. It stays as the record of what the slices
+built and what this plan had wrong; each slice's "Built" note is where to read that. The prototype
+branch was never merged and never needs to be — the slices rebuilt its behaviour on `main`. The
+next work is the implementation plan's P1.5 remainder and P1.6; see
+`docs/AGENTIC_EDITOR_PROGRESS.md`.
+
 Ahead of the slices, two pieces of the surrounding work have landed in production and are no
 longer pending: the export-policy step (§2) and the Scribe provider activation (§7).
 
