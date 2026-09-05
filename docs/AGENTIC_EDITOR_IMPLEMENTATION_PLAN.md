@@ -946,16 +946,20 @@ Changes What A Word Says, Never What The Clip Contains" (2026-08-20).
 - **Rollback:** Hold affected exports and use the converter. Never restore concatenated delivery.
 - **Trace:** Rev2 §§2.5 and 3.6; product-owner Decision 3.
 
-**Status 2026-09-05: the gate is built; the renderer is not.** `CONTINUOUS_RANGE_REQUIRED` landed
-with Slice 5 (`1d4b8e3`, PR #47) in `src/lib/exports/continuous-range.ts`. The worker refuses a
-pinned document that would render as more than one span before it downloads anything, and the
-route answers the same question at request time. `DECISIONS.md` records it on 2026-08-20 as "The
-P1.4 Continuous-Range Export Gate Landed Early, With Slice 5" — that entry numbers the gate as
-P1.4; it is this commit's gate. **What remains is the renderer.** `src/lib/export/render.ts` still
-runs three passes (one re-encode per kept range, a concat, then the final encode) and
-`src/lib/exports/render-plan.ts` still returns `keptRanges`. Retiring that path is the next commit.
-Slice 13's parity gate, `tests/integration/export-parity.integration.test.ts`, is its regression
-net; `tests/export-kept-ranges.test.ts` is the test the bullets say to respecify.
+**Built in two parts.** The gate landed with Slice 5 (`1d4b8e3`, PR #47, 2026-08-21) in
+`src/lib/exports/continuous-range.ts`: the worker refuses a pinned document that would render as
+more than one span before it downloads anything, and the route answers the same question at
+request time. `DECISIONS.md` records it on 2026-08-20 as "The P1.4 Continuous-Range Export Gate
+Landed Early, With Slice 5" — that entry numbers the gate as P1.4; it is this commit's gate. The
+renderer followed on 2026-09-05: `src/lib/export/render.ts` runs one ffmpeg pass over the clip's
+one range, `src/lib/exports/render-plan.ts` carries `range` rather than `keptRanges` and asserts
+the gate itself, and `toOutputTimeline` in the new `src/lib/export/output-timeline.ts` replaces
+`mapToKeptTimeline`. `computeKeptRanges` stays as the gate's arithmetic only.
+`tests/export-kept-ranges.test.ts` is respecified as that; `tests/export-output-timeline.test.ts`
+and the `buildExportFfmpegArgs` tests in `tests/export-render.test.ts` are new; the parity gate
+is the regression net. Recorded in `DECISIONS.md` as "An Export Is One Range In One Pass". One
+departure from the bullets: `src/lib/export/kept-ranges.ts` is kept, not deleted, because the
+gate's refusal is decided against the ranges a cut would leave.
 
 ### P1.6 — Give caption overrides stable identity
 

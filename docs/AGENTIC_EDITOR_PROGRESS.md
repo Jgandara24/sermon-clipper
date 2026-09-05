@@ -21,7 +21,7 @@ build the whole implementation plan in order.
 | P1.2 export identity is clip + edit version | done | `ea6f9f7` (PR #53, 2026-09-02) |
 | P1.3 mandatory render QC | done | `8e7ab42` (PR #54, 2026-09-02) |
 | P1.4 no new internal word cuts | done | inside editor Slice 5, `01860fa` (PR #47, 2026-08-21) |
-| P1.5 one continuous range at export | **half done** | the gate landed with Slice 5 (`1d4b8e3`); the renderer still concatenates — see below |
+| P1.5 one continuous range at export | done | the gate landed with Slice 5 (`1d4b8e3`); the one-pass renderer on 2026-09-05 — see below |
 | Editor delta plan, Slices 1–13 | done | PRs #43–#51, #55, #58, #60–#65, #67–#72; plan closed 2026-09-05 |
 | P1.6 stable caption override identity | **next** | not started; `src/lib/editor/caption-lines.ts:34` still writes `line-${index}` |
 | P1.7–P1.12 | not started | none of their named modules exist |
@@ -34,20 +34,21 @@ no longer binds. Automatic publishing turns on at the end of P2, after the produ
 Tier 3 sandbox test by hand (`docs/TIER3_SANDBOX_TEST_CHECKLIST.md`), and not before. Recorded in
 `DECISIONS.md` as "Build The Whole Plan In Order; No Customer Until Publishing Works".
 
-### What "half done" means for P1.5
+### P1.5, in two parts
 
-Done: `CONTINUOUS_RANGE_REQUIRED` in `src/lib/exports/continuous-range.ts`. The worker refuses a
-pinned document that would render as more than one span, before it downloads anything; the route
-answers the same question at request time. Recorded in `DECISIONS.md` on 2026-08-20 as "The P1.4
-Continuous-Range Export Gate Landed Early, With Slice 5" — that entry numbers the gate as P1.4, the
-plan numbers it as P1.5; it is one gate.
+The gate: `CONTINUOUS_RANGE_REQUIRED` in `src/lib/exports/continuous-range.ts`, with Slice 5. The
+worker refuses a pinned document that would render as more than one span, before it downloads
+anything; the route answers the same question at request time. Recorded in `DECISIONS.md` on
+2026-08-20 as "The P1.4 Continuous-Range Export Gate Landed Early, With Slice 5" — that entry
+numbers the gate as P1.4, the plan numbers it as P1.5; it is one gate.
 
-Not done: the renderer. `src/lib/export/render.ts` still runs three ffmpeg passes — one re-encode
-per kept range, a concat, then the crop/caption/loudnorm encode — and
-`src/lib/exports/render-plan.ts` still returns `keptRanges` in the plural. The gate guarantees
-exactly one range for every deliverable, so the first two passes are dead weight. The plan's P1.5
-outcome, "retires the multi-segment concat path", is the remaining work, and it is the next
-commit. `tests/integration/export-parity.integration.test.ts` is its regression net.
+The renderer, 2026-09-05: `src/lib/export/render.ts` runs one ffmpeg pass over the clip's one
+range — seek, trim, crop, fill, burn, normalise, encode — where it ran three (one re-encode per
+kept range, a concat, then the final encode). `src/lib/exports/render-plan.ts` carries `range`
+and asserts the gate itself; `toOutputTimeline` in `src/lib/export/output-timeline.ts` is the one
+source-to-file conversion. Recorded in `DECISIONS.md` as "An Export Is One Range In One Pass". A
+fresh render of an old clip now differs in bytes from the three-pass output and improves in
+quality; nothing stored changes.
 
 ### P0 commits
 
