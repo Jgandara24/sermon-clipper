@@ -2725,8 +2725,11 @@ Tradeoff: the datum carries two related families of number — what the platform
 caption rests — rather than one. Collapsing them into one is the change that moves renders, so it
 waits for the product owner.
 
-Status: Active. The title overlay reads `top-safe` from this datum from birth, so it starts with no
-copy of its own.
+Status: Active, and both open disagreements are **settled by the product owner on 2026-09-05**.
+(1) The side margin stays at 40px, deliberately; see the 2026-09-05 entry. (2) The preview now
+derives its resting caption centre from the burn-in's margin, so the second disagreement no longer
+exists; `captionRestCentreY` has left this datum. The title overlay reads `top-safe` from this datum
+from birth, so it starts with no copy of its own.
 
 ## 2026-09-02 - The Title Overlay Parses Leniently And Writes Strictly
 
@@ -3169,7 +3172,60 @@ this, deliberately — an assertion either way would freeze one of the two answe
   **16.3px higher**, for this caption. A two-row caption moves that number, in the opposite
   direction, because the two anchors scale differently with block height.
 
+*Corrected 2026-09-05:* the two-row claim above was wrong. The preview already held a bottom
+caption's last row still as rows were added (`captionRowsShiftPx`), and its unmeasured path never
+wraps at all, so the disagreement was a constant per position rather than one that grew with the
+block. The constant was larger than measured here for the middle position: 96px.
+
 Tradeoff: the gate is silent about the one thing it is best placed to measure. Recording the
 measurement is the whole of what this slice is allowed to do with it.
 
-Status: **Open for the product owner**, unchanged from 2026-09-02. Now carrying measurements.
+Status: **Settled by the product owner on 2026-09-05.** See the entry of that date: the side margin
+stays, and the preview moved onto the burn-in.
+
+## 2026-09-05 - The Preview Moves Onto The Burn-In, And The Side Margin Stays
+
+Decision: the two safe-area disagreements left open on 2026-09-02 and measured on 2026-09-04 are
+settled, one each way, by the product owner.
+
+**The caption's 40px side margin stays exactly as it is.** The burn-in writes `MarginL` and
+`MarginR` of 40px; the guide draws the platform band at 6 percent, which is 64.8px at 1080 wide. A
+caption wide enough to fill the line reaches 24.8px into that band. That is 2.3 percent of the
+frame, it bites only on a full-width line, and closing it would re-render every approved clip and
+force more wrapping on every future one. It is recorded as a deliberate, accepted overlap. No code
+changed.
+
+**The preview now rests its caption where the burn-in anchors it.** The burn-in was right. It pins a
+bottom caption's last row to the bottom margin line (`\an2`, `MarginV` 230, y=1690), a top
+caption's first row to the top margin line (`\an8`, y=154), and a middle caption to the frame's
+centre, with rows pitched at the caption's size. The preview rested the block's centre on its own
+fractions (0.86, 0.1, 0.45) and then shifted multi-row blocks afterwards to hold an edge still. The
+two disagreed by a constant per position: about 13px at bottom and top for a 52px caption, and 96px
+at middle, where 0.45 of the frame is simply not 0.5 of it. The editor showed a caption in a place
+the file would not put it.
+
+`captionRestCentre(position, { rows, sizePx, videoHeight })` now derives the block's centre from
+`captionMarginVPx`, which is the same function the burn-in writes its style margin from. The second
+source of truth, `captionRestCentreY`, has left `social-safe-area-values.ts`, and the preview's
+`captionRowsShiftPx` has gone with it. `tests/caption-rest-position-parity.test.ts` proves the edges
+coincide by parsing the `\pos` rows out of the generator's own output for every position, one to
+three rows and three sizes, rather than by writing the formula twice.
+
+Why the preview moved and not the burn-in: the burn-in's rule is the one the platforms make
+necessary. A caption that grows away from the bottom band never enters the strip the platform
+covers with its own UI, however many rows it has. And only the preview *could* move without cost:
+`captionRestCentre` had exactly one consumer and the burn-in never read it, so the ASS generator and
+every fixture are untouched byte for byte, the export parity gate passes unchanged, and no stored
+clip re-renders.
+
+The datum's version is not bumped. It exists because "moving any of these moves every clip rendered
+afterwards", and this moved nothing rendered. Removing a value nothing rendered read is not the
+event the version counts.
+
+Tradeoff: a caption's resting place in the editor depends on its row count now, so a dragged caption
+starts from a point that moves as the current line changes. That is where the object visibly is, so
+the drag starts where the member's finger is, but it is a behaviour rather than a constant. And the
+side-margin overlap is now a decision rather than an oversight, which means the day a platform's
+rail is seen sitting on caption text, the fix is a re-render of everything and the reason is here.
+
+Status: Active. Both halves of the 2026-09-02 disagreement are closed.
