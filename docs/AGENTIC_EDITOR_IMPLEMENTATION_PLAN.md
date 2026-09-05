@@ -21,8 +21,8 @@ its renderer half is not. The editor delta plan, `docs/EDITOR_DELTA_PLAN_2026-08
 complete and closed — Slices 1–13, PRs #43 through #72. `main` is at `bd934ca` and production
 runs it.
 
-P1.5's renderer, P1.6, P1.7 and P1.8 all followed on 2026-09-05. **Next: P1.9.** Then P1.10–P1.12,
-P2, P3, P4, P5 and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
+P1.5's renderer, P1.6, P1.7, P1.8 and P1.9 all followed on 2026-09-05. **Next: P1.10.** Then
+P1.11–P1.12, P2, P3, P4, P5 and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
 Whole Plan In Order; No Customer Until Publishing Works").
 
 **The record of actual progress and deviations is `docs/AGENTIC_EDITOR_PROGRESS.md`.** Read it
@@ -1033,6 +1033,10 @@ already-normalised calendar date rather than a service instant.
 - **Trace:** Rev2 §4.2; Addendum S10 and S11.
 
 ### P1.9 — Integrate the allocator, explicit slot states, and safe retention activation
+
+**Built 2026-09-05.** Both switches default false. Deviations in `docs/AGENTIC_EDITOR_PROGRESS.md`:
+`MISSED`/`UNFILLED` had to move from P1.7's durable set to the reschedulable one, the allocator
+takes the snapshotted slot count, and `scheduledDateForRank` was deleted rather than deprecated.
 
 **Commit:** `feat(schedule): arm explicit weekday slots during analysis`
 

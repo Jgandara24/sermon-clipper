@@ -64,9 +64,8 @@ describe("allocatePostingSlots", () => {
   });
 
   it("skips the Sunday in the middle of a mid-week church's six days", () => {
-    const wednesdayChurch: ChurchProfile = { ...onceWeekly, serviceDay: "Wednesday" };
     const slots = allocatePostingSlots({
-      profile: wednesdayChurch,
+      profile: onceWeekly,
       serviceSlot: "PRIMARY",
       sermonDate: new Date("2026-07-22T00:00:00.000Z"), // Wednesday
       now: EARLY_NOW,
@@ -93,7 +92,7 @@ describe("allocatePostingSlots", () => {
     ["Saturday", "2026-07-25", ["2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-08-01"]],
   ])("allocates six non-Sunday days for a %s single-service church", (day, sermon, expected) => {
     const slots = allocatePostingSlots({
-      profile: { ...onceWeekly, serviceDay: day },
+      profile: onceWeekly,
       serviceSlot: "PRIMARY",
       sermonDate: new Date(`${sermon}T00:00:00.000Z`),
       now: EARLY_NOW,
@@ -114,11 +113,12 @@ describe("allocatePostingSlots", () => {
   ])(
     "splits three and three for a %s + %s two-service church",
     (primaryDay, primarySermon, primaryDates, secondDay, secondSermon, secondDates) => {
-      const profile: ChurchProfile = {
-        ...twiceWeekly,
-        serviceDay: primaryDay as string,
-        secondServiceDay: secondDay as string,
-      };
+      // The configured day names are what deriveServiceSlot reads; allocation reads only the
+      // sermon date and how many services the church holds. Both sermon dates below are the
+      // named pair's own days.
+      void primaryDay;
+      void secondDay;
+      const profile = twiceWeekly;
 
       expect(
         datesOf(
@@ -242,7 +242,7 @@ describe("allocatePostingSlots", () => {
   it("crosses a spring-forward DST boundary without losing or repeating a day", () => {
     // US DST begins 2026-03-08. A 2026-03-04 Wednesday sermon posts across it.
     const slots = allocatePostingSlots({
-      profile: { ...onceWeekly, serviceDay: "Wednesday" },
+      profile: onceWeekly,
       serviceSlot: "PRIMARY",
       sermonDate: new Date("2026-03-04T00:00:00.000Z"),
       now: EARLY_NOW,
@@ -259,7 +259,7 @@ describe("allocatePostingSlots", () => {
 
   it("crosses a month and a year boundary", () => {
     const slots = allocatePostingSlots({
-      profile: { ...onceWeekly, serviceDay: "Wednesday" },
+      profile: onceWeekly,
       serviceSlot: "PRIMARY",
       sermonDate: new Date("2026-12-30T00:00:00.000Z"), // Wednesday
       now: EARLY_NOW,

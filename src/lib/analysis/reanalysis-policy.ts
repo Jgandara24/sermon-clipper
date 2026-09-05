@@ -29,7 +29,7 @@ export type DurableWorkCounts = {
   approvals: number;
   /** Export jobs, in any state — a render that was asked for is work, finished or not. */
   exports: number;
-  /** Scheduled posts that have left NOT_STARTED and FAILED: in flight, published, or otherwise a record of delivery. */
+  /** Scheduled posts in flight, published, or blocked by an operator: a record this project delivered. */
   posts: number;
 };
 
@@ -44,13 +44,18 @@ export type ReanalysisPolicyClient =
 /**
  * Publish states that a rebuild would silently detach from their clip.
  *
- * NOT_STARTED and FAILED rows are the reschedulable ones: the rebuild re-derives them from the
- * new clips, and they carry no record of anything having reached an audience. Every other state
- * does — a claim in flight, a post that succeeded, a slot blocked or missed on the record — and
- * `clearReschedulableScheduledPosts` leaves those rows behind with `clipId` null, which is exactly
- * the detachment this policy exists to prevent.
+ * A durable row is one that records something reaching an audience, or a decision a person made:
+ * a claim in flight, a post that succeeded, a slot an operator blocked. A rebuild must not
+ * detach those, and `clearReschedulableScheduledPosts` deliberately leaves them alone.
+ *
+ * MISSED and UNFILLED were listed here by P1.7, when no code created either state. P1.9 creates
+ * both routinely — every sermon uploaded after its own posting week produces MISSED rows, and
+ * every thin candidate pool produces UNFILLED ones. Left durable, the first analysis of an old
+ * sermon would permanently forbid re-analysing it. Neither reached an audience and neither
+ * carries a human decision, so both are reschedulable, and `clearReschedulableScheduledPosts`
+ * now clears them rather than leaving them behind detached.
  */
-const DURABLE_PUBLISH_STATES = ["IN_PROGRESS", "SUCCEEDED", "BLOCKED", "UNFILLED", "MISSED"] as const;
+const DURABLE_PUBLISH_STATES = ["IN_PROGRESS", "SUCCEEDED", "BLOCKED"] as const;
 
 /** Counts the durable work on a project's clips. Every count is a database count, never a load. */
 export async function countDurableWork(
@@ -113,7 +118,7 @@ export function describeDurableWork(work: DurableWorkCounts): string {
   return (
     `durable work on this project's clips: ${work.edits} saved edit(s), ` +
     `${work.approvals} approval record(s), ${work.exports} export job(s), ` +
-    `${work.posts} scheduled post(s) past NOT_STARTED/FAILED`
+    `${work.posts} scheduled post(s) in flight, published or blocked`
   );
 }
 

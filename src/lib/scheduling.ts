@@ -1,25 +1,24 @@
 import type { SchedulePublishStatus } from "@prisma/client";
 
+type RescheduleState = "NOT_STARTED" | "FAILED" | "MISSED" | "UNFILLED";
+
 /**
- * Maps a clip's rank (1-indexed, best first) to its calendar posting date, per Pulpit
- * Engine's scheduling rule (docs/BUSINESS_OVERVIEW.md): the Nth-best clip posts N days
- * after the sermon date — rank 1 is the day after the sermon, rank 6 is six days after.
- * `sermonDate` must already be a calendar-date-normalized UTC midnight (see
- * calendarDateInTimezone in church-profile.ts) so this stays plain UTC date arithmetic.
+ * What posting dates a sermon gets is decided by `allocatePostingSlots` in
+ * `src/lib/schedule/posting-schedule.ts`, not here. This module keeps only the database-coupled
+ * scheduling helpers: what a workspace has already reserved, and what re-analysis may clear.
+ *
+ * `scheduledDateForRank` used to live here and was removed in P1.9. It mapped rank N to
+ * `sermonDate + N days` with no weekday awareness, which posts on Sunday. Turning
+ * `AUTOMATIC_SCHEDULE_ARMING_ENABLED` off disables arming; it does not bring that rule back.
  */
-export function scheduledDateForRank(sermonDate: Date, rank: number): Date {
-  const result = new Date(sermonDate);
-  result.setUTCDate(result.getUTCDate() + rank);
-  return result;
-}
 
 type ScheduledPostQueryClient = {
   scheduledPost: {
     deleteMany(args: {
       where: {
         workspaceId: string;
-        clip: { projectId: string };
-        publishStatus: { in: ("NOT_STARTED" | "FAILED")[] };
+        OR: Array<{ clip: { projectId: string } } | { projectId: string }>;
+        publishStatus: { in: RescheduleState[] };
       };
     }): Promise<{ count: number }>;
     findFirst(args: {
@@ -61,10 +60,25 @@ export type ScheduledPostCollision = {
 };
 
 /**
- * Clears the re-schedulable (NOT_STARTED/FAILED) calendar slots of a project's clips before
- * re-analysis regenerates them. SUCCEEDED/IN_PROGRESS rows are publish history — the only
- * record a real Facebook post exists — and must survive; scheduled_posts.clip_id is
+ * Slots a rebuild may throw away and re-derive. Kept in step with `DURABLE_PUBLISH_STATES` in
+ * `reanalysis-policy.ts`: exactly the states that policy does not treat as durable work. MISSED
+ * and UNFILLED belong here — neither reached an audience — and clearing them is what stops a
+ * rebuild leaving them behind with a null clip.
+ */
+export const RESCHEDULABLE_PUBLISH_STATES = [
+  "NOT_STARTED",
+  "FAILED",
+  "MISSED",
+  "UNFILLED",
+] as const;
+
+/**
+ * Clears the re-schedulable calendar slots of a project before re-analysis regenerates them.
+ * SUCCEEDED/IN_PROGRESS/BLOCKED rows are publish history — the only record a real Facebook post
+ * exists, or an operator's decision — and must survive; scheduled_posts.clip_id is
  * ON DELETE SET NULL so the subsequent clip deleteMany detaches them instead of cascading.
+ *
+ * Matches on the project as well as the clip: an UNFILLED slot has no clip to match on.
  */
 export async function clearReschedulableScheduledPosts(
   tx: ScheduledPostQueryClient,
@@ -73,8 +87,8 @@ export async function clearReschedulableScheduledPosts(
   return tx.scheduledPost.deleteMany({
     where: {
       workspaceId: params.workspaceId,
-      clip: { projectId: params.projectId },
-      publishStatus: { in: ["NOT_STARTED", "FAILED"] },
+      OR: [{ clip: { projectId: params.projectId } }, { projectId: params.projectId }],
+      publishStatus: { in: [...RESCHEDULABLE_PUBLISH_STATES] },
     },
   });
 }

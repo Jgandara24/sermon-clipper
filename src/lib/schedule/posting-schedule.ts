@@ -28,6 +28,14 @@ const DARK_WEEKDAY = "Sunday";
  */
 export type PostingSlotState = "SCHEDULED" | "MISSED" | "COLLIDED";
 
+/**
+ * The only two profile fields allocation reads. Narrower than `ChurchProfile` on purpose: the
+ * P0.7 project snapshot carries no `postsPerDay`, and the configured weekday names matter to
+ * `deriveServiceSlot`, which has already run by the time a sermon reaches this module. A full
+ * `ChurchProfile` still satisfies this.
+ */
+export type PostingScheduleProfile = Pick<ChurchProfile, "timezone" | "sermonsPerWeek">;
+
 export type PostingSlot = {
   /** 1-indexed, best clip first. Ranks stay dense: rank 2 keeps its date if rank 1 is MISSED. */
   rank: number;
@@ -37,7 +45,7 @@ export type PostingSlot = {
 };
 
 export type AllocatePostingSlotsInput = {
-  profile: ChurchProfile;
+  profile: PostingScheduleProfile;
   /** Which weekly service this sermon is. `UNMATCHED` allocates nothing — see below. */
   serviceSlot: ServiceSlot;
   /**
@@ -54,6 +62,13 @@ export type AllocatePostingSlotsInput = {
    * owns a date; a later sermon that wants it is reported as `COLLIDED` rather than moved.
    */
   reservedDates?: readonly Date[];
+  /**
+   * How many days this sermon posts on, when the caller knows better than the profile does. The
+   * project snapshot stores its own `targetClipCount`, and a project must schedule the way it was
+   * configured when it was created, so `analyze.ts` passes that rather than re-deriving from a
+   * profile that may have changed. An `UNMATCHED` service still allocates nothing.
+   */
+  slotCount?: number;
 };
 
 /**
@@ -82,8 +97,15 @@ function nextDay(date: Date): Date {
  * scheduled automatically (Rev2 §2.3, "a special service is analyzed but is not scheduled
  * automatically").
  */
-export function postingSlotCountFor(profile: ChurchProfile, serviceSlot: ServiceSlot): number {
+export function postingSlotCountFor(
+  profile: PostingScheduleProfile,
+  serviceSlot: ServiceSlot,
+  slotCount?: number,
+): number {
+  // Checked before the override on purpose: reserve-only is a rule about the service, and no
+  // caller-supplied count may schedule a service the church does not hold.
   if (serviceSlot === "UNMATCHED") return 0;
+  if (slotCount !== undefined) return Math.max(0, Math.floor(slotCount));
   return targetClipCountFor(profile.sermonsPerWeek);
 }
 
@@ -102,10 +124,10 @@ export function postingSlotCountFor(profile: ChurchProfile, serviceSlot: Service
  * "a missed date is marked MISSED; later posts do not shift").
  */
 export function allocatePostingSlots(input: AllocatePostingSlotsInput): PostingSlot[] {
-  const { profile, serviceSlot, sermonDate, now, reservedDates = [] } = input;
+  const { profile, serviceSlot, sermonDate, now, reservedDates = [], slotCount } = input;
   if (!sermonDate) return [];
 
-  const count = postingSlotCountFor(profile, serviceSlot);
+  const count = postingSlotCountFor(profile, serviceSlot, slotCount);
   if (count === 0) return [];
 
   // `now` is a real instant, so it does convert: "today" must be the church's today, not UTC's.

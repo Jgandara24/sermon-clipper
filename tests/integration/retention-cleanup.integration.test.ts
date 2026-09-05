@@ -184,6 +184,12 @@ afterAll(async () => {
 });
 
 describe("retention cleanup", () => {
+  // P1.9 ships SOURCE_RETENTION_DELETION_ENABLED false. Source deletion is what most of these
+  // cases are about, so the file arms it; the report-only cases below unset it themselves.
+  beforeAll(() => {
+    process.env.SOURCE_RETENTION_DELETION_ENABLED = "true";
+  });
+
   it("purges an expired project's media and exports but keeps the database records", async () => {
     const seeded = await seedProject({
       label: "expired",
@@ -355,6 +361,77 @@ describe("retention cleanup", () => {
       where: { projectId: activeFresh.projectId, type: ProcessingJobType.CLEANUP },
     });
     expect(jobs).toHaveLength(0);
+  });
+
+  it("deletes nothing and reports what it would delete while the switch is off", async () => {
+    delete process.env.SOURCE_RETENTION_DELETION_ENABLED;
+    try {
+      const seeded = await seedProject({
+        label: "report-only",
+        projectExpiresAt: LONG_AGO,
+        downloadExpiresAt: RECENT,
+      });
+
+      const result = await runCleanupForProject(seeded.projectId);
+
+      expect(result?.metadata).toMatchObject({
+        projectExpired: true,
+        sourceMediaPurged: false,
+        sourceDeletionEnabled: false,
+      });
+      expect(result?.metadata?.sourceMediaReportOnly).toBe(seeded.sourceKeys.length);
+
+      // Every source object is still there, and every key column is still set.
+      for (const key of seeded.sourceKeys) {
+        await expect(objectExists(key)).resolves.toBe(true);
+      }
+      const sourceVideo = await prisma.sourceVideo.findUniqueOrThrow({
+        where: { id: seeded.sourceVideoId },
+      });
+      expect(sourceVideo.storageKey).not.toBeNull();
+      expect(sourceVideo.audioKey).not.toBeNull();
+
+      // What it would have deleted is on the record, so a production dry run can be read back.
+      const event = await prisma.operationalEvent.findFirst({
+        where: { projectId: seeded.projectId, eventType: "retention_cleanup_report_only" },
+      });
+      expect(event).not.toBeNull();
+      expect((event?.metadata as { wouldPurgeSourceKeys?: string[] })?.wouldPurgeSourceKeys).toEqual(
+        expect.arrayContaining(seeded.sourceKeys),
+      );
+    } finally {
+      process.env.SOURCE_RETENTION_DELETION_ENABLED = "true";
+    }
+  });
+
+  it("re-reads a concurrent retention extension under the source lock before deleting", async () => {
+    const seeded = await seedProject({
+      label: "extended",
+      projectExpiresAt: LONG_AGO,
+      downloadExpiresAt: RECENT,
+    });
+
+    // A second project on the same source video, still active. Cleanup's first read saw only the
+    // expired one; the re-read under the lock must see this and refuse to delete shared media.
+    await prisma.project.create({
+      data: {
+        workspaceId,
+        name: `extended-sibling-${Date.now()}`,
+        sourceVideoId: seeded.sourceVideoId,
+        expiresAt: new Date(Date.now() + 30 * 86_400_000),
+      },
+    });
+
+    const result = await runCleanupForProject(seeded.projectId);
+
+    expect(result?.metadata).toMatchObject({ sourceMediaPurged: false });
+    for (const key of seeded.sourceKeys) {
+      await expect(objectExists(key)).resolves.toBe(true);
+    }
+    const sourceVideo = await prisma.sourceVideo.findUniqueOrThrow({
+      where: { id: seeded.sourceVideoId },
+    });
+    expect(sourceVideo.storageKey).not.toBeNull();
   });
 
   it("sweeps orphaned exported files past grace", async () => {

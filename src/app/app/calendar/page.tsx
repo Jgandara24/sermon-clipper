@@ -41,6 +41,13 @@ function publishStatusBadge(publishStatus: string) {
       return { label: "Posting…", className: "bg-amber-100 text-amber-900" };
     case "FAILED":
       return { label: "Post failed", className: "bg-red-100 text-red-800" };
+    // Both arrive with P1.9. A day the sermon could not fill needs someone to act; a day that
+    // had already passed when the sermon was analyzed is history, and the days after it did not
+    // move up to cover it.
+    case "UNFILLED":
+      return { label: "Needs a clip", className: "bg-amber-100 text-amber-900" };
+    case "MISSED":
+      return { label: "Missed", className: "bg-stone-200 text-stone-700" };
     default:
       return null;
   }
@@ -66,6 +73,9 @@ export default async function CalendarPage() {
       clip: {
         select: { title: true, rank: true, project: { select: { name: true } } },
       },
+      // A slot can own a project without owning a clip: an UNFILLED day still says which sermon
+      // it belongs to, which is what makes it actionable.
+      project: { select: { name: true } },
     },
   });
 
@@ -122,7 +132,7 @@ export default async function CalendarPage() {
                       <div key={post.id} className="rounded-md border border-stone-200 p-3">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-xs font-medium uppercase tracking-wide text-stone-400">
-                            {post.clip?.project.name ?? "Earlier clip set"}
+                            {post.clip?.project.name ?? post.project?.name ?? "Earlier clip set"}
                           </p>
                           {badge ? (
                             <span
@@ -133,8 +143,16 @@ export default async function CalendarPage() {
                           ) : null}
                         </div>
                         <p className="mt-1 text-sm font-semibold">
-                          {post.clip?.title ?? "Posted clip (regenerated since)"}
+                          {post.clip?.title ??
+                            (post.publishStatus === "UNFILLED"
+                              ? "No clip for this day yet"
+                              : "Posted clip (regenerated since)")}
                         </p>
+                        {post.publishStatus === "UNFILLED" ? (
+                          <p className="mt-1 text-xs text-stone-500">
+                            This sermon made fewer clips than its week has days.
+                          </p>
+                        ) : null}
                         {post.clip ? (
                           <p className="mt-1 text-xs text-stone-500">Rank #{post.clip.rank}</p>
                         ) : null}
