@@ -4,9 +4,11 @@ import {
   Prisma,
   PrismaClient,
   ProcessingJobState,
+  RenderQcStatus,
   WorkspaceRole,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { assessScheduledPostDelivery } from "@/lib/delivery/query";
 import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher";
 
 /**
@@ -104,18 +106,25 @@ async function createDueScheduledPost(
     },
   });
 
+  // The clip's current cut. The bound export must be of exactly this version (P1.11).
+  await prisma.clipEdit.create({
+    data: { clipId: clip.id, version: 1, editorState: {}, savedBy: null },
+  });
+
+  let exportJobId: string | null = null;
   if (withExport) {
+    const checksum = `sha256-${uniqueKey(label)}`;
     const exportedFile = await prisma.exportedFile.create({
       data: {
         storageKey: `exports/${workspaceId}/${uniqueKey(label)}.mp4`,
         bytes: BigInt(1024),
         width: 1080,
         height: 1920,
-        checksum: "test-checksum",
+        checksum,
         downloadExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     });
-    await prisma.exportJob.create({
+    const exportJob = await prisma.exportJob.create({
       data: {
         clipId: clip.id,
         workspaceId,
@@ -123,15 +132,24 @@ async function createDueScheduledPost(
         idempotencyKey: uniqueKey(`export-${label}`),
         filename: `${label}.mp4`,
         outputFileId: exportedFile.id,
+        editVersion: 1,
+        qcStatus: RenderQcStatus.PASSED,
+        // QC measured this exact file; delivery refuses if the two ever diverge.
+        qcChecksum: checksum,
         finishedAt: new Date(),
       },
     });
+    exportJobId = exportJob.id;
   }
 
   const scheduledPost = await prisma.scheduledPost.create({
     data: {
       workspaceId,
+      projectId: project.id,
       clipId: clip.id,
+      // The binding is the only route from a slot to a file. Without it nothing publishes, and
+      // there is deliberately no fallback to the clip's newest successful export.
+      exportJobId,
       scheduledDate: options.scheduledDate ?? new Date("2026-07-19T00:00:00Z"),
     },
   });
@@ -148,6 +166,10 @@ describe("publishDueScheduledPosts", () => {
     let publishCalls = 0;
     const summary = await publishDueScheduledPosts(prisma, {
       now: () => new Date("2026-07-20T12:00:00Z"),
+      // Publish mechanics, not the delivery rule: the real rule refuses every slot until
+      // P2 records editorial reviews. The unstubbed rule is asserted on these same rows
+      // in the last case of this file.
+      assessDelivery: async () => ({ eligible: true as const }),
       resolvePageAccessToken: async () => {
         resolveCalls++;
         return "page-token-abc";
@@ -170,6 +192,10 @@ describe("publishDueScheduledPosts", () => {
     // Second poll must not touch an already-SUCCEEDED row.
     const secondSummary = await publishDueScheduledPosts(prisma, {
       now: () => new Date("2026-07-21T12:00:00Z"),
+      // Publish mechanics, not the delivery rule: the real rule refuses every slot until
+      // P2 records editorial reviews. The unstubbed rule is asserted on these same rows
+      // in the last case of this file.
+      assessDelivery: async () => ({ eligible: true as const }),
       resolvePageAccessToken: async () => {
         resolveCalls++;
         return "page-token-abc";
@@ -194,6 +220,10 @@ describe("publishDueScheduledPosts", () => {
     let calls = 0;
     const summary = await publishDueScheduledPosts(prisma, {
       now: () => new Date("2026-07-20T12:00:00Z"),
+      // Publish mechanics, not the delivery rule: the real rule refuses every slot until
+      // P2 records editorial reviews. The unstubbed rule is asserted on these same rows
+      // in the last case of this file.
+      assessDelivery: async () => ({ eligible: true as const }),
       resolvePageAccessToken: async () => {
         calls++;
         return "unused";
@@ -217,6 +247,10 @@ describe("publishDueScheduledPosts", () => {
     let calls = 0;
     const summary = await publishDueScheduledPosts(prisma, {
       now: () => new Date("2026-07-20T12:00:00Z"),
+      // Publish mechanics, not the delivery rule: the real rule refuses every slot until
+      // P2 records editorial reviews. The unstubbed rule is asserted on these same rows
+      // in the last case of this file.
+      assessDelivery: async () => ({ eligible: true as const }),
       resolvePageAccessToken: async () => {
         calls++;
         return "unused";
@@ -240,6 +274,10 @@ describe("publishDueScheduledPosts", () => {
 
     const failingDeps = {
       now: () => new Date("2026-07-20T12:00:00Z"),
+      // Publish mechanics, not the delivery rule: the real rule refuses every slot until
+      // P2 records editorial reviews. The unstubbed rule is asserted on these same rows
+      // in the last case of this file.
+      assessDelivery: async () => ({ eligible: true as const }),
       resolvePageAccessToken: async () => "page-token-abc",
       publishScheduledVideo: async () => {
         throw new Error("Facebook API rejected the request (HTTP 403, Invalid OAuth access token).");
@@ -324,3 +362,74 @@ describe("publishDueScheduledPosts", () => {
     ).resolves.toBe(eventCountBefore + 1);
   });
 });
+
+/**
+ * The delivery rule against real rows, with nothing stubbed.
+ *
+ * The cases above inject an eligible verdict so they can reach the publish mechanics. These prove
+ * that the injection hides nothing: the fixture is seeded eligible in every respect the database
+ * can express — bound export, matching edit version, QC passed, checksum matching the stored file
+ * — so the only thing standing between it and publication is the editorial review that P2 will
+ * introduce. If a future change makes this publish, the fail-closed default has been lost.
+ */
+describe("delivery eligibility against a real database", () => {
+  it("refuses a fully-seeded slot for exactly one reason: no editorial review yet", async () => {
+    const workspaceId = await createWorkspace("Delivery Real", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-real");
+
+    const verdict = await assessScheduledPostDelivery(prisma, { scheduledPostId });
+    expect(verdict).toEqual({ eligible: false, reason: "editorial_review_missing" });
+  });
+
+  it("refuses a slot bound to no export, and does not go looking for another one", async () => {
+    const workspaceId = await createWorkspace("Delivery Unbound", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-unbound", {
+      withExport: false,
+    });
+
+    // A successful export for this clip exists in the database, but not bound to this slot.
+    const post = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    const exportedFile = await prisma.exportedFile.create({
+      data: {
+        storageKey: `exports/${workspaceId}/stray.mp4`,
+        bytes: BigInt(1024),
+        width: 1080,
+        height: 1920,
+        checksum: "sha256-stray",
+        downloadExpiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    await prisma.exportJob.create({
+      data: {
+        clipId: post.clipId!,
+        workspaceId,
+        state: ProcessingJobState.SUCCEEDED,
+        idempotencyKey: `stray-${Date.now()}`,
+        filename: "stray.mp4",
+        outputFileId: exportedFile.id,
+        editVersion: 1,
+        qcStatus: RenderQcStatus.PASSED,
+        qcChecksum: "sha256-stray",
+        finishedAt: new Date(),
+      },
+    });
+
+    // It must not be found. The slot has no binding, so nothing is deliverable.
+    const verdict = await assessScheduledPostDelivery(prisma, { scheduledPostId });
+    expect(verdict).toEqual({ eligible: false, reason: "slot_export_missing" });
+  });
+
+  it("refuses once the clip is edited past the cut the bound export rendered", async () => {
+    const workspaceId = await createWorkspace("Delivery Stale", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-stale");
+    const post = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+
+    await prisma.clipEdit.create({
+      data: { clipId: post.clipId!, version: 2, editorState: {}, savedBy: null },
+    });
+
+    const verdict = await assessScheduledPostDelivery(prisma, { scheduledPostId });
+    expect(verdict).toEqual({ eligible: false, reason: "export_edit_version_stale" });
+  });
+});
+

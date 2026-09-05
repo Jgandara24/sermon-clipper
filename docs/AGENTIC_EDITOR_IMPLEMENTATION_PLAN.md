@@ -21,8 +21,8 @@ its renderer half is not. The editor delta plan, `docs/EDITOR_DELTA_PLAN_2026-08
 complete and closed — Slices 1–13, PRs #43 through #72. `main` is at `bd934ca` and production
 runs it.
 
-P1.5's renderer, P1.6, P1.7, P1.8, P1.9 and P1.10 all followed on 2026-09-05. **Next: P1.11.**
-Then P1.12, P2, P3, P4, P5 and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
+P1.5's renderer and P1.6 through P1.11 all followed on 2026-09-05. **Next: P1.12.** Then P2, P3,
+P4, P5 and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
 Whole Plan In Order; No Customer Until Publishing Works").
 
 **The record of actual progress and deviations is `docs/AGENTIC_EDITOR_PROGRESS.md`.** Read it
@@ -1071,6 +1071,11 @@ uploads.
 Before this UI edit, read the relevant bundled Next 16 form, route-handler, and server-action guides.
 
 ### P1.11 — Add one Delivery Eligibility Module
+
+**Built 2026-09-05.** `src/lib/delivery/{eligibility,settings,query}.ts`, composed into
+`facebook-publisher.ts`, which no longer resolves a clip's latest successful export. Every slot is
+ineligible until P2 records editorial reviews, as intended. Deviations in
+`docs/AGENTIC_EDITOR_PROGRESS.md`.
 
 **Commit:** `feat(delivery): centralize fail-closed publish eligibility`
 

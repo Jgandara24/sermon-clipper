@@ -28,8 +28,8 @@ build the whole implementation plan in order.
 | P1.8 posting schedule module | done | 2026-09-05; `src/lib/schedule/posting-schedule.ts` allocates weekday slots and `deriveServiceSlot` returns `UNMATCHED`. Pure — no production caller until P1.9 |
 | P1.9 arm weekday slots, stage retention | done | 2026-09-05; `analyze.ts` arms from the allocator behind `AUTOMATIC_SCHEDULE_ARMING_ENABLED`; `expiresAt` set; source deletion report-only behind `SOURCE_RETENTION_DELETION_ENABLED`. Both flags default false |
 | P1.10 capture and correct service occurrence | done | 2026-09-05; direct uploads state the service date and occurrence; correction gated at the reanalysis boundary |
-| P1.11 delivery eligibility module | **next** | not started |
-| P1.12 | not started | its named module does not exist |
+| P1.11 delivery eligibility module | done | 2026-09-05; `src/lib/delivery/{eligibility,settings,query}.ts`, wired into the publisher; the latest-export fallback is gone |
+| P1.12 | **next** | not started |
 | P2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
@@ -173,6 +173,43 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
     is the record of what was built instead.
 
 ---
+
+### P1.11 deviations
+
+**The publisher was rewired, though the plan's file list does not name it.** P2.4 states that
+"P0.16 and P1.11 must both be deployed before this commit", because P2.4 removes today's accidental
+safety barrier. Deployed means in force in the publish path, so a module nobody calls would not
+satisfy it. More directly: `facebook-publisher.ts` resolved a clip's newest finished `SUCCEEDED`
+export (`orderBy: { finishedAt: "desc" }, take: 1`) — the exact "latest successful export" path
+Rev2 §6 forbids, live in the code while a new module declared it must not exist. It now reads only
+`ScheduledPost.exportJobId`.
+
+**The publisher gained an injectable `assessDelivery` dep.** With the real rule in place the
+publisher refuses every slot, because `review` is null until P2 — intended, but it also makes the
+clamp, retry and misconfiguration tests unreachable, and those cover logic that still matters and
+must work at P2. The seam lets those cases stub an eligible verdict; two further cases run the
+real rule unstubbed and assert it refuses and never claims the row, so the stub cannot hide a
+wiring regression. Nothing in production passes the dep.
+
+**Billing access and the transcription hold stay outside the module.** Rev2 says one module
+proves eligibility, and the plan enumerates its inputs; neither of those two is among them.
+Neither is a fact about whether a render is the right render, and importing plan state into a pure
+delivery rule would couple publishing correctness to billing. Both remain in the publisher, ahead
+of the eligibility call, and this is recorded rather than left implicit.
+
+**Caption burn-in substitution, checked on request and left alone.** `main` ships only the six
+DejaVu faces, while three presets name `Inter` and one names `Georgia`. Verified with `fc-match`
+against a fontconfig tree holding only `public/fonts`: with the alias rules a Debian image has,
+`Inter` resolves to DejaVu Sans and `Georgia` to DejaVu Serif — sensible substitutions, not broken
+ones. The substitution is by design: `Dockerfile.worker` deletes the distribution DejaVu copy and
+fails the build unless the three bundled families resolve to `public/fonts`, and
+`font-metrics.ts` deliberately has no fallback face, so an unbundled family raises and the render
+keeps the whole-run path. The two paths that would be dangerous are already guarded — the only
+preset with `activeWordHighlight: true` uses a bundled face, and `TITLE_BANNER_FONT_FAMILY` is
+`"DejaVu Sans"`. What remains is that the browser preview shows `system-ui` for the Inter presets
+while the file gets DejaVu Sans, so preview and output differ for four of five presets. Bundling
+Inter would fix it; changing those presets would alter what already-approved clips render with,
+which `caption-fonts.ts` warns against. A product decision, not a code fix.
 
 ### P1.10 deviations
 

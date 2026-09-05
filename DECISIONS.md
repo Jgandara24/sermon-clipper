@@ -3510,3 +3510,39 @@ rather than trusted from the earlier read. Anything that extends `expiresAt` mus
 lock — `lockSourceVideoForRetention` in `src/lib/retention.ts`.
 
 Status: Active. Do not set `SOURCE_RETENTION_DELETION_ENABLED=true` before a report-only cycle.
+
+## 2026-09-05 - One Module Decides Whether Anything Reaches An Audience
+
+`src/lib/delivery/eligibility.ts` is the only place that answers "may this slot publish?". It
+takes program state, the slot, the clip, the exact bound export, the render's QC and checksum, the
+editorial review, and the church's approval, and returns either eligible or the first reason it is
+not. It is pure; `query.ts` loads the facts and is the only module that knows how.
+
+**The kill switch dominates.** `AUTOMATIC_PUBLISHING_ENABLED` is checked before anything else, so
+an installation with publishing off always reports that as the reason. An operator who has
+switched publishing off should be told so, not handed a checksum complaint about a clip that was
+never going to post.
+
+**There is no "latest successful export" path, and now there is nowhere to write one.** The
+publisher used to resolve a clip's most recently finished `SUCCEEDED` export
+(`facebook-publisher.ts`, `orderBy: { finishedAt: "desc" }, take: 1`). That could hand it a render
+of a cut nobody reviewed — a clip edited after an approved export would publish the old file. The
+publisher now reads only `ScheduledPost.exportJobId`, and the eligibility module's input type
+accepts `exportJob: … | null` rather than a clip, so there is no query inside it that could find a
+substitute. A slot with no binding publishes nothing.
+
+**Delivery = editorial ACCEPT and, when the workspace requires it, a church APPROVED** (Decision
+D), both checked against the bound export's edit version. An export of an older edit is refused
+before approval is even consulted, which is what stops an approval demoted by a later edit from
+riding out on the export that predates it.
+
+**Until P2 records editorial reviews, every slot is ineligible.** That is intentional, not a gap.
+`AUTOMATIC_PUBLISHING_ENABLED` is false in production regardless, and P2.4 — which removes today's
+accidental safety barrier by creating exports automatically — is explicitly required to land after
+this module is in the publish path.
+
+Workspace billing access and the transcription-fallback hold stay outside the module, in the
+publisher. Neither is a fact about whether a render is the right render, and folding billing into
+a pure delivery rule would make it depend on plan state.
+
+Status: Active. Never reintroduce a fallback from a slot to any export it is not bound to.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { updateWorkspaceSettings, WorkspaceSettingsConflictError } from "@/lib/workspace-settings";
+import { parseDeliverySettings } from "@/lib/delivery/settings";
 
 type FakeRow = {
   id: string;
@@ -104,5 +105,41 @@ describe("updateWorkspaceSettings", () => {
     await updateWorkspaceSettings(client as never, "ws-1", (settings) => ({ ...settings, a: 1 }));
 
     expect(row.settings).toEqual({ a: 1 });
+  });
+});
+
+describe("parseDeliverySettings", () => {
+  it("defaults both switches off for a workspace that has never been configured", () => {
+    expect(parseDeliverySettings(null)).toEqual({
+      customerApprovalRequired: false,
+      pilotHold: false,
+    });
+  });
+
+  it("reads both switches when they are set", () => {
+    expect(
+      parseDeliverySettings({ delivery: { customerApprovalRequired: true, pilotHold: true } }),
+    ).toEqual({ customerApprovalRequired: true, pilotHold: true });
+  });
+
+  // Both switches decide whether something reaches an audience, so anything that is not exactly
+  // the boolean true has to read as off. A stored string "true" is a configuration mistake, not
+  // permission to publish.
+  it.each([["true"], [1], ["yes"], [{}], [null]])("treats %o as off", (value) => {
+    expect(
+      parseDeliverySettings({ delivery: { customerApprovalRequired: value, pilotHold: value } }),
+    ).toEqual({ customerApprovalRequired: false, pilotHold: false });
+  });
+
+  it("ignores a delivery key that is not an object", () => {
+    expect(parseDeliverySettings({ delivery: "on" })).toEqual({
+      customerApprovalRequired: false,
+      pilotHold: false,
+    });
+  });
+
+  it("leaves other settings sections alone", () => {
+    const settings = { churchProfile: { timezone: "UTC" }, delivery: { pilotHold: true } };
+    expect(parseDeliverySettings(settings).pilotHold).toBe(true);
   });
 });
