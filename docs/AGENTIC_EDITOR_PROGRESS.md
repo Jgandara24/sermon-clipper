@@ -174,6 +174,29 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
 
 ---
 
+### The Inter font question, decided 2026-09-05
+
+Asked to choose between bundling Inter and leaving preview and burn-in differing. Took neither:
+both change what approved clips render with, and a third option does not.
+
+Only the **fallback tail** of the affected stacks moved, to a bundled family — `Inter, 'DejaVu
+Sans', sans-serif` and `Georgia, 'DejaVu Serif', serif`. The ASS `Fontname` is
+`resolveCaptionFace()`, the first family, which is untouched, so the rendered file cannot change.
+The preview reads the whole stack (`video-preview.tsx:657`), so it now lands on the same face the
+worker draws with instead of on `system-ui`.
+
+**An attempt to verify the bolder option failed, and that is why it was not taken.** Renaming the
+first family looked safe: `fc-match` maps `Inter` to DejaVu Sans and `Georgia` to DejaVu Serif. A
+burn test with ffmpeg was meant to confirm it and instead proved the test worthless — libass
+ignored the restricted `FONTCONFIG_FILE` and substituted a macOS system face, rendering `Inter`
+byte-identically to a family that exists nowhere. Docker was not running, so the built worker
+image could not be checked either.
+
+**What would settle it:** inside the built worker image, render one clip with the first family
+named and again with the bundled family named, and compare the frames. Until then the head of each
+stack is frozen. The existing guard test was narrowed rather than deleted: it now asserts the first
+family of each retired preset, which is the part that reaches a file.
+
 ### P1.12 deviations
 
 **Its first outcome had already landed in P1.11.** The plan opens P1.12 with "delete the
@@ -219,6 +242,10 @@ proves eligibility, and the plan enumerates its inputs; neither of those two is 
 Neither is a fact about whether a render is the right render, and importing plan state into a pure
 delivery rule would couple publishing correctness to billing. Both remain in the publisher, ahead
 of the eligibility call, and this is recorded rather than left implicit.
+
+**Caption burn-in substitution — resolved 2026-09-05, see the P1.12 entry above and DECISIONS.md.**
+The preview now falls back to the bundled face the burn-in actually draws; the first family, which
+is what reaches the rendered file, is frozen. Original finding follows.
 
 **Caption burn-in substitution, checked on request and left alone.** `main` ships only the six
 DejaVu faces, while three presets name `Inter` and one names `Georgia`. Verified with `fc-match`

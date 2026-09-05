@@ -42,7 +42,10 @@ describe("the preset picker", () => {
   });
 
   it("keeps every retired preset's style exactly as it was", () => {
-    expect(getCaptionPreset("bold-serif").style.fontFamily).toBe("Georgia, 'Times New Roman', serif");
+    // The first family is what becomes the ASS Fontname and therefore what an approved clip
+    // renders with; it is frozen. The fallback tail was repointed at a bundled face on
+    // 2026-09-05 so the preview stops showing something the burn-in will not use.
+    expect(getCaptionPreset("bold-serif").style.fontFamily.split(",")[0].trim()).toBe("Georgia");
     expect(getCaptionPreset("bold-serif").style.sizePx).toBe(50);
     expect(getCaptionPreset("quiet").style.sizePx).toBe(36);
     expect(getCaptionPreset("quiet").style.shadow).toBe(false);

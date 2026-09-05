@@ -3574,3 +3574,29 @@ precisely the cases that can double-post.
 between the decision and the claim no longer inherits a verdict that was never about it.
 
 Status: Active. Never re-queue a slot with an unsettled publish intent.
+
+## 2026-09-05 - The Caption Preview Falls Back To The Face The Burn-In Draws
+
+`clean`, `karaoke` and `quiet` ask for `Inter`; `bold-serif` asks for `Georgia`. Neither has ever
+been shipped. The worker image carries only the three bundled DejaVu faces — it deletes the
+distribution copy on purpose — so libass substitutes, while the browser fell through to
+`system-ui`. The church was shown one face and sent another, and two operators on different
+machines were shown different ones.
+
+Only the fallback tail of each stack changed, to a bundled family. The ASS `Fontname` is
+`resolveCaptionFace()`, which takes the **first** family, so it is still `Inter` and `Georgia`: the
+rendered file is unchanged and no approved clip moves. The preview reads the whole stack, so it now
+lands on the same DejaVu face the burn-in uses.
+
+**What was rejected, and why.** Renaming the first family to a bundled one looked output-neutral —
+`fc-match` resolves `Inter` to DejaVu Sans and `Georgia` to DejaVu Serif — but that could not be
+confirmed. A burn test on a developer machine proved nothing: libass ignored the restricted
+fontconfig and substituted a macOS system face, rendering `Inter` byte-identically to a family
+that does not exist anywhere. Bundling Inter was rejected for the opposite reason: it would
+certainly change approved clips, because `Inter` would start resolving to Inter.
+
+Both remain open, and both need the same evidence: render a clip inside the built worker image
+with the first family named and again with the bundled family named, and compare. Until someone
+does that, the head of each stack is frozen and only the tail is ours to move.
+
+Status: Active. Do not change the first family of a caption preset without that comparison.

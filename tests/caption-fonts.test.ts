@@ -102,13 +102,32 @@ describe("bundled caption fonts", () => {
     expect(isBundledFontValue(FONT_OPTIONS[0].value)).toBe(true);
   });
 
-  it("leaves the stored font of Clean and every retired preset exactly as it was", () => {
-    // Changing these changes what an approved clip renders, which is the whole point of not
-    // touching them.
-    expect(getCaptionPreset("clean").style.fontFamily).toBe("Inter, system-ui, sans-serif");
-    expect(getCaptionPreset("bold-serif").style.fontFamily).toBe("Georgia, 'Times New Roman', serif");
-    expect(getCaptionPreset("karaoke").style.fontFamily).toBe("Inter, system-ui, sans-serif");
-    expect(getCaptionPreset("quiet").style.fontFamily).toBe("Inter, system-ui, sans-serif");
+  /**
+   * The guard that matters, narrowed on 2026-09-05 to the part that reaches a rendered file.
+   *
+   * The ASS `Fontname` is the *first* family, so that is what changes an approved clip. The rest
+   * of the stack is read only by the browser preview. The tails were repointed at bundled faces
+   * so the preview stops showing a face the burn-in will not use; the heads are frozen.
+   */
+  it("freezes the first family of Clean and every retired preset", () => {
+    const head = (id: string) =>
+      getCaptionPreset(id).style.fontFamily.split(",")[0].trim().replace(/^['"]|['"]$/g, "");
+    expect(head("clean")).toBe("Inter");
+    expect(head("bold-serif")).toBe("Georgia");
+    expect(head("karaoke")).toBe("Inter");
+    expect(head("quiet")).toBe("Inter");
+  });
+
+  it("ends every retired preset's stack on a face this repository ships", () => {
+    const bundled = new Set(BUNDLED_CAPTION_FONTS.map((font) => font.family));
+    for (const id of ["clean", "bold-serif", "karaoke", "quiet"]) {
+      const families = getCaptionPreset(id)
+        .style.fontFamily.split(",")
+        .map((part) => part.trim().replace(/^['"]|['"]$/g, ""));
+      // Somewhere before the generic keyword, the browser must be able to land on the same file
+      // the worker draws with.
+      expect(families.some((family) => bundled.has(family))).toBe(true);
+    }
   });
 
   it("gives Highlighter a bundled default, because Highlighter is new", () => {
