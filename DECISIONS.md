@@ -3229,3 +3229,67 @@ side-margin overlap is now a decision rather than an oversight, which means the 
 rail is seen sitting on caption text, the fix is a re-render of everything and the reason is here.
 
 Status: Active. Both halves of the 2026-09-02 disagreement are closed.
+
+## 2026-09-05 - A Test That Presses Off Screen Sees A Gesture That Was Never Sent
+
+Decision: `openCanvasEditor` in `tests/e2e/canvas-fixture.ts` now scrolls the caption itself into
+view and refuses to return until the caption's centre is inside the viewport. Ten specs open the
+editor through it, and all ten gain the guarantee. No production code changed.
+
+Why: `editor-canvas.spec.ts:119` ("a drag near the centre snaps to it") failed once on a full local
+run of the Slice 13 branch and passed everywhere else, including CI. That is the shape of a real
+regression, so it was reproduced rather than re-run. Under 6x CPU throttling the unmodified test
+failed **11 times in 15**, always the same way: the first drag's save never reached the database
+within fifteen seconds while the page read "Saved".
+
+Two hypotheses were tested and discarded before the cause was found, and both are recorded because
+each was plausible enough to have been shipped as a fix:
+
+1. **A stale drawn box.** The drag adds a pointer delta to the document's point, so a box read
+   before the preview had painted the saved point would start the second drag from the wrong place.
+   Instrumented: on every pass the drawn and stored positions agreed to four decimals, and the
+   failures happened before that step was reached. Wrong.
+2. **Hydration.** The built application server-renders the caption, so it is visible before React
+   has attached a handler. Instrumented with React's own `__reactProps$` stamp: hydrated before the
+   drag in **10 of 10** throttled runs, of which 4 still failed. Wrong.
+
+The third probe asked the browser what was under the cursor at the press point. Every failure had
+the same signature: `document.elementFromPoint` returned **null**, the object never registered the
+press, and the caption moved 2.5px, which is a layout settle rather than a drag. The press point
+was outside the viewport. The fixture's own comment already named this failure mode ("a box
+measured off screen sends every pointer and touch event outside the page, which looks exactly like a
+gesture the component ignored") and guarded it by scrolling the *canvas* into view. The canvas is
+taller than a 720px window and the caption sits at 87 percent of it, right at the fold; under load
+the layout above and around it is still settling after that scroll, and a few pixels decide whether
+the caption's centre is on screen or just past it. More delay before the drag meant fewer failures
+(11/15, then 4/10, then 0/6 as probes added round trips), which is what a settling layout looks
+like.
+
+Fix, and proof: scroll the caption into view, then poll until its centre is inside the viewport,
+failing with the coordinates and the viewport size so a regression names itself. Under the same 6x
+throttling the fixed test passed **15 of 15**.
+
+Tradeoff: the fixture does one more scroll and one more poll per test, a few milliseconds when the
+caption is already on screen. A test that flakes at random costs more than that each time it does:
+it reddens a required check and teaches everyone to re-run instead of read.
+
+Status: Active.
+
+## 2026-09-05 - This Container Cannot Decode The E2E Fixtures, And Cannot Be Made To
+
+Decision: video playback and timeline-frame tests are proved on CI only, from this remote
+environment. Four e2e tests fail here on `main` and on every branch, and none of them is a defect.
+
+Why: three tests in `editor-playback.spec.ts` and one in `editor-timeline-layout.spec.ts` decode
+the fixture video, which is libx264 with AAC audio. The container's Chromium 141 reports
+`canPlayType` empty for `avc1` and for `mp4a.40.2`, and "probably" for VP9 and AV1: a build
+without the proprietary codecs. CI installs Playwright's own Chromium, which decodes them, and
+those four tests pass there on every run. Closing the gap locally needs a codec-capable browser:
+the Chrome download is refused by the environment's network policy (HTTP 403 from the proxy), and
+the environment's own instructions forbid `playwright install`. Changing the fixtures to VP9 would
+make the tests stop exercising the format the product ships.
+
+Tradeoff: any future change to playback or frame rendering cannot be validated locally here. It
+has to go to CI, which is a slower loop for exactly the work that most needs a fast one.
+
+Status: Active. Recorded so the next session does not spend an hour rediscovering it.

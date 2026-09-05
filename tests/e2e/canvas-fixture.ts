@@ -178,6 +178,29 @@ export async function openCanvasEditor(page: Page, clipId: string) {
   await canvas(page).scrollIntoViewIfNeeded();
   // The caption is only on screen while its line is; the clip opens at 0, inside the first line.
   await expect(captionObject(page)).toBeVisible();
+  // Visible is not on screen. Playwright's visibility does not care about the viewport, and the
+  // canvas is taller than a 720px window with the caption at 87 percent of it, right at the fold.
+  // Scrolling the canvas into view puts its top on screen and leaves the caption to a layout that
+  // is still settling; under CPU throttling the centre-snap test then pressed at a point
+  // `document.elementFromPoint` reported as null, nothing registered, and the page said "Saved"
+  // because that was true. So the caption itself is scrolled into view, and its box is checked
+  // against the viewport, so a regression fails here with a reason rather than downstream as a
+  // gesture that appeared to be ignored.
+  await captionObject(page).scrollIntoViewIfNeeded();
+  const viewport = page.viewportSize();
+  if (viewport) {
+    await expect
+      .poll(async () => {
+        const box = await captionObject(page).boundingBox();
+        if (!box) return "no box";
+        const centreX = box.x + box.width / 2;
+        const centreY = box.y + box.height / 2;
+        const onScreen =
+          centreX >= 0 && centreX <= viewport.width && centreY >= 0 && centreY <= viewport.height;
+        return onScreen ? "on screen" : `centre (${centreX.toFixed(0)}, ${centreY.toFixed(0)}) is outside ${viewport.width}x${viewport.height}`;
+      })
+      .toBe("on screen");
+  }
 }
 
 /** The saved document, which is where a canvas gesture must and must not show up. */
