@@ -3661,3 +3661,40 @@ The single `human_reference` row is created by the migration so P2.9's start com
 move an existing row's state and can never race two programs into existence.
 
 Status: Active. Do not grant editorial review through a workspace role.
+
+## 2026-09-05 - The Operator Marker Is Granted Only At A Shell, And Never Billing-Gated
+
+Wave 2 added `users.is_platform_operator`. This is how it is granted and read.
+
+**There is no UI, route, or server action that can grant it.** The only way in is
+`npm run set:platform-operator -- --email <address> --grant`, run by a human at a terminal that
+already has the production database URL. The authority this confers crosses every tenant boundary
+in the deployment, so the cost of getting it should be a deliberate act, not a toggle someone can
+reach after a session hijack. `src/lib/operations/platform-operator.ts` holds the grant and
+`src/lib/operator-auth.ts` holds the check, kept in separate modules so a route that imports the
+check cannot accidentally reach the grant.
+
+Each grant and revoke writes one `OperationalEvent`, platform-scoped with a null `workspaceId` —
+the same choice the candidate-limit override made, and for the same reason: a workspace-scoped row
+would appear on a church's own operations page and tell that church someone outside it can read
+their work. Re-running the command when the marker already holds the requested value changes
+nothing and writes no row, so the audit trail never claims authority changed hands when it did
+not. Revoking clears `platformOperatorGrantedAt`, so the column never records a grant no longer in
+force.
+
+**The operator gate is a separate function from the workspace gate, not a flag on it.** An
+operator has no membership in the church being reviewed, so `requireApiWorkspace`'s membership
+lookup would refuse before the marker was ever consulted. More importantly, that function ends in
+a billing check. A church whose trial lapsed still has editorial work that staff must be able to
+review — gating review on the church's plan would mean a lapse silently stops the human-reference
+programme for that church. `requireApiPlatformOperator` reads no plan state at all.
+
+Both gates refuse with the same code, status, and message a non-member gets, so an operator route
+never tells an unauthorized caller that a different class of authority exists.
+
+**What the marker still cannot do.** It is not an input to `hasWorkspacePermission`, and no
+`WorkspaceRole` produces it. `requirePlatformOperatorWorkspace` is the one place a membership
+check is skipped, and it is a read: it returns the target workspace so callers can scope queries
+and signed media URLs to that church, and confers no ability to write anything into it.
+
+Status: Active. Do not add a route, action, or settings toggle that grants this marker.
