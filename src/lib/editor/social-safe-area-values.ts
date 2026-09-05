@@ -31,9 +31,6 @@ export const SAFE_AREA_VALUES = {
    */
   captionMarginHPx: 40,
 
-  /** Where an undragged caption's centre sits in the preview, before anyone has moved it. */
-  captionRestCentreY: { top: 0.1, middle: 0.45, bottom: 0.86 },
-
   /** Where the brand template's lower third sits above the bottom of the frame. */
   lowerThirdBottom: 0.22,
 } as const;

@@ -174,9 +174,6 @@ export function VideoPreview({
   const previewScale = canvasWidthPx > 0 ? canvasWidthPx / FRAME_WIDTH : FALLBACK_PREVIEW_SCALE;
 
   const captionIsRetyped = currentWords.length === 0;
-  // Where a caption sits before anyone has dragged it, so the object has somewhere to be. The
-  // moment it is dragged the document carries an exact point instead.
-  const captionPoint = style.box ?? captionRestCentre(style.position);
   const guide = safeAreaGuideGeometry();
   const lowerThirdBand = lowerThirdGeometry();
 
@@ -227,22 +224,20 @@ export function VideoPreview({
     ? Math.max(...measuredRows.rows.map((row) => row.restWidth)) * previewScale
     : 0;
   const captionBlockHeightPx = measuredRows ? measuredRows.rows.length * captionRowPitchPx : 0;
-  /**
-   * How far the block shifts so its anchor lands where the burn-in puts it.
-   *
-   * The canvas object centres whatever it holds on the caption's point, which is right for a
-   * caption that was dragged there and for a middle-positioned one. A bottom-anchored caption is
-   * different: the burn-in keeps its last row on the margin line and stacks further rows above, so
-   * a second row must grow upward rather than push the first one up. A top-anchored one grows
-   * downward for the same reason.
-   */
-  const captionRowsShiftPx = (() => {
-    if (!measuredRows || style.box) return 0;
-    const extra = ((measuredRows.rows.length - 1) / 2) * captionRowPitchPx;
-    if (style.position === "top") return extra;
-    if (style.position === "middle") return 0;
-    return -extra;
-  })();
+  // Where a caption sits before anyone has dragged it, so the object has somewhere to be. The
+  // moment it is dragged the document carries an exact point instead.
+  //
+  // The rest is derived from the burn-in's own margin and this block's row count, so the edge the
+  // canvas object's centre implies is the edge the file anchors: the last row of a bottom caption
+  // on the bottom margin line, the first row of a top one on the top line. The unmeasured path
+  // never wraps (`whitespace-nowrap` below), so it is always one row.
+  const captionPoint =
+    style.box ??
+    captionRestCentre(style.position, {
+      rows: measuredRows ? measuredRows.rows.length : 1,
+      sizePx: style.sizePx,
+      videoHeight: FRAME_HEIGHT,
+    });
 
   useEffect(() => {
     seekedRef.current = false;
@@ -690,7 +685,6 @@ export function VideoPreview({
                     style={{
                       width: `${captionBlockWidthPx}px`,
                       height: `${captionBlockHeightPx}px`,
-                      transform: `translateY(${captionRowsShiftPx}px)`,
                     }}
                   >
                     {measuredRows.rows.map((row, rowIndex) =>
