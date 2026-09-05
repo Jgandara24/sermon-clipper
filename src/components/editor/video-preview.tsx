@@ -681,6 +681,7 @@ export function VideoPreview({
                   // coordinates, so the two agree about where a word is rather than one flowing
                   // text and the other placing it.
                   <span
+                    data-testid="caption-block"
                     className="relative block"
                     style={{
                       width: `${captionBlockWidthPx}px`,
