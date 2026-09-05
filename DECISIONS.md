@@ -3293,3 +3293,60 @@ Tradeoff: any future change to playback or frame rendering cannot be validated l
 has to go to CI, which is a slower loop for exactly the work that most needs a fast one.
 
 Status: Active. Recorded so the next session does not spend an hour rediscovering it.
+
+## 2026-09-05 - Build The Whole Plan In Order; No Customer Until Publishing Works
+
+Decision: with the editor delta plan closed — Slices 1–13 merged, `main` at `bd934ca`, production
+running it — the product owner chose to build `docs/AGENTIC_EDITOR_IMPLEMENTATION_PLAN.md` in its
+stated order: P1.5's remaining renderer work, P1.6 through P1.12, then P2, P3, P4, P5 and P6. No
+paying customer is taken until automatic publishing works. In the product owner's words: "I don't
+want to just sell the editor, I want to build out the entire implementation plan", and "Don't worry
+about the live date going forward - no customer until the publishing works."
+
+Three other paths were put forward and declined: sell the editor now, with churches posting the
+MP4 themselves; a one-church pilot with the product owner as the human reviewer after P1.11 and
+P1.12 alone; and keeping the 2026-10-16 date. The 90-day goal set on 2026-07-18 no longer binds.
+
+The same decision fixes how the plan is maintained from here. It is corrected **in place**: each
+commit gains a "Built" or "Status" note with its merge SHA; each statement the repository has
+disproved is corrected where it stands; the work left is re-sequenced; and every `Trace:` line is
+kept, because those links to Rev2 and the Addendum are how a commit proves it built the right
+thing. It is not rewritten. `docs/AGENTIC_EDITOR_PROGRESS.md` stays the record of what actually
+shipped. `docs/SLICE_13_HANDOFF_2026-09-04.md` is retired and its environment notes folded into
+that file: it said PR #69 was open and awaiting review, and its starting prompt told a fresh
+session not to merge work that merged the same day.
+
+Why: the plan was written on 2026-08-11 against a branch that no longer exists, and Slices 1–13
+found it wrong about this repository in specific places — a palette the application never used, a
+`workspaceAccessLabel` that did not exist, a gate list that is not in the repository, a mid-clip
+word cut that the export gate refuses. Twenty-five commits remain. Correcting the text before
+building against it is the cheapest defect prevention available. Rewriting it would lose the trace
+links and produce a diff no person could review.
+
+Tradeoff: the publishing spine is months of work, not weeks, and the product earns nothing until it
+lands. That is the product owner's call, made with the figures in view.
+
+Status: Active. Automatic publishing turns on at the end of P2, after the Tier 3 sandbox test is
+run by hand (`docs/TIER3_SANDBOX_TEST_CHECKLIST.md`), and not before.
+
+## 2026-09-05 - A Prisma CLI Advisory Is Accepted Until Prisma 8 Is Stable
+
+Decision: `npm audit --omit=dev` reports three high-severity findings that are one chain:
+`deepmerge-ts` (GHSA-ggr8-5vv4-36mx, stack exhaustion when merging a recursive object graph) →
+`@prisma/config` → `prisma`. The finding is accepted and left in place. No `overrides` entry is
+added, and Prisma is not moved to a release candidate.
+
+Why: there is no stable fix to take. Every stable Prisma release from 6.19.3 through 7.10.0 pins
+`@prisma/config` to `deepmerge-ts@7.1.5`; only the 8.0.0 release candidates depend on a fixed
+version, and the one remedy npm offers is a downgrade to 6.12.0. And the code cannot be reached:
+`@prisma/config` is loaded only by the `prisma` CLI — `validate`, `generate`, `migrate` — to merge
+a `prisma.config.*` file this repository does not have. Nothing in `src/` or the worker bundle
+imports it, and it never sees user input. Forcing `deepmerge-ts@8` through an `overrides` entry
+would mean regenerating the lockfile on macOS, which drops the `@emnapi/*` entries and breaks
+`npm ci` on Linux (2026-09-02), for a major version `@prisma/config` was never tested against.
+
+Tradeoff: `npm audit` stays red for as long as this holds, and anyone reading it has to know why.
+This entry is the why.
+
+Status: Active. Revisit when Prisma 8 ships a stable release; that upgrade is then a planned
+major-version change, not a security patch.

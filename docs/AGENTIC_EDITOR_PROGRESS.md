@@ -4,11 +4,52 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-08-14, after the first paid model-routing shadow test.
+**Last updated:** 2026-09-05, after the editor delta plan closed and the product owner chose to
+build the whole implementation plan in order.
 
 ---
 
-## Status
+## Where the build stands
+
+`main` is at `bd934ca` (PR #72, 2026-09-05). Production web and worker both run that commit.
+
+| Work | State | Evidence |
+|---|---|---|
+| P0 (20 commits) | done | merged as `331dbc5` (PR #34, 2026-08-14); table below |
+| Pre-P1 model routing and Trial/Paid | done | `aff7979` (PR #36); independent audit `0344735` (PR #37) |
+| P1.1 render a pinned edit version | done | `9c0e8fc` (PR #42, 2026-08-20) |
+| P1.2 export identity is clip + edit version | done | `ea6f9f7` (PR #53, 2026-09-02) |
+| P1.3 mandatory render QC | done | `8e7ab42` (PR #54, 2026-09-02) |
+| P1.4 no new internal word cuts | done | inside editor Slice 5, `01860fa` (PR #47, 2026-08-21) |
+| P1.5 one continuous range at export | **half done** | the gate landed with Slice 5 (`1d4b8e3`); the renderer still concatenates — see below |
+| Editor delta plan, Slices 1–13 | done | PRs #43–#51, #55, #58, #60–#65, #67–#72; plan closed 2026-09-05 |
+| P1.6 stable caption override identity | **next** | not started; `src/lib/editor/caption-lines.ts:34` still writes `line-${index}` |
+| P1.7–P1.12 | not started | none of their named modules exist |
+| P2–P8 | not started | |
+
+**The decision that sets the order (2026-09-05).** The product owner chose to build the whole
+plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
+take no paying customer until automatic publishing works. The 90-day launch date set on 2026-07-18
+no longer binds. Automatic publishing turns on at the end of P2, after the product owner runs the
+Tier 3 sandbox test by hand (`docs/TIER3_SANDBOX_TEST_CHECKLIST.md`), and not before. Recorded in
+`DECISIONS.md` as "Build The Whole Plan In Order; No Customer Until Publishing Works".
+
+### What "half done" means for P1.5
+
+Done: `CONTINUOUS_RANGE_REQUIRED` in `src/lib/exports/continuous-range.ts`. The worker refuses a
+pinned document that would render as more than one span, before it downloads anything; the route
+answers the same question at request time. Recorded in `DECISIONS.md` on 2026-08-20 as "The P1.4
+Continuous-Range Export Gate Landed Early, With Slice 5" — that entry numbers the gate as P1.4, the
+plan numbers it as P1.5; it is one gate.
+
+Not done: the renderer. `src/lib/export/render.ts` still runs three ffmpeg passes — one re-encode
+per kept range, a concat, then the crop/caption/loudnorm encode — and
+`src/lib/exports/render-plan.ts` still returns `keptRanges` in the plural. The gate guarantees
+exactly one range for every deliverable, so the first two passes are dead weight. The plan's P1.5
+outcome, "retires the multi-segment concat path", is the remaining work, and it is the next
+commit. `tests/integration/export-parity.integration.test.ts` is its regression net.
+
+### P0 commits
 
 | Commit | SHA | State | Notes |
 |---|---|---|---|
@@ -36,34 +77,44 @@ say. `DECISIONS.md` remains the authoritative record of decisions; this is a wor
 
 P0 merged to `main` as `331dbc5`.
 
-Current branch: `codex/pre-p1-model-routing-trial`.
+### Pre-P1, as history
 
-The pre-P1 change adds versioned per-stage analysis routing, an effective-dated model price
-catalog, a Google Gemini adapter, a no-mutation shadow evaluation command, and Trial/Paid access.
-The old minute balance remains as history. It is not an access gate. The P0.19 Gate A report was
-corrected to use the Sonnet 5 price that was active on the run date.
+The pre-P1 change (`aff7979`, PR #36) added versioned per-stage analysis routing, an
+effective-dated model price catalog, a Google Gemini adapter, a no-mutation shadow evaluation
+command, and Trial/Paid access. The old minute balance remains as history. It is not an access
+gate. The P0.19 Gate A report was corrected to use the Sonnet 5 price that was active on the run
+date.
 
-Commit `7b9fdf4` is deployed to the production web and worker services. The routing and Trial/Paid
-migrations are applied. Claude policy version 1 remains active. Google policy version 2 failed its
-shadow test because Google no longer offers `gemini-2.5-flash-lite` to new users. Draft version 3
-uses the current stable `gemini-3.1-flash-lite` model and completed one paid, no-mutation shadow run
-against the existing 47-minute Gate A service. It sent 25 of 491 candidates to Stage B and reduced
-estimated analysis cost by 30.6 percent, but all candidate starts remained inside the first quarter
-of the service. Human review rejected activation on 2026-08-14. Keep Claude policy version 1 active,
-keep Google policy version 3 as a draft, and proceed to P1. The public-safe facts are in
+Claude policy version 1 remains active. Google policy version 2 failed its shadow test because
+Google no longer offers `gemini-2.5-flash-lite` to new users. Draft version 3 uses the current
+stable `gemini-3.1-flash-lite` model and completed one paid, no-mutation shadow run against the
+existing 47-minute Gate A service. It sent 25 of 491 candidates to Stage B and reduced estimated
+analysis cost by 30.6 percent, but all candidate starts remained inside the first quarter of the
+service. Human review rejected activation on 2026-08-14. Keep Claude policy version 1 active, keep
+Google policy version 3 as a draft. The public-safe facts are in
 `evaluation/routing-shadow-2026-08-14.json`.
 
-An independent review of all P0 commits and the pre-P1 merge `aff7979` ran on 2026-08-14, on
-branch `review/p0-pre-p1-audit`. It confirmed eight defects and fixed them: the yt-dlp proxy URL
-reaching church-visible events, the hidden candidate ceiling and override reaching the same
-operations page, Stripe webhook events lost after a processing failure, routing activation
-accepting heuristic stages, the shadow evaluation falling back to the heuristic scorer,
-non-deterministic price selection across overlapping windows, double-recorded and
-work-destroying cost facts, and a readiness check that could pass while the active routing policy
-could not run. It also closed two decisions: a workspace that has paid never returns to an
-unfinished trial, and cost telemetry never fails customer work while Gate A enforces completeness
-(cost-truth schema version 2). No charter assertion was changed. The Stage A front-loading
-baseline stays intact for P5 to invert.
+An independent review of all P0 commits and the pre-P1 merge ran on 2026-08-14 (`0344735`,
+PR #37). It confirmed eight defects and fixed them: the yt-dlp proxy URL reaching church-visible
+events, the hidden candidate ceiling and override reaching the same operations page, Stripe
+webhook events lost after a processing failure, routing activation accepting heuristic stages, the
+shadow evaluation falling back to the heuristic scorer, non-deterministic price selection across
+overlapping windows, double-recorded and work-destroying cost facts, and a readiness check that
+could pass while the active routing policy could not run. It also closed two decisions: a
+workspace that has paid never returns to an unfinished trial, and cost telemetry never fails
+customer work while Gate A enforces completeness (cost-truth schema version 2). No charter
+assertion was changed. The Stage A front-loading baseline stays intact for P5 to invert.
+
+### The editor delta plan, as history
+
+Between P1.1 and P1.2 the editor was rebuilt slice by slice on `main`, following
+`docs/EDITOR_DELTA_PLAN_2026-08-18.md` (Slices 1–13, 2026-08-20 to 2026-09-05). That plan is
+closed. Each slice's "Built" note in it says what landed and what the plan had wrong. The three
+findings most likely to matter to later phases: a trim in an export is a range, never a mid-clip
+word cut; the export's every render decision is derived in one pure place,
+`src/lib/exports/render-plan.ts`, which the parity gate drives with the same document the preview
+holds; and the workspace billing badge now resolves through the exhaustive `workspaceAccessLabel`
+switch in `src/lib/billing/access.ts`, under a one-time authorised exception that is closed.
 
 ---
 
@@ -97,9 +148,27 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
    migration commits all enum expansion. The second adds the Wave 1 substrate and the exact index.
    Clean-database and production-shaped upgrade tests both passed this order.
 
+7. **P1.1's pinned-state loader lives in `src/lib/exports/`, not `src/lib/editor/`.**
+   `loadPinnedEditorState` is in `src/lib/exports/edit-version.ts`. It reads the database, so it
+   belongs with the orchestration modules, not with the pure editor math.
+
+8. **P1.3 needed no migration.** Wave 1 had already added `qcStatus`, `qcCheckedAt`, `qcChecksum`
+   and `qcDetails` to `ExportJob`. The plan was right about that.
+
+9. **P1.4's conversion is a control, not a module.** There is no
+   `src/lib/editor/continuous-edit.ts`. The explicit conversion is `restoreAllDeletedWords` in
+   `src/lib/editor/transcript.ts`, reached from the "Restore all deleted words" control in the
+   Script panel. It is a versioned edit the member asks for, never a background migration, because
+   word ids are positional and a silent rewrite could repoint them at different words.
+
+10. **The editor was rebuilt slice by slice on `main`, not by merging the prototype.** Branch
+    `p1/kinetic-captions-and-editor` (`914d23d`) stays unmerged and labelled `PROTOTYPE, NOT
+    ACCEPTED`. Nothing on it counts as existing on `main`. `docs/EDITOR_DELTA_PLAN_2026-08-18.md`
+    is the record of what was built instead.
+
 ---
 
-## Conventions established during P0 that the plan does not state
+## Conventions established during the build that the plan does not state
 
 - **Commit authorship.** Git identity is now configured locally and globally as
   `Jake Gandara <jake@jakegandara.com>`, verified on the GitHub account. Earlier history contains
@@ -110,6 +179,58 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
 - **New npm scripts are inserted alphabetically** in `package.json`.
 - **Redaction is verified, not trusted.** After generating a sanitized copy, grep it for every
   forbidden value. The first P0.2 scan found two genuine leaks that the transform had missed.
+- **CI runs on pull requests and on pushes to `main` only.** A feature branch gets no checks until
+  a pull request exists; a draft one is enough. The four jobs are `verify`, `integration`
+  (Postgres 17 container + ffmpeg), `e2e` (against a built application), and `worker-image` (the
+  worker font gate lives inside `Dockerfile.worker` and is proved there).
+- **Branch protection is strict and auto-merge is off.** Every pull request must be up to date
+  with `main` and green before it can merge. Poll `gh pr view N --json mergeStateStatus` until it
+  says `CLEAN`; `gh pr checks` reports the previous head's results right after an update.
+- **The "Install ffmpeg" apt step sometimes hangs** in the integration and e2e jobs. The step has
+  its own timeout; if a job sits there, `gh run cancel <id>` then `gh run rerun <id> --failed`.
+- **Kill `next dev` before any Playwright run.** A running dev server is reused
+  (`reuseExistingServer: !isCI`) and reads `.data/storage` while the specs write to
+  `.data/e2e-storage`, so every media request 404s and video tests fail in ways that look like
+  defects. The tell is no `[WebServer]` lines in the Playwright output.
+- **Two local failures are the machine, not the code.** The upload e2e spec fails when the local
+  `.env` carries `ELEVENLABS_API_KEY` (transcription takes the Scribe path and the expected warning
+  never appears), and the retention integration test can fail when run straight after the full
+  e2e suite. Rerun alone; let CI decide. Do not chase them as branch regressions.
+- **Never regenerate `package-lock.json` with a bare macOS `npm install`.** It drops the
+  `@emnapi/*` optional entries and breaks `npm ci` on Linux. If a regeneration is unavoidable,
+  merge only the new subtree into `main`'s lockfile — a correct result is a purely additive diff —
+  and prove it with `npm ci`.
+- **The parity gate is the export's evidence.** `tests/integration/export-parity.integration.test.ts`
+  renders four real MP4s through `runExportJob` and reads them back against the same pure
+  functions the preview draws with. It takes about a minute and needs Postgres and ffmpeg.
+- **Some tests deliberately record known defects as executable evidence:** Sunday-spill
+  scheduling, destructive reanalysis, the Stage A funnel ratio, and the opening-quarter clip
+  assertion. They belong to P1.8, P1.7, P5 and P0.17. Do not "fix" them; invert or respecify them
+  in the commit that fixes the defect.
+
+### Commands
+
+```bash
+npm ci
+
+# The verify gate: prisma validate + generate, lint, typecheck, unit tests, next build
+npm run verify
+
+# The worker build; the font gate itself lives in Dockerfile.worker and runs on CI
+npm run worker:build
+
+# Integration tests need a real Postgres and ffmpeg on PATH
+docker compose up -d
+npm run db:migrate:deploy
+npm run test:integration
+
+# Just the parity gate
+npx vitest run --config vitest.integration.config.ts \
+  tests/integration/export-parity.integration.test.ts
+
+# Browser tests — kill any running `next dev` first
+npm run test:e2e
+```
 
 ---
 
@@ -168,3 +289,10 @@ produced 2 clips, both announcements, both at minute 0.
   2026-08-14 and deliberately deferred: channel import fetches YouTube, and that intake path is
   economically disapproved today, so this matters only once PERC or a better proxy contract makes
   it viable. Revisit with that intake decision.
+- **`prisma` carries a high-severity advisory with no stable fix.** GHSA-ggr8-5vv4-36mx
+  (`deepmerge-ts` below 8, stack exhaustion on a recursive input) reaches `prisma` through
+  `@prisma/config`, which pins `deepmerge-ts@7.1.5` in every stable Prisma release up to 7.10.0.
+  `@prisma/config` is loaded by the CLI alone; nothing in `src/` or the worker bundle imports it,
+  and there is no `prisma.config.*` file for it to merge. Accepted on 2026-09-05 — see
+  `DECISIONS.md`, "A Prisma CLI Advisory Is Accepted Until Prisma 8 Is Stable". Revisit when
+  Prisma 8 is stable.

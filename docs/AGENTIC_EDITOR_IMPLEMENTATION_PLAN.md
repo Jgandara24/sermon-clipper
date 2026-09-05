@@ -12,14 +12,27 @@
 
 ---
 
-## 0.0 Build status (updated 2026-08-12)
+## 0.0 Build status (updated 2026-09-05)
 
-P0.0 `6ddbba6`, P0.1 `737a01c`, P0.2 `30dbfc7`, P0.3 `855567e` are committed. P0.4 is next; P0.5 is
-the first commit that changes `src/` behavior. Branch `feat/reel-builder-trim`, five commits ahead
-of `origin/main`, nothing pushed. Suite at 56 files / 426 tests.
+P0 is merged (`331dbc5`, PR #34). The pre-P1 routing and Trial/Paid change is merged (`aff7979`,
+PR #36) and audited (`0344735`, PR #37). P1.1 (`9c0e8fc`), P1.2 (`ea6f9f7`), P1.3 (`8e7ab42`) and
+P1.4 (`01860fa`, inside editor Slice 5) are merged. P1.5's delivery gate is merged (`1d4b8e3`);
+its renderer half is not. The editor delta plan, `docs/EDITOR_DELTA_PLAN_2026-08-18.md`, is
+complete and closed — Slices 1–13, PRs #43 through #72. `main` is at `bd934ca` and production
+runs it.
+
+**Next: the P1.5 renderer remainder, then P1.6.** Then P1.7–P1.12, P2, P3, P4, P5 and P6, in this
+document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
+Whole Plan In Order; No Customer Until Publishing Works").
 
 **The record of actual progress and deviations is `docs/AGENTIC_EDITOR_PROGRESS.md`.** Read it
-before continuing; it lists five deliberate departures from this plan's text.
+before continuing; it lists the deliberate departures from this plan's text. Where a commit below
+carries a **Built** or **Status** note, that note is more recent than the commit's bullets and
+wins.
+
+This document was written on 2026-08-11 against branch `feat/reel-builder-trim` at `004db2f`. The
+file and line citations in the commit bullets refer to that tree, and several are stale. A module
+named here is a claim; the tree is the evidence. Read it before acting on a citation.
 
 ---
 
@@ -440,10 +453,10 @@ Every commit in P0–P2 must follow these rules:
 
 - **The repository is public until the start of P5 (P0.0).** Never commit `CTO.md`, gross margins, scale/revenue projections, or price positioning while it is public — public git history cannot be retracted. Everything else, including the technical architecture, `DECISIONS.md`, cost gates, and per-stage costs, commits normally. If a new document is business-strategic rather than build-necessary, it belongs in the Dropbox workspace until the trigger fires.
 - `npm run verify` passes (prisma validate/generate + lint + typecheck + unit vitest + build; database- and credential-free by construction).
-- Database tests go in `tests/integration/*.integration.test.ts` (own vitest config, needs live Postgres). Browser tests go in `tests/e2e/` (Playwright; boots dev with `WHISPER_MODEL_PATH=""` — e2e cannot depend on real transcription; there is exactly one spec today).
+- Database tests go in `tests/integration/*.integration.test.ts` (own vitest config, needs live Postgres). Browser tests go in `tests/e2e/` (Playwright; boots with `WHISPER_MODEL_PATH=""` — e2e cannot depend on real transcription; seventeen specs as of 2026-09-05, run against a built application on CI since PR #50).
 - CI runs four jobs: verify, integration (Postgres 17 container + ffmpeg), e2e, and worker-image (docker build of `Dockerfile.worker` on every PR — new native deps get exercised there). Note the worker image pulls yt-dlp unpinned and clones whisper.cpp at build time, so that job has a live network dependency.
 - Commits pass through `.githooks/pre-commit` running gitleaks — fixture tokens/keys need `.gitleaks.toml` allowlist entries, not `--no-verify`.
-- Before each UI commit, read the relevant Next 16 guide under `node_modules/next/dist/docs/` (423 files; this repo's Next differs from training-data conventions).
+- Before each UI commit, read the relevant Next 16 guide under `node_modules/next/dist/docs/` (452 files as of Next 16.3.4; this repo's Next differs from training-data conventions).
 - `DECISIONS.md` stays append-only. A reversed decision gets a new dated entry and an updated Status on the old entry. Known reversals this plan makes: export idempotency scoped to (clip, edit version, filename) (`DECISIONS.md:599`), rank-date scheduling, the filler-removal default, approval-gates-export.
 - Do not rename internal `sermon-clipper` identifiers (`DECISIONS.md:872`).
 - Worker-reachable code stays in `src/lib` or `src/worker` (`tsconfig.worker.json` includes only those trees). It must not import Next application modules.
@@ -458,7 +471,7 @@ Every commit in P0–P2 must follow these rules:
 - Cost facts use the P0.10 cost-event contract on OperationalEvent. Do not use `UsageLedger` for COGS (and note its field is `minutesDelta`; `minutesCharged` lives on `ExportJob`).
 - Schema changes are additive first. Roll back application code without deleting new data.
 - Migrations run from the web deploy (`railway.json` `preDeployCommand: npm run db:migrate:deploy`) before the independent worker deploy (`railway.worker.json`, `Dockerfile.worker`).
-- Module naming: pure math in `src/lib/export/`-style DB-free modules; orchestration in `src/lib/exports/`-style DB-coupled modules; new modules get unambiguous names (`src/lib/review`, `src/lib/qc`, `src/lib/schedule`, `src/lib/delivery`, `src/lib/cost`, `src/lib/operations` — none exist yet; verified). Never create a third near-duplicate sibling.
+- Module naming: pure math in `src/lib/export/`-style DB-free modules; orchestration in `src/lib/exports/`-style DB-coupled modules; new modules get unambiguous names (`src/lib/review`, `src/lib/qc`, `src/lib/schedule`, `src/lib/delivery`, `src/lib/cost`, `src/lib/operations`). Verified 2026-09-05: `src/lib/cost` (P0.10–P0.12), `src/lib/operations` (P0.6, `candidate-limit-override.ts`), `src/lib/delivery` (P0.17, `identity-contract.ts` only), `src/lib/qc` (P1.3, `render-output.ts`) and `src/lib/billing` exist; `src/lib/review` and `src/lib/schedule` do not. P1.8 creates `schedule`; P1.11 fills `delivery`; P2.3 creates `review`. Never create a third near-duplicate sibling.
 - Timezone/date math builds on the existing helpers in `src/lib/church-profile.ts` (`calendarDateInTimezone`, `wallClockInstantInTimezone` are exported; `weekdayNameInTimezone` is currently module-private and must be exported when the Posting Schedule Module needs it). No new timezone library.
 
 For every Prisma migration:
@@ -857,6 +870,12 @@ P1 makes the current renderer, scheduler, and publisher safe. Automatic delivery
 - **Rollback:** Keep the legacy nullable code path for manual investigation. Do not make null exports automatically eligible.
 - **Trace:** Rev2 §3.1; Addendum known defect sites.
 
+**Built 2026-08-20 (PR #42, merged `9c0e8fc`).** `loadPinnedEditorState` lives in
+`src/lib/exports/edit-version.ts`, not `src/lib/editor/` — it reads the database, so it belongs
+with the orchestration modules. The export route stores `editVersion` on the `ExportJob` row and
+`runExportJob` loads the document through `job.editVersion`, so a job renders the edit it was asked
+for even when newer edits were saved between the request and the run.
+
 ### P1.2 — Pin new exports and remove filename from idempotency
 
 **Commit:** `fix(exports): bind one export job to one edit version`
@@ -869,6 +888,10 @@ P1 makes the current renderer, scheduler, and publisher safe. Automatic delivery
 - **Rollback:** Old jobs remain readable. Do not restore filename identity — it creates unlimited renders.
 - **Trace:** Rev2 §3.1; Addendum §5 known defect.
 
+**Built 2026-09-02 (PR #53, merged `ea6f9f7`).** Identity is `export:{clipId}:v{editVersion}`;
+the filename is metadata. Recorded in `DECISIONS.md` as "An Export Is Identified By Its Clip And
+Its Edit Version, And Nothing Else" (2026-09-02).
+
 ### P1.3 — Make basic render QC mandatory
 
 **Commit:** `fix(exports): fail jobs when output validation fails`
@@ -880,6 +903,12 @@ P1 makes the current renderer, scheduler, and publisher safe. Automatic delivery
 - **Decision log:** `SUCCEEDED` now means the file passed mandatory validation.
 - **Rollback:** Hold exports. Never restore a swallowed probe failure.
 - **Trace:** Rev2 §3.5, §4.8; Addendum known defect.
+
+**Built 2026-09-02 (PR #54, merged `8e7ab42`).** `src/lib/qc/render-output.ts` is the module;
+nothing uploads before it passes. No migration was needed — Wave 1 had already added `qcStatus`,
+`qcCheckedAt`, `qcChecksum` and `qcDetails`. Recorded in `DECISIONS.md` as "A Successful Export Is
+One That Proved Itself Before It Was Stored" (2026-09-02). Slice 13 later confirmed the module
+needed no extension for export parity.
 
 ### P1.4 — Remove creation of internal word cuts
 
@@ -895,6 +924,16 @@ P1 makes the current renderer, scheduler, and publisher safe. Automatic delivery
 
 Before this UI edit, read the relevant bundled Next 16 server-action, form, and component guides.
 
+**Built 2026-08-21, inside editor Slice 5 (PR #47, merged `01860fa`; the transcript model is
+`f504c6e`).** The word-delete control is gone and the editor cannot create an internal cut. Two
+departures from the bullets above. There is no `src/lib/editor/continuous-edit.ts`: the explicit
+conversion is `restoreAllDeletedWords` in `src/lib/editor/transcript.ts`, reached from the "Restore
+all deleted words" control, and it is a versioned edit the member asks for rather than an automatic
+conversion, because word ids are positional and a silent rewrite could repoint them. And the slice
+added `wordEdits.textOverrides` (`{ wordId, text }`), so a mis-heard word can be corrected without
+touching its timing or the clip's range. Recorded in `DECISIONS.md` as "A Transcript Correction
+Changes What A Word Says, Never What The Clip Contains" (2026-08-20).
+
 ### P1.5 — Enforce one continuous range at export
 
 **Commit:** `fix(render): reject all deliverable internal cuts`
@@ -906,6 +945,17 @@ Before this UI edit, read the relevant bundled Next 16 server-action, form, and 
 - **Decision log:** Supersede internal-cut behavior. Record the product statement about selecting, not rewriting.
 - **Rollback:** Hold affected exports and use the converter. Never restore concatenated delivery.
 - **Trace:** Rev2 §§2.5 and 3.6; product-owner Decision 3.
+
+**Status 2026-09-05: the gate is built; the renderer is not.** `CONTINUOUS_RANGE_REQUIRED` landed
+with Slice 5 (`1d4b8e3`, PR #47) in `src/lib/exports/continuous-range.ts`. The worker refuses a
+pinned document that would render as more than one span before it downloads anything, and the
+route answers the same question at request time. `DECISIONS.md` records it on 2026-08-20 as "The
+P1.4 Continuous-Range Export Gate Landed Early, With Slice 5" — that entry numbers the gate as
+P1.4; it is this commit's gate. **What remains is the renderer.** `src/lib/export/render.ts` still
+runs three passes (one re-encode per kept range, a concat, then the final encode) and
+`src/lib/exports/render-plan.ts` still returns `keptRanges`. Retiring that path is the next commit.
+Slice 13's parity gate, `tests/integration/export-parity.integration.test.ts`, is its regression
+net; `tests/export-kept-ranges.test.ts` is the test the bullets say to respecify.
 
 ### P1.6 — Give caption overrides stable identity
 
@@ -920,6 +970,17 @@ Before this UI edit, read the relevant bundled Next 16 server-action, form, and 
 - **Trace:** Rev2 §3.7; implementation-guide ordering rule 3 (re-key before any caption tooling).
 
 Before this UI edit, read the relevant bundled Next 16 guide.
+
+**Status 2026-09-05: not started. The finding above still holds, with one addition.**
+`caption-lines.ts:34` still writes `line-${index}`, and nothing in `src/` writes
+`captions.textOverrides` — only two test fixtures do (`tests/caption-lines.test.ts`,
+`tests/e2e/editor-caption-grid.spec.ts`), both with `line-0`. The addition: Slice 5 created a
+second, word-keyed override list, `wordEdits.textOverrides` (`{ wordId, text }`, keyed by the
+transcript's `segmentId:index`), and that is what the Script panel writes. It is stable across
+trims and regroupings and moves only on re-transcription; it is not in this commit's scope. This
+commit is about the line-keyed list that the preview and the render plan both read through
+`applyCaptionTextOverrides`. `src/components/clip-editor.tsx` and `tests/edit-state-conflict.test.ts`
+in the file list are probably untouched — verify by reading the tree.
 
 ### P1.7 — Block destructive reanalysis after durable work starts
 
