@@ -23,8 +23,9 @@ build the whole implementation plan in order.
 | P1.4 no new internal word cuts | done | inside editor Slice 5, `01860fa` (PR #47, 2026-08-21) |
 | P1.5 one continuous range at export | done | the gate landed with Slice 5 (`1d4b8e3`); the one-pass renderer on 2026-09-05 — see below |
 | Editor delta plan, Slices 1–13 | done | PRs #43–#51, #55, #58, #60–#65, #67–#72; plan closed 2026-09-05 |
-| P1.6 stable caption override identity | **next** | not started; `src/lib/editor/caption-lines.ts:34` still writes `line-${index}` |
-| P1.7–P1.12 | not started | none of their named modules exist |
+| P1.6 stable caption override identity | done | 2026-09-05; `captionLineId` names a line by its words; legacy `line-N` is read by position, never written |
+| P1.7 block destructive reanalysis | **next** | not started; no `src/lib/analysis/reanalysis-policy.ts` |
+| P1.8–P1.12 | not started | none of their named modules exist |
 | P2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole

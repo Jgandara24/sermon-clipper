@@ -3382,3 +3382,30 @@ improves in quality. Nothing the gate or QC checks moves: the parity gate's colo
 timing, title timing and audio measurements all hold, and they are what proves it.
 
 Status: Active. Never restore concatenated delivery.
+
+## 2026-09-05 - A Caption Line Is Named By Its Words, Not By Its Position
+
+Decision: `buildCaptionLines` names a line `line:<first word id>:<hash>`, where the hash is FNV-1a
+over every word id in the line, and `applyCaptionTextOverrides` matches an override on that name.
+A positional name, `line-N`, is still read — it applies to the line at that position, unless a
+stable-id override already claims the line — and is never written again. `captions.textOverrides`
+keeps its shape; only the ids in it change. Nothing in `src/` writes the list today, so no stored
+document changes. This completes P1.6.
+
+Why: `line-N` named a line by where it fell in the list, so anything that changed the list ahead
+of it renamed every line after it. A trim that moved the clip's start past the first line turned
+`line-1` into `line-0`, and an override written against the second line landed on the first; a
+regrouping did the same. A name made from the words themselves cannot do that. The first word's id
+is the transcript's segment and index, which no trim or regrouping changes, and the hash makes a
+line with different members a different line — so an override can follow its words or fall away,
+but never move onto words it was not written for. The hash is computed in the browser by the
+preview and in the worker by the burn-in, so it is dependency-free and deterministic.
+
+The word-keyed corrections Slice 5 added (`wordEdits.textOverrides`) are not touched: they were
+already named by word id, which is the property this entry gives the line list.
+
+Tradeoff: an override keyed to a line falls away when the line's membership changes — a regrouping
+drops it rather than guessing which new line it meant. That is the honest answer; the alternative
+was the old one, applying it to whatever line now sits at that position.
+
+Status: Active. Do not write positional ids.

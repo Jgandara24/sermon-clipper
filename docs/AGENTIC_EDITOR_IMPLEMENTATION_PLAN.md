@@ -21,8 +21,8 @@ its renderer half is not. The editor delta plan, `docs/EDITOR_DELTA_PLAN_2026-08
 complete and closed — Slices 1–13, PRs #43 through #72. `main` is at `bd934ca` and production
 runs it.
 
-**Next: the P1.5 renderer remainder, then P1.6.** Then P1.7–P1.12, P2, P3, P4, P5 and P6, in this
-document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
+P1.5's renderer and P1.6 followed on 2026-09-05. **Next: P1.7.** Then P1.8–P1.12, P2, P3, P4, P5
+and P6, in this document's order. The product owner chose that order on 2026-09-05 (`DECISIONS.md`, "Build The
 Whole Plan In Order; No Customer Until Publishing Works").
 
 **The record of actual progress and deviations is `docs/AGENTIC_EDITOR_PROGRESS.md`.** Read it
@@ -975,16 +975,18 @@ gate's refusal is decided against the ranges a cut would leave.
 
 Before this UI edit, read the relevant bundled Next 16 guide.
 
-**Status 2026-09-05: not started. The finding above still holds, with one addition.**
-`caption-lines.ts:34` still writes `line-${index}`, and nothing in `src/` writes
-`captions.textOverrides` — only two test fixtures do (`tests/caption-lines.test.ts`,
-`tests/e2e/editor-caption-grid.spec.ts`), both with `line-0`. The addition: Slice 5 created a
-second, word-keyed override list, `wordEdits.textOverrides` (`{ wordId, text }`, keyed by the
-transcript's `segmentId:index`), and that is what the Script panel writes. It is stable across
-trims and regroupings and moves only on re-transcription; it is not in this commit's scope. This
-commit is about the line-keyed list that the preview and the render plan both read through
-`applyCaptionTextOverrides`. `src/components/clip-editor.tsx` and `tests/edit-state-conflict.test.ts`
-in the file list are probably untouched — verify by reading the tree.
+**Built 2026-09-05.** `captionLineId` in `src/lib/editor/caption-lines.ts` names a line by its
+first word's id and an FNV-1a hash of every word id in it; `applyCaptionTextOverrides` reads that
+name first and a legacy `line-N` by position only when no stable override claims the line.
+Nothing writes positional ids. `tests/caption-lines.test.ts` covers the list above: boundary
+shift, regrouped lines, the correction staying on its words, legacy read, stable write, no
+collision. Departures from the bullets: `src/components/editor/video-preview.tsx`,
+`src/components/clip-editor.tsx` and `tests/edit-state-conflict.test.ts` needed no change — both
+renderers already read line ids through the one function — and `src/lib/editor/types.ts` changed
+only in its comment. No UI edit, so no Next guide applied. One finding worth keeping: Slice 5's
+word-keyed corrections (`wordEdits.textOverrides`, keyed `segmentId:index`) already had the
+property this commit gives the line list, and were left alone. Recorded in `DECISIONS.md` as "A
+Caption Line Is Named By Its Words, Not By Its Position".
 
 ### P1.7 — Block destructive reanalysis after durable work starts
 
