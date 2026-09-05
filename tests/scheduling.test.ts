@@ -5,8 +5,17 @@ import {
   scheduledDateForRank,
   slotAlreadyPublished,
 } from "@/lib/scheduling";
+import { allocatePostingSlots } from "@/lib/schedule/posting-schedule";
 
-describe("scheduledDateForRank", () => {
+/**
+ * Legacy rank arithmetic, superseded by `allocatePostingSlots` in
+ * `src/lib/schedule/posting-schedule.ts` (P1.8). These cases describe what this function does,
+ * not what the product wants: plain sermonDate + rank days, with no weekday awareness, which
+ * posts on Sunday. It stays live until P1.9 moves `analyze.ts` onto the allocator.
+ *
+ * Do not extend this block. New scheduling rules belong in `tests/posting-schedule.test.ts`.
+ */
+describe("scheduledDateForRank (legacy, superseded by the P1.8 weekday allocator)", () => {
   const sunday = new Date("2026-07-19T00:00:00.000Z");
 
   it("schedules rank 1 the day after the sermon", () => {
@@ -20,6 +29,24 @@ describe("scheduledDateForRank", () => {
   it("schedules rank 3 three days after a twice-a-week sermon", () => {
     const wednesday = new Date("2026-07-22T00:00:00.000Z");
     expect(scheduledDateForRank(wednesday, 3).toISOString()).toBe("2026-07-25T00:00:00.000Z");
+  });
+
+  it("posts on a Sunday — the defect the weekday allocator exists to remove", () => {
+    const monday = new Date("2026-07-20T00:00:00.000Z");
+    // 2026-07-26 is a Sunday; the allocator gives this rank 2026-07-27 instead.
+    expect(scheduledDateForRank(monday, 6).toISOString()).toBe("2026-07-26T00:00:00.000Z");
+    expect(allocatePostingSlots({
+      profile: {
+        timezone: "America/Chicago",
+        serviceDay: "Monday",
+        sermonsPerWeek: 1,
+        secondServiceDay: null,
+        postsPerDay: 1,
+      },
+      serviceSlot: "PRIMARY",
+      sermonDate: monday,
+      now: new Date("2020-01-01T00:00:00.000Z"),
+    })[5].date.toISOString()).toBe("2026-07-27T00:00:00.000Z");
   });
 });
 
