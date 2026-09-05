@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { FacebookApiAuthError, FacebookApiError } from "@/lib/integrations/facebook";
 import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher";
 import type { PublishScheduledVideoInput } from "@/lib/integrations/facebook";
 
@@ -37,6 +38,7 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
   const updates: Array<Record<string, unknown>> = [];
   const findManyWheres: Array<Record<string, unknown>> = [];
   const events: Array<Record<string, unknown>> = [];
+  const attempts: Array<Record<string, unknown>> = [];
   const client = {
     scheduledPost: {
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
@@ -45,6 +47,10 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
           {
             id: "post-1",
             workspaceId: "ws-1",
+            // Prisma returns the scalars alongside the relations; the exact claim and the intent
+            // row are both built from these.
+            clipId: CLIP_ID,
+            exportJobId: EXPORT_ID,
             scheduledDate,
             attemptCount: options.attemptCount ?? 0,
             workspace: {
@@ -72,7 +78,16 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
     },
     // The clip now carries a projectId, so the transcription-fallback hold check actually runs.
     // No project is held in these cases.
-    editorialException: { findMany: async () => [] },
+    editorialException: { findMany: async () => [], create: async () => ({}) },
+    // P1.12 writes an intent row before the provider call and settles it after.
+    publishAttempt: {
+      create: async () => ({ id: "attempt-1" }),
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        attempts.push(data);
+        return {};
+      },
+      findFirst: async () => null,
+    },
     operationalEvent: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         events.push(data);
@@ -80,7 +95,7 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
       },
     },
   };
-  return { client, updates, findManyWheres, events };
+  return { client, updates, findManyWheres, events, attempts };
 }
 
 async function runPoller(
@@ -88,7 +103,7 @@ async function runPoller(
   nowIso: string,
   options: { attemptCount?: number; publishError?: Error } = {},
 ) {
-  const { client, updates, findManyWheres, events } = makeFakeClient(scheduledDate, options);
+  const { client, updates, findManyWheres, events, attempts } = makeFakeClient(scheduledDate, options);
   const publishCalls: PublishScheduledVideoInput[] = [];
 
   const summary = await publishDueScheduledPosts(client as never, {
@@ -105,7 +120,7 @@ async function runPoller(
     },
   });
 
-  return { summary, publishCalls, updates, findManyWheres, events };
+  return { summary, publishCalls, updates, findManyWheres, events, attempts };
 }
 
 // scheduledDate 2026-07-20 in America/Chicago (CDT): 9am local = 2026-07-20T14:00:00Z.
@@ -209,9 +224,14 @@ describe("publishDueScheduledPosts app-URL misconfiguration", () => {
 describe("publishDueScheduledPosts retry behavior", () => {
   const nowIso = "2026-07-20T15:00:00Z";
 
-  it("re-queues a transient failure with backoff instead of failing terminally", async () => {
+  /**
+   * The ladder now applies only to refusals — outcomes where Meta definitely created nothing.
+   * P1.12 narrowed it: a network failure or a 5xx used to come back round through the backoff,
+   * and those are exactly the cases where a post may already exist. They now block instead.
+   */
+  it("re-queues a refused attempt with backoff instead of failing terminally", async () => {
     const { summary, updates } = await runPoller(scheduledDate, nowIso, {
-      publishError: new Error("Could not reach the Facebook Graph API (network failure)."),
+      publishError: new FacebookApiError("Facebook API request failed (HTTP 400, bad video)."),
     });
 
     expect(summary.postsFailed).toBe(1);
@@ -225,12 +245,97 @@ describe("publishDueScheduledPosts retry behavior", () => {
   it("fails terminally on the final attempt", async () => {
     const { updates } = await runPoller(scheduledDate, nowIso, {
       attemptCount: 4,
-      publishError: new Error("HTTP 500"),
+      publishError: new FacebookApiError("Facebook API request failed (HTTP 400)."),
     });
 
     expect(updates[0].publishStatus).toBe("FAILED");
     expect(updates[0].attemptCount).toBe(5);
     expect(updates[0].nextAttemptAt).toBeNull();
+  });
+
+  it("treats a rejected token as a refusal, not as an unknown outcome", async () => {
+    const { summary, updates } = await runPoller(scheduledDate, nowIso, {
+      publishError: new FacebookApiAuthError("Facebook API rejected the request (HTTP 401)."),
+    });
+
+    expect(summary.postsFailed).toBe(1);
+    expect(summary.postsIndeterminate).toBe(0);
+    expect(updates[0].publishStatus).toBe("NOT_STARTED");
+  });
+});
+
+/**
+ * Outcomes nobody can read.
+ *
+ * The rule these cases pin down: when it is possible that a post exists on the Page, the slot
+ * stops and waits for a person. Retrying would publish a second one, and no amount of backoff
+ * makes that safe.
+ */
+describe("publishDueScheduledPosts indeterminate outcomes", () => {
+  const nowIso = "2026-07-20T15:00:00Z";
+
+  it.each([
+    ["a network failure", new FacebookApiError("network failure", { indeterminate: true })],
+    ["an unreadable body", new FacebookApiError("not valid JSON", { indeterminate: true })],
+    ["an unrecognised error", new Error("something nobody anticipated")],
+  ])("blocks the slot and opens an exception after %s", async (_label, publishError) => {
+    const { summary, updates, events, attempts } = await runPoller(scheduledDate, nowIso, {
+      publishError,
+    });
+
+    expect(summary.postsIndeterminate).toBe(1);
+    expect(summary.postsFailed).toBe(0);
+
+    // Blocked, and pointedly not put back on the ladder.
+    expect(updates).toHaveLength(1);
+    expect(updates[0].publishStatus).toBe("BLOCKED");
+    expect(updates[0].nextAttemptAt).toBeNull();
+    expect(updates[0].attemptCount).toBeUndefined();
+
+    // The intent row is settled as INDETERMINATE rather than left open.
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0].state).toBe("INDETERMINATE");
+
+    expect(
+      events.some((event) => event.eventType === "facebook_publish_indeterminate"),
+    ).toBe(true);
+  });
+
+  it("writes the intent row before calling Facebook, naming the exact clip and export", async () => {
+    const created: Array<Record<string, unknown>> = [];
+    const { client } = makeFakeClient(scheduledDate);
+    const order: string[] = [];
+
+    await publishDueScheduledPosts(
+      {
+        ...client,
+        publishAttempt: {
+          create: async ({ data }: { data: Record<string, unknown> }) => {
+            created.push(data);
+            order.push("intent");
+            return { id: "attempt-1" };
+          },
+          update: async () => ({}),
+          findFirst: async () => null,
+        },
+      } as never,
+      {
+        now: () => new Date(nowIso),
+        assessDelivery: async () => ({ eligible: true as const }),
+        resolvePageAccessToken: async () => "page-token-abc",
+        publishScheduledVideo: async () => {
+          order.push("meta");
+          return { facebookPostId: "fb-video-123" };
+        },
+      },
+    );
+
+    expect(order).toEqual(["intent", "meta"]);
+    expect(created[0]).toMatchObject({
+      expectedClipId: CLIP_ID,
+      expectedExportJobId: EXPORT_ID,
+      state: "INTENT",
+    });
   });
 
   it("only queries rows whose nextAttemptAt is unset or due", async () => {

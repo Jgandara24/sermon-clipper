@@ -29,7 +29,7 @@ build the whole implementation plan in order.
 | P1.9 arm weekday slots, stage retention | done | 2026-09-05; `analyze.ts` arms from the allocator behind `AUTOMATIC_SCHEDULE_ARMING_ENABLED`; `expiresAt` set; source deletion report-only behind `SOURCE_RETENTION_DELETION_ENABLED`. Both flags default false |
 | P1.10 capture and correct service occurrence | done | 2026-09-05; direct uploads state the service date and occurrence; correction gated at the reanalysis boundary |
 | P1.11 delivery eligibility module | done | 2026-09-05; `src/lib/delivery/{eligibility,settings,query}.ts`, wired into the publisher; the latest-export fallback is gone |
-| P1.12 | **next** | not started |
+| P1.12 harden publication claims | done | 2026-09-05; intent rows before the Meta call, exact claim, indeterminate outcomes block instead of retrying |
 | P2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
@@ -174,6 +174,52 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
 
 ---
 
+### The Inter font question, decided 2026-09-05
+
+Asked to choose between bundling Inter and leaving preview and burn-in differing. Took neither:
+both change what approved clips render with, and a third option does not.
+
+Only the **fallback tail** of the affected stacks moved, to a bundled family — `Inter, 'DejaVu
+Sans', sans-serif` and `Georgia, 'DejaVu Serif', serif`. The ASS `Fontname` is
+`resolveCaptionFace()`, the first family, which is untouched, so the rendered file cannot change.
+The preview reads the whole stack (`video-preview.tsx:657`), so it now lands on the same face the
+worker draws with instead of on `system-ui`.
+
+**An attempt to verify the bolder option failed, and that is why it was not taken.** Renaming the
+first family looked safe: `fc-match` maps `Inter` to DejaVu Sans and `Georgia` to DejaVu Serif. A
+burn test with ffmpeg was meant to confirm it and instead proved the test worthless — libass
+ignored the restricted `FONTCONFIG_FILE` and substituted a macOS system face, rendering `Inter`
+byte-identically to a family that exists nowhere. Docker was not running, so the built worker
+image could not be checked either.
+
+**What would settle it:** inside the built worker image, render one clip with the first family
+named and again with the bundled family named, and compare the frames. Until then the head of each
+stack is frozen. The existing guard test was narrowed rather than deleted: it now asserts the first
+family of each retired preset, which is the part that reaches a file.
+
+### P1.12 deviations
+
+**Its first outcome had already landed in P1.11.** The plan opens P1.12 with "delete the
+latest-SUCCEEDED-export lookup", citing `facebook-publisher.ts:199-205`. P1.11 removed it, because
+leaving a forbidden path live while introducing the module that forbids it was not defensible.
+P1.12 covers the rest: the exact claim, intent rows, and indeterminate handling.
+
+**The retry ladder got narrower, and that is the point.** It previously caught network failures
+and 5xx responses — exactly the outcomes where a post may already exist on the Page. Those now
+block. What still retries is a refusal: a 4xx, or a rejected token, where Meta created nothing.
+Two existing tests described network failures and an HTTP 500 as "transient failures" to retry;
+both were respecified, because under the new rule those are the cases that must not retry.
+
+**An unrecognised error is treated as indeterminate.** `classifyPublishFailure` only calls an
+outcome definite when it recognises the error as a refusal. A mistaken "indeterminate" costs an
+operator one look at the Page; a mistaken "failed" costs the church a duplicate post.
+
+**`PublishAttempt.scheduledPost` is `onDelete: Restrict`, which blocks workspace deletion.**
+Surfaced by an integration teardown, not by product code: nothing in `src/` deletes a workspace,
+and the Restrict is deliberate — a record that an external post may exist must outlive a cascade.
+Fixed in the test teardown rather than by weakening the constraint. Worth knowing if workspace
+deletion ever becomes a real operation.
+
 ### P1.11 deviations
 
 **The publisher was rewired, though the plan's file list does not name it.** P2.4 states that
@@ -196,6 +242,10 @@ proves eligibility, and the plan enumerates its inputs; neither of those two is 
 Neither is a fact about whether a render is the right render, and importing plan state into a pure
 delivery rule would couple publishing correctness to billing. Both remain in the publisher, ahead
 of the eligibility call, and this is recorded rather than left implicit.
+
+**Caption burn-in substitution — resolved 2026-09-05, see the P1.12 entry above and DECISIONS.md.**
+The preview now falls back to the bundled face the burn-in actually draws; the first family, which
+is what reaches the rendered file, is frozen. Original finding follows.
 
 **Caption burn-in substitution, checked on request and left alone.** `main` ships only the six
 DejaVu faces, while three presets name `Inter` and one names `Georgia`. Verified with `fc-match`

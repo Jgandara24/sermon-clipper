@@ -11,7 +11,7 @@ type FakeRow = {
   lastErrorMessage: string | null;
 };
 
-function makeFakeClient(rows: FakeRow[]) {
+function makeFakeClient(rows: FakeRow[], options: { unsettledIntent?: boolean } = {}) {
   const matchesStale = (row: FakeRow, where: { publishStatus: string; updatedAt: { lt: Date } }) =>
     row.publishStatus === where.publishStatus && row.updatedAt.getTime() < where.updatedAt.lt.getTime();
 
@@ -32,6 +32,11 @@ function makeFakeClient(rows: FakeRow[]) {
         return { count: 1 };
       },
     },
+    // P1.12: recovery asks whether a provider call may already have gone out.
+    publishAttempt: {
+      findFirst: async () => (options.unsettledIntent ? { id: "attempt-1" } : null),
+    },
+    editorialException: { create: async () => ({}) },
     operationalEvent: { create: async () => ({}) },
   };
   return client as never;
@@ -57,7 +62,7 @@ describe("recoverStaleScheduledPosts", () => {
     const row = makeRow({ updatedAt: new Date("2026-07-20T14:30:00Z") });
     const result = await recoverStaleScheduledPosts(makeFakeClient([row]), now);
 
-    expect(result).toEqual({ recovered: 1, failed: 0 });
+    expect(result).toEqual({ recovered: 1, failed: 0, blocked: 0 });
     expect(row.publishStatus).toBe("NOT_STARTED");
     expect(row.attemptCount).toBe(1);
     expect(row.lastErrorMessage).toContain("re-queued");
@@ -67,7 +72,7 @@ describe("recoverStaleScheduledPosts", () => {
     const row = makeRow({ updatedAt: new Date("2026-07-20T14:50:00Z") });
     const result = await recoverStaleScheduledPosts(makeFakeClient([row]), now);
 
-    expect(result).toEqual({ recovered: 0, failed: 0 });
+    expect(result).toEqual({ recovered: 0, failed: 0, blocked: 0 });
     expect(row.publishStatus).toBe("IN_PROGRESS");
     expect(row.attemptCount).toBe(0);
   });
@@ -76,7 +81,7 @@ describe("recoverStaleScheduledPosts", () => {
     const row = makeRow({ attemptCount: 4, updatedAt: new Date("2026-07-20T14:00:00Z") });
     const result = await recoverStaleScheduledPosts(makeFakeClient([row]), now);
 
-    expect(result).toEqual({ recovered: 0, failed: 1 });
+    expect(result).toEqual({ recovered: 0, failed: 1, blocked: 0 });
     expect(row.publishStatus).toBe("FAILED");
     expect(row.attemptCount).toBe(5);
   });
@@ -89,11 +94,46 @@ describe("recoverStaleScheduledPosts", () => {
       await expect(recoverStaleScheduledPosts(makeFakeClient([row]), now)).resolves.toEqual({
         recovered: 1,
         failed: 0,
+        blocked: 0,
       });
       expect(row.publishStatus).toBe("NOT_STARTED");
     } finally {
       if (saved === undefined) delete process.env.AUTOMATIC_PUBLISHING_ENABLED;
       else process.env.AUTOMATIC_PUBLISHING_ENABLED = saved;
     }
+  });
+});
+
+/**
+ * The case that decides whether a church can be posted to twice.
+ *
+ * A worker that dies between the claim and the terminal update leaves an IN_PROGRESS row either
+ * way. What separates "safe to retry" from "a post may already exist" is whether a provider call
+ * had been started, and the unsettled intent row is the only record of that.
+ */
+describe("recoverStaleScheduledPosts intent reconciliation", () => {
+  it("blocks rather than re-queues when a provider call may already have gone out", async () => {
+    const row = makeRow({ updatedAt: new Date("2026-07-20T14:30:00Z") });
+    const result = await recoverStaleScheduledPosts(
+      makeFakeClient([row], { unsettledIntent: true }),
+      now,
+    );
+
+    expect(result).toEqual({ recovered: 0, failed: 0, blocked: 1 });
+    expect(row.publishStatus).toBe("BLOCKED");
+    expect(row.nextAttemptAt).toBeNull();
+    // Not counted as an attempt: this is not a failure, it is an unknown.
+    expect(row.attemptCount).toBe(0);
+  });
+
+  it("still re-queues when the worker died before any call was made", async () => {
+    const row = makeRow({ updatedAt: new Date("2026-07-20T14:30:00Z") });
+    const result = await recoverStaleScheduledPosts(
+      makeFakeClient([row], { unsettledIntent: false }),
+      now,
+    );
+
+    expect(result).toEqual({ recovered: 1, failed: 0, blocked: 0 });
+    expect(row.publishStatus).toBe("NOT_STARTED");
   });
 });

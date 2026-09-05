@@ -3,6 +3,14 @@ import { parseChurchProfile, wallClockInstantInTimezone } from "@/lib/church-pro
 import { env } from "@/lib/env";
 import { decideWorkspaceAccess } from "@/lib/billing/access";
 import { describeDeliveryIneligibility } from "@/lib/delivery/eligibility";
+import {
+  classifyPublishFailure,
+  hasUnsettledPublishIntent,
+  INDETERMINATE_PUBLISH_EXCEPTION,
+  INDETERMINATE_PUBLISH_MESSAGE,
+  recordPublishIntent,
+  settlePublishAttempt,
+} from "@/lib/delivery/publish-attempts";
 import { assessScheduledPostDelivery } from "@/lib/delivery/query";
 import { isEligibleForAutoPost, parseFacebookConnection } from "@/lib/facebook-connection";
 import {
@@ -55,7 +63,6 @@ function retryBackoffMs(attemptCount: number): number {
 // Long enough for Facebook's servers to fetch the file after the scheduling request, short
 // enough to bound how long a signed link stays valid if leaked.
 const MEDIA_URL_TTL_SECONDS = 30 * 60;
-const ERROR_MESSAGE_MAX_LENGTH = 500;
 
 // One event is enough to make the process state visible. An enabled call resets the latch so a
 // later disabled period produces a new event. The promise also coalesces concurrent disabled calls.
@@ -74,11 +81,6 @@ function reportPublishingDisabled(client: PrismaClient): Promise<void> {
   return publishingDisabledEvent;
 }
 
-function truncateErrorMessage(message: string): string {
-  return message.length > ERROR_MESSAGE_MAX_LENGTH
-    ? `${message.slice(0, ERROR_MESSAGE_MAX_LENGTH - 1)}…`
-    : message;
-}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -110,6 +112,8 @@ export type FacebookPublishSummary = {
   /** NEXT_PUBLIC_APP_URL is unset or localhost — Meta could never fetch file_url. */
   postsSkippedMisconfigured: number;
   postsFailed: number;
+  /** Outcomes nobody could read. Each left a BLOCKED slot and an open exception. */
+  postsIndeterminate: number;
 };
 
 export type FacebookPublisherDeps = {
@@ -139,7 +143,7 @@ const STALE_CLAIM_TIMEOUT_MS = 15 * 60_000;
 export async function recoverStaleScheduledPosts(
   client: PrismaClient,
   now = new Date(),
-): Promise<{ recovered: number; failed: number }> {
+): Promise<{ recovered: number; failed: number; blocked: number }> {
   const cutoff = new Date(now.getTime() - STALE_CLAIM_TIMEOUT_MS);
   const staleRows = await client.scheduledPost.findMany({
     where: { publishStatus: "IN_PROGRESS", updatedAt: { lt: cutoff } },
@@ -149,7 +153,45 @@ export async function recoverStaleScheduledPosts(
 
   let recovered = 0;
   let failed = 0;
+  let blocked = 0;
   for (const row of staleRows) {
+    // Reconcile against intent before deciding. An unsettled INTENT row means a provider call was
+    // started and this process never learned how it ended, so a post may already exist on the
+    // Page. Re-queueing that is how a church gets posted to twice — the previous version did
+    // exactly that, because it had no way to tell the two cases apart. Only a slot with no
+    // unsettled intent died before dialling and is safe to retry.
+    if (await hasUnsettledPublishIntent(client, row.id)) {
+      const stopped = await client.scheduledPost.updateMany({
+        where: { id: row.id, publishStatus: "IN_PROGRESS", updatedAt: { lt: cutoff } },
+        data: {
+          publishStatus: "BLOCKED",
+          nextAttemptAt: null,
+          lastErrorMessage: INDETERMINATE_PUBLISH_MESSAGE,
+        },
+      });
+      if (stopped.count === 0) continue;
+      blocked++;
+      await client.editorialException.create({
+        data: {
+          workspaceId: row.workspaceId,
+          scheduledPostId: row.id,
+          exceptionType: INDETERMINATE_PUBLISH_EXCEPTION,
+          message: INDETERMINATE_PUBLISH_MESSAGE,
+          metadata: { recoveredFrom: "stale_claim", attemptCount: row.attemptCount },
+        },
+      });
+      await recordOperationalEventSafely(client, {
+        workspaceId: row.workspaceId,
+        category: "facebook_publish",
+        eventType: "facebook_publish_indeterminate",
+        severity: "error",
+        message:
+          "A publish attempt was interrupted after the Facebook call had started. The slot is blocked until someone checks the Page.",
+        metadata: { scheduledPostId: row.id, recoveredFrom: "stale_claim" },
+      });
+      continue;
+    }
+
     const attemptCount = row.attemptCount + 1;
     const exhausted = attemptCount >= MAX_PUBLISH_ATTEMPTS;
     const result = await client.scheduledPost.updateMany({
@@ -184,7 +226,7 @@ export async function recoverStaleScheduledPosts(
     });
   }
 
-  return { recovered, failed };
+  return { recovered, failed, blocked };
 }
 
 export async function publishDueScheduledPosts(
@@ -198,6 +240,7 @@ export async function publishDueScheduledPosts(
     postsSkippedNotExported: 0,
     postsSkippedMisconfigured: 0,
     postsFailed: 0,
+    postsIndeterminate: 0,
   };
 
   // This is the authoritative publish gate. Scripts and direct callers cannot bypass it. No due
@@ -348,12 +391,29 @@ export async function publishDueScheduledPosts(
         continue;
       }
 
-      // Durable claim: only the run that flips NOT_STARTED -> IN_PROGRESS proceeds.
+      // Durable claim, bound to the exact intent the eligibility decision was made about: this
+      // slot, still holding this clip and this export, still NOT_STARTED. Claiming on the id
+      // alone left a replacement race — a reserve swapped into the slot between the decision and
+      // the claim would be published against a verdict that was never about it.
       const claim = await client.scheduledPost.updateMany({
-        where: { id: post.id, publishStatus: "NOT_STARTED" },
+        where: {
+          id: post.id,
+          publishStatus: "NOT_STARTED",
+          clipId: post.clipId,
+          exportJobId: post.exportJobId,
+        },
         data: { publishStatus: "IN_PROGRESS" },
       });
       if (claim.count === 0) continue;
+
+      // Intent before side effect. Written after the claim and before the provider call, so a
+      // process that dies mid-publish leaves proof that a call may have gone out.
+      const attemptId = await recordPublishIntent(client, {
+        scheduledPostId: post.id,
+        expectedClipId: post.clipId,
+        expectedExportJobId: post.exportJobId,
+        now: now(),
+      });
 
       try {
         const fileUrl = `${appUrl}${createSignedMediaUrl({
@@ -380,6 +440,11 @@ export async function publishDueScheduledPosts(
           scheduledPublishAt: publishImmediately ? undefined : desiredPublishAt,
         });
 
+        await settlePublishAttempt(client, {
+          attemptId,
+          outcome: { kind: "succeeded", providerPostId: facebookPostId },
+          now: now(),
+        });
         await client.scheduledPost.update({
           where: { id: post.id },
           data: {
@@ -392,8 +457,57 @@ export async function publishDueScheduledPosts(
         });
         summary.postsPublished++;
       } catch (error) {
+        const outcome = classifyPublishFailure(error);
+        await settlePublishAttempt(client, { attemptId, outcome, now: now() });
+
+        // An outcome nobody can read is not a failure to retry. A post may exist on the Page, and
+        // the retry ladder would publish a second one. The slot stops here, in BLOCKED, with an
+        // open exception, until a person has looked.
+        if (outcome.kind === "indeterminate") {
+          summary.postsIndeterminate++;
+          await client.scheduledPost.update({
+            where: { id: post.id },
+            data: {
+              publishStatus: "BLOCKED",
+              lastErrorMessage: outcome.errorMessage,
+              // Deliberately not advanced: this is not an attempt that failed, and it must never
+              // come back round through the backoff ladder.
+              nextAttemptAt: null,
+            },
+          });
+          await client.editorialException.create({
+            data: {
+              workspaceId: post.workspaceId,
+              projectId: clip.projectId,
+              scheduledPostId: post.id,
+              exceptionType: INDETERMINATE_PUBLISH_EXCEPTION,
+              message: INDETERMINATE_PUBLISH_MESSAGE,
+              slotSnapshot: {
+                scheduledDate: post.scheduledDate.toISOString().slice(0, 10),
+                clipId: post.clipId,
+                exportJobId: post.exportJobId,
+              },
+              metadata: { errorCode: outcome.errorCode, errorMessage: outcome.errorMessage },
+            },
+          });
+          await recordOperationalEventSafely(client, {
+            workspaceId: post.workspaceId,
+            category: "facebook_publish",
+            eventType: "facebook_publish_indeterminate",
+            severity: "error",
+            message: `Facebook publish outcome is unknown and will not be retried: ${outcome.errorMessage}`,
+            projectId: clip.projectId,
+            metadata: {
+              scheduledPostId: post.id,
+              errorCode: outcome.errorCode,
+              publishAttemptId: attemptId,
+            },
+          });
+          continue;
+        }
+
         summary.postsFailed++;
-        const message = truncateErrorMessage(errorMessage(error));
+        const message = outcome.errorMessage;
         const attemptCount = post.attemptCount + 1;
         const exhausted = attemptCount >= MAX_PUBLISH_ATTEMPTS;
         await client.scheduledPost.update({

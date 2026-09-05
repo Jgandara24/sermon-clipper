@@ -28,7 +28,24 @@ export class FacebookNotConfiguredError extends Error {}
 export class FacebookApiAuthError extends Error {}
 
 /** Network failure or an unexpected/unparseable API response. */
-export class FacebookApiError extends Error {}
+/**
+ * A Graph API call that did not return a usable result.
+ *
+ * `indeterminate` means the call may still have created something. A publish that is refused
+ * before Meta acts (a 4xx, a bad token) leaves nothing behind and can be retried safely; a
+ * request that timed out, got a 5xx, or came back unreadable may have created a post that this
+ * process never learned the id of. Retrying that blindly is how a church gets posted to twice,
+ * so the two are distinguished here rather than guessed at by the caller.
+ */
+export class FacebookApiError extends Error {
+  readonly indeterminate: boolean;
+
+  constructor(message: string, options: { indeterminate?: boolean } = {}) {
+    super(message);
+    this.name = "FacebookApiError";
+    this.indeterminate = options.indeterminate ?? false;
+  }
+}
 
 type FetchLike = (url: string, init?: { method?: string; body?: string }) => Promise<
   Pick<Response, "ok" | "status" | "json">
@@ -60,7 +77,9 @@ async function requestJson(fetchFn: FetchLike, url: string, init?: { method?: st
   try {
     response = await fetchFn(url, init);
   } catch {
-    throw new FacebookApiError("Could not reach the Facebook Graph API (network failure).");
+    throw new FacebookApiError("Could not reach the Facebook Graph API (network failure).", {
+      indeterminate: true,
+    });
   }
 
   if (response.status === 401 || response.status === 403) {
@@ -74,13 +93,18 @@ async function requestJson(fetchFn: FetchLike, url: string, init?: { method?: st
     const reason = await extractErrorReason(response);
     throw new FacebookApiError(
       `Facebook API request failed (HTTP ${response.status}${reason ? `, ${reason}` : ""}).`,
+      // A 5xx or a gateway timeout may have been raised after the post was created; a 4xx is a
+      // refusal, so nothing exists to collide with on a retry.
+      { indeterminate: response.status >= 500 || response.status === 408 },
     );
   }
 
   try {
     return await response.json();
   } catch {
-    throw new FacebookApiError("Facebook API returned a response that was not valid JSON.");
+    throw new FacebookApiError("Facebook API returned a response that was not valid JSON.", {
+      indeterminate: true,
+    });
   }
 }
 
@@ -134,7 +158,12 @@ export async function publishScheduledVideo(
     id?: string;
   };
   if (!json.id) {
-    throw new FacebookApiError("Facebook API did not return a post id for the scheduled video.");
+    throw new FacebookApiError(
+      "Facebook API did not return a post id for the scheduled video.",
+      // The call succeeded and the body parsed; the post probably exists and this process simply
+      // cannot name it. Never retry this without a human looking at the Page.
+      { indeterminate: true },
+    );
   }
   return { facebookPostId: json.id };
 }

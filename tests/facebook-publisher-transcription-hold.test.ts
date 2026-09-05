@@ -61,6 +61,11 @@ function makeClient(options: { heldProjectIds: string[] }) {
     editorialException: {
       findMany: async () => options.heldProjectIds.map((projectId) => ({ projectId })),
     },
+    publishAttempt: {
+      create: async () => ({ id: "attempt-1" }),
+      update: async () => ({}),
+      findFirst: async () => null,
+    },
     operationalEvent: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         events.push(data);
