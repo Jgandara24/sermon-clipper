@@ -3409,3 +3409,41 @@ drops it rather than guessing which new line it meant. That is the honest answer
 was the old one, applying it to whatever line now sits at that position.
 
 Status: Active. Do not write positional ids.
+
+## 2026-09-05 - Reanalysis Is Refused Once Durable Work Exists
+
+Decision: a project's clips are rebuilt only while nobody has done anything with them.
+`assessReanalysis` in `src/lib/analysis/reanalysis-policy.ts` counts, in the database, the
+durable work on a project's clips — editor documents a person saved (every `ClipEdit` that is not
+the machine's initial one), approval records in any state, export jobs in any state, and
+scheduled posts in any state a rebuild would detach (`IN_PROGRESS`, `SUCCEEDED`, `BLOCKED`,
+`UNFILLED`, `MISSED`). If any exists, the rebuild is refused with `REANALYSIS_BLOCKED`. Three
+places ask. The SRT upload route asks at request time, before it writes anything, and answers
+409. The TRANSCRIBE handler asks before it transcribes and again inside the transaction that
+replaces the transcript. The ANALYZE handler asks before it pays for analysis and again inside the
+transaction that deletes the clips. The refusal is terminal, and it leaves the project exactly as
+it found it: `JobFailureError` gains `preservesProject`, and for such a failure the runner neither
+marks the project failed nor releases its reservations. This completes P1.7 with the policy the
+plan names as "block now, version later".
+
+Why: the rebuild deletes every `GeneratedClip`, and `ClipEdit`, `ClipApproval` and `ExportJob`
+cascade from them, so a person's edits, a church's approval and every rendered file go with them.
+A `ScheduledPost` survived with its clip set to null, which kept a published post on record but
+detached it from what was posted. Replacing the transcript is the same loss one step earlier,
+because word ids are positional. P0.4 chartered this as a defect with two tests; both are
+inverted here, and a third case, an untouched project, still rebuilds. Counting rather than
+loading keeps the check bounded, and asking inside the transaction closes the window between the
+early answer and the delete.
+
+Two things the policy does not see. A clip title renamed in the editor header writes straight to
+the clip with no provenance (2026-09-04, "Five Words Is A Title Target, And Export Is Not A
+Modal"), so a rename alone does not block a rebuild; the row that would record it does not exist.
+And a transcription fallback hold whose human work predates the hold used to be settleable by a
+healthy rebuild; the rebuild is now refused first, so such a hold stays open for a person, which
+is the safer of the two answers.
+
+Tradeoff: a church that edited one clip cannot re-run analysis on that sermon, and the message
+tells them to upload it as a new project. Versioned analysis — old clips kept beside new — is the
+remedy, and it is later work.
+
+Status: Active. Do not restore destructive deletion after history exists.
