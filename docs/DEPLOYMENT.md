@@ -826,6 +826,53 @@ inspect `IN_PROGRESS` scheduled posts. To disable safely, set the switch to `fal
 Do not roll back code that removes this guard unless the Meta token is removed first or every
 workspace auto-post flag is disabled.
 
+## Schedule Arming Switch
+
+`AUTOMATIC_SCHEDULE_ARMING_ENABLED` decides whether ANALYZE reserves calendar dates. Only the
+exact string `true` arms slots; missing, `false`, or anything else keeps arming off.
+
+Off is a fully working state, not a degraded one. Analysis still runs, scores, and keeps every
+candidate; it simply reserves no dates and records one `schedule_arming_disabled` operational
+event per project naming how many slots it would have armed and their first and last dates. Read
+those events to see what the allocator intends before letting it write anything.
+
+Turning it off does not restore the old behaviour. Rank-plus-date scheduling was deleted in P1.9,
+so off means "no automatic dates", never "the previous dates".
+
+**Before turning it on.** Confirm on a real project that the reported first and last dates land
+where the church expects, that no reported date is a Sunday, and that a church with two weekly
+services reports three days per service rather than six. Then set the switch on the web and worker
+services together — the worker arms, and the web app renders what it armed.
+
+## Source Retention Deletion Switch
+
+`SOURCE_RETENTION_DELETION_ENABLED` decides whether retention CLEANUP may delete a church's source
+media. Only the exact string `true` permits deletion.
+
+**This path has never run against real data.** P1.9 is the first code that ever sets
+`Project.expiresAt`, so before it, nothing in production was ever a deletion candidate. Treat the
+first live cycle as unproven.
+
+While the switch is off, CLEANUP does everything except delete: it takes the source-video row
+lock, re-reads every referencing project's expiry, decides, and then records a
+`retention_cleanup_report_only` event whose `wouldPurgeSourceKeys` lists the exact object keys it
+would have removed. No object is deleted and no key column is nulled.
+
+**Before turning it on.**
+
+1. Deploy with the switch absent or `false`.
+2. Let at least one complete report-only cycle run — long enough that projects genuinely reach
+   their expiry, not just one sweep.
+3. Read every `retention_cleanup_report_only` event and check each `wouldPurgeSourceKeys` entry
+   against the four `SourceVideo` key columns: `storage_key`, `audio_key`, `thumbnail_key`,
+   `srt_override_key`. A key outside those four means something writes storage that retention does
+   not know about — stop and fix that first.
+4. Confirm no reported project shares its source video with a project that is still active.
+5. Only then set the switch to the exact string `true`.
+
+Set it back to `false` immediately if a report ever lists a key you cannot account for. Deleted
+source objects are not recoverable from the application.
+
 ### Wave 1 database deployment
 
 Wave 1 is expand-first. Use this order:

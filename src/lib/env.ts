@@ -175,6 +175,19 @@ const fieldSchemas = {
   META_SYSTEM_USER_TOKEN: optionalString,
   META_GRAPH_API_VERSION: z.string().default("v23.0"),
 
+  // Weekday posting schedule (P1.9). Both default false and both use exactTrue, so only the
+  // literal string "true" turns them on — a typo, "1", or "yes" leaves the safe behaviour.
+  //
+  // Arming: when false, analysis still keeps every candidate it scored but creates no new
+  // schedule rows, and records one visible fact saying so. Turn it on only after the allocator
+  // has passed a production-safe smoke test.
+  AUTOMATIC_SCHEDULE_ARMING_ENABLED: exactTrue,
+  // Source deletion: when false, CLEANUP reports what it would delete and deletes nothing. This
+  // is the first code that ever sets Project.expiresAt, so the whole source-purge path has zero
+  // production mileage. Run at least one complete report-only cycle in production before turning
+  // it on (docs/DEPLOYMENT.md).
+  SOURCE_RETENTION_DELETION_ENABLED: exactTrue,
+
   // Observability
   SENTRY_DSN: optionalString,
   ALERTS_THROTTLE_MS: numberOrFallback(30 * 60 * 1000),

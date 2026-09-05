@@ -26,8 +26,9 @@ build the whole implementation plan in order.
 | P1.6 stable caption override identity | done | 2026-09-05; `captionLineId` names a line by its words; legacy `line-N` is read by position, never written |
 | P1.7 block destructive reanalysis | done | 2026-09-05; `reanalysis-policy.ts` refuses a rebuild once durable work exists, at the route and in both handlers |
 | P1.8 posting schedule module | done | 2026-09-05; `src/lib/schedule/posting-schedule.ts` allocates weekday slots and `deriveServiceSlot` returns `UNMATCHED`. Pure — no production caller until P1.9 |
-| P1.9 integrate the allocator | **next** | not started; `analyze.ts` still calls `scheduledDateForRank` |
-| P1.10–P1.12 | not started | none of their named modules exist |
+| P1.9 arm weekday slots, stage retention | done | 2026-09-05; `analyze.ts` arms from the allocator behind `AUTOMATIC_SCHEDULE_ARMING_ENABLED`; `expiresAt` set; source deletion report-only behind `SOURCE_RETENTION_DELETION_ENABLED`. Both flags default false |
+| P1.10 capture and correct service occurrence | **next** | not started |
+| P1.11–P1.12 | not started | none of their named modules exist |
 | P2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
@@ -172,6 +173,38 @@ Each of these is a deliberate departure. Follow them; do not "correct" them back
 
 ---
 
+### P1.9 deviations
+
+**P1.7 had classified `MISSED` and `UNFILLED` as durable work; P1.9 had to reverse that.** The
+P1.7 comment was right for its own moment — no code created either state, so any such row could
+only have been left behind detached. P1.9 creates both routinely: every sermon uploaded after its
+own posting week produces `MISSED` rows, and every thin candidate pool produces `UNFILLED` ones.
+Left durable, the first analysis of an old sermon would have made that project permanently
+un-re-analysable. Both moved to the reschedulable set, `clearReschedulableScheduledPosts` now
+clears them (matching on the project as well as the clip, since an `UNFILLED` row has no clip),
+and re-analysis closes their open exceptions as `superseded_by_reanalysis`. Caught by an existing
+integration test — "still rebuilds a project nobody has touched" — not by review.
+
+**The allocator takes the snapshotted slot count, not one re-derived from the profile.** P1.8
+derived the count from `sermonsPerWeek`. P1.9 must read the P0.7 project snapshot, which stores
+its own `targetClipCount`, and the two can differ for a legacy project or an operator override.
+`allocatePostingSlots` gained an optional `slotCount`; `UNMATCHED` still forces zero ahead of it,
+so no caller-supplied count can schedule a service the church does not hold.
+
+**`src/lib/scheduling.ts` lost `scheduledDateForRank` entirely** rather than keeping a deprecated
+export. The plan calls the module a compatibility facade; leaving a live rank-arithmetic function
+exported invites reuse, and the plan is explicit that turning arming off must not return to it.
+The module keeps only the database-coupled helpers.
+
+**One gap found while verifying the storage-key lists, not fixed here.** The two four-key lists in
+`retention.ts` and `cleanup.ts` do match every key FINALIZE and PROBE write — `src/…` to
+`storageKey`, `thumbs/…` to `thumbnailKey`, `audio/…` to `audioKey`, and the SRT route's `srt/…`
+to `srtOverrideKey`, with `exports/…` handled by the separate stale-file path. But
+`tmp/{workspaceId}/{uploadId}`, written by the upload PUT route, is removed only by the `move` on
+successful completion. An abandoned upload, or one that fails the size check at `complete` (which
+returns `UPLOAD_INTERRUPTED` without removing the temp object), leaves that object in storage
+forever, and nothing scans `tmp/`. Pre-existing and outside P1.9's scope; it needs an owner.
+
 ### P1.8 deviations
 
 **Fixed a second misfile site the plan does not list.** P1.8's file list names only
@@ -230,10 +263,10 @@ edit. Recorded here instead; fold it into the P5 work that owns the manifest.
 - **The parity gate is the export's evidence.** `tests/integration/export-parity.integration.test.ts`
   renders four real MP4s through `runExportJob` and reads them back against the same pure
   functions the preview draws with. It takes about a minute and needs Postgres and ffmpeg.
-- **Some tests deliberately record known defects as executable evidence:** Sunday-spill
-  scheduling, destructive reanalysis, the Stage A funnel ratio, and the opening-quarter clip
-  assertion. They belong to P1.8, P1.7, P5 and P0.17. Do not "fix" them; invert or respecify them
-  in the commit that fixes the defect.
+- **Some tests deliberately record known defects as executable evidence:** the Stage A funnel
+  ratio and the opening-quarter clip assertion, belonging to P5 and P0.17. Do not "fix" them;
+  invert or respecify them in the commit that fixes the defect. Sunday-spill scheduling was
+  inverted by P1.9 and destructive reanalysis by P1.7; both now assert the fixed rule.
 
 ### Commands
 

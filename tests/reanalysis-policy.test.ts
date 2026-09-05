@@ -63,9 +63,14 @@ describe("countDurableWork", () => {
     const client = fakeClient({});
     await countDurableWork(client as never, { projectId: "p" });
     const where = client.scheduledPost.count.mock.calls[0][0].where;
-    expect(where.publishStatus.in).toEqual(["IN_PROGRESS", "SUCCEEDED", "BLOCKED", "UNFILLED", "MISSED"]);
+    expect(where.publishStatus.in).toEqual(["IN_PROGRESS", "SUCCEEDED", "BLOCKED"]);
     expect(where.publishStatus.in).not.toContain("NOT_STARTED");
     expect(where.publishStatus.in).not.toContain("FAILED");
+    // P1.9 moved these two out of the durable set. Both are created routinely once arming is on
+    // — a past sermon makes MISSED rows, a thin pool makes UNFILLED ones — and neither reached an
+    // audience, so counting them as durable would forbid ever re-analysing such a project.
+    expect(where.publishStatus.in).not.toContain("MISSED");
+    expect(where.publishStatus.in).not.toContain("UNFILLED");
     // Both ways a slot can belong to the project: through its clip, or directly once the clip is gone.
     expect(where.OR).toEqual([{ clip: { projectId: "p" } }, { projectId: "p" }]);
   });
