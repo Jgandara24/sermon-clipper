@@ -53,6 +53,17 @@ export function RenderedClipReview({ detail }: { detail: OperatorReviewDetail })
         </Link>
         <p className="mt-4 text-sm font-medium text-teal-800">{detail.churchName}</p>
         <h1 className="mt-1 text-2xl font-semibold">{detail.projectName}</h1>
+        {/* The pool behind this one date. A reviewer about to REPLACE wants to know what is
+            actually available before deciding, and this is the only route to it. */}
+        {detail.projectId ? (
+          <Link
+            href={`/app/operator/projects/${detail.projectId}`}
+            data-testid="operator-project-link"
+            className="mt-1 inline-block text-sm text-teal-800 underline"
+          >
+            Inspect this service&rsquo;s candidate pool
+          </Link>
+        ) : null}
         <p className="mt-1 text-sm text-stone-500">
           {detail.platform} · {formatDate(detail.scheduledDate)} · {detail.publishStatus}
         </p>

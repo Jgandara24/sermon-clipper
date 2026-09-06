@@ -191,6 +191,21 @@ export async function loadOperatorProjectPool(
     projectId: project.id,
     projectName: project.name,
     clips: [...own, ...borrowed],
+    // Every date the service owns, including any left empty by a replacement that found no
+    // reserve. Those have no clip and so no candidate row; without this they are invisible.
+    slots: slots.map((slot) => ({
+      scheduledPostId: slot.id,
+      scheduledDate: slot.scheduledDate,
+      publishStatus: slot.publishStatus,
+      clipId: slot.clipId,
+      boundRender: slot.exportJob
+        ? {
+            exportJobId: slot.exportJob.id,
+            state: slot.exportJob.state,
+            qcStatus: slot.exportJob.qcStatus,
+          }
+        : null,
+    })),
     renderSourceAvailable: Boolean(project.sourceVideo?.storageKey),
     limits: {
       // Frozen into the project at creation. Read from the project rather than recomputed, so a
