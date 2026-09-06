@@ -1,4 +1,4 @@
-import { ProcessingJobState } from "@prisma/client";
+import { Prisma, ProcessingJobState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { parseExportIdempotencyKeyVersion } from "@/lib/exports/edit-version";
 import { enqueueExportJob, requeueFailedExportJob } from "@/lib/exports/queue";
@@ -153,5 +153,22 @@ describe("requeueFailedExportJob", () => {
     expect(call.data).not.toHaveProperty("editVersion");
     expect(call.data).not.toHaveProperty("idempotencyKey");
     expect(call.where.state).toBe(ProcessingJobState.FAILED);
+  });
+
+  /**
+   * The row outlives the render, so nothing on it may keep describing the render that failed.
+   * A `qcChecksum` left behind is the dangerous one: an editorial acceptance is recorded against
+   * that value, so a stale one lets a verdict about the old bytes match the new ones (P2.8).
+   */
+  it("clears the QC verdict, because the retry produces a different file", async () => {
+    const updateMany = vi.fn<(args: UpdateManyArgs) => Promise<{ count: number }>>(() =>
+      Promise.resolve({ count: 1 }),
+    );
+
+    await requeueFailedExportJob({ exportJob: { updateMany } } as never, "export-1");
+
+    const { data } = updateMany.mock.calls[0][0];
+    expect(data).toMatchObject({ qcStatus: null, qcCheckedAt: null, qcChecksum: null });
+    expect(data.qcDetails).toBe(Prisma.DbNull);
   });
 });

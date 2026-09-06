@@ -358,7 +358,7 @@ describe("publishDueScheduledPosts indeterminate outcomes", () => {
  * consults it, refuses, and never claims the row.
  */
 describe("publishDueScheduledPosts delivery gate", () => {
-  it("refuses through the real rule, because no editorial review exists before P2", async () => {
+  it("refuses through the real rule, because nobody has accepted this render", async () => {
     const { client, updates, events } = makeFakeClient(new Date("2026-03-02T00:00:00.000Z"));
     let claimed = false;
     const publishCalls: unknown[] = [];
@@ -366,6 +366,10 @@ describe("publishDueScheduledPosts delivery gate", () => {
     const summary = await publishDueScheduledPosts(
       {
         ...client,
+        // The slot below is deliverable in every mechanical respect — bound export, matching
+        // edit version, QC passed against exactly this file, church approved. The one thing
+        // missing is a person's decision about it, and that alone stops it.
+        clipReview: { findFirst: async () => null },
         scheduledPost: {
           ...client.scheduledPost,
           // The real loader reads the slot back before deciding.
@@ -414,7 +418,7 @@ describe("publishDueScheduledPosts delivery gate", () => {
     expect(summary.postsPublished).toBe(0);
     expect(summary.postsSkippedNotEligible).toBe(1);
     expect(publishCalls).toHaveLength(0);
-    // Nothing was claimed, so the slot stays available for when P2 makes it eligible.
+    // Nothing was claimed, so the slot stays available for whenever it is reviewed.
     expect(claimed).toBe(false);
     expect(updates).toHaveLength(0);
     expect(

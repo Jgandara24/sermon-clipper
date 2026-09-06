@@ -37,7 +37,8 @@ build the whole implementation plan in order.
 | P2.5 exact-render operator review queue | done | 2026-09-05; `/app/operator/review` and its detail page, `src/lib/review/query.ts`. Signs the reviewed church's file, shows the four identity facts, hides every selector signal |
 | P2.6 accept, revise and multiple-feedback UI | done | 2026-09-05; `src/app/actions/clip-review.ts` authorizes itself; `REPLACE` blocked at the button, the schema and the service |
 | P2.7 atomic replacement | done | 2026-09-06; `src/lib/review/{reserve-policy,replace-scheduled-clip}.ts`. One transaction, project row locked so two replacements take different reserves; empty pool still records the decision and opens an exception |
-| P2.8–P8 | not started | |
+| P2.8 require exact editorial acceptance | done | 2026-09-06; `src/lib/delivery/{eligibility,query}.ts` now query the standing decision about the exact render. Four identity facts, human reviewer, `ACCEPT`; a retry clears the QC verdict so a rerender cannot inherit one |
+| P2.9–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -241,6 +242,40 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P2.8 deviations
+
+**The QC verdict is cleared in `queue.ts`, not in the retry route.** The plan lists
+`src/app/api/exports/[id]/retry/route.ts`. The route does nothing but call
+`requeueFailedExportJob`, and the reason a rerender must invalidate an acceptance is a property of
+reusing the job row, not of the HTTP path that asks for it. Clearing `qcStatus`, `qcCheckedAt`,
+`qcChecksum` and `qcDetails` inside the queue function covers every caller that reuses a row,
+including any later one. The route itself needed no change.
+
+**The rule re-checks the four facts the loader already matched on.** `query.ts` finds the review by
+clip, edit version, bound export and QC checksum, so the identity check inside
+`assessDeliveryEligibility` cannot fail in production. It is there because `DeliveryFacts` is an
+exported type and the publisher takes the assessor as an injectable dependency: this module is the
+one thing that must not be talkable-into a publish, and a loosened `where` should fail a unit test
+rather than quietly widen what can go out. The same reasoning already put
+`verifyBoundDeliveryIdentity` beside foreign keys that imply most of what it checks.
+
+**An `AGENT` acceptance is refused, which the plan did not ask for in so many words.** Nothing
+writes one today, which is exactly why it was worth writing now — when P4 begins producing agent
+reviews they must not become publishable by having arrived. P2.9 owns the program clock and P7 owns
+the change to this rule; neither is a reason to leave the gap open in between.
+
+**One test premise had to be rewritten rather than deleted.** `tests/delivery-eligibility.test.ts`
+carried "refuses after an edit demoted the approval, though an old SUCCEEDED export exists", which
+asserted `customer_approval_missing`. Under P2.8 the re-rendered export invalidates the acceptance
+first, so the reason changed. The case now walks all four layers — stale export, stale acceptance,
+demoted approval, then eligible — which is more than it proved before.
+
+**The global-query trap, caught before it landed this time.** `publishDueScheduledPosts` sweeps
+every due post in the database, so a new end-to-end case asserting `summary.postsPublished === 0`
+was answered by the two slots the cases above it had just made genuinely deliverable — the first
+rows in the project's history that could pass the real rule. The assertion is now on the test's own
+slot's `publishStatus`. Fourth instance; the tell in the P2.7 note held.
 
 ### P2.6 deviations
 

@@ -234,7 +234,17 @@ export async function recoverStaleExportJobs(client: PrismaClient, now = new Dat
   return { recovered, failed };
 }
 
-/** Manual "try again" from the UI reuses the same job row (guide: "try again ... reuses the job"). */
+/**
+ * Manual "try again" from the UI reuses the same job row (guide: "try again ... reuses the job").
+ *
+ * The QC verdict is cleared with the failure. Reusing the row means the export id survives a
+ * rerender, so everything else about the row has to stop claiming the last attempt's result:
+ * leaving `qcStatus` PASSED beside a QUEUED job says a file passed quality control that no longer
+ * exists, and leaving `qcChecksum` names bytes about to be replaced. Delivery reads both, and an
+ * editorial acceptance is recorded against that checksum (P2.8) — so a stale one is the exact
+ * shape of a clip publishing on a verdict about a different file. The next QC pass writes them
+ * again; until it does, the honest value is none.
+ */
 export async function requeueFailedExportJob(client: PrismaClient, jobId: string) {
   return client.exportJob.updateMany({
     where: { id: jobId, state: ProcessingJobState.FAILED },
@@ -247,6 +257,10 @@ export async function requeueFailedExportJob(client: PrismaClient, jobId: string
       heartbeatAt: null,
       workerId: null,
       finishedAt: null,
+      qcStatus: null,
+      qcCheckedAt: null,
+      qcChecksum: null,
+      qcDetails: Prisma.DbNull,
     },
   });
 }

@@ -124,9 +124,10 @@ export type FacebookPublisherDeps = {
   ) => Promise<{ facebookPostId: string }>;
   /**
    * The delivery decision, defaulting to the real module. Injectable only so tests for the
-   * clamp, retry and misconfiguration paths can reach the code past it: until P2 records
-   * editorial reviews, the real rule refuses every slot, and that is deliberate. Nothing in
-   * production passes this — the default is the single authority.
+   * clamp, retry and misconfiguration paths can reach the code past it without standing up a
+   * QC-passed render and a human acceptance of exactly it. Nothing in production passes this —
+   * the default is the single authority, and it is the only thing that decides whether a slot
+   * has a human `ACCEPT` recorded against the exact file about to go out (P2.8).
    */
   assessDelivery?: typeof assessScheduledPostDelivery;
 };

@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { parseDeliverySettings } from "@/lib/delivery/settings";
 import { env } from "@/lib/env";
 import { parseFacebookConnection } from "@/lib/facebook-connection";
+import { latestReviewForRender } from "@/lib/review/service";
 import {
   assessDeliveryEligibility,
   type DeliveryEligibility,
@@ -17,6 +18,10 @@ type DeliveryQueryClient = PrismaClient | Prisma.TransactionClient;
  * clip's most recent successful export" — the slot's `exportJobId` is the only way to reach an
  * export, so a slot with no binding produces null and the pure rule refuses. Adding a fallback
  * lookup here would defeat the whole module.
+ *
+ * The review is loaded the same way: keyed on the render the slot is bound to, never on the slot
+ * or the clip. A query by slot would hand the rule a decision about a file this slot no longer
+ * holds, which is the same defect one table further along.
  */
 export async function loadDeliveryFacts(
   client: DeliveryQueryClient,
@@ -59,6 +64,22 @@ export async function loadDeliveryFacts(
 
   if (!slot) return null;
 
+  // The exact render under judgement. Absent any of these four the slot is already ineligible on
+  // an earlier rule, so there is nothing to look up and nothing a lookup could rescue.
+  const exportJob = slot.exportJob;
+  const reviewedIdentity =
+    slot.clipId && exportJob && exportJob.editVersion !== null && exportJob.qcChecksum
+      ? {
+          clipId: slot.clipId,
+          exportJobId: exportJob.id,
+          editVersion: exportJob.editVersion,
+          // The QC-time checksum, which the rule separately asserts is the output file's own.
+          // One verified value, compared everywhere.
+          checksum: exportJob.qcChecksum,
+        }
+      : null;
+  const review = reviewedIdentity ? await latestReviewForRender(client, reviewedIdentity) : null;
+
   return {
     globalPublishingEnabled: env.AUTOMATIC_PUBLISHING_ENABLED,
     settings: parseDeliverySettings(slot.workspace.settings),
@@ -80,10 +101,22 @@ export async function loadDeliveryFacts(
           currentEditVersion: slot.clip.edits[0]?.version ?? 0,
         }
       : null,
-    exportJob: slot.exportJob ?? null,
-    // Wave 2 supplies ClipReview. Until then there is nowhere to record an editorial decision,
-    // so this stays null and every slot is ineligible — the intended P1 state.
-    review: null,
+    exportJob: exportJob ?? null,
+    review:
+      review && reviewedIdentity
+        ? {
+            decision: review.decision,
+            reviewerKind: review.reviewerKind,
+            // Read back off the row rather than echoing the query, so the rule is checking the
+            // decision's own snapshot and a loosened `where` here cannot pass unnoticed.
+            identity: {
+              clipId: review.clipIdSnapshot,
+              exportJobId: review.exportJobIdSnapshot,
+              editVersion: review.editVersion,
+              checksum: review.checksum,
+            },
+          }
+        : null,
     approval: slot.clip?.approvals[0] ?? null,
   };
 }
