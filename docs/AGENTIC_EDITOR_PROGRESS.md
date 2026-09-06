@@ -248,6 +248,28 @@ about "the next" or "the count" of something not scoped to the test's own rows.
 
 ### P3.2 deviations
 
+**A regression P3.1 shipped, and the reading behind it.** `GeneratedClipStatus.SUGGESTED` reads as
+"the selector produced this and did not keep it", and P3.1's pool excluded it on that basis. It is
+not what the enum means here: `analyze.ts` writes `SUGGESTED` for **every** candidate it retains,
+and nothing in production ever writes `KEPT` — only a manual `PATCH /api/clips/[id]` can, and no
+surface calls it. Excluding `SUGGESTED` therefore emptied the project page for every normally
+analysed sermon. Every integration and unit fixture created clips as `KEPT` explicitly, so nothing
+caught it until an end-to-end test walked the real analysis path. The pool now holds all four
+statuses, and `RESERVE` covers both `SUGGESTED` and `KEPT`.
+
+**The same misreading is live in P2.7, and is not fixed here.** `reserve-policy.ts` promotes only
+`KEPT`, so in production a replacement finds no eligible reserve for any normally analysed sermon:
+it supersedes the rejected clip, empties the slot, and opens an `UNFILLED` exception every time.
+Its tests pass because every fixture sets `KEPT` by hand. Left for its own commit rather than
+folded into a church-UI change — see the open items below.
+
+**Two e2e tests asserted the behaviour this commit removes.** `phase-6-7-reviewed-export.spec.ts`
+opened the "Show score breakdown" control and checked each subscore label was visible. Rewritten
+to assert the same four labels are absent, because "these words must not reach this page" is worth
+a test of its own and this is the page that used to show them.
+
+
+
 **This commit removed something churches could already see.** The project page and the clips API
 both carried the Selector's score, its subscores, the model version and the quoted excerpt — a
 score tile, a colour-coded tone, and a "show score breakdown" toggle. Plan §2.2 says no
@@ -876,6 +898,17 @@ Settled, And It Split In Two", and `npm run audit:caption-faces`.
 ---
 
 ## Open items not owned by any commit yet
+
+- **`reserve-policy.ts` promotes only `KEPT`, and nothing writes `KEPT`.** `analyze.ts` writes
+  `SUGGESTED` for every retained candidate; the only `KEPT` writer is a manual
+  `PATCH /api/clips/[id]` that no surface calls. So P2.7's replacement command finds
+  `NO_ELIGIBLE_RESERVE` for any normally analysed sermon — it supersedes the rejected clip, clears
+  both bindings, sets the slot `UNFILLED` and opens an exception, every time. Every replacement
+  test passes because its fixtures set `KEPT` by hand. Found 2026-09-06 while fixing the same
+  misreading in P3.1's pool. The fix is a one-line change to `PROMOTABLE_STATUSES` plus a fixture
+  that uses the status analysis actually writes, but it belongs in its own commit with its own
+  integration test rather than inside a church-UI change. **Do this before the Gate C replacement
+  smoke test** — that smoke test would otherwise fail for this reason and look like a P2.7 bug.
 
 - **OpenAI adapter.** The policy schema reserves `openai`, but the activation command refuses it
   until an adapter and benchmark exist.

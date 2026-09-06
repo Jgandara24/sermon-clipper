@@ -252,7 +252,7 @@ test.describe("Phase 6/7 browser workflow", () => {
 
   test("applies brand, approves, exports, and downloads a vertical MP4", async ({ page }) => {
     await page.goto(`/app/projects/${fixture.projectId}`);
-    await expect(page.getByRole("heading", { name: "Suggested clips" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Clips from this sermon" })).toBeVisible();
     // The detected-scripture badge, addressed by its title rather than its text. The transcript
     // viewer fetches its segments after hydration and one of them also contains "John 14", so a
     // plain text match is a race: one element before that fetch lands, two after it, and a strict
@@ -383,14 +383,25 @@ John 14 says peace stays with us because Jesus tells the church not to let their
     await runPendingProcessingJobs();
     await page.reload();
 
-    await expect(page.getByRole("heading", { name: "Suggested clips" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Clips from this sermon" })).toBeVisible();
     await expect(page.getByText("Rank 1")).toBeVisible();
     await expect(page.getByText("John 14").first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Show score breakdown" }).click();
-    await expect(page.getByText(/biblical usefulness/i)).toBeVisible();
-    await expect(page.getByText(/theological clarity/i)).toBeVisible();
-    await expect(page.getByText(/pastoral tone/i)).toBeVisible();
-    await expect(page.getByText(/scripture relevance/i)).toBeVisible();
+    /**
+     * This block asserted the opposite until P3.2: it opened a "Show score breakdown" control and
+     * checked that each subscore label was visible. A church now sees none of the Selector's
+     * opinion of its own sermon (plan §2.2), so the same four labels are the evidence — read the
+     * other way round. Rewritten rather than deleted, because "these words must not reach this
+     * page" is worth a test of its own, and this is the page that used to show them.
+     */
+    await expect(page.getByRole("button", { name: "Show score breakdown" })).toHaveCount(0);
+    for (const label of [
+      /biblical usefulness/i,
+      /theological clarity/i,
+      /pastoral tone/i,
+      /scripture relevance/i,
+    ]) {
+      await expect(page.getByText(label)).toHaveCount(0);
+    }
   });
 });

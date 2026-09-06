@@ -120,7 +120,8 @@ describe("one service's pool", () => {
     await createClip(project.id, 2);
     await createClip(project.id, 3, { status: GeneratedClipStatus.HIDDEN });
     await createClip(project.id, 5, { supersededAt: new Date() });
-    // Never kept, so it is not in the pool at all — no presentation state describes it.
+    // `SUGGESTED` is what analysis writes for every candidate it retains, so this is an ordinary
+    // reserve rather than a rejected clip. Nothing in production writes `KEPT`.
     await createClip(project.id, 6, { status: GeneratedClipStatus.SUGGESTED });
 
     const job = await createBoundExport(scheduled.id, "one-service");
@@ -141,9 +142,10 @@ describe("one service's pool", () => {
       [3, "HIDDEN"],
       [4, "RESERVE"],
       [5, "SUPERSEDED"],
+      [6, "RESERVE"],
     ]);
-    expect(pool?.reserveQueue.map((row) => row.rank)).toEqual([2, 4]);
-    expect(pool?.retainedCount).toBe(5);
+    expect(pool?.reserveQueue.map((row) => row.rank)).toEqual([2, 4, 6]);
+    expect(pool?.retainedCount).toBe(6);
     expect(pool?.renderSourceAvailable).toBe(true);
   });
 
