@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CandidateStateBadge } from "@/components/candidates/candidate-state-badge";
+import { OperatorCandidateList } from "@/components/operator/operator-candidate-list";
 import type { OperatorProjectPool } from "@/lib/candidates/project-pool";
 import type { ReplacementLineageRow } from "@/lib/review/query";
 
@@ -24,20 +24,15 @@ function formatDay(date: Date | string) {
   });
 }
 
-function formatRange(startMs: number, endMs: number) {
-  const stamp = (ms: number) => {
-    const total = Math.floor(ms / 1000);
-    return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, "0")}`;
-  };
-  return `${stamp(startMs)}–${stamp(endMs)}`;
-}
-
 export function OperatorProjectCandidatePool({
   pool,
   lineage,
+  previewUrl,
 }: {
   pool: OperatorProjectPool;
   lineage: ReplacementLineageRow[];
+  /** The church's signed recording, or null once retention has purged it. */
+  previewUrl: string | null;
 }) {
   return (
     <div className="grid gap-6">
@@ -126,43 +121,7 @@ export function OperatorProjectCandidatePool({
 
       <section>
         <h2 className="text-sm font-semibold text-stone-800">Every candidate</h2>
-        <ul data-testid="operator-candidates" className="mt-2 grid gap-2">
-          {pool.candidates.map((candidate) => (
-            <li
-              key={candidate.clipId}
-              className="rounded-md border border-stone-200 bg-white p-3 text-sm"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <CandidateStateBadge state={candidate.state} />
-                <span className="text-xs font-medium uppercase tracking-wide text-stone-500">
-                  Rank {candidate.rank} · {formatRange(candidate.sourceRange.startMs, candidate.sourceRange.endMs)}{" "}
-                  · {Math.round(candidate.durationMs / 1000)}s
-                </span>
-                {candidate.scheduledDate ? (
-                  <span className="text-xs text-stone-600">
-                    {formatDay(candidate.scheduledDate)}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-1 font-medium">{candidate.title}</p>
-              {candidate.hook ? (
-                <p className="mt-0.5 text-xs italic text-stone-500">
-                  &quot;{candidate.hook}&quot;
-                </p>
-              ) : null}
-              <p className="mt-1 text-xs text-stone-500">
-                {candidate.review.latestDecision
-                  ? candidate.review.isAboutBoundRender
-                    ? `Decision: ${candidate.review.latestDecision}`
-                    : `Decision: ${candidate.review.latestDecision} (about an earlier file)`
-                  : "No decision recorded."}
-                {candidate.borrowedFromProjectId
-                  ? " · borrowed from an earlier service"
-                  : ""}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <OperatorCandidateList candidates={pool.candidates} previewUrl={previewUrl} />
       </section>
 
       <section>
