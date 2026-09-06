@@ -1,4 +1,8 @@
 import Link from "next/link";
+import {
+  AddFeedbackForm,
+  ReviewDecisionForm,
+} from "@/components/operator/review-decision-form";
 import type { OperatorReviewDetail } from "@/lib/review/query";
 
 /**
@@ -158,17 +162,36 @@ export function RenderedClipReview({ detail }: { detail: OperatorReviewDetail })
                     ))}
                   </ul>
                 )}
+                {/* Findings can be added to any past decision, however long afterwards. The
+                    decision itself never moves — correcting one means appending a new review. */}
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm text-teal-800">
+                    Add a finding to this decision
+                  </summary>
+                  <AddFeedbackForm
+                    clipReviewId={entry.id}
+                    scheduledPostId={detail.scheduledPostId}
+                  />
+                </details>
               </li>
             ))}
           </ol>
         )}
       </section>
 
-      {/* P2.6 adds ACCEPT and REVISE here; P2.7 enables REPLACE. Until then this page reads. */}
-      <p className="text-sm text-stone-500">
-        Recording a decision arrives with the next commit. This page shows the exact file so the
-        decision, when it exists, is made against it.
-      </p>
+      <section aria-label="Record a decision" className="grid gap-3">
+        <h2 className="text-sm font-semibold">Your decision</h2>
+        {detail.identity ? (
+          <ReviewDecisionForm
+            scheduledPostId={detail.scheduledPostId}
+            identity={detail.identity}
+          />
+        ) : (
+          <p data-testid="review-undecidable" className="text-sm text-stone-500">
+            There is no identifiable file here, so no decision can be recorded against it.
+          </p>
+        )}
+      </section>
     </div>
   );
 }

@@ -11,7 +11,7 @@ build the whole implementation plan in order.
 
 ## Where the build stands
 
-`main` is at `56a2aa8` (PR #87, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
+`main` is at `170bdef` (PR #88, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
 
 | Work | State | Evidence |
 |---|---|---|
@@ -35,7 +35,8 @@ build the whole implementation plan in order.
 | P2.3 append-only review and feedback services | done | 2026-09-05; `src/lib/review/{types,feedback-policy,snapshots,service}.ts`. Exact-render check, S15 table, bare `REPLACE` refused, reanalysis now blocks after any review |
 | P2.4 render only scheduled review clips | done | 2026-09-05; `src/lib/review/{final-render-eligibility,render-coordinator}.ts`, called after analysis and on a worker sweep. Records nothing while `AUTOMATIC_PUBLISHING_ENABLED` is false |
 | P2.5 exact-render operator review queue | done | 2026-09-05; `/app/operator/review` and its detail page, `src/lib/review/query.ts`. Signs the reviewed church's file, shows the four identity facts, hides every selector signal |
-| P2.6–P8 | not started | |
+| P2.6 accept, revise and multiple-feedback UI | done | 2026-09-05; `src/app/actions/clip-review.ts` authorizes itself; `REPLACE` blocked at the button, the schema and the service |
+| P2.7–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -201,6 +202,42 @@ image could not be checked either.
 named and again with the bundled family named, and compare the frames. Until then the head of each
 stack is frozen. The existing guard test was narrowed rather than deleted: it now asserts the first
 family of each retired preset, which is the part that reaches a file.
+
+### P2.6 deviations
+
+**A `"use server"` module may export nothing but async functions, and the error arrives late.**
+`CLIP_REVIEW_IDLE` started life beside the action as a plain `const`. Typecheck and lint both
+passed; the failure surfaced at request time as *"A 'use server' file can only export async
+functions, found object"* with a 500 on the POST. `npm run build` would have caught it — running
+only `typecheck` and `lint` after writing an action is not enough. The state constant and its type
+now live in `src/lib/review/decision-input.ts`.
+
+**Form parsing lives outside the action, in `decision-input.ts`.** The plan lists only
+`src/app/actions/clip-review.ts`. Everything inside a `"use server"` module is unreachable from a
+unit test, for the same rule as above, and the parsing is the part worth testing on its own — it is
+where untrusted `FormData` becomes something the service is allowed to see. `tests/review-decision-
+input.test.ts` covers it.
+
+**`REPLACE` is blocked three times, not once.** The plan says to show the control as unavailable.
+A disabled button is a suggestion, and a Server Action is a POST endpoint anyone can reach — Next's
+own guidance is that "render-time gating is not a security boundary". So the button is disabled,
+the action's schema does not accept the value, and `appendClipReview` refuses a bare `REPLACE`
+besides. The control is shown rather than hidden so a reviewer learns what a `CONTENT` finding
+costs from the control, not from a refusal after writing it all out.
+
+**Two components, not the plan's one.** The plan lists `review-feedback-list.tsx`. That file holds
+the editable findings list, which both forms reuse; `review-decision-form.tsx` holds the decision
+form and the later-feedback form that use it. One file holding all three would mean the findings
+list could not be shared.
+
+**Zod 4 checks a UUID's version and variant nibbles, not just its shape.** A placeholder like
+`11111111-1111-1111-1111-111111111111` is refused. Real ids come from `gen_random_uuid()` and are
+v4, so production is unaffected — but test fixtures must use genuine v4 UUIDs.
+
+**Every e2e interaction is scoped to its form.** A recorded decision renders an add-feedback form
+into the history, and both forms label their inputs "Finding 1 note". Page-level `getByLabel`
+becomes ambiguous the moment the first decision exists, which is a failure that only appears after
+a passing test writes a row.
 
 ### P2.5 deviations
 
