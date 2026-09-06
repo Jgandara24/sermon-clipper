@@ -43,7 +43,8 @@ build the whole implementation plan in order.
 | P3.2 show the complete actual pool to churches | done | 2026-09-06; the project page and `/api/projects/[id]/clips` now read P3.1's church pool. Selector score, subscores, model version and excerpt removed from both — they were church-visible before this commit |
 | P3.3 cross-workspace operator project view | done | 2026-09-06; `/app/operator/projects/[projectId]`, two components, lineage and exception readers in `review/query.ts`. Reading only — no limit editor, no settings, no publishing |
 | P3.4 cheap on-demand candidate previews | done | 2026-09-06; `src/components/candidates/source-range-preview.tsx` on both the church and operator pools. One signed recording per service, byte ranges, `preload="none"`, one open at a time, no `ExportJob` ever |
-| P3.5–P8 | not started | |
+| P3.5 explicit prior-service fill policy | done | 2026-09-06; `src/lib/review/prior-service-fill-policy.ts`. Pure, and exports no way to *find* a candidate — only to judge one an operator named. No caller yet; P3.6 applies it |
+| P3.6–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -247,6 +248,33 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.5 deviations
+
+**"Known forbidden" resolves to a recorded `FORBIDDEN_CONTENT` finding.** The plan names the state
+without saying where it lives. `ReviewFeedbackCategory.FORBIDDEN_CONTENT` is the editorial
+standard's one irreversible verdict, so a clip carrying such a finding is the durable meaning of
+"forbidden". Kept as a separate refusal from `HIDDEN`, which is only a preference: a clip that must
+not reach an audience does not become acceptable by being needed.
+
+**`renderableSource` is one boolean, not two branches.** The plan describes a `SourceVideo` key
+before P4 and a registered `DerivedMediaArtifact` after it. `DerivedMediaArtifact` does not exist
+yet, and which of the two satisfies the requirement is a question for whatever loads the facts.
+From the policy it is one fact either way, which is what lets P4 move the media source without
+touching this rule.
+
+**"Older" is measured on the sermon's own date.** A prior service is one that was *preached*
+earlier, so the comparison is `sermonDate` (falling back to `createdAt` where a project has none),
+compared strictly and by day. Same-day is refused: a sermon preached the same morning is not a
+prior service.
+
+**`hasOpenPublishClaim` is checked even though the slot state already excludes publishing.** P1.12
+writes the publish intent before the provider call, so a process that died mid-publish leaves a
+claim behind a state that looks safe. Same defence-in-depth pattern as the delivery module.
+
+**A test asserts the module's whole export list.** Rev2 §9 puts automatic cross-project borrowing
+out of scope, and a module that could rank or search candidates is one call away from doing it. The
+absence of a selector is the policy, so it is pinned rather than described.
 
 ### P3.4 deviations
 
