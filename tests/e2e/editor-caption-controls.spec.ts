@@ -14,6 +14,8 @@ import {
   storedState,
   type CanvasFixture,
 } from "./canvas-fixture";
+import { prisma } from "../../src/lib/prisma";
+import { buildInitialEditorState } from "../../src/lib/editor/types";
 
 process.env.STORAGE_LOCAL_ROOT = path.join(process.cwd(), ".data", "e2e-storage");
 process.env.WHISPER_MODEL_PATH = "";
@@ -228,10 +230,45 @@ test.describe("Caption controls", () => {
     );
   });
 
-  test("a preset whose font is not bundled says so rather than naming one", async ({ page }) => {
+  test("names the bundled face a preset actually draws with", async ({ page }) => {
     await openCanvasEditor(page, fixture.clipId);
 
-    // Clean stores a stack this repository does not ship, so the picker must not claim otherwise.
+    // Clean asked for `Inter` until 2026-09-05, and the control could only say "Preset default"
+    // because the stored stack named a family nothing ships. A render inside the worker image
+    // proved `Inter` and `DejaVu Sans` are the same frame, so Clean now names the family it
+    // always drew — and the control can say which one that is.
+    await expect(page.getByLabel("Font")).toHaveValue("'DejaVu Sans', sans-serif");
+  });
+
+  test("a preset whose font is not bundled says so rather than naming one", async ({ page }) => {
+    // `bold-serif` still stores a stack this repository does not ship: its head is `Georgia`,
+    // which the same comparison showed draws as DejaVu *Sans*, so renaming it would change every
+    // clip approved against it. The picker must not claim a family the document does not use.
+    //
+    // It is retired, so no UI can select it. The stored document is seeded directly, which is
+    // also how a clip saved before the preset was retired reaches the editor today.
+    const clip = await prisma.generatedClip.findUniqueOrThrow({
+      where: { id: fixture.clipId },
+      include: { project: true },
+    });
+    const seeded = buildInitialEditorState({
+      sourceVideoId: clip.project.sourceVideoId as string,
+      startMs: clip.startMs,
+      endMs: clip.endMs,
+    });
+    await prisma.clipEdit.create({
+      data: {
+        clipId: fixture.clipId,
+        version: seeded.version,
+        editorState: {
+          ...seeded,
+          captions: { ...seeded.captions, presetId: "bold-serif" },
+        } as never,
+      },
+    });
+
+    await openCanvasEditor(page, fixture.clipId);
+
     await expect(page.getByLabel("Font")).toHaveValue("__preset_default__");
     const options = await page.getByLabel("Font").locator("option").allTextContents();
     expect(options[0]).toBe("Preset default");

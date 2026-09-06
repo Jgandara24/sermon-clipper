@@ -337,7 +337,10 @@ is what reaches the rendered file, is frozen. Original finding follows.
 DejaVu faces, while three presets name `Inter` and one names `Georgia`. Verified with `fc-match`
 against a fontconfig tree holding only `public/fonts`: with the alias rules a Debian image has,
 `Inter` resolves to DejaVu Sans and `Georgia` to DejaVu Serif — sensible substitutions, not broken
-ones. The substitution is by design: `Dockerfile.worker` deletes the distribution DejaVu copy and
+ones. **The `Georgia` half of that was wrong, and the method is why.** A render inside the built
+image on 2026-09-05 showed libass draws `Georgia` as DejaVu **Sans**, not Serif: `fc-match` and
+libass disagree for a family the repository does not ship, and only the render is authoritative.
+Do not use `fc-match` to answer what an unbundled family draws as. The substitution is by design: `Dockerfile.worker` deletes the distribution DejaVu copy and
 fails the build unless the three bundled families resolve to `public/fonts`, and
 `font-metrics.ts` deliberately has no fallback face, so an unbundled family raises and the render
 keeps the whole-run path. The two paths that would be dangerous are already guarded — the only
@@ -548,10 +551,12 @@ matters is read off it by hand.
 `slice7-prerebase-backup` (`099258d`, local only) had every distinctive file land on `main` at
 equal or greater size — `active-word.ts`, `numeric-field.ts` and its four test files.
 
-**One live gap this surfaced.** `src/lib/editor/caption-presets.ts` on `main` names `Inter` as a
-font family, but `main` ships only the six DejaVu faces in `public/fonts/`. The Inter, Poppins and
-Source Serif 4 files exist solely on the two editor branches above. Whether burn-in silently falls
-back to DejaVu is unverified — worth a look before P2 publishing, not a P1.8 blocker.
+**One live gap this surfaced — closed 2026-09-05.** `src/lib/editor/caption-presets.ts` named
+`Inter`, while `main` ships only the six DejaVu faces in `public/fonts/`. A render inside the built
+worker image settled it: `Inter` draws the identical frame to `DejaVu Sans`, so `clean`, `karaoke`
+and `quiet` now name the bundled family. `Georgia` does not draw as `DejaVu Serif` — it draws as
+`DejaVu Sans` — so `bold-serif` keeps its head. See `DECISIONS.md`, "The Caption Font Question Is
+Settled, And It Split In Two", and `npm run audit:caption-faces`.
 
 ---
 
