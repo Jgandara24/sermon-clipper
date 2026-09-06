@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { OperatorCandidateList } from "@/components/operator/operator-candidate-list";
 import { PriorServiceFillForm } from "@/components/operator/prior-service-fill-form";
+import { RescheduleMissedForm } from "@/components/operator/reschedule-missed-form";
 import type { OperatorProjectPool, PoolSlotSummary } from "@/lib/candidates/project-pool";
 import type { ShortageResolutionSlot } from "@/lib/review/prior-service-fill-options";
 import type { ReplacementLineageRow } from "@/lib/review/query";
@@ -137,6 +138,27 @@ export function OperatorProjectCandidatePool({
                       : "No render bound yet."
                     : "No clip in this date. A replacement found no reserve, or none was allocated."}
                 </p>
+                {/*
+                  A missed date is terminal for automation, so the only way it moves is here. The
+                  form is offered on the missed row itself rather than in a list elsewhere, because
+                  the decision needs the date it is replacing in front of it.
+                */}
+                {slot.publishStatus === "MISSED" ? (
+                  <div
+                    data-testid="operator-slot-missed"
+                    className="mt-3 rounded-md border border-stone-200 bg-white p-3"
+                  >
+                    <p className="text-xs font-medium text-stone-700">
+                      This date passed without publishing
+                    </p>
+                    <div className="mt-2">
+                      <RescheduleMissedForm
+                        scheduledPostId={slot.scheduledPostId}
+                        currentDate={formatDay(slot.scheduledDate)}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 {shortages[slot.scheduledPostId] ? (
                   <div
                     data-testid="operator-slot-shortage"

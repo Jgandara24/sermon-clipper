@@ -4016,3 +4016,45 @@ it. If the render then fails, the date stays bound and unpublishable, and nothin
 different candidate — the operator chose this one, and choosing again is theirs to do.
 
 Status: Active. Never call this from a sweep, a coordinator, or a replacement fallback.
+
+## 2026-09-06 - A Missed Post Is Terminal For Automation
+
+Nothing sweeps missed slots, nothing retries them, and the allocator does not shift later posts up
+to cover one. A missed Tuesday stays missed and Wednesday stays Wednesday. That is Addendum
+Decision O, and P3.8 is the only exception: a platform operator picking a specific date.
+
+**Why automation must not do it.** A missed post is almost always a symptom — a render that ran
+long, a provider that was down, a process that died. Letting the system move the post on its own
+means one late render silently rewrites a church's whole week, and the rewrite happens at the
+moment nobody is watching, which is exactly when the original failure happened. A person moving one
+date is a decision with a date on it; a queue moving dates is a schedule nobody agreed to.
+
+**The same row moves; a second one is never inserted.** `scheduled_posts` carries a partial unique
+index — one non-`MISSED` row per workspace date — and `clip_id` is globally unique. Inserting a new
+row for the same clip would violate the second constraint, and inserting one for a taken date would
+violate the first. Mutating in place sidesteps both and keeps the publish history attached to the
+row it belongs to. The count check before the write cannot see an uncommitted rival, so the partial
+index is the real arbiter and its violation is reported as the refusal it is rather than as a
+crash.
+
+**The binding is retained, never re-derived.** Whatever clip and export the slot held, it keeps.
+This command does not look for a fresher render, because "the newest successful export" is exactly
+the lookup P1.11 exists to forbid. Delivery eligibility stays authoritative: a rescheduled date
+publishes only if its exact bound render is still accepted (P2.8). What resets is narrower —
+`attemptCount`, `nextAttemptAt` and `lastErrorMessage` are facts about an attempt that did not
+happen, and a new date is a new attempt. The `PublishAttempt` rows stay, because they are the
+record that a call may have gone out.
+
+**Today counts as a valid date, and the plan's word was "future".** `allocatePostingSlots` already
+rules that "a slot dated today is still postable; only a strictly earlier date is missed", and an
+operator noticing a missed post on the morning it should have gone out has a real reason to send it
+that afternoon. Contradicting that rule inside the same domain would be the larger inconsistency,
+so the refusal is `date_in_past` and today is allowed.
+
+**The weekday is read in UTC.** A stored `scheduledDate` is the church's own calendar date pinned
+to UTC midnight, so reading its weekday in the church's zone would apply that offset a second time
+and report the previous day — turning a chosen Monday into a refused Sunday.
+`allocatePostingSlots` documents the same trap; this command follows it rather than inventing a
+second convention.
+
+Status: Active. Never call `rescheduleMissedSlot` from a sweep, poller, or allocator.

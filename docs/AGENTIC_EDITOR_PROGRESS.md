@@ -46,7 +46,8 @@ build the whole implementation plan in order.
 | P3.5 explicit prior-service fill policy | done | 2026-09-06; `src/lib/review/prior-service-fill-policy.ts`. Pure, and exports no way to *find* a candidate — only to judge one an operator named. No caller yet; P3.6 applies it |
 | P3.6 apply a prior-service fill atomically | done | 2026-09-06; `src/lib/review/prior-service-fill.ts`. Source-video lock serialises it against cleanup; exact conditional claim; no second `REPLACE`; exception resolved in place; delivery still needs a fresh acceptance |
 | P3.7 operator shortage-resolution action | done | 2026-09-06; `src/app/actions/operator-prior-service-fill.ts`, its form, the options loader, and an operator-only calendar link. Nothing preselected, confirmation re-checked server side, review link waits for a real file |
-| P3.8–P8 | not started | |
+| P3.8 reschedule a missed slot explicitly | done | 2026-09-06; `src/lib/schedule/reschedule-missed.ts` and its operator action. Same row mutated, binding retained, no automatic caller — asserted by a grep test |
+| P3.9–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -250,6 +251,31 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.8 deviations
+
+**Today is a valid date; the plan said "future".** `allocatePostingSlots` already rules that "a
+slot dated today is still postable; only a strictly earlier date is missed", and an operator
+noticing a missed post on the morning it should have gone out has a real reason to send it that
+afternoon. Contradicting that rule inside the same domain would be the larger inconsistency, so the
+refusal is `date_in_past`. Flagged because it is a judgement call against the plan's wording.
+
+**The form is not gated on client state, after an e2e proved why it should not be.** The first
+draft revealed the confirmation only once a date was chosen and disabled the button until then —
+so `page.fill()` on the controlled date input left React's state empty and the button permanently
+disabled. Rather than work around the timing, the form became uncontrolled: date field, confirmation
+and submit are all always present, and the server decides the refusals it was already deciding.
+That is the behaviour a Server Action form is supposed to have — it works before hydration.
+
+**A structural test asserts the module has one caller.** "MISSED is terminal for automation" is a
+claim about what does *not* exist, so it is checked by grepping `src/` for the command's import
+path rather than described in a comment. The first version of that grep matched
+`reschedule-missed-form.tsx` too and failed correctly; the pattern now includes the closing quote,
+which is the difference between "imports the command" and "has a similar filename".
+
+**The success message is unreachable here as well.** A successful move stops the date being missed,
+so the row stops offering the form. Third time this session: the durable state is the assertion,
+not the message.
 
 ### P3.7 deviations
 
