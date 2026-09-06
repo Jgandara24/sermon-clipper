@@ -826,6 +826,39 @@ inspect `IN_PROGRESS` scheduled posts. To disable safely, set the switch to `fal
 Do not roll back code that removes this guard unless the Meta token is removed first or every
 workspace auto-post flag is disabled.
 
+### What else this switch turns on (P2.4)
+
+Two things beyond the publisher now read it. Read both before you set it to `true`.
+
+**The scheduled-render coordinator starts creating export jobs.** For every scheduled slot with no
+bound export, it enqueues one pinned render and writes that exact job id into
+`ScheduledPost.exportJobId`. It runs after each analysis and on a periodic sweep
+(`SCHEDULED_RENDER_SWEEP_INTERVAL_MS`, default 15 minutes). While the switch is false it records
+nothing at all — no job row, no binding, no cost — so a queue is never built quietly behind it.
+
+The sweep exists so that enabling the switch later cannot strand slots armed while it was false.
+Those slots are picked up on the first sweep after enablement, which means **the first sweep after
+you enable the switch renders every unbound scheduled slot in the deployment at once.** Before
+enabling, count them:
+
+```sql
+SELECT count(*) FROM scheduled_posts
+WHERE publish_status = 'not_started' AND export_job_id IS NULL AND clip_id IS NOT NULL;
+```
+
+If that number is larger than you want to pay for in one go, work through the backlog with a
+bounded manual run rather than by flipping the switch.
+
+**Manual export starts refusing unscheduled clips.** This is the one church-visible change hiding
+inside a delivery flag. While the switch is false, `POST /api/clips/:id/exports` behaves exactly as
+it always has. While it is true, a clip that no posting slot is waiting on is refused with
+`FINAL_RENDER_NOT_SCHEDULED` and a 409, because a rendered file that never publishes is money spent
+on nothing. A render that already exists stays downloadable — the rule refuses new work, it never
+withdraws a file already paid for.
+
+If you enable the switch for the controlled sandbox publication and then disable it again, both
+behaviours revert with it.
+
 ## Schedule Arming Switch
 
 `AUTOMATIC_SCHEDULE_ARMING_ENABLED` decides whether ANALYZE reserves calendar dates. Only the

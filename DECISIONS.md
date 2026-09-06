@@ -3772,3 +3772,41 @@ mistaken "revisable" publishes forbidden content that nobody removed.
 must not rewrite what a past finding demanded — the same reason the review tables are append-only.
 
 Status: Active. If this rule ever changes, change it forward; do not reinterpret stored rows.
+
+## 2026-09-05 - Final Files Are Rendered Only For Clips A Slot Is Waiting On
+
+Rendering is the expensive step. Under the agentic regime every project produces more candidates
+than it has posting slots, and the extras are reserves — real clips, ranked and kept, that no date
+is waiting for. Rendering all of them multiplies the render bill by the size of the candidate pool
+and delivers nothing. So a final MP4 belongs to a clip a slot is actually waiting on, and P2.7's
+atomic replacement binds a promoted reserve to its slot *before* it enqueues that reserve's export,
+so a promotion satisfies the same rule with no exception carved for it.
+
+A reserve loses nothing else. It keeps its source preview, its editor document, and its place in
+the pool. What it does not get is a finished file nobody asked for.
+
+**The rule is gated on `AUTOMATIC_PUBLISHING_ENABLED`, and that is a judgement, not an oversight.**
+The plan says to apply it to the manual export path as well as the automatic one, and it is
+applied to both — but only once the delivery regime is running. Two reasons. The rule exists to
+stop paying for renders that never publish, and while nothing publishes there is nothing for it to
+save. And a church's manual export from the editor is a Tier 2 feature that predates all of this:
+refusing it now would take away something churches use today to prevent a cost that is not yet
+being incurred. Worse, `AUTOMATIC_SCHEDULE_ARMING_ENABLED` is still false, so no slots are being
+created at all — an ungated rule would refuse *every* export in the product.
+
+The cost of the gate is that the rule has no production mileage until the switch flips, and that
+flipping it changes church-visible behaviour. `docs/DEPLOYMENT.md` says so beside the switch, in
+the same section as the count of unbound slots the first sweep will render.
+
+**The coordinator records nothing while the switch is false.** Not "enqueues and holds" — no job
+row, no binding, no cost. The switch is the last thing standing between this repository and a real
+church's Facebook page, and a coordinator that quietly built a queue behind it would make flipping
+it far more dangerous than it looks. The consequence is a backlog on first enablement, which is
+why the sweep exists and why the deployment checklist asks for a count before flipping.
+
+**A render already paid for is never withdrawn.** The manual export route checks eligibility after
+its idempotent early return, so a clip replaced out of its slot keeps the file it already has. The
+rule refuses new work; it does not confiscate finished work over an editorial decision made about
+a different clip.
+
+Status: Active. Do not render a clip no slot is waiting on.

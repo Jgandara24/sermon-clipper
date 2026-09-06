@@ -29,6 +29,7 @@ import {
   findScheduledPostCollision,
 } from "@/lib/scheduling";
 import { allocatePostingSlots, type PostingSlot } from "@/lib/schedule/posting-schedule";
+import { coordinateScheduledRenders } from "@/lib/review/render-coordinator";
 import { readProjectProcessingConfig } from "@/lib/project-service";
 import {
   lockSourceVideoForRetention,
@@ -633,6 +634,16 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     await tx.project.update({ where: { id: project.id }, data: { status: ProjectStatus.READY } });
   });
 
+  // Outside the transaction, on purpose. The slots are committed and the project is READY; a
+  // render that cannot be enqueued is a thing to retry on the next sweep, not a reason to undo
+  // an analysis that succeeded. It records nothing at all while automatic publishing is off.
+  const scheduledRenders = await coordinateScheduledRenders(prisma, {
+    projectId: project.id,
+  }).catch((error: unknown) => {
+    console.error("[analyze] scheduled render coordination failed", error);
+    return null;
+  });
+
   return {
     metadata: {
       provider: provider.name,
@@ -646,6 +657,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       candidateLimit,
       targetClipCount,
       genre,
+      scheduledRendersEnqueued: scheduledRenders?.slotsBound ?? 0,
     },
   };
   };
