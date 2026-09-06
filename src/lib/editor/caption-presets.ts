@@ -49,7 +49,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
     id: "clean",
     name: "Clean",
     style: {
-      fontFamily: "Inter, 'DejaVu Sans', sans-serif",
+      fontFamily: "'DejaVu Sans', sans-serif",
       sizePx: 44,
       textColor: "#FFFFFF",
       highlightColor: "#2DD4BF",
@@ -87,7 +87,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
     id: "karaoke",
     name: "Karaoke",
     style: {
-      fontFamily: "Inter, 'DejaVu Sans', sans-serif",
+      fontFamily: "'DejaVu Sans', sans-serif",
       sizePx: 46,
       textColor: "#E5E5E5",
       highlightColor: "#FFD34D",
@@ -106,7 +106,7 @@ export const CAPTION_PRESETS: CaptionPreset[] = [
     id: "quiet",
     name: "Quiet",
     style: {
-      fontFamily: "Inter, 'DejaVu Sans', sans-serif",
+      fontFamily: "'DejaVu Sans', sans-serif",
       sizePx: 36,
       textColor: "#F5F5F4",
       highlightColor: "#F5F5F4",
@@ -153,21 +153,25 @@ export const SELECTABLE_CAPTION_PRESETS: CaptionPreset[] = CAPTION_PRESETS.filte
 );
 
 /**
- * Why these stacks end in a bundled family (2026-09-05).
+ * Why `clean`, `karaoke` and `quiet` now name a bundled family, and `bold-serif` still does not.
  *
- * `clean`, `karaoke` and `quiet` ask for `Inter`, which nothing has ever shipped. The worker image
- * carries only the bundled DejaVu faces, so libass substitutes; the browser used to fall through
- * to `system-ui`, so the preview showed whatever the operator's machine had. The church was shown
- * one face and sent another, and two operators were shown different ones.
+ * All four asked for a family nothing ships — `Inter` for the first three, `Georgia` for
+ * `bold-serif`. libass substitutes silently, so the head of each stack was frozen until someone
+ * rendered inside the built worker image and compared. `npm run audit:caption-faces` did that on
+ * 2026-09-05, and the two cases came out differently.
  *
- * Only the *tail* changed. The ASS `Fontname` is `resolveCaptionFace()`, which takes the first
- * family, and that is still `Inter` — so the rendered file is byte-for-byte what it was, and no
- * approved clip changes. The preview reads the whole stack (`video-preview.tsx`), so it now lands
- * on the bundled `DejaVu Sans` that the burn-in actually draws with.
+ * `Inter` renders byte-for-byte identically to `DejaVu Sans` (frame md5 53d928…), so naming the
+ * bundled family changes no approved clip and is now what these three say.
  *
- * Renaming the first family, or bundling Inter, would both change what approved clips render.
- * Neither can be verified outside the worker image. See DECISIONS.md, "The Caption Preview Falls
- * Back To The Face The Burn-In Draws".
+ * `Georgia` does not render as `DejaVu Serif` (9ba6e1…). It renders as `DejaVu Sans` — the same
+ * 53d928… frame as the sans presets — even though `fc-match Georgia` names the serif file. libass
+ * and fontconfig disagree here, and libass wins. So `bold-serif`, the serif preset, has always
+ * burned in a sans face. Renaming its head to `DejaVu Serif` would change every clip already
+ * approved against it from sans to serif, so the head stays `Georgia` and the tail carries the
+ * bundled serif for the preview. It is retired (`selectable: false`), so no new clip can pick it.
+ *
+ * See DECISIONS.md, "The Caption Preview Falls Back To The Face The Burn-In Draws" and its
+ * 2026-09-05 settlement.
  */
 export function getCaptionPreset(id: string): CaptionPreset {
   return CAPTION_PRESETS.find((preset) => preset.id === id) ?? CAPTION_PRESETS[0];

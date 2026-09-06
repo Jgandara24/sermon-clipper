@@ -55,6 +55,9 @@ next-env.d.ts
 # local working artifacts (planning scratch, not project docs)
 /OUTPUTS/
 
+# probe and audit output (frames, hashes, generated subtitle files)
+/tmp/
+
 # private strategy document — never commit while this repository is public.
 # Public git history cannot be retracted: going private later does not unpublish
 # what was already crawled, archived, or forked. See DECISIONS.md, 2026-08-11,

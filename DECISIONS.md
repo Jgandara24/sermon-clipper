@@ -3699,6 +3699,53 @@ and signed media URLs to that church, and confers no ability to write anything i
 
 Status: Active. Do not add a route, action, or settings toggle that grants this marker.
 
+## 2026-09-05 - The Caption Font Question Is Settled, And It Split In Two
+
+The previous entry froze the head of every legacy caption stack until someone rendered inside the
+built worker image and compared. `npm run audit:caption-faces` did that. It burns the same caption
+line four times inside the image, straight to raw RGB frame hashes with no video codec in the
+path, so a hash difference is a pixel difference and nothing else.
+
+```
+Inter          -> DejaVu Sans   [/usr/share/fonts/truetype/sermon-clipper/DejaVuSans.ttf]
+DejaVu Sans    -> DejaVu Sans   [/usr/share/fonts/truetype/sermon-clipper/DejaVuSans.ttf]
+Georgia        -> DejaVu Serif  [/usr/share/fonts/truetype/sermon-clipper/DejaVuSerif.ttf]
+DejaVu Serif   -> DejaVu Serif  [/usr/share/fonts/truetype/sermon-clipper/DejaVuSerif.ttf]
+
+frame md5   Inter         53d928603f4f9f9d38fd712c9e1806e0
+            DejaVu Sans   53d928603f4f9f9d38fd712c9e1806e0
+            Georgia       53d928603f4f9f9d38fd712c9e1806e0
+            DejaVu Serif  9ba6e1826449fc05ffe87b24cd603125
+```
+
+**`Inter` and `DejaVu Sans` are the same frame, so `clean`, `karaoke` and `quiet` now name
+`DejaVu Sans`.** The generated ASS changes in exactly one field — `Fontname` in the `Default` and
+`LowerThird` style lines — and the three Clean fixtures are otherwise byte-identical: every
+Dialogue line, position and margin is unchanged, and no Highlighter fixture moved. Combined with
+the identical frame, the rename moves no approved clip. The preview and the burn-in now name the
+same family, so nobody has to know that `Inter` was a synonym.
+
+**`Georgia` is not `DejaVu Serif`. It is `DejaVu Sans`.** This is the finding that matters. The
+serif preset has been burning in a sans face for its whole life. `fc-match Georgia` names the
+serif file, and libass ignores that and substitutes the default sans — the two disagree, and
+libass is the one that draws. Renaming `bold-serif`'s head to `DejaVu Serif` would therefore not
+be a rename at all: it would flip every clip approved against that preset from sans to serif. So
+the head stays `Georgia` and the tail keeps the bundled serif for the preview.
+
+That leaves `bold-serif` with a preview that does not match its burn-in, which is the defect the
+previous entry set out to fix. It is accepted, narrowly, because the alternative is worse: the
+preset is retired (`selectable: false`), no new clip can choose it, and the clips that already use
+it were approved as they render today. Fixing the preview to show sans would be honest and is
+worth doing; changing the file is not.
+
+**What this teaches about `fc-match`.** The worker image's font gate asserts that `fc-match`
+resolves each bundled family to a bundled file. That gate is still right for the families the
+repository ships, but this comparison shows it cannot answer what libass does with a family the
+repository does *not* ship. Only a render inside the image can.
+
+Status: Active. `clean`, `karaoke` and `quiet` are settled. `bold-serif`'s head stays frozen for a
+stronger reason than before: changing it would change what it draws.
+
 ## 2026-09-05 - Forbidden Content Is Revisable Exactly When A Trim Can Remove It
 
 The S15 actionability table says `CONTENT` is replace-only and boundary, crop, caption and audio

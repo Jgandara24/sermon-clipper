@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "audit:caption-faces": "bash scripts/compare-caption-faces.sh",
     "audit:event-exposure": "tsx scripts/audit-event-exposure.ts",
     "audit:legacy-exports": "tsx scripts/audit-legacy-exports.ts",
     "audit:schedule-collisions": "tsx scripts/audit-scheduled-post-collisions.ts",
