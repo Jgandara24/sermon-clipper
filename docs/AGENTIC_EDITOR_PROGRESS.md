@@ -39,7 +39,8 @@ build the whole implementation plan in order.
 | P2.7 atomic replacement | done | 2026-09-06; `src/lib/review/{reserve-policy,replace-scheduled-clip}.ts`. One transaction, project row locked so two replacements take different reserves; empty pool still records the decision and opens an exception |
 | P2.8 require exact editorial acceptance | done | 2026-09-06; `src/lib/delivery/{eligibility,query}.ts` now query the standing decision about the exact render. Four identity facts, human reviewer, `ACCEPT`; a retry clears the QC verdict so a rerender cannot inherit one |
 | P2.9 start the human-only program explicitly | done | 2026-09-06; `src/lib/review/{editorial-program,program-key}.ts`, two scripts, `docs/HUMAN_REVIEW_30_DAY_RUNBOOK.md`. Fixed 30 days, no backdating, no restart; a pause extends and also pauses delivery; the sandbox census scans exactly what the publisher scans |
-| P3–P8 | not started | |
+| P3.1 role-safe candidate-pool read model | done | 2026-09-06; `src/lib/candidates/{project-pool,query}.ts`. Six presentation states, rank preserved, borrowed prior-service fill found through the slot; church shape derived from the operator shape by removal. No production caller yet |
+| P3.2–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -243,6 +244,36 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.1 deviations
+
+**No selector facts in either role shape, not just the church's.** The plan lists scores,
+subscores, model version, excerpt and rationale among the things *church* responses omit, which
+implies an operator shape that carries them. Nothing needs them today — P3.1 has no production
+caller at all — and S14 already says a reviewer must not see the machine's confidence in the work
+they are judging. A field that exists is a field that leaks into the next surface, so the pool
+carries none. Adding them later for a P4 evaluation consumer is a smaller change than removing
+them from a review page.
+
+**The church shape is `Omit` of the operator shape, not a second literal.** Two independently
+written shapes leak by omission the first time someone adds a field to one and forgets the other.
+Written as a removal, a new field reaches churches only if somebody deletes it on purpose.
+
+**Slots are queried by the service that owns them, never through the clips.** Following each clip
+to its slot would miss the whole reason this read model exists: a slot of *this* service filled by
+a clip from an older one has no row in this service's clip list. The borrowed candidate is added
+from the slot side or it is invisible.
+
+**`PRIOR_SERVICE_FILL` is decided before the replacement check, and that ordering is the rule.** A
+borrowed clip usually *was* promoted by a `REPLACE` — that is how it reached the slot — so asking
+"was it promoted?" first would tell a church this service produced a replacement it never
+produced. Both integration and unit tests pin the borrowed-and-promoted case specifically.
+
+**The promotions lookup is scoped to the clips the pool presents.** The obvious query —
+`replacementClipIdSnapshot: { not: null }` — is correct and unbounded: it loads every replacement
+ever made in every workspace to answer a question about six clips, and that set only grows. Caught
+while re-reading rather than by a test, because a global read that returns a superset gives the
+right answer and simply costs more every month.
 
 ### P2.9 deviations
 
