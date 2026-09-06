@@ -26,6 +26,7 @@
     "report:project-cost": "tsx scripts/report-project-cost.ts",
     "set:analysis-routing": "tsx scripts/set-analysis-routing-policy.ts",
     "set:candidate-limit-override": "tsx scripts/set-candidate-limit-override.ts",
+    "set:platform-operator": "tsx scripts/set-platform-operator.ts",
     "smoke:production": "tsx scripts/production-smoke.ts",
     "start": "next start",
     "test": "vitest run",

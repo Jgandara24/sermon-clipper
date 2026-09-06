@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { WorkspacePermission } from "@/lib/authorization";
 import { assertWorkspacePermission } from "@/lib/authorization";
+import { isPlatformOperator } from "@/lib/operator-auth";
 import { AUTH_SESSION_COOKIE, hashSecret } from "@/lib/auth/email-otp";
 import { prisma } from "@/lib/prisma";
 
@@ -93,4 +94,22 @@ export async function requirePrimaryWorkspacePermission(
   }
 
   return membership;
+}
+
+/**
+ * The page-and-server-action gate for the operator surfaces.
+ *
+ * Deliberately not composed with `requirePrimaryWorkspace*`: an operator's own workspace is
+ * irrelevant to reviewing someone else's clips, and requiring one would make the marker useless
+ * to a staff account that belongs to no church. A user without the marker is sent to `/app`, the
+ * same place a permission refusal goes, so the operator surfaces do not announce themselves.
+ */
+export async function requirePlatformOperator() {
+  const user = await requireCurrentUser();
+
+  if (!isPlatformOperator(user)) {
+    redirect("/app?error=permission-denied");
+  }
+
+  return user;
 }

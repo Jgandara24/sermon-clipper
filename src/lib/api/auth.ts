@@ -4,6 +4,7 @@ import {
   WorkspaceAuthorizationError,
   type WorkspacePermission,
 } from "@/lib/authorization";
+import { isPlatformOperator } from "@/lib/operator-auth";
 import { apiError } from "./response";
 import {
   decideWorkspaceAccess,
@@ -78,4 +79,37 @@ export async function requireApiWorkspace(permission?: WorkspacePermission) {
   }
 
   return { user, workspace: membership.workspace, membership } as const;
+}
+
+/**
+ * Route-handler gate for the operator surfaces.
+ *
+ * Separate from `requireApiWorkspace` rather than a flag on it, for two reasons. An operator has
+ * no membership in the workspace being reviewed, so the membership lookup would refuse before the
+ * marker was ever consulted. And `requireApiWorkspace` ends in a billing gate: a church whose
+ * trial lapsed would stop staff from reviewing work already done for it, which inverts what the
+ * gate is for. Nothing here reads the workspace's plan.
+ *
+ * The refusal is the same shape and status a non-member gets, so an operator route does not tell
+ * an unauthorized caller that a different class of authority exists.
+ */
+export async function requireApiPlatformOperator() {
+  const user = await getCurrentUser();
+  if (!user) {
+    return {
+      error: apiError("PERMISSION_DENIED", "You don't have access to that workspace.", {
+        status: 401,
+      }),
+    } as const;
+  }
+
+  if (!isPlatformOperator(user)) {
+    return {
+      error: apiError("PERMISSION_DENIED", "You don't have access to that workspace.", {
+        status: 403,
+      }),
+    } as const;
+  }
+
+  return { user } as const;
 }

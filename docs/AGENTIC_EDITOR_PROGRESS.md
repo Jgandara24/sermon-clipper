@@ -11,7 +11,7 @@ build the whole implementation plan in order.
 
 ## Where the build stands
 
-`main` is at `9f5470b` (PR #81, 2026-09-05). Production web and worker both run P1's last commit.
+`main` is at `f647f78` (PR #82, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
 
 | Work | State | Evidence |
 |---|---|---|
@@ -31,7 +31,8 @@ build the whole implementation plan in order.
 | P1.11 delivery eligibility module | done | 2026-09-05; `src/lib/delivery/{eligibility,settings,query}.ts`, wired into the publisher; the latest-export fallback is gone |
 | P1.12 harden publication claims | done | 2026-09-05; intent rows before the Meta call, exact claim, indeterminate outcomes block instead of retrying |
 | P2.1 deploy migration wave 2 | done | 2026-09-05; `clip_reviews`, `clip_review_feedback`, the platform-operator marker and the editorial program tables. Append-only enforced by a database trigger, not by the service that writes it |
-| P2.2–P8 | not started | |
+| P2.2 platform-operator authorization | done | 2026-09-05; `src/lib/operator-auth.ts` reads the marker, `src/lib/operations/platform-operator.ts` grants it, `npm run set:platform-operator` is the only door. No route, action, or toggle |
+| P2.3–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -197,6 +198,39 @@ image could not be checked either.
 named and again with the bundled family named, and compare the frames. Until then the head of each
 stack is frozen. The existing guard test was narrowed rather than deleted: it now asserts the first
 family of each retired preset, which is the part that reaches a file.
+
+### P2.2 deviations
+
+**The grant lives in `src/lib/operations/`, not in `operator-auth.ts`.** The plan lists one new
+module. Two exist: `src/lib/operator-auth.ts` reads the marker, and
+`src/lib/operations/platform-operator.ts` grants it, beside `candidate-limit-override.ts` where
+audited operations commands already live. One module holding both would let a route that imports
+the check reach the grant, and the repo already has a home for the second half.
+
+**Nothing was added to the route matrix, because P2.2 adds no route.** The plan lists
+`tests/integration/route-authorization.integration.test.ts`, whose completeness guard walks
+`src/app/api` and demands a row per route. P2.2 deliberately ships no staff dashboard — the
+operator surfaces are P2.5 — so there is no route to add a row for. The behaviour that exists is
+the gate helper and the command, covered by a new
+`tests/integration/platform-operator.integration.test.ts`. P2.5 adds the matrix rows.
+
+**`operator-auth.ts` takes a Prisma client rather than importing the singleton.** The plan does
+not say. `src/lib/auth.ts` imports `@/lib/prisma` because it is a Next server module that cannot
+be unit-tested anyway; every other DB-coupled module in `src/lib` — `retention.ts`,
+`workspace-settings.ts`, `operations/candidate-limit-override.ts` — takes a client parameter, and
+the marker check has to be unit-testable without pulling `PrismaClient` into the pure test config.
+
+**The operator gate deliberately skips the billing check.** `requireApiWorkspace` ends in
+`decideWorkspaceAccess`, which returns 402 for a lapsed church. Composing the operator gate onto
+it would mean a lapsed trial silently stops staff reviewing work already done for that church.
+`requireApiPlatformOperator` reads no plan state. Recorded in `DECISIONS.md`.
+
+**One test-isolation bug worth remembering.** The first version of the audit assertions counted
+`operational_events` rows globally by `eventType`. It passed alone and failed in the full suite,
+because an earlier manual `npm run set:platform-operator` against the same database had left two
+rows. Every assertion is now scoped to a user the test created, and the cleanup no longer deletes
+rows it did not write. The shared integration database makes a global count a latent failure, not
+a convenience.
 
 ### P2.1 deviations
 
