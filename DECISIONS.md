@@ -3974,3 +3974,45 @@ of the exact render, and only P7, deployed and explicitly changed, moves that. T
 keeps saying so after day 30 for exactly that reason.
 
 Status: Active. Never shorten, backdate, or restart the phase.
+
+## 2026-09-06 - Cross-Project Filling Is Operator-Initiated, And Never A Fallback
+
+When a sermon runs out of reserves, P2.7 empties the slot, sets it `UNFILLED` and opens an
+exception. It does not reach into an older service for a replacement, and P3.6 does not change
+that: filling a date from a previous sermon is a platform operator looking at that exception and
+naming one specific clip.
+
+**It never runs automatically, and the way to keep it that way is to have no code that could.**
+Rev2 §9 puts automatic cross-project reserve borrowing out of scope. So
+`prior-service-fill-policy.ts` exports exactly two functions — one that judges a pairing and one
+that explains a refusal — and nothing that ranks, searches or selects. A test asserts that export
+list, because a module which could find a candidate is one call away from being wired into a sweep
+by someone who thought it would be helpful.
+
+The reason the rule matters is editorial rather than technical. A church's Tuesday post carrying a
+moment from a sermon three weeks ago is a defensible choice a person can make and explain. The same
+thing happening because a queue was short is a product deciding, on its own, that one week's
+message will stand in for another's.
+
+**The lock is the source video, not the project.** P2.7 locks the project row because its race is
+two replacements choosing the same reserve. This command's race is with source cleanup deleting
+the media the new render needs, so it takes the `SourceVideo` row lock P1.9 introduced and re-reads
+the storage key under it. If cleanup won, the key is null and the fill refuses before writing
+anything. If the fill won, retention is extended inside the same transaction, so cleanup re-reads a
+later expiry and keeps the source.
+
+**Extending retention is not a substitute for re-reading the key.** Retention decides when media
+*will* be deleted. It cannot bring back media that already has been, and a command that only
+pushed the expiry out would cheerfully bind a slot to a clip whose recording is gone.
+
+**No second `REPLACE` is written.** The decision that emptied the date is already on the record,
+and a fill is not a new judgement about the rejected clip — it is a different clip arriving. The
+exception is resolved in place, keeping its snapshots and its message, because deleting it would
+erase the only explanation of why this date holds another sermon's clip.
+
+**Delivery stays blocked.** The slot returns to `NOT_STARTED` with a fresh render bound to it, and
+P2.8 requires a human `ACCEPT` of that exact new file. Filling a date is not approving what fills
+it. If the render then fails, the date stays bound and unpublishable, and nothing selects a
+different candidate — the operator chose this one, and choosing again is theirs to do.
+
+Status: Active. Never call this from a sweep, a coordinator, or a replacement fallback.
