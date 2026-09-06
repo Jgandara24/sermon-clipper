@@ -246,6 +246,112 @@ test.describe("The exact file under review", () => {
     await expect(page.getByText("Machine-generated, under review")).toBeVisible();
   });
 
+  test("records an ACCEPT against the exact file, and shows it in the history", async ({ page }) => {
+    await page.goto(`/app/operator/review/${fixture.scheduledPostId}`);
+
+    const decisionForm = page.getByTestId("review-decision-form");
+    await decisionForm.getByLabel("Decision note").fill("Lands cleanly.");
+    await page.getByTestId("review-accept").click();
+
+    await expect(decisionForm.getByTestId("review-success")).toContainText("Accepted");
+    await expect(page.getByTestId("review-history")).toContainText("ACCEPT");
+
+    const stored = await prisma.clipReview.findFirstOrThrow({
+      where: { scheduledPostIdSnapshot: fixture.scheduledPostId },
+      orderBy: { createdAt: "desc" },
+    });
+    // Recorded against the file that was on screen, not against whatever is newest.
+    expect(stored.exportJobIdSnapshot).toBe(fixture.exportJobId);
+    expect(stored.checksum).toBe(fixture.checksum);
+    expect(stored.editVersion).toBe(2);
+    expect(stored.note).toBe("Lands cleanly.");
+  });
+
+  test("records a REVISE carrying several findings at once", async ({ page }) => {
+    await page.goto(`/app/operator/review/${fixture.scheduledPostId}`);
+
+    const decisionForm = page.getByTestId("review-decision-form");
+    await decisionForm.getByLabel("Finding 1 category").selectOption("BOUNDARY");
+    await decisionForm.getByLabel("Finding 1 note").fill("Starts a sentence early.");
+    await decisionForm.getByLabel("Finding 1 start").fill("0");
+    await decisionForm.getByLabel("Finding 1 end").fill("1500");
+
+    await decisionForm.getByRole("button", { name: "Add another finding" }).click();
+    await decisionForm.getByLabel("Finding 2 category").selectOption("CAPTION");
+    await decisionForm.getByLabel("Finding 2 note").fill("Caption sits over the chin.");
+
+    await page.getByTestId("review-revise").click();
+
+    await expect(decisionForm.getByTestId("review-success")).toContainText("Revision requested");
+
+    const review = await prisma.clipReview.findFirstOrThrow({
+      where: { scheduledPostIdSnapshot: fixture.scheduledPostId, decision: "REVISE" },
+      include: { feedback: true },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(review.feedback).toHaveLength(2);
+    // Both are fixable by re-editing, which is what a REVISE promises.
+    expect(review.feedback.every((row) => row.actionability === "REVISABLE")).toBe(true);
+  });
+
+  test("refuses a REVISE whose finding needs a different clip, and saves nothing", async ({
+    page,
+  }) => {
+    const before = await prisma.clipReview.count({
+      where: { scheduledPostIdSnapshot: fixture.scheduledPostId },
+    });
+
+    await page.goto(`/app/operator/review/${fixture.scheduledPostId}`);
+    const decisionForm = page.getByTestId("review-decision-form");
+    await decisionForm.getByLabel("Finding 1 category").selectOption("CONTENT");
+    await decisionForm.getByLabel("Finding 1 note").fill("The point never lands.");
+    await page.getByTestId("review-revise").click();
+
+    await expect(decisionForm.getByTestId("review-error")).toContainText(
+      "replacement rather than a revision",
+    );
+    expect(
+      await prisma.clipReview.count({ where: { scheduledPostIdSnapshot: fixture.scheduledPostId } }),
+    ).toBe(before);
+  });
+
+  test("offers replacement as unavailable rather than hiding it", async ({ page }) => {
+    await page.goto(`/app/operator/review/${fixture.scheduledPostId}`);
+
+    // Visible, so a reviewer learns the cost of a CONTENT finding from the control rather than
+    // from a refusal after writing it out. Disabled, because the transaction does not exist yet.
+    const replace = page.getByTestId("review-replace");
+    await expect(replace).toBeVisible();
+    await expect(replace).toBeDisabled();
+  });
+
+  test("adds a finding to a decision that already exists", async ({ page }) => {
+    await page.goto(`/app/operator/review/${fixture.scheduledPostId}`);
+    await page.getByTestId("review-accept").click();
+    await expect(page.getByTestId("review-decision-form").getByTestId("review-success")).toBeVisible();
+
+    const review = await prisma.clipReview.findFirstOrThrow({
+      where: { scheduledPostIdSnapshot: fixture.scheduledPostId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    await page.reload();
+    await page.getByText("Add a finding to this decision").first().click();
+    const laterForm = page.getByTestId("review-add-feedback-form").first();
+    await laterForm.getByLabel("Finding 1 note").fill("Noticed on a rewatch.");
+    await laterForm.getByTestId("review-add-feedback").click();
+
+    await expect(laterForm.getByTestId("review-success")).toContainText("Added 1 finding");
+
+    // The decision itself did not move. Only findings were appended to it.
+    const after = await prisma.clipReview.findUniqueOrThrow({
+      where: { id: review.id },
+      include: { feedback: true },
+    });
+    expect(after.decision).toBe(review.decision);
+    expect(after.feedback.length).toBeGreaterThan(0);
+  });
+
   test("shows nothing of what the selector thought", async ({ page }) => {
     await page.goto(`/app/operator/review/${fixture.scheduledPostId}`);
     await expect(page.getByTestId("review-identity")).toBeVisible();
