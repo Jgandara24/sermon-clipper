@@ -1,5 +1,6 @@
 import { GeneratedClipStatus, type Prisma, type PrismaClient } from "@prisma/client";
 import { readCandidateLimit } from "@/lib/analysis/candidate-limit";
+import { RETAINED_CLIP_STATUSES } from "@/lib/analysis/clip-status";
 import {
   buildProjectPool,
   toChurchPool,
@@ -30,15 +31,15 @@ import { readCandidateLimitOverride } from "@/lib/operations/candidate-limit-ove
 type PoolQueryClient = PrismaClient | Prisma.TransactionClient;
 
 /**
- * Every status a retained clip can hold — which is all four.
+ * Every status a clip in the pool can hold — the retained pair, plus the two a person or a
+ * replacement moves a clip into.
  *
- * `SUGGESTED` is not "rejected": `analyze.ts` writes it for every candidate it keeps, and nothing
- * in production writes `KEPT` at all. Filtering `SUGGESTED` out empties the pool for every
- * normally analysed sermon, which is exactly what it did before an end-to-end test caught it.
+ * The retained pair comes from the shared constant rather than being listed here: filtering
+ * `SUGGESTED` out is what emptied every church's project page, and one source of truth for "what
+ * analysis actually writes" is what stops that happening a third time.
  */
 const POOL_STATUSES = [
-  GeneratedClipStatus.SUGGESTED,
-  GeneratedClipStatus.KEPT,
+  ...RETAINED_CLIP_STATUSES,
   GeneratedClipStatus.HIDDEN,
   GeneratedClipStatus.SUPERSEDED,
 ] as const;

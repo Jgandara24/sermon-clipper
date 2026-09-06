@@ -246,6 +246,36 @@ by an earlier test in the same file. The test now settles the queue before makin
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
 
+### The `SUGGESTED` misreading, fixed 2026-09-06
+
+`GeneratedClipStatus.SUGGESTED` reads as "the selector produced this and did not keep it". It is
+the opposite: `analyze.ts` builds a local list called `kept` — the candidates that survived
+selection — and writes every one of them as `SUGGESTED`. Nothing in production writes `KEPT`; the
+only writer is a manual `PATCH /api/clips/[id]` that no surface calls.
+
+The same misreading was in two places and cost two slices:
+
+- **P3.1's candidate pool** excluded `SUGGESTED`, which emptied every church's project page. Caught
+  by an end-to-end test walking the real analysis path, after every unit and integration fixture
+  agreed with the bug.
+- **`reserve-policy.ts`** promoted only `KEPT`, so a replacement found `NO_ELIGIBLE_RESERVE` for
+  any real sermon: it superseded the rejected clip, emptied the slot, set it `UNFILLED` and opened
+  an exception, every time. Its own unit test asserted this as correct behaviour.
+
+The fact now lives once, in `src/lib/analysis/clip-status.ts`, and both the writer and the two
+readers point at it. `tests/reserve-policy.test.ts` asserts the policy accepts
+`ANALYSIS_RETAINED_CLIP_STATUS` rather than a literal, so a change to what analysis writes moves
+the policy with it.
+
+**The fixtures were the actual bug.** Every replacement test created clips with `KEPT` by hand, so
+the whole suite agreed no real clip was promotable. `createClip`'s default is now the shared
+constant. Proof the tests bind the fix: reverting `PROMOTABLE_STATUSES` to `KEPT` alone now fails
+5 unit and 5 integration tests, where before it failed none.
+
+**A guard that cannot be tested at the integration level.** `reserve-policy.ts` refuses a
+zero-length clip, but `generated_clips_start_before_end_chk` refuses one at the database, so that
+branch is defence in depth and is tested in the unit suite against a plain object.
+
 ### P3.2 deviations
 
 **A regression P3.1 shipped, and the reading behind it.** `GeneratedClipStatus.SUGGESTED` reads as
@@ -898,17 +928,6 @@ Settled, And It Split In Two", and `npm run audit:caption-faces`.
 ---
 
 ## Open items not owned by any commit yet
-
-- **`reserve-policy.ts` promotes only `KEPT`, and nothing writes `KEPT`.** `analyze.ts` writes
-  `SUGGESTED` for every retained candidate; the only `KEPT` writer is a manual
-  `PATCH /api/clips/[id]` that no surface calls. So P2.7's replacement command finds
-  `NO_ELIGIBLE_RESERVE` for any normally analysed sermon — it supersedes the rejected clip, clears
-  both bindings, sets the slot `UNFILLED` and opens an exception, every time. Every replacement
-  test passes because its fixtures set `KEPT` by hand. Found 2026-09-06 while fixing the same
-  misreading in P3.1's pool. The fix is a one-line change to `PROMOTABLE_STATUSES` plus a fixture
-  that uses the status analysis actually writes, but it belongs in its own commit with its own
-  integration test rather than inside a church-UI change. **Do this before the Gate C replacement
-  smoke test** — that smoke test would otherwise fail for this reason and look like a P2.7 bug.
 
 - **OpenAI adapter.** The policy schema reserves `openai`, but the activation command refuses it
   until an adapter and benchmark exist.
