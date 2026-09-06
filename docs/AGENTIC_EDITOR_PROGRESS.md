@@ -11,7 +11,7 @@ build the whole implementation plan in order.
 
 ## Where the build stands
 
-`main` is at `f647f78` (PR #82, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
+`main` is at `e6664b8` (PR #83, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
 
 | Work | State | Evidence |
 |---|---|---|
@@ -32,7 +32,8 @@ build the whole implementation plan in order.
 | P1.12 harden publication claims | done | 2026-09-05; intent rows before the Meta call, exact claim, indeterminate outcomes block instead of retrying |
 | P2.1 deploy migration wave 2 | done | 2026-09-05; `clip_reviews`, `clip_review_feedback`, the platform-operator marker and the editorial program tables. Append-only enforced by a database trigger, not by the service that writes it |
 | P2.2 platform-operator authorization | done | 2026-09-05; `src/lib/operator-auth.ts` reads the marker, `src/lib/operations/platform-operator.ts` grants it, `npm run set:platform-operator` is the only door. No route, action, or toggle |
-| P2.3–P8 | not started | |
+| P2.3 append-only review and feedback services | done | 2026-09-05; `src/lib/review/{types,feedback-policy,snapshots,service}.ts`. Exact-render check, S15 table, bare `REPLACE` refused, reanalysis now blocks after any review |
+| P2.4–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -198,6 +199,38 @@ image could not be checked either.
 named and again with the bundled family named, and compare the frames. Until then the head of each
 stack is frozen. The existing guard test was narrowed rather than deleted: it now asserts the first
 family of each retired preset, which is the part that reaches a file.
+
+### P2.3 deviations
+
+**"Mid-clip" got a definition, and it came from P1.5.** The plan says `FORBIDDEN_CONTENT` is
+replace-only "mid-clip" without saying where the edge is. Rather than pick a tolerance, the rule
+reuses the continuous-range constraint the renderer already enforces: a forbidden span is
+revisable exactly when excising it leaves one continuous range, which is true at either end and
+false in the middle. A finding with no position is treated as mid-clip, which fails closed.
+Recorded in `DECISIONS.md`, against the plan's "Decision log: none beyond Wave 2" — the plan said
+that before anyone had to define the word.
+
+**The bare-`REPLACE` guard checks at runtime, not only in the types.** `AppendableDecision`
+excludes `REPLACE` from the union, which stops a TypeScript caller. It does not stop a decision
+arriving from a form, a script, or JSON, which is a string until something checks it. The service
+checks the value as well, and the test casts through `never` to prove the runtime guard holds.
+
+**`latestReviewForRender` matches all four identity facts, not the export id.** The obvious
+implementation looks up the bound export and takes its newest review. That would let a rerender
+that reused an export id inherit an acceptance of different bytes. P2.8 will call this, so the
+narrow version exists now rather than after it is depended on.
+
+**The church-facing refusal message gained no words.** Reviews joined the durable-work set that
+blocks reanalysis, but `REANALYSIS_BLOCKED_MESSAGE` still lists edits, approvals, exports and
+schedules. A review can only exist against a slot whose bound export passed QC, and that export is
+itself durable work on the same project — so `reviews` can never be the only non-zero count, and
+the sentence is never incomplete. Naming staff review to a church would also mean explaining a
+process that is not theirs, beside the "approved" they do recognise.
+
+**No read model was built.** The plan lists `src/lib/review/query.ts` under P2.5, and P2.3's file
+list does not include it. The service carries only the reads its own guarantees need —
+`latestReviewForSlot`, `latestReviewForRender`, `reviewHistoryForSlot`. The queue read model stays
+P2.5's.
 
 ### P2.2 deviations
 

@@ -19,6 +19,7 @@ function fakeClient(counts: {
   approvals?: number;
   exports?: number;
   posts?: number;
+  reviews?: number;
 }) {
   const clipEditCount = vi
     .fn()
@@ -29,17 +30,26 @@ function fakeClient(counts: {
     clipApproval: { count: vi.fn().mockResolvedValue(counts.approvals ?? 0) },
     exportJob: { count: vi.fn().mockResolvedValue(counts.exports ?? 0) },
     scheduledPost: { count: vi.fn().mockResolvedValue(counts.posts ?? 0) },
+    clipReview: { count: vi.fn().mockResolvedValue(counts.reviews ?? 0) },
   };
 }
 
 describe("countDurableWork", () => {
-  it("counts a person's edits, approvals, exports and delivered posts", async () => {
-    const client = fakeClient({ edits: 2, systemEdits: 3, approvals: 1, exports: 4, posts: 1 });
+  it("counts a person's edits, approvals, exports, delivered posts and reviews", async () => {
+    const client = fakeClient({
+      edits: 2,
+      systemEdits: 3,
+      approvals: 1,
+      exports: 4,
+      posts: 1,
+      reviews: 2,
+    });
     await expect(countDurableWork(client as never, { projectId: "p" })).resolves.toEqual({
       edits: 2,
       approvals: 1,
       exports: 4,
       posts: 1,
+      reviews: 2,
     });
   });
 
@@ -88,6 +98,9 @@ describe("assessReanalysis", () => {
     ["an approval", { approvals: 1 }],
     ["an export", { exports: 1 }],
     ["a delivered post", { posts: 1 }],
+    // P2.3: an editorial decision is durable work. A rebuild would leave a human verdict
+    // pointing at a clip that no longer exists.
+    ["an editorial review", { reviews: 1 }],
   ])("refuses once %s exists, and says what it found", async (_label, counts) => {
     const assessment = await assessReanalysis(fakeClient(counts) as never, { projectId: "p" });
     expect(assessment.allowed).toBe(false);
@@ -98,7 +111,13 @@ describe("assessReanalysis", () => {
 
 describe("the refusal", () => {
   it("is terminal and leaves the project as it found it", () => {
-    const error = reanalysisBlockedError({ edits: 1, approvals: 0, exports: 0, posts: 0 });
+    const error = reanalysisBlockedError({
+      edits: 1,
+      approvals: 0,
+      exports: 0,
+      posts: 0,
+      reviews: 0,
+    });
     expect(error).toBeInstanceOf(JobFailureError);
     expect(error.code).toBe(REANALYSIS_BLOCKED);
     expect(error.retryable).toBe(false);
