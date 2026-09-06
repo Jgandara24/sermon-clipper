@@ -12,6 +12,10 @@ import {
   readFeedbackRows,
   type ClipReviewActionState,
 } from "@/lib/review/decision-input";
+import {
+  replaceScheduledClip,
+  ReplacementRefusedError,
+} from "@/lib/review/replace-scheduled-clip";
 import { appendClipReview, appendReviewFeedback } from "@/lib/review/service";
 import {
   BareReplaceForbiddenError,
@@ -40,8 +44,11 @@ function explain(error: unknown): string {
       "replacement rather than a revision. Replacement arrives with the next release."
     );
   }
+  if (error instanceof ReplacementRefusedError) {
+    return error.message;
+  }
   if (error instanceof BareReplaceForbiddenError) {
-    return "A replacement cannot be recorded on its own yet.";
+    return "A replacement has to go through the replacement command, not the append path.";
   }
   if (error instanceof ReviewSubjectError) {
     return error.message;
@@ -69,6 +76,34 @@ export async function submitClipReviewAction(
       editVersion: formData.get("editVersion"),
       checksum: formData.get("checksum"),
     });
+
+    // A replacement is not an appended decision. It promotes a reserve, supersedes the rejected
+    // clip, rebinds the slot and queues a priority render, all in one transaction — so it has its
+    // own command, and the append path refuses it.
+    if (input.decision === ClipReviewDecision.REPLACE) {
+      const replacement = await replaceScheduledClip(prisma, {
+        scheduledPostId: input.scheduledPostId,
+        reviewerUserId: operator.id,
+        note: input.note || null,
+        identity: {
+          clipId: input.clipId,
+          exportJobId: input.exportJobId,
+          editVersion: input.editVersion,
+          checksum: input.checksum,
+        },
+        feedback: readFeedbackRows(formData),
+      });
+
+      revalidatePath(`/app/operator/review/${input.scheduledPostId}`);
+      revalidatePath("/app/operator/review");
+
+      return {
+        status: "success",
+        message: replacement.promotedClipId
+          ? "Replaced. The next reserve is queued for a priority render and holds this date."
+          : "Replaced, but this sermon had no clip left. The date is unfilled and an exception is open.",
+      };
+    }
 
     const review = await appendClipReview(prisma, {
       scheduledPostId: input.scheduledPostId,

@@ -148,6 +148,64 @@ async function buildFixture(): Promise<Fixture> {
   };
 }
 
+/** A second sermon, for the one test that destroys what it touches. */
+async function buildReplaceableSlot() {
+  const church = await prisma.scheduledPost.findUniqueOrThrow({
+    where: { id: fixture.scheduledPostId },
+    select: { workspaceId: true },
+  });
+  const project = await prisma.project.create({
+    data: { workspaceId: church.workspaceId, name: `Replaceable ${Date.now()}` },
+  });
+  const rejected = await prisma.generatedClip.create({
+    data: {
+      workspaceId: church.workspaceId,
+      projectId: project.id,
+      rank: 1,
+      startMs: 0,
+      endMs: 60_000,
+      title: "The clip being replaced",
+      summary: "E2E replace fixture.",
+      status: GeneratedClipStatus.KEPT,
+    },
+  });
+  const reserve = await prisma.generatedClip.create({
+    data: {
+      workspaceId: church.workspaceId,
+      projectId: project.id,
+      rank: 2,
+      startMs: 0,
+      endMs: 45_000,
+      title: "The reserve clip",
+      summary: "E2E reserve.",
+      status: GeneratedClipStatus.KEPT,
+    },
+  });
+  const exportJob = await prisma.exportJob.create({
+    data: {
+      workspaceId: church.workspaceId,
+      clipId: rejected.id,
+      state: ProcessingJobState.SUCCEEDED,
+      idempotencyKey: `e2e-replace-${Date.now()}`,
+      filename: "replaceable.mp4",
+      editVersion: 0,
+      qcStatus: RenderQcStatus.PASSED,
+      qcCheckedAt: new Date(),
+      qcChecksum: `sha256:replaceable-${Date.now()}`,
+    },
+  });
+  const slot = await prisma.scheduledPost.create({
+    data: {
+      workspaceId: church.workspaceId,
+      projectId: project.id,
+      clipId: rejected.id,
+      exportJobId: exportJob.id,
+      scheduledDate: new Date(Date.UTC(2040, 1, 4)),
+    },
+  });
+  return { scheduledPostId: slot.id, rejectedClipId: rejected.id, reserve };
+}
+
 let fixture: Fixture;
 
 test.beforeAll(async () => {
@@ -315,14 +373,46 @@ test.describe("The exact file under review", () => {
     ).toBe(before);
   });
 
-  test("offers replacement as unavailable rather than hiding it", async ({ page }) => {
-    await page.goto(`/app/operator/review/${fixture.scheduledPostId}`);
+  test("replaces the clip with the sermon's next reserve, in one transaction", async ({ page }) => {
+    // Its own sermon. A replacement supersedes a clip and rebinds the slot to a reserve whose
+    // render has not finished, so the shared fixture would not survive it — and the tests after
+    // this one would fail for reasons that have nothing to do with them.
+    const own = await buildReplaceableSlot();
+    const reserve = own.reserve;
 
-    // Visible, so a reviewer learns the cost of a CONTENT finding from the control rather than
-    // from a refusal after writing it out. Disabled, because the transaction does not exist yet.
-    const replace = page.getByTestId("review-replace");
-    await expect(replace).toBeVisible();
-    await expect(replace).toBeDisabled();
+    await page.goto(`/app/operator/review/${own.scheduledPostId}`);
+    const decisionForm = page.getByTestId("review-decision-form");
+    await decisionForm.getByLabel("Finding 1 category").selectOption("CONTENT");
+    await decisionForm.getByLabel("Finding 1 note").fill("The point never lands.");
+    await page.getByTestId("review-replace").click();
+
+    // The decision form is gone, because the promoted reserve's render has not finished and there
+    // is nothing to decide about yet. That is the honest state, so the page says so rather than
+    // leaving the operator wondering whether the replacement worked.
+    await expect(page.getByTestId("review-undecidable")).toContainText("render has not finished");
+    await expect(page.getByTestId("review-history")).toContainText("REPLACE");
+    await expect(page.getByTestId("review-title")).toHaveText("The reserve clip");
+
+    // The slot holds the reserve and the reserve's own priority render, on the same date.
+    const after = await prisma.scheduledPost.findUniqueOrThrow({
+      where: { id: own.scheduledPostId },
+      include: { exportJob: true },
+    });
+    expect(after.clipId).toBe(reserve.id);
+    expect(after.exportJob?.clipId).toBe(reserve.id);
+    expect(after.exportJob?.priority).toBeGreaterThan(0);
+    expect(after.publishStatus).toBe("NOT_STARTED");
+
+    // The rejected clip is superseded, and the decision names both.
+    const review = await prisma.clipReview.findFirstOrThrow({
+      where: { scheduledPostIdSnapshot: own.scheduledPostId, decision: "REPLACE" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(review.replacementClipIdSnapshot).toBe(reserve.id);
+    expect(review.clipIdSnapshot).toBe(own.rejectedClipId);
+    await expect(
+      prisma.generatedClip.findUniqueOrThrow({ where: { id: own.rejectedClipId } }),
+    ).resolves.toMatchObject({ status: GeneratedClipStatus.SUPERSEDED });
   });
 
   test("adds a finding to a decision that already exists", async ({ page }) => {

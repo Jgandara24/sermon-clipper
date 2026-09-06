@@ -187,8 +187,16 @@ export function RenderedClipReview({ detail }: { detail: OperatorReviewDetail })
             identity={detail.identity}
           />
         ) : (
+          // Reached most often straight after a replacement: the promoted reserve's render is
+          // queued, so there is nothing to decide about yet. Saying "no identifiable file" and
+          // stopping would leave an operator who just replaced a clip with no idea whether it
+          // worked — the form they submitted is gone, and so is the message it carried. The
+          // reason the file cannot be played is the same reason it cannot be decided about, so
+          // it is the one worth showing.
           <p data-testid="review-undecidable" className="text-sm text-stone-500">
-            There is no identifiable file here, so no decision can be recorded against it.
+            {detail.unplayableReason ??
+              "There is no identifiable file here, so no decision can be recorded against it."}{" "}
+            The decision history below records what has already been decided.
           </p>
         )}
       </section>

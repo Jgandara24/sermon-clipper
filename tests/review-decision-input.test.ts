@@ -41,14 +41,27 @@ describe("the decision a form may carry", () => {
     }
   });
 
-  it("refuses REPLACE, which is the lock a disabled button is not", () => {
-    // The UI shows the control disabled. A disabled button is a suggestion; a direct POST is not
-    // obliged to honour it, and a Server Action is reachable by direct POST.
-    expect(() =>
-      decisionSchema.parse({ ...IDENTITY, decision: ClipReviewDecision.REPLACE }),
-    ).toThrow();
+  it("accepts REPLACE at the form, because the page routes it to its own command", () => {
+    // Until P2.7 this schema was where REPLACE was refused. It is not any more: the page may
+    // submit one, and the action sends it to `replaceScheduledClip` rather than to the append
+    // path. The refusal moved rather than disappeared — see the next test.
+    expect(decisionSchema.parse({ ...IDENTITY, decision: ClipReviewDecision.REPLACE }).decision).toBe(
+      ClipReviewDecision.REPLACE,
+    );
+  });
+
+  it("keeps REPLACE out of the decisions the append path may write", () => {
+    // An appended REPLACE would be a review row with no supersession, no promotion, no rebinding
+    // and no render — a slot left worse than before it was reviewed. `appendClipReview` refuses
+    // one at the service; this is the vocabulary that says why.
+    expect(APPENDABLE_DECISIONS).not.toContain(ClipReviewDecision.REPLACE);
+    expect(APPENDABLE_DECISIONS).toEqual([ClipReviewDecision.ACCEPT, ClipReviewDecision.REVISE]);
+  });
+
+  it("refuses a decision that is not one of the three", () => {
     expect(() => decisionSchema.parse({ ...IDENTITY, decision: "replace" })).toThrow();
     expect(() => decisionSchema.parse({ ...IDENTITY, decision: "" })).toThrow();
+    expect(() => decisionSchema.parse({ ...IDENTITY, decision: "DELETE" })).toThrow();
   });
 
   it("refuses an identity that is not a set of real ids", () => {

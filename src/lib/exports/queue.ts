@@ -14,10 +14,21 @@ const MAX_ATTEMPTS = EXPORT_MAX_ATTEMPTS; // initial attempt + 2 retries, per gu
  *
  * The filename is stored on the row because the download needs a name. It is not part of the
  * identity, so renaming cannot mint a second render.
+ *
+ * **Takes a transaction client (P2.7).** An atomic replacement has to create the reserve's render
+ * inside the same commit that promotes it, or a rollback leaves an orphan job for a clip no slot
+ * points at. `priority` is how that job jumps the queue: a replacement is a person waiting, while
+ * the work already queued is not.
  */
 export async function enqueueExportJob(
-  client: PrismaClient,
-  params: { clipId: string; workspaceId: string; filename: string; editVersion: number },
+  client: PrismaClient | Prisma.TransactionClient,
+  params: {
+    clipId: string;
+    workspaceId: string;
+    filename: string;
+    editVersion: number;
+    priority?: number;
+  },
 ): Promise<ExportJob> {
   const idempotencyKey = buildExportIdempotencyKey({
     clipId: params.clipId,
@@ -37,6 +48,7 @@ export async function enqueueExportJob(
         filename: params.filename,
         idempotencyKey,
         editVersion: params.editVersion,
+        priority: params.priority ?? 0,
         state: ProcessingJobState.QUEUED,
       },
     });
@@ -50,7 +62,14 @@ export async function enqueueExportJob(
   }
 }
 
-/** Same conditional-UPDATE claim pattern as the processing-job queue (see jobs/queue.ts). */
+/**
+ * Same conditional-UPDATE claim pattern as the processing-job queue (see jobs/queue.ts).
+ *
+ * Ordered by `priority desc, createdAt asc` since P2.7. Priority is the tie-breaker that lets a
+ * replacement render reach a worker ahead of a backlog: an operator has just rejected a clip and
+ * is waiting to review its replacement, while the queued work behind it is nobody's Tuesday.
+ * Within one priority the order is still oldest-first, so nothing starves.
+ */
 export async function claimNextExportJob(client: PrismaClient): Promise<ExportJob | null> {
   const now = new Date();
   const claimedBy = workerId();
@@ -59,7 +78,7 @@ export async function claimNextExportJob(client: PrismaClient): Promise<ExportJo
       state: { in: [ProcessingJobState.QUEUED, ProcessingJobState.RETRYING] },
       runAfter: { lte: now },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
   });
 
   if (!candidate) {
