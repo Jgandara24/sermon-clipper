@@ -11,7 +11,7 @@ import {
   recordPublishIntent,
   settlePublishAttempt,
 } from "@/lib/delivery/publish-attempts";
-import { assessScheduledPostDelivery } from "@/lib/delivery/query";
+import { assessScheduledPostDelivery, duePublishWhere } from "@/lib/delivery/query";
 import { isEligibleForAutoPost, parseFacebookConnection } from "@/lib/facebook-connection";
 import {
   publishScheduledVideo as defaultPublishScheduledVideo,
@@ -263,14 +263,10 @@ export async function publishDueScheduledPosts(
   const assessDelivery = deps.assessDelivery ?? assessScheduledPostDelivery;
 
   const duePosts = await client.scheduledPost.findMany({
-    where: {
-      platform: "FACEBOOK",
-      publishStatus: "NOT_STARTED",
-      scheduledDate: { lte: now() },
-      // Detached history rows (clip regenerated after publish) are never publishable.
-      clipId: { not: null },
-      OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now() } }],
-    },
+    // Shared with P2.9's sandbox census, which claims exactly one of these rows would go out if
+    // the global switch were flipped. Two definitions of "due" would make that claim about a
+    // different population than the one this loop walks.
+    where: duePublishWhere(now()),
     orderBy: { scheduledDate: "asc" },
     include: {
       workspace: {

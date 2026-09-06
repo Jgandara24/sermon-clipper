@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePlatformOperator } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { editorialProgramStatus } from "@/lib/review/editorial-program";
 import { listOperatorReviewQueue } from "@/lib/review/query";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,10 @@ export const dynamic = "force-dynamic";
 export default async function OperatorReviewQueuePage() {
   await requirePlatformOperator();
 
-  const rows = await listOperatorReviewQueue(prisma);
+  const [rows, program] = await Promise.all([
+    listOperatorReviewQueue(prisma),
+    editorialProgramStatus(prisma),
+  ]);
 
   return (
     <div className="grid gap-6">
@@ -27,6 +31,43 @@ export default async function OperatorReviewQueuePage() {
           Every scheduled slot awaiting a decision, across every church, soonest first.
         </p>
       </div>
+
+      {/*
+        Where the phase stands, above the work rather than on a page of its own. The reviewer
+        needs two facts while deciding: that their judgement is still the authority, and that the
+        clock is running. A day count that has quietly stopped is the failure worth seeing.
+      */}
+      {program === null ? (
+        <p
+          data-testid="program-not-started"
+          className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600"
+        >
+          The 30-day human-only review phase has not started. Decisions recorded now are real, but
+          they are not counted toward the reference phase.
+        </p>
+      ) : (
+        <div
+          data-testid="program-status"
+          className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600"
+        >
+          <p>
+            <span className="font-medium text-stone-800">
+              Day {program.elapsedDays} of {program.minimumDays}
+            </span>
+            {program.state === "PAUSED"
+              ? " · paused, and delivery is paused with it"
+              : program.minimumMet
+                ? " · minimum served"
+                : ""}
+            {" · your decision is the authority"}
+          </p>
+          {program.agentReviews > 0 ? (
+            <p data-testid="program-contaminated" className="mt-1 text-rose-700">
+              {program.agentReviews} agent-written review(s) landed inside this window.
+            </p>
+          ) : null}
+        </div>
+      )}
 
       {rows.length === 0 ? (
         <p data-testid="review-queue-empty" className="text-sm text-stone-500">

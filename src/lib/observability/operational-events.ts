@@ -16,6 +16,7 @@ export type OperationalEventCategory =
   | "worker"
   | "channel_import"
   | "facebook_publish"
+  | "editorial_program"
   | "cost";
 
 export type OperationalEventInput = {
