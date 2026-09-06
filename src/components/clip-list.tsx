@@ -4,6 +4,7 @@ import { Pencil, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { CandidateStateBadge, candidateStateCopy } from "@/components/candidates/candidate-state-badge";
+import { SourceRangePreview } from "@/components/candidates/source-range-preview";
 import type { CandidatePresentationState } from "@/lib/candidates/project-pool";
 
 /**
@@ -36,6 +37,14 @@ export type Clip = {
   review: { latestDecision: string | null; isAboutBoundRender: boolean };
   /** The older service a borrowed fill came from. Null for this service's own clips. */
   borrowedFromProjectId: string | null;
+  /**
+   * The signed sermon recording this moment is cut from, or null when it has been deleted.
+   *
+   * One URL for the whole service, shared by every candidate — each one plays its own span of it
+   * through byte ranges. Signing one link rather than a dozen is the cheap part; `preload="none"`
+   * is what stops any of them being fetched before somebody asks.
+   */
+  previewUrl: string | null;
   scriptureReferences: Array<{
     id: string;
     normalized: string;
@@ -91,9 +100,13 @@ function renderLine(clip: Clip): string {
 function ClipCard({
   clip,
   onLike,
+  isPreviewOpen,
+  onTogglePreview,
 }: {
   clip: Clip;
   onLike: (id: string, liked: boolean | null) => void;
+  isPreviewOpen: boolean;
+  onTogglePreview: () => void;
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [approval, setApproval] = useState(clip.approval);
@@ -177,6 +190,14 @@ function ClipCard({
             </div>
           ) : null}
           <p className="mt-2 text-xs text-stone-500">{renderLine(clip)}</p>
+          <SourceRangePreview
+            mediaUrl={clip.previewUrl}
+            startMs={clip.startMs}
+            endMs={clip.endMs}
+            isOpen={isPreviewOpen}
+            onToggle={onTogglePreview}
+            label={clip.title}
+          />
           {approval ? (
             <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
               <p>
@@ -296,6 +317,9 @@ const SECTIONS: {
 
 export function ClipList({ initialClips }: { initialClips: Clip[] }) {
   const [clips, setClips] = useState(initialClips);
+  // One preview at a time. Held here rather than in each card so opening a second closes the
+  // first, which is both the plan's rule and the only way a page of candidates stays cheap.
+  const [openPreviewId, setOpenPreviewId] = useState<string | null>(null);
 
   function handleLike(id: string, liked: boolean | null) {
     setClips((prev) => prev.map((clip) => (clip.id === id ? { ...clip, liked } : clip)));
@@ -321,7 +345,15 @@ export function ClipList({ initialClips }: { initialClips: Clip[] }) {
             <p className="mt-1 text-xs text-stone-500">{section.blurb}</p>
             <div className="mt-3 grid gap-3">
               {rows.map((clip) => (
-                <ClipCard key={clip.id} clip={clip} onLike={handleLike} />
+                <ClipCard
+                  key={clip.id}
+                  clip={clip}
+                  onLike={handleLike}
+                  isPreviewOpen={openPreviewId === clip.id}
+                  onTogglePreview={() =>
+                    setOpenPreviewId((current) => (current === clip.id ? null : clip.id))
+                  }
+                />
               ))}
             </div>
           </section>

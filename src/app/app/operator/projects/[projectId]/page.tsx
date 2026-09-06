@@ -51,7 +51,7 @@ export default async function OperatorProjectPage({
       speaker: true,
       workspaceId: true,
       workspace: { select: { name: true } },
-      sourceVideo: { select: { thumbnailKey: true } },
+      sourceVideo: { select: { thumbnailKey: true, storageKey: true } },
     },
   });
   if (!project) notFound();
@@ -66,6 +66,18 @@ export default async function OperatorProjectPage({
   // The same guard the review model runs. This page is one click from the review queue, and a
   // reviewer who has seen the machine's confidence is no longer independent of it (S14).
   assertNoSelectorSignal({ pool, lineage, exceptions }, "operatorProject");
+
+  // One signed link to the church's recording, shared by every candidate preview (P3.4). Signed
+  // for the church, like everything else here. Null once retention has purged the media, so the
+  // preview says so rather than offering a link that 404s.
+  const previewUrl = project.sourceVideo?.storageKey
+    ? createSignedMediaUrl({
+        key: project.sourceVideo.storageKey,
+        workspaceId: project.workspaceId,
+        contentType: "video/mp4",
+        disposition: "inline",
+      })
+    : null;
 
   const thumbnailUrl = project.sourceVideo?.thumbnailKey
     ? createSignedMediaUrl({
@@ -116,7 +128,7 @@ export default async function OperatorProjectPage({
         </div>
       </section>
 
-      <OperatorProjectCandidatePool pool={pool} lineage={lineage} />
+      <OperatorProjectCandidatePool pool={pool} lineage={lineage} previewUrl={previewUrl} />
     </div>
   );
 }

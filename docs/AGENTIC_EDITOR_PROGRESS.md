@@ -42,7 +42,8 @@ build the whole implementation plan in order.
 | P3.1 role-safe candidate-pool read model | done | 2026-09-06; `src/lib/candidates/{project-pool,query}.ts`. Six presentation states, rank preserved, borrowed prior-service fill found through the slot; church shape derived from the operator shape by removal. No production caller yet |
 | P3.2 show the complete actual pool to churches | done | 2026-09-06; the project page and `/api/projects/[id]/clips` now read P3.1's church pool. Selector score, subscores, model version and excerpt removed from both — they were church-visible before this commit |
 | P3.3 cross-workspace operator project view | done | 2026-09-06; `/app/operator/projects/[projectId]`, two components, lineage and exception readers in `review/query.ts`. Reading only — no limit editor, no settings, no publishing |
-| P3.4–P8 | not started | |
+| P3.4 cheap on-demand candidate previews | done | 2026-09-06; `src/components/candidates/source-range-preview.tsx` on both the church and operator pools. One signed recording per service, byte ranges, `preload="none"`, one open at a time, no `ExportJob` ever |
+| P3.5–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -246,6 +247,33 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.4 deviations
+
+**No component unit tests, because there is no component test environment.** The repo has no
+jsdom, happy-dom or testing-library, and `vitest.config.ts` runs in `node`. Adding a browser
+environment and a second config for one component is a larger change than this slice warrants, and
+media behaviour — autoplay policy, `preload`, byte ranges, what a browser actually fetches — is
+exactly what a real browser tests better than a simulated DOM. The plan's "component/E2E tests"
+are therefore all E2E, plus an integration test for the byte-range route they rest on.
+
+**One signed URL per service, not per candidate.** Every preview plays a span of the same sermon
+recording, so the page signs once and each preview seeks into it. Signing a dozen links to the
+same file would cost a dozen HMACs to say the same thing.
+
+**A borrowed prior-service fill gets no preview here.** It is cut from a different service's
+recording, so this service's link would play the wrong sermon. Its own page is where it can be
+previewed. Passing `mediaUrl: null` reuses the unavailable state rather than inventing a second
+one.
+
+**The element is unmounted when closed, as well as `preload="none"`.** Either alone would probably
+do; both together mean a closed preview has no `src` for a browser to be clever about, and the
+"opening a page fetches nothing" test asserts zero `<video>` elements rather than trusting an
+attribute.
+
+**An accessible label broke a test locator, and the label was right.** Each toggle carries the
+candidate's title in an `sr-only` span, so `getByText("Preview candidate 1")` matched the heading
+and the button both. Fixed in the test by asking for the heading role.
 
 ### P3.3 deviations
 

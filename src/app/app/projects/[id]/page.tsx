@@ -65,6 +65,18 @@ export default async function ProjectPage({
   // (summary, scripture, approval, liked) that the pool has no business knowing about. Merged
   // here rather than widening the read model, which would make P3.1 a church-page module.
   const extrasByClipId = new Map(project.generatedClips.map((clip) => [clip.id, clip]));
+
+  // One signed link to the sermon recording, shared by every candidate's preview — each plays its
+  // own span of it through byte ranges (P3.4). Null once retention has purged the media, which is
+  // how the preview learns to say so instead of minting a link that 404s at playback.
+  const previewUrl = project.sourceVideo?.storageKey
+    ? createSignedMediaUrl({
+        key: project.sourceVideo.storageKey,
+        workspaceId: workspace.id,
+        contentType: "video/mp4",
+        disposition: "inline",
+      })
+    : null;
   const candidates = (pool?.candidates ?? []).map((candidate) => {
     const extra = extrasByClipId.get(candidate.clipId);
     return {
@@ -86,6 +98,9 @@ export default async function ProjectPage({
         : null,
       review: candidate.review,
       borrowedFromProjectId: candidate.borrowedFromProjectId,
+      // A borrowed fill is cut from a different service's recording, so this service's link would
+      // play the wrong sermon. Its own page is where it can be previewed.
+      previewUrl: candidate.borrowedFromProjectId === null ? previewUrl : null,
       scriptureReferences: (extra?.scriptureReferences ?? []).map((ref) => ({
         id: ref.id,
         normalized: ref.normalized,
