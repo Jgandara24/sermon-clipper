@@ -9,6 +9,7 @@ import {
   ReviewFeedbackCategory,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ANALYSIS_RETAINED_CLIP_STATUS } from "@/lib/analysis/clip-status";
 import { buildExportIdempotencyKey } from "@/lib/exports/edit-version";
 import { claimNextExportJob } from "@/lib/exports/queue";
 import {
@@ -30,10 +31,18 @@ function nextDate() {
   return new Date(Date.UTC(2041, 0, serial));
 }
 
+/**
+ * A clip shaped the way `analyze.ts` makes one.
+ *
+ * The default was `KEPT` until 2026-09-06, and that single word hid the fact that replacement was
+ * broken for every real sermon: `reserve-policy.ts` promoted only `KEPT`, nothing in production
+ * writes `KEPT`, and every fixture in this file handed it one. The default now comes from the
+ * shared constant, so these tests run against clips the product actually produces.
+ */
 async function createClip(
   projectId: string,
   rank: number,
-  status: GeneratedClipStatus = GeneratedClipStatus.KEPT,
+  status: GeneratedClipStatus = ANALYSIS_RETAINED_CLIP_STATUS,
 ) {
   serial += 1;
   return prisma.generatedClip.create({
@@ -266,10 +275,22 @@ describe("when the sermon has nothing left", () => {
     expect(exception.scheduledPostId).toBe(sermon.slot.id);
   });
 
+  /**
+   * The two states that actually make a clip unpromotable, plus a zero-length one.
+   *
+   * `SUGGESTED` used to be listed here as a third. It is not ineligible — it is what `analyze.ts`
+   * writes for every candidate it retains — and having it in this list is how the file managed to
+   * assert that a pool of real clips was empty. `HIDDEN` is a person's "not this one" and
+   * `SUPERSEDED` has been replaced out once already; those are the exclusions that were meant.
+   *
+   * The policy's third exclusion, a zero-length clip, has no case here: a CHECK constraint
+   * (`generated_clips_start_before_end_chk`) refuses one at the database, so the guard in
+   * `reserve-policy.ts` is defence in depth and is tested where such a value can exist — in the
+   * unit suite, against a plain object.
+   */
   it("counts a pool of only ineligible clips as empty", async () => {
     const sermon = await createSermon("ineligible", []);
     await createClip(sermon.project.id, 2, GeneratedClipStatus.HIDDEN);
-    await createClip(sermon.project.id, 3, GeneratedClipStatus.SUGGESTED);
     await createClip(sermon.project.id, 4, GeneratedClipStatus.SUPERSEDED);
 
     const outcome = await replaceScheduledClip(prisma, {
@@ -309,7 +330,7 @@ describe("what a replacement refuses", () => {
       ).toBe(0);
       await expect(
         prisma.generatedClip.findUniqueOrThrow({ where: { id: sermon.scheduled.id } }),
-      ).resolves.toMatchObject({ status: GeneratedClipStatus.KEPT });
+      ).resolves.toMatchObject({ status: ANALYSIS_RETAINED_CLIP_STATUS });
       await expect(
         prisma.scheduledPost.findUniqueOrThrow({ where: { id: sermon.slot.id } }),
       ).resolves.toMatchObject({ clipId: sermon.scheduled.id });
@@ -329,7 +350,7 @@ describe("what a replacement refuses", () => {
 
     await expect(
       prisma.generatedClip.findUniqueOrThrow({ where: { id: sermon.scheduled.id } }),
-    ).resolves.toMatchObject({ status: GeneratedClipStatus.KEPT });
+    ).resolves.toMatchObject({ status: ANALYSIS_RETAINED_CLIP_STATUS });
     expect(await prisma.exportJob.count({ where: { clipId: sermon.reserves[0].id } })).toBe(0);
     expect(await prisma.clipReview.count({ where: { scheduledPostIdSnapshot: sermon.slot.id } })).toBe(0);
   });

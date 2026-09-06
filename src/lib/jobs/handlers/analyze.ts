@@ -10,6 +10,7 @@ import { INITIAL_EDIT_VERSION } from "@/lib/exports/edit-version";
 import { getAnalysisProvider, type AnalysisProviderSelection } from "@/lib/analysis";
 import { assertReanalysisAllowed } from "@/lib/analysis/reanalysis-policy";
 import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidate-limit";
+import { ANALYSIS_RETAINED_CLIP_STATUS } from "@/lib/analysis/clip-status";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { analysisCallCostFact } from "@/lib/analysis/usage";
@@ -494,7 +495,9 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
           title: clip.title,
           hookText: clip.hookText,
           summary: clip.summary,
-          status: GeneratedClipStatus.SUGGESTED,
+          // Named constant, not the literal: `reserve-policy.ts` has to promote exactly what this
+          // line writes, and the two drifting apart is what broke replacement.
+          status: ANALYSIS_RETAINED_CLIP_STATUS,
         },
       });
 

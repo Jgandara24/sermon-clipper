@@ -1,6 +1,10 @@
 import { GeneratedClipStatus } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  ANALYSIS_RETAINED_CLIP_STATUS,
+  RETAINED_CLIP_STATUSES,
+} from "@/lib/analysis/clip-status";
+import {
   isPromotableReserve,
   selectReserve,
   type ReserveCandidate,
@@ -8,7 +12,9 @@ import {
 
 function candidate(overrides: Partial<ReserveCandidate> & { id: string; rank: number }): ReserveCandidate {
   return {
-    status: GeneratedClipStatus.KEPT,
+    // What `analyze.ts` actually writes. The fixture said `KEPT` until 2026-09-06, which is why
+    // every test in this file agreed that no real clip was promotable.
+    status: ANALYSIS_RETAINED_CLIP_STATUS,
     startMs: 0,
     endMs: 60_000,
     isScheduled: false,
@@ -52,17 +58,30 @@ describe("choosing the next clip in", () => {
   });
 });
 
-describe("what is not a reserve", () => {
-  it("leaves a SUGGESTED clip alone, because nothing ever kept it", () => {
-    // Promoting one would put a clip into a church's feed that the selector produced and then
-    // decided against.
-    const result = selectReserve([
-      candidate({ id: "suggested", rank: 1, status: GeneratedClipStatus.SUGGESTED }),
-      candidate({ id: "kept", rank: 7 }),
-    ]);
-    expect(result.selected?.id).toBe("kept");
+/**
+ * The binding this whole module got wrong.
+ *
+ * `SUGGESTED` reads like "produced but not kept" and is the exact opposite: `analyze.ts` writes it
+ * for every candidate it retains, and nothing writes `KEPT` at all. This file used to assert that
+ * a `SUGGESTED` clip was *not* promotable, which meant no real sermon had a promotable reserve —
+ * a replacement emptied the slot every time. Asserted against the shared constant rather than a
+ * literal, so a change to what analysis writes moves this policy with it.
+ */
+describe("what analysis writes is what may be promoted", () => {
+  it.each(RETAINED_CLIP_STATUSES)("promotes a %s clip", (status) => {
+    expect(isPromotableReserve(candidate({ id: "a", rank: 1, status }), new Set())).toBe(true);
   });
 
+  it("promotes the status the analysis handler actually writes", () => {
+    const result = selectReserve([
+      candidate({ id: "analysed", rank: 1, status: ANALYSIS_RETAINED_CLIP_STATUS }),
+      candidate({ id: "later", rank: 7, status: ANALYSIS_RETAINED_CLIP_STATUS }),
+    ]);
+    expect(result.selected?.id).toBe("analysed");
+  });
+});
+
+describe("what is not a reserve", () => {
   it("leaves a HIDDEN clip alone, because a person already said no to it", () => {
     const result = selectReserve([
       candidate({ id: "hidden", rank: 2, status: GeneratedClipStatus.HIDDEN }),

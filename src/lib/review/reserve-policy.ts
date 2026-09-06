@@ -1,4 +1,5 @@
 import { GeneratedClipStatus } from "@prisma/client";
+import { RETAINED_CLIP_STATUSES } from "@/lib/analysis/clip-status";
 
 /**
  * Which clip takes a rejected one's place.
@@ -30,12 +31,20 @@ export type ReserveSelection =
 /**
  * Statuses a reserve may hold.
  *
- * `KEPT` is what analysis writes for a clip it chose. `SUGGESTED` is not promoted: it is a
- * candidate the selector produced but did not keep, and promoting one would put a clip into a
- * church's feed that nothing ever decided was good enough. `HIDDEN` is a person's "not this one",
- * and `SUPERSEDED` has already been replaced out once.
+ * Read from `RETAINED_CLIP_STATUSES` rather than written out here, because this set had the enum
+ * exactly backwards until 2026-09-06. It held `KEPT` alone, on the reading that `SUGGESTED` meant
+ * a candidate the selector produced and did not keep. `analyze.ts` writes `SUGGESTED` for every
+ * candidate it *does* keep and nothing writes `KEPT` at all, so no reserve was ever promotable:
+ * a replacement superseded the rejected clip, found nothing to put in its place, emptied the slot
+ * and opened an `UNFILLED` exception — every time, for every real sermon.
+ *
+ * Every test agreed with the bug because every fixture set `KEPT` by hand. Pointing at the shared
+ * constant is what stops the writer and this policy drifting apart again.
+ *
+ * `HIDDEN` is a person's "not this one", and `SUPERSEDED` has already been replaced out once.
+ * Those two are the exclusions that were always meant.
  */
-const PROMOTABLE_STATUSES: ReadonlySet<GeneratedClipStatus> = new Set([GeneratedClipStatus.KEPT]);
+const PROMOTABLE_STATUSES: ReadonlySet<GeneratedClipStatus> = new Set(RETAINED_CLIP_STATUSES);
 
 export function isPromotableReserve(
   candidate: ReserveCandidate,
