@@ -40,7 +40,8 @@ build the whole implementation plan in order.
 | P2.8 require exact editorial acceptance | done | 2026-09-06; `src/lib/delivery/{eligibility,query}.ts` now query the standing decision about the exact render. Four identity facts, human reviewer, `ACCEPT`; a retry clears the QC verdict so a rerender cannot inherit one |
 | P2.9 start the human-only program explicitly | done | 2026-09-06; `src/lib/review/{editorial-program,program-key}.ts`, two scripts, `docs/HUMAN_REVIEW_30_DAY_RUNBOOK.md`. Fixed 30 days, no backdating, no restart; a pause extends and also pauses delivery; the sandbox census scans exactly what the publisher scans |
 | P3.1 role-safe candidate-pool read model | done | 2026-09-06; `src/lib/candidates/{project-pool,query}.ts`. Six presentation states, rank preserved, borrowed prior-service fill found through the slot; church shape derived from the operator shape by removal. No production caller yet |
-| P3.2–P8 | not started | |
+| P3.2 show the complete actual pool to churches | done | 2026-09-06; the project page and `/api/projects/[id]/clips` now read P3.1's church pool. Selector score, subscores, model version and excerpt removed from both — they were church-visible before this commit |
+| P3.3–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -244,6 +245,53 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.2 deviations
+
+**A regression P3.1 shipped, and the reading behind it.** `GeneratedClipStatus.SUGGESTED` reads as
+"the selector produced this and did not keep it", and P3.1's pool excluded it on that basis. It is
+not what the enum means here: `analyze.ts` writes `SUGGESTED` for **every** candidate it retains,
+and nothing in production ever writes `KEPT` — only a manual `PATCH /api/clips/[id]` can, and no
+surface calls it. Excluding `SUGGESTED` therefore emptied the project page for every normally
+analysed sermon. Every integration and unit fixture created clips as `KEPT` explicitly, so nothing
+caught it until an end-to-end test walked the real analysis path. The pool now holds all four
+statuses, and `RESERVE` covers both `SUGGESTED` and `KEPT`.
+
+**The same misreading is live in P2.7, and is not fixed here.** `reserve-policy.ts` promotes only
+`KEPT`, so in production a replacement finds no eligible reserve for any normally analysed sermon:
+it supersedes the rejected clip, empties the slot, and opens an `UNFILLED` exception every time.
+Its tests pass because every fixture sets `KEPT` by hand. Left for its own commit rather than
+folded into a church-UI change — see the open items below.
+
+**Two e2e tests asserted the behaviour this commit removes.** `phase-6-7-reviewed-export.spec.ts`
+opened the "Show score breakdown" control and checked each subscore label was visible. Rewritten
+to assert the same four labels are absent, because "these words must not reach this page" is worth
+a test of its own and this is the page that used to show them.
+
+
+
+**This commit removed something churches could already see.** The project page and the clips API
+both carried the Selector's score, its subscores, the model version and the quoted excerpt — a
+score tile, a colour-coded tone, and a "show score breakdown" toggle. Plan §2.2 says no
+church-facing response, page, or label exposes them, so all of it is gone. The `score` relation is
+no longer selected in either place: not selected is a stronger guarantee than selected-and-dropped.
+
+**Card titles moved from `h3` to `h4`.** The list gained a section layer (going out / in reserve /
+set aside), so the section heading is the `h3` and the cards below it are `h4`. Found because an
+e2e selector reading `h3` picked up the section heading; fixed in the markup rather than in the
+selector, because the heading order was the thing that was wrong.
+
+**One e2e assertion had to be rewritten, and the reason is worth keeping.** `expect(html).not
+.toContain("93")` — the fixture's score total — fails against any page, because two-digit numbers
+appear inside Next's chunk hashes. Distinctive strings (the model version, the excerpt) are checked
+against the raw HTML where they could hide in an attribute; the numeric total is checked against
+the page's visible text, which is where a leaked score would actually show.
+
+**The page merges the pool with the church-only extras rather than widening P3.1.** Summary,
+scripture references, approval state and the like/dislike flag are church-page concerns; teaching
+the pool read model about them would make P3.1 a church-page module. A borrowed prior-service fill
+has no row in this service's clip list, so it renders with the facts the slot supplies and a
+sentence saying where it came from — nothing invented to fill the gap.
 
 ### P3.1 deviations
 
@@ -850,6 +898,17 @@ Settled, And It Split In Two", and `npm run audit:caption-faces`.
 ---
 
 ## Open items not owned by any commit yet
+
+- **`reserve-policy.ts` promotes only `KEPT`, and nothing writes `KEPT`.** `analyze.ts` writes
+  `SUGGESTED` for every retained candidate; the only `KEPT` writer is a manual
+  `PATCH /api/clips/[id]` that no surface calls. So P2.7's replacement command finds
+  `NO_ELIGIBLE_RESERVE` for any normally analysed sermon — it supersedes the rejected clip, clears
+  both bindings, sets the slot `UNFILLED` and opens an exception, every time. Every replacement
+  test passes because its fixtures set `KEPT` by hand. Found 2026-09-06 while fixing the same
+  misreading in P3.1's pool. The fix is a one-line change to `PROMOTABLE_STATUSES` plus a fixture
+  that uses the status analysis actually writes, but it belongs in its own commit with its own
+  integration test rather than inside a church-UI change. **Do this before the Gate C replacement
+  smoke test** — that smoke test would otherwise fail for this reason and look like a P2.7 bug.
 
 - **OpenAI adapter.** The policy schema reserves `openai`, but the activation command refuses it
   until an adapter and benchmark exist.

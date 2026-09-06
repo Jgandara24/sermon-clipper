@@ -120,6 +120,26 @@ describe("classifyCandidate", () => {
     expect(classifyCandidate(clip(moved), THIS_SERVICE)).toBe("SUPERSEDED");
   });
 
+  /**
+   * The reading that emptied every church's project page until an end-to-end test caught it.
+   *
+   * `SUGGESTED` looks like "produced but not kept". It is not: `analyze.ts` writes it for every
+   * candidate it retains, and nothing in production ever writes `KEPT`. A classifier that treats
+   * `SUGGESTED` as rejected therefore rejects the entire pool.
+   */
+  it.each([GeneratedClipStatus.SUGGESTED, GeneratedClipStatus.KEPT])(
+    "calls an unused %s clip a reserve, because both are what a retained clip holds",
+    (status) => {
+      expect(classifyCandidate(clip({ status }), THIS_SERVICE)).toBe("RESERVE");
+    },
+  );
+
+  it("schedules a SUGGESTED clip like any other once a slot holds it", () => {
+    expect(
+      classifyCandidate(clip({ status: GeneratedClipStatus.SUGGESTED, slot: slot() }), THIS_SERVICE),
+    ).toBe("SCHEDULED");
+  });
+
   it("calls a clip somebody put away hidden", () => {
     expect(classifyCandidate(clip({ status: GeneratedClipStatus.HIDDEN }), THIS_SERVICE)).toBe(
       "HIDDEN",

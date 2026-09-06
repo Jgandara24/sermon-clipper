@@ -1,10 +1,20 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Pencil, Send, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Pencil, Send, ThumbsDown, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { CandidateStateBadge, candidateStateCopy } from "@/components/candidates/candidate-state-badge";
+import type { CandidatePresentationState } from "@/lib/candidates/project-pool";
 
-type Subscore = { score: number; letter: string; note: string };
+/**
+ * The clips of one service, as the church sees them.
+ *
+ * **No selector signal appears here, and the type is what enforces it.** The score, its
+ * subscores, the model that produced them and the excerpt it quoted were all on this card until
+ * P3.2 and are all gone: §2.2 of the plan says no church-facing page exposes them, and a field
+ * the type does not have cannot be rendered by accident. The same removal happened in the API
+ * route that feeds this list.
+ */
 
 export type Clip = {
   id: string;
@@ -16,12 +26,16 @@ export type Clip = {
   summary: string;
   status: string;
   liked: boolean | null;
-  score: {
-    total: number;
-    subscores: Record<string, Subscore>;
-    modelVersion: string;
-    excerpt: string;
-  } | null;
+  /** Where this clip stands in the service: scheduled, reserve, retired (P3.1). */
+  state: CandidatePresentationState;
+  /** The date it is booked for, when it is booked. */
+  scheduledDate: string | null;
+  /** Whether a final file exists for it yet, and how that render is doing. */
+  finalRender: { state: string; qcStatus: string | null } | null;
+  /** The standing decision, and whether it was made about the file booked now. */
+  review: { latestDecision: string | null; isAboutBoundRender: boolean };
+  /** The older service a borrowed fill came from. Null for this service's own clips. */
+  borrowedFromProjectId: string | null;
   scriptureReferences: Array<{
     id: string;
     normalized: string;
@@ -42,11 +56,36 @@ function formatTimestamp(ms: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function scoreTone(total: number) {
-  if (total >= 85) return "bg-emerald-700";
-  if (total >= 70) return "bg-teal-700";
-  if (total >= 50) return "bg-amber-600";
-  return "bg-stone-500";
+function formatDay(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * What a church is told about the final file, in one line.
+ *
+ * A reserve has no final render and that is correct rather than a failure, so it says what a
+ * reserve *is* — a preview of the source — instead of reporting an absence. Only scheduled clips
+ * are rendered (P2.4), and saying so here is what stops "no final file" reading as a fault.
+ */
+function renderLine(clip: Clip): string {
+  if (clip.state === "RESERVE") {
+    return candidateStateCopy("RESERVE").description;
+  }
+  if (!clip.finalRender) {
+    return "Final file: not started yet.";
+  }
+  const qc = clip.finalRender.qcStatus ? ` · quality check ${clip.finalRender.qcStatus.toLowerCase()}` : "";
+  const decision = clip.review.latestDecision
+    ? clip.review.isAboutBoundRender
+      ? ` · reviewed: ${clip.review.latestDecision.toLowerCase()}`
+      : " · reviewed, but that was an earlier version of the file"
+    : " · not reviewed yet";
+  return `Final file: ${clip.finalRender.state.toLowerCase()}${qc}${decision}`;
 }
 
 function ClipCard({
@@ -56,7 +95,6 @@ function ClipCard({
   clip: Clip;
   onLike: (id: string, liked: boolean | null) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [approval, setApproval] = useState(clip.approval);
   const [reviewerEmail, setReviewerEmail] = useState("");
@@ -108,10 +146,19 @@ function ClipCard({
     <article className="rounded-lg border border-stone-200 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
-            Rank {clip.rank} · {formatTimestamp(clip.startMs)}–{formatTimestamp(clip.endMs)}
+          <div className="flex flex-wrap items-center gap-2">
+            <CandidateStateBadge state={clip.state} />
+            {clip.scheduledDate ? (
+              <span className="text-xs font-medium text-stone-600">
+                {formatDay(clip.scheduledDate)}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-xs font-medium uppercase tracking-wide text-stone-500">
+            Rank {clip.rank} · {formatTimestamp(clip.startMs)}–{formatTimestamp(clip.endMs)} ·{" "}
+            {Math.round((clip.endMs - clip.startMs) / 1000)}s
           </p>
-          <h3 className="mt-1 text-base font-semibold">{clip.title}</h3>
+          <h4 className="mt-1 text-base font-semibold">{clip.title}</h4>
           {clip.hookText ? (
             <p className="mt-1 text-sm italic text-stone-500">&quot;{clip.hookText}&quot;</p>
           ) : null}
@@ -129,6 +176,7 @@ function ClipCard({
               ))}
             </div>
           ) : null}
+          <p className="mt-2 text-xs text-stone-500">{renderLine(clip)}</p>
           {approval ? (
             <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
               <p>
@@ -147,39 +195,8 @@ function ClipCard({
               ) : null}
             </div>
           ) : null}
-          {clip.score ? (
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-teal-800 hover:underline"
-            >
-              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              {expanded ? "Hide" : "Show"} score breakdown
-            </button>
-          ) : null}
-          {expanded && clip.score ? (
-            <div className="mt-3 grid gap-2 rounded-md bg-stone-50 p-3 sm:grid-cols-2">
-              {Object.entries(clip.score.subscores).map(([key, sub]) => (
-                <div key={key} className="text-xs">
-                  <p className="font-medium text-stone-700">
-                    {key.replace(/_/g, " ")}: {sub.letter} ({sub.score})
-                  </p>
-                  <p className="text-stone-500">{sub.note}</p>
-                </div>
-              ))}
-              <p className="col-span-full mt-1 text-xs text-stone-400">
-                Scored by {clip.score.modelVersion}
-              </p>
-            </div>
-          ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          {clip.score ? (
-            <div className={`rounded-lg px-4 py-3 text-center text-white ${scoreTone(clip.score.total)}`}>
-              <p className="text-xs">Score</p>
-              <p className="text-2xl font-semibold">{clip.score.total}</p>
-            </div>
-          ) : null}
           <div className="flex gap-1">
             <Link
               href={`/app/clips/${clip.id}/editor`}
@@ -248,6 +265,35 @@ function ClipCard({
   );
 }
 
+/** The three groups, in the order a church cares about them. */
+const SECTIONS: {
+  id: string;
+  heading: string;
+  blurb: string;
+  states: CandidatePresentationState[];
+}[] = [
+  {
+    id: "scheduled",
+    heading: "Going out",
+    blurb: "Booked for a date. These are the clips that get a final file.",
+    states: ["SCHEDULED", "SELECTED_REPLACEMENT", "PRIOR_SERVICE_FILL"],
+  },
+  {
+    id: "reserves",
+    heading: "In reserve",
+    blurb:
+      "Ready to step in if a scheduled clip is set aside. They are previewed from the sermon " +
+      "recording and are not rendered until one is chosen.",
+    states: ["RESERVE"],
+  },
+  {
+    id: "retired",
+    heading: "Set aside",
+    blurb: "Kept so past decisions stay readable.",
+    states: ["SUPERSEDED", "HIDDEN"],
+  },
+];
+
 export function ClipList({ initialClips }: { initialClips: Clip[] }) {
   const [clips, setClips] = useState(initialClips);
 
@@ -257,17 +303,30 @@ export function ClipList({ initialClips }: { initialClips: Clip[] }) {
 
   if (clips.length === 0) {
     return (
-      <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      <p data-testid="candidate-pool-empty" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         No clips yet — they will appear once analysis finishes.
       </p>
     );
   }
 
   return (
-    <div className="grid gap-3">
-      {clips.map((clip) => (
-        <ClipCard key={clip.id} clip={clip} onLike={handleLike} />
-      ))}
+    <div className="grid gap-6">
+      {SECTIONS.map((section) => {
+        // Rank order is preserved from the pool; filtering never reorders.
+        const rows = clips.filter((clip) => section.states.includes(clip.state));
+        if (rows.length === 0) return null;
+        return (
+          <section key={section.id} data-testid={`candidate-section-${section.id}`}>
+            <h3 className="text-sm font-semibold text-stone-800">{section.heading}</h3>
+            <p className="mt-1 text-xs text-stone-500">{section.blurb}</p>
+            <div className="mt-3 grid gap-3">
+              {rows.map((clip) => (
+                <ClipCard key={clip.id} clip={clip} onLike={handleLike} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

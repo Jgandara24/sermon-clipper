@@ -29,7 +29,15 @@ import { readCandidateLimitOverride } from "@/lib/operations/candidate-limit-ove
 
 type PoolQueryClient = PrismaClient | Prisma.TransactionClient;
 
+/**
+ * Every status a retained clip can hold — which is all four.
+ *
+ * `SUGGESTED` is not "rejected": `analyze.ts` writes it for every candidate it keeps, and nothing
+ * in production writes `KEPT` at all. Filtering `SUGGESTED` out empties the pool for every
+ * normally analysed sermon, which is exactly what it did before an end-to-end test caught it.
+ */
 const POOL_STATUSES = [
+  GeneratedClipStatus.SUGGESTED,
   GeneratedClipStatus.KEPT,
   GeneratedClipStatus.HIDDEN,
   GeneratedClipStatus.SUPERSEDED,

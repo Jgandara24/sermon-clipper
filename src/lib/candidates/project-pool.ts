@@ -12,10 +12,14 @@ import type {
  * Pure. Every fact arrives as an argument, so the classification has a truth table of its own and
  * the query module is the only place that knows how to load anything.
  *
- * The pool is the *retained* set. `SUGGESTED` clips — the ones the selector produced and did not
- * keep — are deliberately absent: none of the six presentation states describes one, they can
- * never be promoted (`reserve-policy.ts`), and showing a church a list of moments the machine
- * rejected invites an argument about work nobody is going to do.
+ * The pool is the retained set, and in this codebase that means `SUGGESTED` **and** `KEPT`.
+ *
+ * The enum reads as though `SUGGESTED` were "produced but not kept". It is not: `analyze.ts`
+ * writes `SUGGESTED` for every candidate it retains, and nothing in production ever writes `KEPT`
+ * — only a manual `PATCH /api/clips/[id]` can, and no surface calls it. So `SUGGESTED` is the
+ * ordinary state of a clip in the pool, and excluding it empties every church's project page.
+ * `HIDDEN` and `SUPERSEDED` are the two states a person or a replacement actually moves a clip
+ * into, and those are the two the pool sets apart.
  */
 
 export type CandidatePresentationState =
@@ -94,6 +98,8 @@ export function classifyCandidate(
   // clip that has been replaced out is not a reserve, whichever field says so.
   if (clip.supersededAt !== null || clip.status === "SUPERSEDED") return "SUPERSEDED";
   if (clip.status === "HIDDEN") return "HIDDEN";
+  // Everything else — `SUGGESTED` as analysis writes it, `KEPT` as a person may set it — is a
+  // clip this service produced that nothing has used yet.
   return "RESERVE";
 }
 

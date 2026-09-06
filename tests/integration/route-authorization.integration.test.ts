@@ -109,6 +109,7 @@ type RouteSpec = {
 const sessionTokens = {} as Record<WorkspaceRole, string>;
 const fixtures = {
   workspaceAId: "",
+  ownProjectId: "",
   workspaceBId: "",
   foreignVideoId: "",
   foreignProjectId: "",
@@ -407,6 +408,50 @@ beforeAll(async () => {
       },
     });
   }
+
+  // Workspace A's own service, scored by the Selector. The score exists precisely so the leak
+  // test below is proving a removal rather than an absence: a response that omits a field nothing
+  // wrote proves nothing at all.
+  const videoA = await prisma.sourceVideo.create({
+    data: {
+      workspaceId: fixtures.workspaceAId,
+      origin: "UPLOAD",
+      filename: "own.mp4",
+      storageKey: `src/${fixtures.workspaceAId}/own.mp4`,
+      language: "en",
+    },
+  });
+  const projectA = await prisma.project.create({
+    data: {
+      workspaceId: fixtures.workspaceAId,
+      name: "Own Project",
+      sourceVideoId: videoA.id,
+      processingConfig: { targetClipCount: 6, candidateLimit: 18 },
+    },
+  });
+  fixtures.ownProjectId = projectA.id;
+  const clipA = await prisma.generatedClip.create({
+    data: {
+      workspaceId: fixtures.workspaceAId,
+      projectId: projectA.id,
+      rank: 1,
+      startMs: 0,
+      endMs: 30_000,
+      title: "Own Clip",
+      summary: "A clip belonging to workspace A.",
+      status: "KEPT",
+    },
+  });
+  await prisma.clipScore.create({
+    data: {
+      workspaceId: fixtures.workspaceAId,
+      clipId: clipA.id,
+      total: 91,
+      subscores: { hook: { score: 9, letter: "A", note: "Strong opening line." } },
+      modelVersion: "selector-test-1",
+      excerpt: "A quoted sentence the Selector leaned on.",
+    },
+  });
 
   // Workspace B: a foreign tenant owning one of each resource the routes can address by id.
   const ownerB = await prisma.user.create({ data: { email: uniqueEmail("owner-b") } });
@@ -772,6 +817,56 @@ describe("route authorization matrix", () => {
           },
         });
       }
+    });
+  });
+
+  /**
+   * What a church's own successful response is allowed to contain (P3.2).
+   *
+   * The authorization matrix above proves nobody reaches another tenant's data. This proves the
+   * narrower thing: that a church reaching its *own* data is still not handed the Selector's
+   * opinion of its sermon, or the configured ceiling behind the pool (plan §2.2, product-owner
+   * Decision 1).
+   *
+   * Asserted on the whole serialised body rather than on named fields, because the failure being
+   * guarded against is a field somebody adds later without thinking about who reads it.
+   */
+  describe("a church's own clips response leaks no internal fact", () => {
+    const FORBIDDEN = [
+      // The Selector's opinion.
+      "score",
+      "subscores",
+      "modelVersion",
+      "excerpt",
+      "rationale",
+      // The configured pool ceiling and the staff-only override behind it.
+      "masterDefault",
+      "masterMaximum",
+      "hardMaximum",
+      "candidateLimit",
+      "hiddenOverride",
+      "effectiveSnapshot",
+      "internalOperations",
+    ];
+
+    it("returns the clip without any of them, though the score row exists", async () => {
+      const response = await callRoute(
+        ROUTES.find((spec) => spec.file === "projects/[id]/clips/route.ts")!,
+        sessionTokens[WorkspaceRole.OWNER],
+        { id: fixtures.ownProjectId },
+      );
+      expect(response.status).toBe(200);
+
+      const body = await response.text();
+      expect(body).toContain("Own Clip");
+      for (const forbidden of FORBIDDEN) {
+        expect(body).not.toContain(forbidden);
+      }
+
+      // And the count it does report is the pool's actual size, not a ceiling.
+      const parsed = JSON.parse(body) as { data: { retainedCount: number; clips: unknown[] } };
+      expect(parsed.data.retainedCount).toBe(1);
+      expect(parsed.data.clips).toHaveLength(1);
     });
   });
 });
