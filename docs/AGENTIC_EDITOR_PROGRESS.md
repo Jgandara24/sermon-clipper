@@ -41,7 +41,8 @@ build the whole implementation plan in order.
 | P2.9 start the human-only program explicitly | done | 2026-09-06; `src/lib/review/{editorial-program,program-key}.ts`, two scripts, `docs/HUMAN_REVIEW_30_DAY_RUNBOOK.md`. Fixed 30 days, no backdating, no restart; a pause extends and also pauses delivery; the sandbox census scans exactly what the publisher scans |
 | P3.1 role-safe candidate-pool read model | done | 2026-09-06; `src/lib/candidates/{project-pool,query}.ts`. Six presentation states, rank preserved, borrowed prior-service fill found through the slot; church shape derived from the operator shape by removal. No production caller yet |
 | P3.2 show the complete actual pool to churches | done | 2026-09-06; the project page and `/api/projects/[id]/clips` now read P3.1's church pool. Selector score, subscores, model version and excerpt removed from both — they were church-visible before this commit |
-| P3.3–P8 | not started | |
+| P3.3 cross-workspace operator project view | done | 2026-09-06; `/app/operator/projects/[projectId]`, two components, lineage and exception readers in `review/query.ts`. Reading only — no limit editor, no settings, no publishing |
+| P3.4–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -245,6 +246,30 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.3 deviations
+
+**The operator pool gained `slots`; the church shape does not inherit it.** A slot holding nothing
+— what P2.7 leaves when a replacement finds no reserve — has no candidate row, so it was invisible
+in the pool read model. An operator inspecting a service has to see the empty date; it is the one
+needing action. `toChurchPool` drops it along with `limits`, because P3.2 deliberately built the
+church view around clips and changing what a church sees is a decision of its own.
+
+**No selector facts on the operator page either.** The plan only requires hiding them from
+churches. This page is one click from the review queue, and S14 is about reviewers rather than
+about churches, so the page runs the same `assertNoSelectorSignal` guard the review model runs.
+
+**An exact-key-set assertion caught the new field, which is what it is for.**
+`operator-review-query.integration.test.ts` pins the queue row's whole shape rather than searching
+for a score's value — its own comment records that hunting a two-digit number through a blob of
+UUIDs found "87" inside one. Adding `projectId` failed it, correctly; the field is now recorded
+there as a chosen one.
+
+**The same two-digit trap, twice more.** An e2e assertion that the score total "88" was absent from
+visible text failed because the generated operator email contains a timestamp with 88 in it. The
+label is what a leak looks like, so the assertions check for "Score" and the distinctive strings
+instead. That makes three times in this session — it is a property of asserting absence of short
+substrings in a page, not of any one test.
 
 ### The `SUGGESTED` misreading, fixed 2026-09-06
 

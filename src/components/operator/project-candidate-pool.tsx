@@ -1,0 +1,209 @@
+import Link from "next/link";
+import { CandidateStateBadge } from "@/components/candidates/candidate-state-badge";
+import type { OperatorProjectPool } from "@/lib/candidates/project-pool";
+import type { ReplacementLineageRow } from "@/lib/review/query";
+
+/**
+ * A service's whole pool, as staff see it.
+ *
+ * Two things separate this from the church view (`clip-list.tsx`): the internal limits that
+ * explain why the pool is the size it is, and the posting dates themselves — including any left
+ * empty, which have no candidate row and are the ones needing action.
+ *
+ * The Selector's opinion is absent here too. The plan only requires hiding it from churches, but
+ * S14 is about reviewers: someone who has seen the machine's confidence is no longer an
+ * independent judgement of the machine's work, and this page sits one click from the review queue.
+ */
+
+function formatDay(date: Date | string) {
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function formatRange(startMs: number, endMs: number) {
+  const stamp = (ms: number) => {
+    const total = Math.floor(ms / 1000);
+    return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, "0")}`;
+  };
+  return `${stamp(startMs)}–${stamp(endMs)}`;
+}
+
+export function OperatorProjectCandidatePool({
+  pool,
+  lineage,
+}: {
+  pool: OperatorProjectPool;
+  lineage: ReplacementLineageRow[];
+}) {
+  return (
+    <div className="grid gap-6">
+      <section
+        data-testid="operator-pool-limits"
+        className="rounded-lg border border-stone-200 bg-white p-4 text-sm"
+      >
+        <h2 className="font-semibold">Pool size</h2>
+        <p className="mt-1 text-stone-600">
+          <span data-testid="operator-pool-count" className="font-medium text-stone-900">
+            {pool.retainedCount} retained
+          </span>{" "}
+          against a ceiling of {pool.limits.effectiveSnapshot} frozen into this service.
+        </p>
+        {/*
+          Staff-only, all of it. These are the facts a church must never see (§2.2), shown here
+          because "why is this pool 12 and not 18" is otherwise unanswerable without a database.
+          There is deliberately no control to change any of them — `npm run
+          set:candidate-limit-override` is the only door, and this page grants no such authority.
+        */}
+        <dl className="mt-3 grid gap-2 text-xs text-stone-600 sm:grid-cols-3">
+          <div>
+            <dt className="text-stone-500">Master default</dt>
+            <dd className="font-medium">{pool.limits.masterDefault}</dd>
+          </div>
+          <div>
+            <dt className="text-stone-500">Hard maximum</dt>
+            <dd className="font-medium">{pool.limits.hardMaximum}</dd>
+          </div>
+          <div>
+            <dt className="text-stone-500">Church override</dt>
+            <dd className="font-medium">
+              {pool.limits.hiddenOverride === null ? "none" : pool.limits.hiddenOverride}
+            </dd>
+          </div>
+        </dl>
+        {!pool.renderSourceAvailable ? (
+          <p data-testid="operator-source-purged" className="mt-3 text-amber-800">
+            The sermon recording has been purged, so nothing in this pool can be rendered.
+          </p>
+        ) : null}
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-stone-800">Posting dates</h2>
+        <ul data-testid="operator-slots" className="mt-2 grid gap-2">
+          {pool.slots.length === 0 ? (
+            <li className="text-sm text-stone-500">This service owns no posting dates.</li>
+          ) : (
+            pool.slots.map((slot) => (
+              <li
+                key={slot.scheduledPostId}
+                data-testid={slot.clipId ? "operator-slot-filled" : "operator-slot-empty"}
+                className={`rounded-md border p-3 text-sm ${
+                  slot.clipId ? "border-stone-200 bg-white" : "border-amber-200 bg-amber-50"
+                }`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{formatDay(slot.scheduledDate)}</span>
+                  <span className="text-xs uppercase tracking-wide text-stone-500">
+                    {slot.publishStatus.replace(/_/g, " ")}
+                  </span>
+                  <Link
+                    href={`/app/operator/review/${slot.scheduledPostId}`}
+                    className="text-xs text-teal-800 underline"
+                  >
+                    Review this date
+                  </Link>
+                </div>
+                <p className="mt-1 text-xs text-stone-500">
+                  {slot.clipId
+                    ? slot.boundRender
+                      ? `Render ${slot.boundRender.state.toLowerCase()}${
+                          slot.boundRender.qcStatus
+                            ? ` · QC ${slot.boundRender.qcStatus.toLowerCase()}`
+                            : ""
+                        }`
+                      : "No render bound yet."
+                    : "No clip in this date. A replacement found no reserve, or none was allocated."}
+                </p>
+              </li>
+            ))
+          )}
+        </ul>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-stone-800">Every candidate</h2>
+        <ul data-testid="operator-candidates" className="mt-2 grid gap-2">
+          {pool.candidates.map((candidate) => (
+            <li
+              key={candidate.clipId}
+              className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <CandidateStateBadge state={candidate.state} />
+                <span className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                  Rank {candidate.rank} · {formatRange(candidate.sourceRange.startMs, candidate.sourceRange.endMs)}{" "}
+                  · {Math.round(candidate.durationMs / 1000)}s
+                </span>
+                {candidate.scheduledDate ? (
+                  <span className="text-xs text-stone-600">
+                    {formatDay(candidate.scheduledDate)}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 font-medium">{candidate.title}</p>
+              {candidate.hook ? (
+                <p className="mt-0.5 text-xs italic text-stone-500">
+                  &quot;{candidate.hook}&quot;
+                </p>
+              ) : null}
+              <p className="mt-1 text-xs text-stone-500">
+                {candidate.review.latestDecision
+                  ? candidate.review.isAboutBoundRender
+                    ? `Decision: ${candidate.review.latestDecision}`
+                    : `Decision: ${candidate.review.latestDecision} (about an earlier file)`
+                  : "No decision recorded."}
+                {candidate.borrowedFromProjectId
+                  ? " · borrowed from an earlier service"
+                  : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-stone-800">Replacement lineage</h2>
+        {lineage.length === 0 ? (
+          <p data-testid="operator-lineage-empty" className="mt-2 text-sm text-stone-500">
+            No clip in this service has been replaced.
+          </p>
+        ) : (
+          <ol data-testid="operator-lineage" className="mt-2 grid gap-2">
+            {lineage.map((row) => (
+              <li
+                key={row.clipReviewId}
+                className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+              >
+                <p className="text-xs text-stone-500">
+                  {formatDay(row.decidedAt)}
+                  {row.reviewerEmail ? ` · ${row.reviewerEmail}` : ""}
+                </p>
+                <p className="mt-1">
+                  <span className="font-medium">
+                    Rank {row.rejected.rank}
+                    {row.rejected.title ? ` — ${row.rejected.title}` : " (clip since deleted)"}
+                  </span>
+                  {" was set aside, "}
+                  {row.promoted ? (
+                    <span className="font-medium">rank {row.promoted.rank} took its date</span>
+                  ) : (
+                    /* The empty-pool replacement. The most important lineage row there is. */
+                    <span className="font-medium text-amber-800">
+                      and nothing was available to take its date
+                    </span>
+                  )}
+                  .
+                </p>
+                {row.note ? <p className="mt-1 text-xs text-stone-600">{row.note}</p> : null}
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    </div>
+  );
+}

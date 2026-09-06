@@ -191,6 +191,8 @@ describe("the cross-workspace queue", () => {
         "latestDecisionAt",
         "latestDecisionIsCurrent",
         "platform",
+        // Added by P3.3 so the queue can link to the whole service behind one date.
+        "projectId",
         "projectName",
         "publishStatus",
         "qcStatus",

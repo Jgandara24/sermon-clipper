@@ -87,7 +87,20 @@ export default async function OperatorReviewQueuePage() {
                 {row.clipTitle}
               </Link>
               <p className="mt-1 text-sm text-stone-500">
-                {row.churchName} · {row.projectName} ·{" "}
+                {row.churchName} ·{" "}
+                {/* The service, not just its name: an operator deciding one date usually wants
+                    the whole pool behind it. Null once the service has been deleted. */}
+                {row.projectId ? (
+                  <Link
+                    href={`/app/operator/projects/${row.projectId}`}
+                    className="text-teal-800 underline"
+                  >
+                    {row.projectName}
+                  </Link>
+                ) : (
+                  row.projectName
+                )}{" "}
+                ·{" "}
                 {new Date(row.scheduledDate).toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",

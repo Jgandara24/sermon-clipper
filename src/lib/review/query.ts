@@ -3,6 +3,7 @@ import {
   RenderQcStatus,
   SchedulePublishStatus,
   type ClipReviewDecision,
+  type EditorialExceptionState,
   type PrismaClient,
   type ReviewFeedbackActionability,
   type ReviewFeedbackCategory,
@@ -31,6 +32,8 @@ export type OperatorReviewQueueRow = {
   scheduledPostId: string;
   workspaceId: string;
   churchName: string;
+  /** Null once the service has been deleted; the slot's own row outlives it. */
+  projectId: string | null;
   projectName: string;
   scheduledDate: string;
   platform: SocialPlatform;
@@ -72,6 +75,8 @@ export type OperatorReviewDetail = {
   scheduledPostId: string;
   workspaceId: string;
   churchName: string;
+  /** Null once the service has been deleted; the slot's own row outlives it. */
+  projectId: string | null;
   projectName: string;
   scheduledDate: string;
   platform: SocialPlatform;
@@ -180,6 +185,7 @@ export async function listOperatorReviewQueue(
       scheduledPostId: slot.id,
       workspaceId: slot.workspaceId,
       churchName: slot.workspace.name,
+      projectId: slot.projectId,
       projectName: slot.project?.name ?? "Deleted project",
       scheduledDate: slot.scheduledDate.toISOString(),
       platform: slot.platform,
@@ -283,6 +289,7 @@ export async function loadOperatorReviewDetail(
     scheduledPostId: slot.id,
     workspaceId: slot.workspace.id,
     churchName: slot.workspace.name,
+    projectId: slot.projectId,
     projectName: slot.project?.name ?? "Deleted project",
     scheduledDate: slot.scheduledDate.toISOString(),
     platform: slot.platform,
@@ -328,4 +335,109 @@ export async function loadOperatorReviewDetail(
   // something nobody chose. Checked with the rest.
   assertNoSelectorSignal(detail);
   return detail;
+}
+
+
+/**
+ * How a service's slots came to hold what they hold.
+ *
+ * One row per `REPLACE`, oldest first — the clip that was rejected, the clip that took its place,
+ * and the reviewer who decided. Read from the decision's immutable snapshots rather than from the
+ * live links, so a lineage stays readable after reanalysis deletes a clip or retention deletes an
+ * export. That is the whole reason those snapshot columns exist.
+ *
+ * A `REPLACE` that found no reserve has no replacement clip. It is still lineage — the most
+ * important kind — so it is returned with `promoted: null` rather than filtered out.
+ */
+export type ReplacementLineageRow = {
+  clipReviewId: string;
+  decidedAt: string;
+  reviewerEmail: string | null;
+  scheduledPostId: string;
+  rejected: { clipId: string; rank: number; title: string | null };
+  promoted: { clipId: string; rank: number | null } | null;
+  note: string | null;
+};
+
+export async function replacementLineageForProject(
+  client: Pick<PrismaClient, "clipReview" | "generatedClip">,
+  projectId: string,
+): Promise<ReplacementLineageRow[]> {
+  const replacements = await client.clipReview.findMany({
+    where: { projectIdSnapshot: projectId, decision: "REPLACE" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    include: { reviewer: { select: { email: true } } },
+  });
+
+  // Titles come from the clips that still exist; a deleted one keeps its rank from the snapshot
+  // and simply has no title to show. Looked up in one query rather than per row.
+  const clipIds = replacements
+    .flatMap((row) => [row.clipIdSnapshot, row.replacementClipIdSnapshot])
+    .filter((id): id is string => Boolean(id));
+  const titles = new Map(
+    clipIds.length > 0
+      ? (
+          await client.generatedClip.findMany({
+            where: { id: { in: clipIds } },
+            select: { id: true, title: true },
+          })
+        ).map((clip) => [clip.id, clip.title])
+      : [],
+  );
+
+  return replacements.map((row) => ({
+    clipReviewId: row.id,
+    decidedAt: row.createdAt.toISOString(),
+    reviewerEmail: row.reviewer?.email ?? null,
+    scheduledPostId: row.scheduledPostIdSnapshot,
+    rejected: {
+      clipId: row.clipIdSnapshot,
+      rank: row.clipRank,
+      title: titles.get(row.clipIdSnapshot) ?? null,
+    },
+    promoted: row.replacementClipIdSnapshot
+      ? {
+          clipId: row.replacementClipIdSnapshot,
+          rank: row.replacementClipRank,
+        }
+      : null,
+    note: row.note,
+  }));
+}
+
+/** Every exception raised against a service, open ones first, then the resolved history. */
+export type EditorialExceptionRow = {
+  id: string;
+  exceptionType: string;
+  state: EditorialExceptionState;
+  message: string;
+  scheduledPostId: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedByEmail: string | null;
+  resolutionReason: string | null;
+};
+
+export async function editorialExceptionsForProject(
+  client: Pick<PrismaClient, "editorialException">,
+  projectId: string,
+): Promise<EditorialExceptionRow[]> {
+  const rows = await client.editorialException.findMany({
+    where: { projectId },
+    // Open first, then newest. An operator opens this page to find what still needs doing.
+    orderBy: [{ state: "asc" }, { createdAt: "desc" }],
+    include: { resolvedBy: { select: { email: true } } },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    exceptionType: row.exceptionType,
+    state: row.state,
+    message: row.message,
+    scheduledPostId: row.scheduledPostId,
+    createdAt: row.createdAt.toISOString(),
+    resolvedAt: row.resolvedAt?.toISOString() ?? null,
+    resolvedByEmail: row.resolvedBy?.email ?? null,
+    resolutionReason: row.resolutionReason,
+  }));
 }

@@ -133,6 +133,22 @@ export type PoolCandidate = {
   borrowedFromProjectId: string | null;
 };
 
+/**
+ * One posting date this service owns, whether or not a clip is in it.
+ *
+ * The pool's candidate list is keyed by clip, so a slot holding nothing — what P2.7 leaves when a
+ * replacement finds no reserve — has no row there at all. An operator inspecting a service has to
+ * see the empty date; it is the one that needs acting on.
+ */
+export type PoolSlotSummary = {
+  scheduledPostId: string;
+  scheduledDate: Date;
+  publishStatus: SchedulePublishStatus;
+  /** Null for an `UNFILLED` slot: the date exists and nothing is in it. */
+  clipId: string | null;
+  boundRender: BoundRenderFacts | null;
+};
+
 /** Everything an operator may see about one service's pool. */
 export type OperatorProjectPool = {
   projectId: string;
@@ -142,6 +158,8 @@ export type OperatorProjectPool = {
   candidates: PoolCandidate[];
   /** The reserve queue, in the selector's original rank order. */
   reserveQueue: PoolCandidate[];
+  /** Every posting date this service owns, soonest first, empty ones included. */
+  slots: PoolSlotSummary[];
   renderSourceAvailable: boolean;
   /**
    * Why this pool is the size it is. Operator-only, every one of them: a church that learned the
@@ -157,13 +175,21 @@ export type OperatorProjectPool = {
   };
 };
 
-/** What a church may see. Structurally the operator shape minus `limits`. */
-export type ChurchProjectPool = Omit<OperatorProjectPool, "limits">;
+/**
+ * What a church may see. Structurally the operator shape minus the operator-only parts.
+ *
+ * `slots` is omitted as well as `limits`, and for a different reason: an empty posting date is an
+ * operational fact somebody has to act on, and P3.2 deliberately built the church view around
+ * clips. Changing what a church is shown is a decision of its own, not a side effect of adding an
+ * operator page.
+ */
+export type ChurchProjectPool = Omit<OperatorProjectPool, "limits" | "slots">;
 
 export type BuildProjectPoolInput = {
   projectId: string;
   projectName: string;
   clips: PoolClipFacts[];
+  slots: PoolSlotSummary[];
   renderSourceAvailable: boolean;
   limits: OperatorProjectPool["limits"];
 };
@@ -206,6 +232,9 @@ export function buildProjectPool(input: BuildProjectPoolInput): OperatorProjectP
     retainedCount: candidates.filter((c) => c.borrowedFromProjectId === null).length,
     candidates,
     reserveQueue: candidates.filter((c) => c.state === "RESERVE"),
+    slots: [...input.slots].sort(
+      (a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime(),
+    ),
     renderSourceAvailable: input.renderSourceAvailable,
     limits: input.limits,
   };
@@ -220,6 +249,6 @@ export function buildProjectPool(input: BuildProjectPoolInput): OperatorProjectP
  * forgets.
  */
 export function toChurchPool(pool: OperatorProjectPool): ChurchProjectPool {
-  const { limits: _limits, ...church } = pool;
+  const { limits: _limits, slots: _slots, ...church } = pool;
   return church;
 }

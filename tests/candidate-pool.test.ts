@@ -64,6 +64,7 @@ function poolInput(overrides: Partial<BuildProjectPoolInput> = {}): BuildProject
     projectId: THIS_SERVICE,
     projectName: "Sunday 13 September",
     clips: [clip()],
+    slots: [],
     renderSourceAvailable: true,
     limits: { effectiveSnapshot: 18, masterDefault: 18, hardMaximum: 24, hiddenOverride: null },
     ...overrides,
