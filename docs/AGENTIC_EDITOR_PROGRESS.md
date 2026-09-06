@@ -38,7 +38,8 @@ build the whole implementation plan in order.
 | P2.6 accept, revise and multiple-feedback UI | done | 2026-09-05; `src/app/actions/clip-review.ts` authorizes itself; `REPLACE` blocked at the button, the schema and the service |
 | P2.7 atomic replacement | done | 2026-09-06; `src/lib/review/{reserve-policy,replace-scheduled-clip}.ts`. One transaction, project row locked so two replacements take different reserves; empty pool still records the decision and opens an exception |
 | P2.8 require exact editorial acceptance | done | 2026-09-06; `src/lib/delivery/{eligibility,query}.ts` now query the standing decision about the exact render. Four identity facts, human reviewer, `ACCEPT`; a retry clears the QC verdict so a rerender cannot inherit one |
-| P2.9–P8 | not started | |
+| P2.9 start the human-only program explicitly | done | 2026-09-06; `src/lib/review/{editorial-program,program-key}.ts`, two scripts, `docs/HUMAN_REVIEW_30_DAY_RUNBOOK.md`. Fixed 30 days, no backdating, no restart; a pause extends and also pauses delivery; the sandbox census scans exactly what the publisher scans |
+| P3–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -242,6 +243,42 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P2.9 deviations
+
+**`NOT_STARTED` does not refuse delivery.** The obvious reading of "nothing publishes outside the
+program" would have made the P2 sandbox proof impossible: that sequence publishes one row *before*
+the clock starts, because publishing it is the evidence the start requires. Only `PAUSED` refuses,
+which is also the documented rollback. The global switch is what holds the pre-start window shut.
+
+**The census and the publisher now share one definition of "due".** `duePublishWhere` moved into
+`src/lib/delivery/query.ts` and `publishDueScheduledPosts` calls it. The plan did not list that
+file, but the dry run's whole claim is that flipping one switch would release exactly one row, and
+a census over a different population would be a claim about rows that never publish.
+
+**The status calculation was split into a pure function.** `summariseEditorialProgram` takes rows
+and returns the report. "Day 29 is held, day 30 is not" and "a pause extends the phase" are the two
+claims the phase rests on, and neither should need a database to state. The loader is now four
+lines around it.
+
+**`HUMAN_REFERENCE_PROGRAM_KEY` lives in its own module.** `delivery/query.ts` needs it and
+`review/editorial-program.ts` imports the delivery census; putting the constant in either would
+have closed an import cycle.
+
+**Two integration tests could not be written the obvious way, and saying why is the point.** The
+census is an installation-wide query, so "exactly one switch-only row" cannot be asserted while
+another file's fixtures are due. Every slot in the program file is scheduled in 2019 and every
+census is taken with a `now` in 2019 — earlier than the 2026 floor every other integration file
+uses — so foreign rows are not due at that instant. Filtering the census by workspace would have
+been easier and would have tested something the operator never runs. For the same reason
+`collectStartEvidence` cannot be tested by absence: the refusal is proved on the value
+`missingEvidence` returns, and the integration test instead proves which of *its own* rows are
+accepted as evidence and which are not.
+
+**A test that could pass without asserting anything was rewritten before it landed.** The first
+draft of "refuses while any precondition is unproved" returned early when another case had already
+seeded evidence. That is the same failure as the global-query trap wearing different clothes — a
+test whose assertion is conditional on database state it does not own. Fifth instance.
 
 ### P2.8 deviations
 

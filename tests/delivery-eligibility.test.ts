@@ -1,4 +1,9 @@
-import { ClipApprovalState, ProcessingJobState, RenderQcStatus } from "@prisma/client";
+import {
+  ClipApprovalState,
+  EditorialProgramState,
+  ProcessingJobState,
+  RenderQcStatus,
+} from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
   assessDeliveryEligibility,
@@ -24,6 +29,7 @@ const CHECKSUM = "sha256:abc";
 function eligibleFacts(): DeliveryFacts {
   return {
     globalPublishingEnabled: true,
+    programState: EditorialProgramState.ACTIVE,
     settings: { customerApprovalRequired: false, pilotHold: false },
     connection: { pageId: "page-1", autoPostEnabled: true },
     slot: {

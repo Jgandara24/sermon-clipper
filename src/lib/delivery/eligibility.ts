@@ -1,4 +1,9 @@
-import { ClipApprovalState, ProcessingJobState, RenderQcStatus } from "@prisma/client";
+import {
+  ClipApprovalState,
+  EditorialProgramState,
+  ProcessingJobState,
+  RenderQcStatus,
+} from "@prisma/client";
 import { isClipApprovedForPublish } from "@/lib/approval";
 import {
   verifyBoundDeliveryIdentity,
@@ -27,6 +32,7 @@ export type DeliveryIneligibleReason =
   | DeliveryIdentityReason
   // Program state, checked ahead of everything else.
   | "global_publishing_disabled"
+  | "editorial_program_paused"
   | "pilot_hold"
   | "platform_not_connected"
   // The slot and its clip.
@@ -59,6 +65,18 @@ const PUBLISHABLE_SLOT_STATES = ["NOT_STARTED", "FAILED"] as const;
 export type DeliveryFacts = {
   /** `AUTOMATIC_PUBLISHING_ENABLED`. Absorbs P0.16 as one input rather than a second gate. */
   globalPublishingEnabled: boolean;
+  /**
+   * The human-reference program's state (P2.9), or null where no program row exists yet.
+   *
+   * Only `PAUSED` refuses. `NOT_STARTED` deliberately does not: the P2 sandbox proof publishes one
+   * row *before* the clock starts, and a rule that demanded an `ACTIVE` program would make the
+   * evidence the start requires impossible to collect. The global switch is what holds that
+   * window shut, and it is off for all of it.
+   *
+   * Pausing the program is therefore the documented rollback — one act that stops delivery
+   * everywhere without erasing a day of elapsed history.
+   */
+  programState: EditorialProgramState | null;
   settings: DeliverySettings;
   connection: FacebookConnection;
   slot: {
@@ -124,6 +142,9 @@ export function assessDeliveryEligibility(facts: DeliveryFacts): DeliveryEligibi
   // 1. Program state. The global switch dominates every other input.
   if (!facts.globalPublishingEnabled) {
     return { eligible: false, reason: "global_publishing_disabled" };
+  }
+  if (facts.programState === EditorialProgramState.PAUSED) {
+    return { eligible: false, reason: "editorial_program_paused" };
   }
   if (facts.settings.pilotHold) return { eligible: false, reason: "pilot_hold" };
   if (!isEligibleForAutoPost(facts.connection)) {
@@ -234,6 +255,8 @@ export function describeDeliveryIneligibility(reason: DeliveryIneligibleReason):
   switch (reason) {
     case "global_publishing_disabled":
       return "Automatic publishing is switched off for the whole installation.";
+    case "editorial_program_paused":
+      return "The human review program is paused, which pauses delivery with it.";
     case "pilot_hold":
       return "This workspace is on an operator hold.";
     case "platform_not_connected":

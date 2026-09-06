@@ -370,6 +370,9 @@ describe("publishDueScheduledPosts delivery gate", () => {
         // edit version, QC passed against exactly this file, church approved. The one thing
         // missing is a person's decision about it, and that alone stops it.
         clipReview: { findFirst: async () => null },
+        // No human-reference program row. `NOT_STARTED` does not refuse delivery (P2.9), so this
+        // case still turns on the missing acceptance rather than on the program.
+        editorialProgram: { findUnique: async () => null },
         scheduledPost: {
           ...client.scheduledPost,
           // The real loader reads the slot back before deciding.

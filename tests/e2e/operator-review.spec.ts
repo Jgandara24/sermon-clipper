@@ -236,6 +236,50 @@ test.describe("Operator review queue", () => {
     await expect(page.getByRole("link", { name: "Review queue" })).toBeVisible();
   });
 
+  /**
+   * The phase's state, above the work.
+   *
+   * A reviewer needs two facts while deciding, and both belong on the page they decide from:
+   * that their judgement is the authority, and that the clock is actually running. A day count
+   * that has quietly stopped is the failure worth seeing.
+   */
+  test("says the phase has not started, then counts the days once it has", async ({
+    page,
+    context,
+  }) => {
+    await signInAs(context, fixture.operatorId);
+    await page.goto("/app/operator/review");
+    await expect(page.getByTestId("program-not-started")).toContainText(
+      "30-day human-only review phase has not started",
+    );
+
+    await prisma.editorialProgram.create({
+      data: {
+        key: "human-reference",
+        state: "ACTIVE",
+        startedAt: new Date(Date.now() - 4 * 86_400_000),
+        startedByUserId: fixture.operatorId,
+      },
+    });
+    try {
+      await page.reload();
+      const status = page.getByTestId("program-status");
+      await expect(status).toContainText("Day 4 of 30");
+      await expect(status).toContainText("your decision is the authority");
+
+      await prisma.editorialProgram.update({
+        where: { key: "human-reference" },
+        data: { state: "PAUSED", pausedAt: new Date() },
+      });
+      await page.reload();
+      await expect(page.getByTestId("program-status")).toContainText(
+        "paused, and delivery is paused with it",
+      );
+    } finally {
+      await prisma.editorialProgram.deleteMany({ where: { key: "human-reference" } });
+    }
+  });
+
   test("a church owner is turned away, and never offered the nav item", async ({
     page,
     context,

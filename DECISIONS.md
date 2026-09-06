@@ -3917,3 +3917,60 @@ precisely why the check is worth writing now: when P4 begins producing them they
 publishable by having arrived. P7 is where that changes, on replay evidence, explicitly.
 
 Status: Active. Never relax this to match on the export id alone.
+
+## 2026-09-06 - The Thirty Days Are Fixed, Explicitly Started, And Never Restarted
+
+The human-only reference phase is the evidence base for everything P4 through P7 later claim about
+a machine reviewer. Its boundaries therefore have to be facts rather than recollections, which is
+what makes the start an explicit, recorded, refusable act instead of a date somebody remembers.
+
+**Thirty full days, fixed.** Product-owner Decision 2 supersedes Addendum S17's permission to
+compress the phase on strong early evidence. A unanimous first fortnight is not a reason to stop
+collecting; it is a reason to suspect the sample. `minimumDays` is stored on the row rather than
+read from a constant at report time, so a later change to the constant cannot retroactively shorten
+a phase already running.
+
+**The clock cannot be backdated.** `startEditorialProgram` has no start-date parameter and never
+will. A phase whose start could be moved backwards is a phase whose length is an opinion. For the
+same reason it cannot be started twice, and cannot be restarted after a pause — a restart is the
+one available way to erase elapsed days.
+
+**A pause extends the phase; it never shortens it.** Paused time is subtracted from elapsed time,
+including the currently open pause rather than only the banked total. Without that second
+subtraction the phase would keep maturing while paused and the pause would take effect only on
+resume, which is precisely backwards. Pausing is also the documented rollback: `PAUSED` refuses
+every slot in the delivery eligibility module, so one act stops publishing everywhere without
+touching workspace settings one at a time.
+
+**`NOT_STARTED` does not refuse delivery, and that is deliberate.** The P2 sandbox sequence
+publishes one row *before* the clock starts, because publishing it is the evidence the start
+requires. A rule demanding an `ACTIVE` program would have made that evidence uncollectable. The
+global switch is what holds the pre-start window shut, and it is off for all of it.
+
+**The start is refused on rows, not on a checklist.** Three preconditions, each a query rather than
+a flag an operator ticks. One slot whose bound export succeeded, passed QC against exactly its own
+file, and carries a human `ACCEPT` of all four identity facts — that single row proves exact
+playback, review writes, QC and delivery gating together. One `REPLACE` decision, which only
+P2.7's command can write. And that same accepted slot having published to a real Page: checked on
+the one row, so "published" and "published the accepted export" cannot come from two different
+slots.
+
+**The census scans exactly what the publisher scans.** `duePublishWhere` is now shared between the
+sandbox dry run and `publishDueScheduledPosts`. The proof's claim is that flipping one switch would
+release exactly one row, and a census over a different population would be a claim about rows that
+never publish. The dry run simulates the switch and nothing else — every other fact is read from
+the database as it stands — so a row that becomes eligible under the simulation had the switch as
+its single failing reason, which is the claim the proof must establish about one row and refute
+about every other. It refuses outright if publishing is already enabled: a census taken with the
+switch live is not a dry run, and the rows it would have released may already be gone.
+
+**Agent rows are counted apart and never folded in.** A reference phase with machine decisions
+inside its window is not a reference for judging machine decisions. The status report exits
+non-zero when it finds any, rather than averaging the contamination into the human totals.
+
+**Day 30 is not a handover.** The minimum being served means the next phase may be considered. It
+does not mean a person has stopped being the authority — delivery still requires a human `ACCEPT`
+of the exact render, and only P7, deployed and explicitly changed, moves that. The status report
+keeps saying so after day 30 for exactly that reason.
+
+Status: Active. Never shorten, backdate, or restart the phase.
