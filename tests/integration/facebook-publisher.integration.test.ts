@@ -1,14 +1,18 @@
 import {
   AuthProvider,
+  ClipApprovalState,
+  ClipReviewDecision,
   GeneratedClipStatus,
   Prisma,
   PrismaClient,
   ProcessingJobState,
   RenderQcStatus,
+  ReviewerKind,
   WorkspaceRole,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { assessScheduledPostDelivery } from "@/lib/delivery/query";
+import { appendClipReview } from "@/lib/review/service";
 import { FacebookApiAuthError, FacebookApiError } from "@/lib/integrations/facebook";
 import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher";
 
@@ -440,6 +444,282 @@ describe("delivery eligibility against a real database", () => {
 
     const verdict = await assessScheduledPostDelivery(prisma, { scheduledPostId });
     expect(verdict).toEqual({ eligible: false, reason: "export_edit_version_stale" });
+  });
+});
+
+/**
+ * P2.8. The other side of the same rule: what it takes to *pass* it, and what takes it away
+ * again.
+ *
+ * Every case here goes through the real loader as well as the real rule, so they prove the query
+ * finds the decision by the render the slot is bound to. A unit test cannot: it is handed the
+ * review it is meant to judge.
+ */
+describe("exact editorial acceptance", () => {
+  /** Another clip of the same sermon with a QC-passed render of its own, bound to no slot. */
+  async function createDeliverableClip(workspaceId: string, projectId: string, label: string) {
+    const clip = await prisma.generatedClip.create({
+      data: {
+        workspaceId,
+        projectId,
+        rank: 2,
+        startMs: 20_000,
+        endMs: 40_000,
+        title: `Reserve clip ${label}`,
+        hookText: "The one held back.",
+        summary: "Reserve seeded for delivery tests.",
+        status: GeneratedClipStatus.KEPT,
+      },
+    });
+    await prisma.clipEdit.create({
+      data: { clipId: clip.id, version: 1, editorState: {}, savedBy: null },
+    });
+    const checksum = `sha256-${uniqueKey(label)}`;
+    const outputFile = await prisma.exportedFile.create({
+      data: {
+        storageKey: `exports/${workspaceId}/${uniqueKey(label)}.mp4`,
+        bytes: BigInt(1024),
+        width: 1080,
+        height: 1920,
+        checksum,
+        downloadExpiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const exportJob = await prisma.exportJob.create({
+      data: {
+        workspaceId,
+        clipId: clip.id,
+        state: ProcessingJobState.SUCCEEDED,
+        idempotencyKey: uniqueKey(`export-${label}`),
+        filename: `${label}.mp4`,
+        outputFileId: outputFile.id,
+        editVersion: 1,
+        qcStatus: RenderQcStatus.PASSED,
+        qcChecksum: checksum,
+        finishedAt: new Date(),
+      },
+    });
+    return { clipId: clip.id, exportJobId: exportJob.id };
+  }
+
+  /** The identity a reviewer would have had on screen: read off the slot's own binding. */
+  async function boundIdentity(scheduledPostId: string) {
+    const slot = await prisma.scheduledPost.findUniqueOrThrow({
+      where: { id: scheduledPostId },
+      include: { exportJob: true },
+    });
+    return {
+      clipId: slot.clipId as string,
+      exportJobId: slot.exportJob!.id,
+      editVersion: slot.exportJob!.editVersion as number,
+      checksum: slot.exportJob!.qcChecksum as string,
+    };
+  }
+
+  async function accept(scheduledPostId: string, reviewerKind: ReviewerKind = ReviewerKind.HUMAN) {
+    return appendClipReview(prisma, {
+      scheduledPostId,
+      decision: ClipReviewDecision.ACCEPT,
+      identity: await boundIdentity(scheduledPostId),
+      reviewerKind,
+    });
+  }
+
+  it("permits a slot a person accepted, against exactly the file it holds", async () => {
+    const workspaceId = await createWorkspace("Delivery Accepted", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-accepted");
+
+    await expect(assessScheduledPostDelivery(prisma, { scheduledPostId })).resolves.toEqual({
+      eligible: false,
+      reason: "editorial_review_missing",
+    });
+
+    await accept(scheduledPostId);
+
+    await expect(assessScheduledPostDelivery(prisma, { scheduledPostId })).resolves.toEqual({
+      eligible: true,
+    });
+  });
+
+  it("takes the acceptance away when the clip is edited again", async () => {
+    const workspaceId = await createWorkspace("Delivery Reedited", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-reedited");
+    await accept(scheduledPostId);
+
+    const post = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    await prisma.clipEdit.create({
+      data: { clipId: post.clipId!, version: 2, editorState: {}, savedBy: null },
+    });
+
+    // The cut moved out from under both the export and the acceptance. The export is asked first.
+    await expect(assessScheduledPostDelivery(prisma, { scheduledPostId })).resolves.toEqual({
+      eligible: false,
+      reason: "export_edit_version_stale",
+    });
+  });
+
+  /**
+   * The case an export id alone cannot catch, and the reason the acceptance carries a checksum.
+   *
+   * Nothing about the slot, the clip, the export row or its edit version has moved. Only the
+   * bytes have. A rule matching on the export would find the acceptance and publish a file the
+   * reviewer never saw.
+   */
+  it("takes the acceptance away when the same export renders different bytes", async () => {
+    const workspaceId = await createWorkspace("Delivery Rerendered", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-rerendered");
+    await accept(scheduledPostId);
+
+    const before = await boundIdentity(scheduledPostId);
+    const rebuilt = `sha256-rebuilt-${uniqueKey("rerender")}`;
+    const job = await prisma.exportJob.update({
+      where: { id: before.exportJobId },
+      data: { qcChecksum: rebuilt },
+    });
+    await prisma.exportedFile.update({
+      where: { id: job.outputFileId! },
+      data: { checksum: rebuilt },
+    });
+
+    // Same slot, same clip, same export id, same edit version. Only the file is new.
+    const after = await boundIdentity(scheduledPostId);
+    expect(after.exportJobId).toBe(before.exportJobId);
+    expect(after.editVersion).toBe(before.editVersion);
+
+    await expect(assessScheduledPostDelivery(prisma, { scheduledPostId })).resolves.toEqual({
+      eligible: false,
+      reason: "editorial_review_missing",
+    });
+  });
+
+  it("takes the acceptance away when the reviewer appends a REVISE about the same file", async () => {
+    const workspaceId = await createWorkspace("Delivery Revised", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-revised");
+    await accept(scheduledPostId);
+
+    await appendClipReview(prisma, {
+      scheduledPostId,
+      decision: ClipReviewDecision.REVISE,
+      identity: await boundIdentity(scheduledPostId),
+    });
+
+    // The standing decision is the newest one about this render, not the newest ACCEPT under it.
+    await expect(assessScheduledPostDelivery(prisma, { scheduledPostId })).resolves.toEqual({
+      eligible: false,
+      reason: "editorial_review_not_accepted",
+    });
+  });
+
+  /**
+   * What a P2.7 replacement leaves behind, asserted from delivery's side.
+   *
+   * The slot keeps its date and its project and rebinds to the reserve; the rejected clip is
+   * superseded. The acceptance stays on the record, pointing at the clip that was rejected — so
+   * the only thing standing between it and an audience is that nothing carries it across.
+   */
+  it("does not let an acceptance follow the slot to the clip that replaced it", async () => {
+    const workspaceId = await createWorkspace("Delivery Replaced", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-replaced");
+    await accept(scheduledPostId);
+    const rejected = await boundIdentity(scheduledPostId);
+
+    // The promoted reserve: another clip of the same sermon, with a render of its own.
+    const post = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    const reserve = await createDeliverableClip(workspaceId, post.projectId!, "reserve");
+
+    await prisma.generatedClip.update({
+      where: { id: rejected.clipId },
+      data: { supersededAt: new Date() },
+    });
+    await prisma.scheduledPost.update({
+      where: { id: scheduledPostId },
+      data: { clipId: reserve.clipId, exportJobId: reserve.exportJobId },
+    });
+
+    // The rejected clip's acceptance is still readable, and still about the rejected clip.
+    await expect(
+      prisma.clipReview.findFirst({ where: { clipIdSnapshot: rejected.clipId } }),
+    ).resolves.toMatchObject({ decision: ClipReviewDecision.ACCEPT });
+
+    await expect(assessScheduledPostDelivery(prisma, { scheduledPostId })).resolves.toEqual({
+      eligible: false,
+      reason: "editorial_review_missing",
+    });
+  });
+
+  it("refuses an acceptance an agent recorded, however exact it is", async () => {
+    const workspaceId = await createWorkspace("Delivery Agent", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-agent");
+    await accept(scheduledPostId, ReviewerKind.AGENT);
+
+    await expect(assessScheduledPostDelivery(prisma, { scheduledPostId })).resolves.toEqual({
+      eligible: false,
+      reason: "editorial_review_not_human",
+    });
+  });
+
+  it("composes the church's approval with the acceptance, only where it is required", async () => {
+    const workspaceId = await createWorkspace("Delivery Approval", {
+      ...eligibleSettings,
+      delivery: { customerApprovalRequired: true },
+    });
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-approval");
+    await accept(scheduledPostId);
+
+    // Accepted editorially, but this workspace also asks the church.
+    await expect(assessScheduledPostDelivery(prisma, { scheduledPostId })).resolves.toEqual({
+      eligible: false,
+      reason: "customer_approval_missing",
+    });
+
+    const post = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } });
+    await prisma.clipApproval.create({
+      data: {
+        workspaceId,
+        clipId: post.clipId!,
+        state: ClipApprovalState.APPROVED,
+        reviewToken: uniqueKey("approval"),
+        reviewTokenExpiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+
+    await expect(assessScheduledPostDelivery(prisma, { scheduledPostId })).resolves.toEqual({
+      eligible: true,
+    });
+  });
+
+  /**
+   * The whole point, exercised through the publisher with nothing stubbed but Facebook itself.
+   *
+   * Every other publish case in this file injects `assessDelivery`. This one does not, so it is
+   * the only proof that a real slot reaches a real audience only by way of a real acceptance.
+   *
+   * Asserted on this slot's own row rather than on the run's totals. `publishDueScheduledPosts`
+   * sweeps every due post in the database, so a count here would really be counting the rows the
+   * cases above left eligible — a number that changes whenever a test is added next to it.
+   */
+  it("publishes only after the acceptance exists, through the unstubbed rule", async () => {
+    const workspaceId = await createWorkspace("Delivery Publish", eligibleSettings);
+    const scheduledPostId = await createDueScheduledPost(workspaceId, "delivery-publish", {
+      scheduledDate: new Date("2026-07-19T00:00:00Z"),
+    });
+
+    const deps = {
+      now: () => new Date("2026-07-20T12:00:00Z"),
+      resolvePageAccessToken: async () => "page-token-abc",
+      publishScheduledVideo: async () => ({ facebookPostId: `fb-${uniqueKey("accepted")}` }),
+    };
+    const statusNow = async () =>
+      (await prisma.scheduledPost.findUniqueOrThrow({ where: { id: scheduledPostId } }))
+        .publishStatus;
+
+    await publishDueScheduledPosts(prisma, deps);
+    expect(await statusNow()).toBe("NOT_STARTED");
+
+    await accept(scheduledPostId);
+
+    await publishDueScheduledPosts(prisma, deps);
+    expect(await statusNow()).toBe("SUCCEEDED");
   });
 });
 

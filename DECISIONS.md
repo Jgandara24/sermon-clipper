@@ -3876,3 +3876,44 @@ replacement; the work queued behind it is nobody's Tuesday. Within one priority 
 oldest-first, so nothing starves.
 
 Status: Active. Never write a `REPLACE` outside this command.
+
+## 2026-09-06 - Only The Exact Accepted File Can Publish, And Four Facts Say Which One That Is
+
+Delivery eligibility has always asked whether a human accepted this render. Through P1 the answer
+was structurally "no" — `ClipReview` did not exist, so the fact was hard-coded null and every slot
+refused. P2.8 connects the real answer, and the whole difficulty is in what "this render" means.
+
+**The standing decision is the newest row about the render, not the newest acceptance of it.** Two
+other readings are easy to write and both publish something nobody agreed to. Querying the latest
+decision *for the slot* refuses a current acceptance because an earlier render was revised.
+Querying the latest `ACCEPT` *for the render* publishes a clip that was accepted and then revised,
+by stepping over the revision to find the acceptance still sitting underneath it — and it is still
+sitting there, because a correction is an append and never an edit. So `latestReviewForRender`
+takes the newest row matching the render, whatever it says, and delivery requires that row to be
+an `ACCEPT`.
+
+**Four facts identify a render, and the export id is not enough.** Clip, edit version, the slot's
+bound `exportJobId`, and the QC-time checksum. Each one is an invalidator on its own, and between
+them they cover every way a render can move under a standing acceptance: a newer edit and a
+replacement move the clip or the edit version, a fresh render moves the export id, and a rerender
+of the same job moves the checksum while leaving the other three untouched. That last case is the
+reason the checksum is in the key — an export id survives its bytes being replaced, and an
+acceptance must not.
+
+**A retry clears the QC verdict.** "Try again" reuses the job row, which is what makes the id
+survive a rerender in the first place. Leaving `qcStatus` at `PASSED` beside a `QUEUED` job claims
+a file passed quality control that no longer exists, and leaving `qcChecksum` names bytes about to
+be overwritten — the exact value an acceptance is recorded against. The next QC pass writes them
+again; until it does, the honest value is none.
+
+**The rule re-checks the four facts it was handed.** `query.ts` already matches on them, so the
+check inside `assessDeliveryEligibility` cannot fire in production. It is there because the module
+is the one thing in the system that must not be talkable-into a publish: the facts type is
+exported, the publisher takes the assessor as an injectable dependency, and a loosened `where` a
+year from now should fail a unit test rather than quietly widen what can go out.
+
+**An agent's acceptance is not an acceptance.** Nothing writes an `AGENT` review today, which is
+precisely why the check is worth writing now: when P4 begins producing them they must not become
+publishable by having arrived. P7 is where that changes, on replay evidence, explicitly.
+
+Status: Active. Never relax this to match on the export id alone.

@@ -50,7 +50,16 @@ function eligibleFacts(): DeliveryFacts {
       qcChecksum: CHECKSUM,
       outputFile: { checksum: CHECKSUM },
     },
-    review: { decision: "ACCEPT" },
+    review: {
+      decision: "ACCEPT",
+      reviewerKind: "HUMAN",
+      identity: {
+        clipId: CLIP_ID,
+        exportJobId: EXPORT_ID,
+        editVersion: 3,
+        checksum: CHECKSUM,
+      },
+    },
     approval: { state: ClipApprovalState.APPROVED },
   };
 }
@@ -221,9 +230,10 @@ describe("assessDeliveryEligibility", () => {
   });
 
   describe("judgement", () => {
-    // Intentional for all of P1: there is nowhere to record an editorial decision until P2, so
-    // nothing is eligible. A change that makes this pass by default is a regression.
-    it("refuses when no editorial review exists, which is every slot until P2", () => {
+    // A slot nobody has judged is ineligible, and always was: through P1 there was nowhere to
+    // record a decision at all, and from P2 the absence means the queue has not reached it. A
+    // change that makes this pass by default is a regression.
+    it("refuses when no decision stands about this render", () => {
       const facts = eligibleFacts();
       facts.review = null;
       expectReason(facts, "editorial_review_missing");
@@ -231,7 +241,59 @@ describe("assessDeliveryEligibility", () => {
 
     it.each(["REVISE", "REPLACE"])("refuses an editorial %s", (decision) => {
       const facts = eligibleFacts();
-      facts.review = { decision };
+      facts.review = { ...facts.review!, decision };
+      expectReason(facts, "editorial_review_not_accepted");
+    });
+
+    /**
+     * The four invalidators, one per fact.
+     *
+     * Each starts from a slot that is eligible in every respect and moves exactly one of the four
+     * identity facts on the decision, so a pass proves that fact is load-bearing on its own
+     * rather than that some general mismatch was noticed.
+     *
+     * The `editVersion` and `checksum` cases are the ones worth stating plainly. An acceptance
+     * carrying an older edit version is what a re-edit leaves behind; an acceptance carrying an
+     * older checksum with the same export id is what a rerender of the same job leaves behind,
+     * and it is invisible to any rule that matches on the export alone.
+     */
+    it.each([
+      ["a different clip", { clipId: "99999999-9999-4999-8999-999999999999" }],
+      ["a different export", { exportJobId: "88888888-8888-4888-8888-888888888888" }],
+      ["an earlier edit version", { editVersion: 2 }],
+      ["different bytes of the same export", { checksum: "sha256:rebuilt" }],
+    ])("refuses an ACCEPT recorded against %s", (_label, moved) => {
+      const facts = eligibleFacts();
+      facts.review = { ...facts.review!, identity: { ...facts.review!.identity, ...moved } };
+      expectReason(facts, "editorial_review_identity_mismatch");
+    });
+
+    // Which file the decision was about comes before what it said. A REVISE of an older render
+    // must not be reported as this render having been revised — it was never looked at.
+    it("reports the identity mismatch ahead of the decision itself", () => {
+      const facts = eligibleFacts();
+      facts.review = {
+        ...facts.review!,
+        decision: "REVISE",
+        identity: { ...facts.review!.identity, checksum: "sha256:rebuilt" },
+      };
+      expectReason(facts, "editorial_review_identity_mismatch");
+    });
+
+    /**
+     * Nothing writes an AGENT review today. That is the point of pinning it now: when P4 begins
+     * producing them, an agent's ACCEPT must not become publishable by having arrived. P7 is
+     * where this is explicitly changed, on replay evidence.
+     */
+    it("refuses an ACCEPT an agent made, however exact", () => {
+      const facts = eligibleFacts();
+      facts.review = { ...facts.review!, reviewerKind: "AGENT" };
+      expectReason(facts, "editorial_review_not_human");
+    });
+
+    it("refuses an agent REVISE on the decision, not on the reviewer", () => {
+      const facts = eligibleFacts();
+      facts.review = { ...facts.review!, reviewerKind: "AGENT", decision: "REVISE" };
       expectReason(facts, "editorial_review_not_accepted");
     });
 
@@ -260,21 +322,36 @@ describe("assessDeliveryEligibility", () => {
     });
 
     /**
-     * The case the plan names explicitly. A reviewer approved a cut, someone edited the clip, and
-     * the approval was demoted — but the export from before the edit is still SUCCEEDED. Nothing
-     * about that old export having worked may carry the new cut to an audience.
+     * The case the plan names explicitly, walked one layer at a time. A reviewer accepted a cut
+     * and the church approved it; then someone edited the clip. Each of the three things that
+     * were true about the old cut has to stop carrying the new one to an audience, and each is
+     * caught by a different rule.
      */
-    it("refuses after an edit demoted the approval, though an old SUCCEEDED export exists", () => {
+    it("refuses at every layer after an edit, though an old SUCCEEDED export exists", () => {
       const facts = eligibleFacts();
       facts.settings.customerApprovalRequired = true;
       facts.clip = { ...facts.clip!, currentEditVersion: 4 };
       facts.approval = { state: ClipApprovalState.IN_REVIEW };
-      // The stale cut is caught before approval is even consulted.
+
+      // 1. The export is of the cut from before the edit. Caught before anything else is asked.
       expectReason(facts, "export_edit_version_stale");
 
-      // And with the export re-rendered for the new cut, the demoted approval still refuses.
-      facts.exportJob = { ...facts.exportJob!, editVersion: 4 };
+      // 2. Re-rendered for the new cut, the export is current again — and now the acceptance is
+      //    the stale thing. It was recorded against edit 3 and different bytes.
+      facts.exportJob = { ...facts.exportJob!, editVersion: 4, qcChecksum: "sha256:v4" };
+      facts.exportJob.outputFile = { checksum: "sha256:v4" };
+      expectReason(facts, "editorial_review_identity_mismatch");
+
+      // 3. Reviewed again and accepted, the demoted church approval still refuses on its own.
+      facts.review = {
+        ...facts.review!,
+        identity: { ...facts.review!.identity, editVersion: 4, checksum: "sha256:v4" },
+      };
       expectReason(facts, "customer_approval_missing");
+
+      // 4. And with the church's approval restored, the whole chain passes.
+      facts.approval = { state: ClipApprovalState.APPROVED };
+      expect(assessDeliveryEligibility(facts)).toEqual({ eligible: true });
     });
   });
 });
@@ -297,7 +374,9 @@ describe("describeDeliveryIneligibility", () => {
       "render_qc_missing",
       "render_qc_failed",
       "editorial_review_missing",
+      "editorial_review_identity_mismatch",
       "editorial_review_not_accepted",
+      "editorial_review_not_human",
       "customer_approval_missing",
       "slot_export_missing",
     ];

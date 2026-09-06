@@ -358,6 +358,42 @@ describe("correction by supersession", () => {
       latestReviewForRender(prisma, { ...fixture.identity, editVersion: 99 }),
     ).resolves.toBeNull();
   });
+
+  /**
+   * The reading P2.8 depends on, stated on its own because the wrong one is so easy to write.
+   *
+   * "The latest ACCEPT for this render" would find the acceptance underneath the revision and
+   * publish a clip the reviewer changed their mind about. The standing decision is the newest
+   * row about the render, whatever it says — and a correction is only ever an append, so the
+   * acceptance is still sitting there in the history to be found by a sloppier query.
+   */
+  it("returns the newest decision about a render, not the newest acceptance of it", async () => {
+    const fixture = await createReviewableSlot("second-thoughts");
+    const accepted = await appendClipReview(prisma, {
+      scheduledPostId: fixture.slot.id,
+      decision: ClipReviewDecision.ACCEPT,
+      identity: fixture.identity,
+      reviewerUserId: userId,
+    });
+
+    const revised = await appendClipReview(prisma, {
+      scheduledPostId: fixture.slot.id,
+      decision: ClipReviewDecision.REVISE,
+      identity: fixture.identity,
+      reviewerUserId: userId,
+      note: "The lower third is wrong after all.",
+      feedback: [{ category: ReviewFeedbackCategory.CAPTION, note: "Misspelt name." }],
+    });
+
+    await expect(latestReviewForRender(prisma, fixture.identity)).resolves.toMatchObject({
+      id: revised.id,
+      decision: ClipReviewDecision.REVISE,
+    });
+
+    // And the acceptance is still on the record. Nothing was rewritten to get this answer.
+    const history = await reviewHistoryForSlot(prisma, fixture.slot.id);
+    expect(history.map((row) => row.id)).toEqual([accepted.id, revised.id]);
+  });
 });
 
 describe("feedback appended later", () => {

@@ -44,7 +44,9 @@ export type DeliveryIneligibleReason =
   | "render_qc_failed"
   // Judgement.
   | "editorial_review_missing"
+  | "editorial_review_identity_mismatch"
   | "editorial_review_not_accepted"
+  | "editorial_review_not_human"
   | "customer_approval_missing";
 
 export type DeliveryEligibility =
@@ -85,11 +87,28 @@ export type DeliveryFacts = {
     outputFile: { checksum: string } | null;
   } | null;
   /**
-   * The editorial decision on this render. Wave 2 supplies `ClipReview`; until then this is
-   * always null, and a null is ineligible. That is intentional: nothing publishes before P2
-   * gives a human somewhere to record an ACCEPT.
+   * The decision that currently stands about **this exact rendered file**, or null when no
+   * decision has ever been made about it.
+   *
+   * Not "the latest decision about this slot", and not "the latest ACCEPT": the newest row
+   * matching all four identity facts, whatever it says. Both of the other readings publish
+   * something nobody agreed to. The latest-for-slot reading refuses a current acceptance because
+   * an older render was revised; the latest-ACCEPT reading publishes a render that was accepted
+   * and then revised, by skipping over the revision to find the acceptance underneath it.
+   *
+   * The four facts are carried here, rather than trusted from the loader, so that this module
+   * still owns the whole rule. `query.ts` already matches on them; this checks the answer.
    */
-  review: { decision: string } | null;
+  review: {
+    decision: string;
+    reviewerKind: string;
+    identity: {
+      clipId: string;
+      exportJobId: string;
+      editVersion: number;
+      checksum: string;
+    };
+  } | null;
   /** The church's approval, when the workspace requires one. */
   approval: { state: ClipApprovalState | string | null } | null;
 };
@@ -171,10 +190,35 @@ export function assessDeliveryEligibility(facts: DeliveryFacts): DeliveryEligibi
   }
 
   // 7. Judgement. Editorial ACCEPT always; the church's approval only when the workspace asks
-  //    for one (Decision D). Until P2 records reviews, `review` is null and this refuses.
+  //    for one (Decision D).
   if (!facts.review) return { eligible: false, reason: "editorial_review_missing" };
+
+  // The four facts the decision was recorded against must still be the four facts the slot
+  // holds. Each one on its own is an invalidator, and between them they cover every way a render
+  // can change under a standing acceptance: a newer edit and a replacement move the clip or the
+  // edit version, a fresh render moves the export id, and a rerender of the same job moves the
+  // checksum while leaving the other three alone. That last one is why the export id is not
+  // enough by itself — an id survives bytes changing underneath it, and an acceptance must not.
+  const reviewed = facts.review.identity;
+  if (
+    reviewed.clipId !== facts.clip.id ||
+    reviewed.exportJobId !== job.id ||
+    reviewed.editVersion !== job.editVersion ||
+    reviewed.checksum !== job.qcChecksum
+  ) {
+    return { eligible: false, reason: "editorial_review_identity_mismatch" };
+  }
+
   if (facts.review.decision !== "ACCEPT") {
     return { eligible: false, reason: "editorial_review_not_accepted" };
+  }
+
+  // The human-reference phase means a person accepted it, not that an acceptance exists. Nothing
+  // writes an AGENT row today, which is exactly why this is worth writing now: when P4 starts
+  // producing agent reviews, they must not become publishable by having arrived. P7 is where
+  // that is explicitly changed, after replay evidence, and not before.
+  if (facts.review.reviewerKind !== "HUMAN") {
+    return { eligible: false, reason: "editorial_review_not_human" };
   }
   if (facts.settings.customerApprovalRequired) {
     if (!isClipApprovedForPublish(facts.approval?.state ?? null)) {
@@ -218,8 +262,12 @@ export function describeDeliveryIneligibility(reason: DeliveryIneligibleReason):
       return "The bound export failed render QC.";
     case "editorial_review_missing":
       return "No editorial review exists for this render.";
+    case "editorial_review_identity_mismatch":
+      return "The editorial decision on hand was made about a different file than this slot holds.";
     case "editorial_review_not_accepted":
       return "The editorial review did not accept this render.";
+    case "editorial_review_not_human":
+      return "This render was accepted by an agent, and delivery requires a person's acceptance.";
     case "customer_approval_missing":
       return "This workspace requires the church to approve a clip, and this one is not approved.";
     default:
