@@ -1,4 +1,0 @@
-Inter          -> DejaVu Sans  [/usr/share/fonts/truetype/sermon-clipper/DejaVuSans.ttf]
-DejaVu Sans    -> DejaVu Sans  [/usr/share/fonts/truetype/sermon-clipper/DejaVuSans.ttf]
-Georgia        -> DejaVu Serif  [/usr/share/fonts/truetype/sermon-clipper/DejaVuSerif.ttf]
-DejaVu Serif   -> DejaVu Serif  [/usr/share/fonts/truetype/sermon-clipper/DejaVuSerif.ttf]
