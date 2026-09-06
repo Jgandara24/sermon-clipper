@@ -41,6 +41,14 @@ export type BoundRenderFacts = {
   exportJobId: string;
   state: ProcessingJobState;
   qcStatus: RenderQcStatus | null;
+  /**
+   * Whether the render has a QC-time checksum yet.
+   *
+   * The review page identifies a file by four facts and the checksum is one of them, so a render
+   * without one has nothing to review. Linking to it would open a page that can only say the file
+   * is not ready — which is why the link waits for this rather than for the job state alone.
+   */
+  hasChecksum: boolean;
 };
 
 export type PoolSlotFacts = {

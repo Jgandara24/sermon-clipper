@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { OperatorCandidateList } from "@/components/operator/operator-candidate-list";
-import type { OperatorProjectPool } from "@/lib/candidates/project-pool";
+import { PriorServiceFillForm } from "@/components/operator/prior-service-fill-form";
+import type { OperatorProjectPool, PoolSlotSummary } from "@/lib/candidates/project-pool";
+import type { ShortageResolutionSlot } from "@/lib/review/prior-service-fill-options";
 import type { ReplacementLineageRow } from "@/lib/review/query";
 
 /**
@@ -24,15 +26,25 @@ function formatDay(date: Date | string) {
   });
 }
 
+/** Whether a date has a file a reviewer could actually decide about. */
+function isReviewable(slot: PoolSlotSummary): boolean {
+  return Boolean(
+    slot.clipId && slot.boundRender?.state === "SUCCEEDED" && slot.boundRender.hasChecksum,
+  );
+}
+
 export function OperatorProjectCandidatePool({
   pool,
   lineage,
   previewUrl,
+  shortages,
 }: {
   pool: OperatorProjectPool;
   lineage: ReplacementLineageRow[];
   /** The church's signed recording, or null once retention has purged it. */
   previewUrl: string | null;
+  /** Fill options, keyed by slot, for the dates that have nothing to post. */
+  shortages: Record<string, ShortageResolutionSlot>;
 }) {
   return (
     <div className="grid gap-6">
@@ -95,24 +107,49 @@ export function OperatorProjectCandidatePool({
                   <span className="text-xs uppercase tracking-wide text-stone-500">
                     {slot.publishStatus.replace(/_/g, " ")}
                   </span>
-                  <Link
-                    href={`/app/operator/review/${slot.scheduledPostId}`}
-                    className="text-xs text-teal-800 underline"
-                  >
-                    Review this date
-                  </Link>
+                  {/*
+                    The review page identifies a file by four facts, one of which is the QC-time
+                    checksum. A render that has not finished has none, so this link waits for the
+                    file to exist rather than opening a page that can only say it does not.
+                  */}
+                  {isReviewable(slot) ? (
+                    <Link
+                      href={`/app/operator/review/${slot.scheduledPostId}`}
+                      data-testid="operator-slot-review-link"
+                      className="text-xs text-teal-800 underline"
+                    >
+                      Review this date
+                    </Link>
+                  ) : null}
                 </div>
                 <p className="mt-1 text-xs text-stone-500">
                   {slot.clipId
                     ? slot.boundRender
-                      ? `Render ${slot.boundRender.state.toLowerCase()}${
-                          slot.boundRender.qcStatus
-                            ? ` · QC ${slot.boundRender.qcStatus.toLowerCase()}`
-                            : ""
-                        }`
+                      ? isReviewable(slot)
+                        ? `Render ${slot.boundRender.state.toLowerCase()}${
+                            slot.boundRender.qcStatus
+                              ? ` · QC ${slot.boundRender.qcStatus.toLowerCase()}`
+                              : ""
+                          }`
+                        : slot.boundRender.state === "FAILED"
+                          ? "The render failed. This date stays blocked until it is re-rendered."
+                          : "A render is in progress. This date opens for review once it finishes."
                       : "No render bound yet."
                     : "No clip in this date. A replacement found no reserve, or none was allocated."}
                 </p>
+                {shortages[slot.scheduledPostId] ? (
+                  <div
+                    data-testid="operator-slot-shortage"
+                    className="mt-3 rounded-md border border-stone-200 bg-white p-3"
+                  >
+                    <p className="text-xs font-medium text-stone-700">
+                      Fill this date from an earlier service
+                    </p>
+                    <div className="mt-2">
+                      <PriorServiceFillForm slot={shortages[slot.scheduledPostId]} />
+                    </div>
+                  </div>
+                ) : null}
               </li>
             ))
           )}

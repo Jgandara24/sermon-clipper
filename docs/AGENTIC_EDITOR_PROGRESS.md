@@ -45,7 +45,8 @@ build the whole implementation plan in order.
 | P3.4 cheap on-demand candidate previews | done | 2026-09-06; `src/components/candidates/source-range-preview.tsx` on both the church and operator pools. One signed recording per service, byte ranges, `preload="none"`, one open at a time, no `ExportJob` ever |
 | P3.5 explicit prior-service fill policy | done | 2026-09-06; `src/lib/review/prior-service-fill-policy.ts`. Pure, and exports no way to *find* a candidate — only to judge one an operator named. No caller yet; P3.6 applies it |
 | P3.6 apply a prior-service fill atomically | done | 2026-09-06; `src/lib/review/prior-service-fill.ts`. Source-video lock serialises it against cleanup; exact conditional claim; no second `REPLACE`; exception resolved in place; delivery still needs a fresh acceptance |
-| P3.7–P8 | not started | |
+| P3.7 operator shortage-resolution action | done | 2026-09-06; `src/app/actions/operator-prior-service-fill.ts`, its form, the options loader, and an operator-only calendar link. Nothing preselected, confirmation re-checked server side, review link waits for a real file |
+| P3.8–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -249,6 +250,38 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.7 deviations
+
+**The `"use server"` export trap, hit a second time.** `PRIOR_SERVICE_FILL_IDLE` was a plain
+`const` in the action file, exactly as `CLIP_REVIEW_IDLE` was in P2.6 — and exactly as the P2.6
+note in this document warned. A `"use server"` module may export nothing but async functions, and
+the failure ("can only export async functions, found object") arrives at *request* time, so
+typecheck, lint and build all pass and the page breaks in a browser. The e2e caught it. The state,
+the idle constant and the zod schema now live in `src/lib/review/prior-service-fill-input.ts`, the
+same shape P2.6 settled on. **Reading a past deviation is not the same as applying it.**
+
+**A new loader the plan did not list.** `prior-service-fill-options.ts` enumerates what an operator
+may choose from. It is deliberately not a selector: services come back oldest first and candidates
+in the selector's original rank order — orderings the data already had — and nothing scores, ranks
+by desirability, or marks a suggestion. A loader that returned "the best option first" would put
+back the recommendation P3.5 was careful not to make.
+
+**The success message is unreachable in this layout, and the test says so.** A successful fill
+stops the date being a shortage, so the server stops sending options and the whole form unmounts,
+taking its message with it. Same shape as the P2.6 gap. The confirmation an operator actually sees
+is the date itself now reading "a render is in progress", and the test asserts that durable state
+rather than a message that legitimately no longer exists.
+
+**One fixture was wrong in a way that looked right.** The "no options" case seeded a service dated
+*after* the one holding clips, so the clips were eligible for it and the empty-list copy never
+rendered. The only honest way to produce an empty list is a service older than every other, which
+is what the fixture now does.
+
+**The review link waits for a checksum, not for a job state.** `BoundRenderFacts` gained
+`hasChecksum`. The review page identifies a file by four facts and the checksum is one of them, so
+a `SUCCEEDED` job that has not yet been QC-checked still has nothing to review; linking on state
+alone would open a page that can only say the file is not ready.
 
 ### P3.6 deviations
 

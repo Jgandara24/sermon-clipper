@@ -7,6 +7,7 @@ import { requirePlatformOperator } from "@/lib/auth";
 import { loadOperatorProjectPool } from "@/lib/candidates/query";
 import { createSignedMediaUrl } from "@/lib/media/signed-url";
 import { prisma } from "@/lib/prisma";
+import { loadShortageResolutionOptions } from "@/lib/review/prior-service-fill-options";
 import {
   assertNoSelectorSignal,
   editorialExceptionsForProject,
@@ -79,6 +80,24 @@ export default async function OperatorProjectPage({
       })
     : null;
 
+  // Fill options, only for the dates that have nothing to post. Loaded on the page rather than
+  // fetched by the form, so nothing is requested until an operator has actually opened a service
+  // with a shortage — there is no request on page load for services that are fine.
+  const emptySlots = pool.slots.filter(
+    (slot) => slot.clipId === null && (slot.publishStatus === "UNFILLED" || slot.publishStatus === "BLOCKED"),
+  );
+  const shortageEntries = await Promise.all(
+    emptySlots.map(async (slot) => {
+      const options = await loadShortageResolutionOptions(prisma, {
+        scheduledPostId: slot.scheduledPostId,
+      });
+      return options ? ([slot.scheduledPostId, options] as const) : null;
+    }),
+  );
+  const shortages = Object.fromEntries(
+    shortageEntries.filter((entry): entry is [string, NonNullable<typeof entry>[1]] => entry !== null),
+  );
+
   const thumbnailUrl = project.sourceVideo?.thumbnailKey
     ? createSignedMediaUrl({
         key: project.sourceVideo.thumbnailKey,
@@ -128,7 +147,12 @@ export default async function OperatorProjectPage({
         </div>
       </section>
 
-      <OperatorProjectCandidatePool pool={pool} lineage={lineage} previewUrl={previewUrl} />
+      <OperatorProjectCandidatePool
+        pool={pool}
+        lineage={lineage}
+        previewUrl={previewUrl}
+        shortages={shortages}
+      />
     </div>
   );
 }
