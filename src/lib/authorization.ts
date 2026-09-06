@@ -1,5 +1,15 @@
 import { WorkspaceRole } from "@prisma/client";
 
+/**
+ * Every permission here is scoped to one workspace, and every one is granted by a `WorkspaceRole`
+ * held through a membership in that workspace. Nothing in this file can express authority over a
+ * workspace the holder is not a member of.
+ *
+ * That is deliberate, and it is why cross-workspace editorial review lives in
+ * `src/lib/operator-auth.ts` instead of as a permission here. `MANAGE_OPERATIONS` is the trap: it
+ * reads like staff authority but shows one church its own operational events, and adding a
+ * cross-tenant meaning to it would silently widen what every existing OWNER and ADMIN can see.
+ */
 export type WorkspacePermission =
   | "VIEW_WORKSPACE"
   | "IMPORT_MEDIA"
