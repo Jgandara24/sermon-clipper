@@ -40,7 +40,8 @@ build the whole implementation plan in order.
 | P2.8 require exact editorial acceptance | done | 2026-09-06; `src/lib/delivery/{eligibility,query}.ts` now query the standing decision about the exact render. Four identity facts, human reviewer, `ACCEPT`; a retry clears the QC verdict so a rerender cannot inherit one |
 | P2.9 start the human-only program explicitly | done | 2026-09-06; `src/lib/review/{editorial-program,program-key}.ts`, two scripts, `docs/HUMAN_REVIEW_30_DAY_RUNBOOK.md`. Fixed 30 days, no backdating, no restart; a pause extends and also pauses delivery; the sandbox census scans exactly what the publisher scans |
 | P3.1 role-safe candidate-pool read model | done | 2026-09-06; `src/lib/candidates/{project-pool,query}.ts`. Six presentation states, rank preserved, borrowed prior-service fill found through the slot; church shape derived from the operator shape by removal. No production caller yet |
-| P3.2–P8 | not started | |
+| P3.2 show the complete actual pool to churches | done | 2026-09-06; the project page and `/api/projects/[id]/clips` now read P3.1's church pool. Selector score, subscores, model version and excerpt removed from both — they were church-visible before this commit |
+| P3.3–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -244,6 +245,31 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.2 deviations
+
+**This commit removed something churches could already see.** The project page and the clips API
+both carried the Selector's score, its subscores, the model version and the quoted excerpt — a
+score tile, a colour-coded tone, and a "show score breakdown" toggle. Plan §2.2 says no
+church-facing response, page, or label exposes them, so all of it is gone. The `score` relation is
+no longer selected in either place: not selected is a stronger guarantee than selected-and-dropped.
+
+**Card titles moved from `h3` to `h4`.** The list gained a section layer (going out / in reserve /
+set aside), so the section heading is the `h3` and the cards below it are `h4`. Found because an
+e2e selector reading `h3` picked up the section heading; fixed in the markup rather than in the
+selector, because the heading order was the thing that was wrong.
+
+**One e2e assertion had to be rewritten, and the reason is worth keeping.** `expect(html).not
+.toContain("93")` — the fixture's score total — fails against any page, because two-digit numbers
+appear inside Next's chunk hashes. Distinctive strings (the model version, the excerpt) are checked
+against the raw HTML where they could hide in an attribute; the numeric total is checked against
+the page's visible text, which is where a leaked score would actually show.
+
+**The page merges the pool with the church-only extras rather than widening P3.1.** Summary,
+scripture references, approval state and the like/dislike flag are church-page concerns; teaching
+the pool read model about them would make P3.1 a church-page module. A borrowed prior-service fill
+has no row in this service's clip list, so it renders with the facts the slot supplies and a
+sentence saying where it came from — nothing invented to fill the gap.
 
 ### P3.1 deviations
 
