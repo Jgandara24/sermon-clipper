@@ -44,7 +44,8 @@ build the whole implementation plan in order.
 | P3.3 cross-workspace operator project view | done | 2026-09-06; `/app/operator/projects/[projectId]`, two components, lineage and exception readers in `review/query.ts`. Reading only — no limit editor, no settings, no publishing |
 | P3.4 cheap on-demand candidate previews | done | 2026-09-06; `src/components/candidates/source-range-preview.tsx` on both the church and operator pools. One signed recording per service, byte ranges, `preload="none"`, one open at a time, no `ExportJob` ever |
 | P3.5 explicit prior-service fill policy | done | 2026-09-06; `src/lib/review/prior-service-fill-policy.ts`. Pure, and exports no way to *find* a candidate — only to judge one an operator named. No caller yet; P3.6 applies it |
-| P3.6–P8 | not started | |
+| P3.6 apply a prior-service fill atomically | done | 2026-09-06; `src/lib/review/prior-service-fill.ts`. Source-video lock serialises it against cleanup; exact conditional claim; no second `REPLACE`; exception resolved in place; delivery still needs a fresh acceptance |
+| P3.7–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -248,6 +249,26 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.6 deviations
+
+**`SLOT_MOVED` is narrower than it looks, and a test had to say so.** The first draft asserted that
+a stale form — one rendered while a date was empty and submitted after somebody else filled it —
+refuses with `SLOT_MOVED`. It does not: the policy runs before the conditional claim, and a filled
+date is already `NOT_STARTED` by then, so the refusal is `slot_state_not_fillable`. `SLOT_MOVED`
+covers only the window *inside* the transaction, between the policy passing and the claim landing.
+Both guards are wanted; the test now asserts the one an operator actually meets, and the
+concurrency cases exercise the other.
+
+**The retry path returns before the policy runs.** A second click on a date this command already
+filled returns the same answer rather than being refused. Without it the conditional claim would
+report an operator's own completed work as somebody else having taken the date, which is a
+confusing thing to be told about something you did.
+
+**The audit event names both services in `metadata`, not just `projectId`.** An operational event
+has one `projectId` column, and this act involves two. The target owns the column because that is
+the date affected; the source is in the metadata beside it, so a later reader can see what was
+borrowed from where without joining anything.
 
 ### P3.5 deviations
 
