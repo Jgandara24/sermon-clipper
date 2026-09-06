@@ -29,11 +29,21 @@ describe("resolveCaptionFace", () => {
     });
   });
 
-  it("reads Clean as an unbundled family that is not bold", () => {
-    // Clean keeps the stack it has always had. The burn-in lets libass lay it out, so nothing
-    // here needs a bundled file for it.
+  it("reads Clean as its bundled family, which is not bold", () => {
+    // Clean asked for `Inter` until 2026-09-05. A render inside the worker image proved `Inter`
+    // and `DejaVu Sans` produce the identical frame, so it now names the family it always drew.
     expect(resolveCaptionFace(getCaptionPreset("clean").style)).toEqual({
-      family: "Inter",
+      family: "DejaVu Sans",
+      bold: false,
+    });
+  });
+
+  it("reads bold-serif as an unbundled family, because it still is one", () => {
+    // The same comparison showed `Georgia` does NOT draw as `DejaVu Serif` — it draws as
+    // `DejaVu Sans`. Renaming the head would change every clip approved against this preset, so
+    // it keeps the family it has always named and the burn-in keeps substituting.
+    expect(resolveCaptionFace(getCaptionPreset("bold-serif").style)).toEqual({
+      family: "Georgia",
       bold: false,
     });
   });

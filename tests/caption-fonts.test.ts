@@ -96,26 +96,40 @@ describe("bundled caption fonts", () => {
   });
 
   it("recognises a stored font that is not one of the explicit choices", () => {
-    // Clean stores a stack this repository does not ship. The control must say so rather than
-    // display a family the document does not use.
-    expect(isBundledFontValue(getCaptionPreset("clean").style.fontFamily)).toBe(false);
+    // `bold-serif` stores a stack this repository does not ship. The control must say so rather
+    // than display a family the document does not use.
+    //
+    // This was Clean's job until 2026-09-05. Clean's head is now `DejaVu Sans`, proven identical
+    // in the worker image, so Clean is a bundled stack and must report as one. `bold-serif` is
+    // the remaining genuine example, and it stays one: its head is `Georgia`.
+    expect(isBundledFontValue(getCaptionPreset("bold-serif").style.fontFamily)).toBe(false);
+    expect(isBundledFontValue(getCaptionPreset("clean").style.fontFamily)).toBe(true);
     expect(isBundledFontValue(FONT_OPTIONS[0].value)).toBe(true);
   });
 
   /**
-   * The guard that matters, narrowed on 2026-09-05 to the part that reaches a rendered file.
+   * The guard that matters: the ASS `Fontname` is the *first* family, so that is the only part of
+   * the stack that reaches a rendered file and can move an approved clip.
    *
-   * The ASS `Fontname` is the *first* family, so that is what changes an approved clip. The rest
-   * of the stack is read only by the browser preview. The tails were repointed at bundled faces
-   * so the preview stops showing a face the burn-in will not use; the heads are frozen.
+   * Settled on 2026-09-05 by rendering inside the built worker image
+   * (`npm run audit:caption-faces`), which is the only place libass reads the image's fontconfig
+   * rather than the developer machine's.
+   *
+   * `Inter` and `DejaVu Sans` produced the identical frame, so the three sans presets now name
+   * the bundled family and nothing they render changed.
+   *
+   * `Georgia` did not match `DejaVu Serif`. It matched `DejaVu Sans` — `bold-serif` has always
+   * burned in a sans face, whatever `fc-match` reports — so renaming its head would flip every
+   * clip approved against it from sans to serif. It stays frozen, and this line is the record of
+   * why. Do not "fix" it without a fresh comparison.
    */
-  it("freezes the first family of Clean and every retired preset", () => {
+  it("pins the first family of Clean and every retired preset", () => {
     const head = (id: string) =>
       getCaptionPreset(id).style.fontFamily.split(",")[0].trim().replace(/^['"]|['"]$/g, "");
-    expect(head("clean")).toBe("Inter");
+    expect(head("clean")).toBe("DejaVu Sans");
+    expect(head("karaoke")).toBe("DejaVu Sans");
+    expect(head("quiet")).toBe("DejaVu Sans");
     expect(head("bold-serif")).toBe("Georgia");
-    expect(head("karaoke")).toBe("Inter");
-    expect(head("quiet")).toBe("Inter");
   });
 
   it("ends every retired preset's stack on a face this repository ships", () => {

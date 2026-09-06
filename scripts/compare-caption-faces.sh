@@ -30,7 +30,7 @@ mkdir -p "${OUT_DIR}"
 rm -f "${OUT_DIR}"/*.png "${OUT_DIR}"/*.md5 "${OUT_DIR}"/*.ass "${OUT_DIR}"/fc-match.txt 2>/dev/null || true
 
 echo "==> Rendering inside the image"
-docker run --rm --entrypoint /bin/sh -v "${OUT_DIR}:/out" "${IMAGE_TAG}" -s <<'PROBE'
+docker run --rm -i --entrypoint /bin/sh -v "${OUT_DIR}:/out" "${IMAGE_TAG}" -s <<'PROBE'
 set -eu
 
 # The caption line the frames carry. Mixed case and a descender, so a serif substitution shows.
