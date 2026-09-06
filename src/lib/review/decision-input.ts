@@ -26,20 +26,28 @@ export type ClipReviewActionState = {
 export const CLIP_REVIEW_IDLE: ClipReviewActionState = { status: "idle", message: "" };
 
 /**
- * `REPLACE` is absent on purpose, and this is the second of three locks.
+ * The decisions the *append* path may write.
  *
- * The UI shows the control disabled; a disabled button is a suggestion. This schema is the
- * refusal, and `appendClipReview` refuses again at the service. A replacement is five writes that
- * must land together, and only P2.7's atomic command may make one.
+ * `REPLACE` is absent, and still is now that P2.7 exists: an appended `REPLACE` would be a review
+ * row with no supersession, no promotion, no rebinding and no render. A replacement goes through
+ * `replaceScheduledClip`, which is the only code that writes one, and `appendClipReview` refuses
+ * it a second time at the service.
  */
 export const APPENDABLE_DECISIONS = [
   ClipReviewDecision.ACCEPT,
   ClipReviewDecision.REVISE,
 ] as const;
 
+/** Every decision a reviewer may take from the page, including the one with its own command. */
+export const SUBMITTABLE_DECISIONS = [
+  ClipReviewDecision.ACCEPT,
+  ClipReviewDecision.REVISE,
+  ClipReviewDecision.REPLACE,
+] as const;
+
 export const decisionSchema = z.object({
   scheduledPostId: z.string().uuid(),
-  decision: z.enum(APPENDABLE_DECISIONS),
+  decision: z.enum(SUBMITTABLE_DECISIONS),
   note: z.string().trim().max(4000).optional(),
   /**
    * What the reviewer had on screen. Client-supplied, and never used to select anything: the

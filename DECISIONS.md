@@ -3837,3 +3837,42 @@ the slot it just loaded — never from the operator's session. The read model bu
 so no page-level code chooses a workspace id at all.
 
 Status: Active. Sign with the owner of the file, never the viewer.
+
+## 2026-09-06 - A Replacement Is One Transaction, And The Project Row Is What Serializes It
+
+Replacing a scheduled clip is not a decision with side effects. It is five writes that only make
+sense together: the rejected clip is superseded, the sermon's next reserve is promoted, the slot is
+rebound to it, a priority render is queued, and the human `REPLACE` is recorded. Land four of the
+five and the slot is worse than before anyone reviewed it — pointing at a clip with no render, or
+at a render for a clip it no longer holds, with no record of who decided what.
+
+So `replaceScheduledClip` is a command, not a sequence, and `appendClipReview` refuses a bare
+`REPLACE` so there is exactly one way to write one.
+
+**The project row is the lock.** Two operators replacing two different slots in the same sermon
+would both read the same candidate pool and both choose the lowest-rank reserve.
+`ScheduledPost.clipId` is unique, so the database would stop the double-promotion — but as a
+constraint violation, which is a crash rather than an answer. Locking the project first makes the
+second replacement wait, re-read, and take the next reserve: both succeed, with different clips.
+The unique index stays as the backstop it should be.
+
+**The rejected clip is superseded even when nothing replaces it.** A replacement that found no
+reserve still says "not this clip", and leaving it `KEPT` would let the next coordinator sweep hand
+it straight back to the slot it was just rejected from. The same transaction empties the slot,
+keeps its date and its `projectId` — which is what preserves ownership once the clip is gone — sets
+it `UNFILLED`, and opens an `EditorialException`. There is no half-replaced state to land in.
+
+**The notification is sent after the commit, and cannot undo it.** An alert that fails to send must
+not roll back a replacement that already happened; the slot is correct either way.
+
+**`SUGGESTED` clips are not promotable.** Only `KEPT` is. A `SUGGESTED` clip is one the selector
+produced and did not keep, and promoting one would put a clip into a church's feed that nothing
+ever judged good enough. `HIDDEN` is a person's "not this one" and `SUPERSEDED` has been replaced
+out once already.
+
+**A replacement's render jumps the queue.** `claimNextExportJob` now orders by
+`priority desc, createdAt asc`. An operator has just rejected a clip and is waiting to review its
+replacement; the work queued behind it is nobody's Tuesday. Within one priority the order is still
+oldest-first, so nothing starves.
+
+Status: Active. Never write a `REPLACE` outside this command.

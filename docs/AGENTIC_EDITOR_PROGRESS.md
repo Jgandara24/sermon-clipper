@@ -11,7 +11,7 @@ build the whole implementation plan in order.
 
 ## Where the build stands
 
-`main` is at `170bdef` (PR #88, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
+`main` is at `4ae7720` (PR #89, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
 
 | Work | State | Evidence |
 |---|---|---|
@@ -36,7 +36,8 @@ build the whole implementation plan in order.
 | P2.4 render only scheduled review clips | done | 2026-09-05; `src/lib/review/{final-render-eligibility,render-coordinator}.ts`, called after analysis and on a worker sweep. Records nothing while `AUTOMATIC_PUBLISHING_ENABLED` is false |
 | P2.5 exact-render operator review queue | done | 2026-09-05; `/app/operator/review` and its detail page, `src/lib/review/query.ts`. Signs the reviewed church's file, shows the four identity facts, hides every selector signal |
 | P2.6 accept, revise and multiple-feedback UI | done | 2026-09-05; `src/app/actions/clip-review.ts` authorizes itself; `REPLACE` blocked at the button, the schema and the service |
-| P2.7–P8 | not started | |
+| P2.7 atomic replacement | done | 2026-09-06; `src/lib/review/{reserve-policy,replace-scheduled-clip}.ts`. One transaction, project row locked so two replacements take different reserves; empty pool still records the decision and opens an exception |
+| P2.8–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -202,6 +203,44 @@ image could not be checked either.
 named and again with the bundled family named, and compare the frames. Until then the head of each
 stack is frozen. The existing guard test was narrowed rather than deleted: it now asserts the first
 family of each retired preset, which is the part that reaches a file.
+
+### P2.7 deviations
+
+**The `REPLACE` row is written inside `replace-scheduled-clip.ts`, not in `service.ts`.** The plan
+lists `service.ts` among the files. Putting the write there would mean a function that creates a
+`REPLACE` exists beside `appendClipReview`, which refuses one — two neighbouring functions with
+opposite rules, and only a comment between them. One call site, inside the transaction that makes
+it correct, is the stronger arrangement.
+
+**The lock is the project row, not the candidate rows.** The requirement is that two concurrent
+replacements cannot select the same reserve. Locking each candidate would be finer-grained and
+would still need a second pass when the chosen one is taken. `SELECT … FROM projects … FOR UPDATE`
+serializes replacements within one sermon, which is the only scope where they compete: the loser
+waits, re-reads the pool, and takes the next reserve. `ScheduledPost.clipId` is unique and remains
+the backstop.
+
+**The subject is read before the lock, and re-checked after it.** `loadReviewSubject` runs first so
+a stale identity is refused without taking a lock at all. That leaves a window, so after the lock
+the slot's `clipId` and `exportJobId` are compared again and a `SLOT_MOVED` refusal is raised if
+either moved. Cheap, and it closes the read-then-lock gap rather than pretending it is not there.
+
+**`decisionSchema` now accepts `REPLACE`, which reverses a P2.6 decision.** In P2.6 that schema was
+where a `REPLACE` was refused, because there was nowhere for one to go. Now the page may submit one
+and the action routes it to the command. The refusal moved to `APPENDABLE_DECISIONS` and to
+`appendClipReview`; the guard test was rewritten to assert the new arrangement rather than deleted.
+
+**A UX gap the e2e found, fixed in the product rather than the test.** After a successful
+replacement the promoted reserve's render has not finished, so the decision form disappears — and
+took its success message with it, leaving an operator who had just replaced a clip with no
+confirmation that anything happened. The "no decision can be recorded" branch now shows *why*
+(`unplayableReason`: the render is queued) and points at the history. The test asserts that durable
+state instead of a message that legitimately no longer exists.
+
+**One more shared-database lesson.** `claimNextExportJob` takes the globally best job, so a test
+asserting "the replacement's render is claimed first" was answered by a priority render left queued
+by an earlier test in the same file. The test now settles the queue before making its claim. That
+is the third time a global query has made a test lie; the pattern to watch for is any assertion
+about "the next" or "the count" of something not scoped to the test's own rows.
 
 ### P2.6 deviations
 

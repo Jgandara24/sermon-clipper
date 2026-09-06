@@ -18,11 +18,11 @@ import {
  * now and refuses if they differ — so a rerender landing mid-review produces a refusal to reload,
  * not a verdict silently attached to a file nobody saw.
  *
- * `REPLACE` is shown and disabled rather than hidden. A reviewer whose finding needs a different
- * clip should learn that from the control, not from a refusal after they have written it all out;
- * and hiding it would leave them wondering whether the product has an opinion about replacement at
- * all. It cannot be submitted: it is not a value the action's schema accepts, and the service
- * refuses a bare REPLACE besides.
+ * `REPLACE` is live as of P2.7. It does not append a decision: it runs one transaction that
+ * supersedes this clip, promotes the sermon's next reserve, rebinds the slot, and queues that
+ * reserve's render at priority. If the sermon has no clip left, the same transaction still records
+ * the decision, empties the slot and opens an exception — there is no half-replaced state to land
+ * in, which is why it is a command rather than a button that does five things in a row.
  */
 
 type Identity = {
@@ -107,20 +107,22 @@ export function ReviewDecisionForm({
           Ask for a revision
         </button>
         <button
-          type="button"
-          disabled
+          type="submit"
+          name="decision"
+          value={ClipReviewDecision.REPLACE}
+          disabled={pending}
           data-testid="review-replace"
-          title="Replacement is one atomic transaction and arrives with the next release."
-          className="cursor-not-allowed rounded border border-stone-200 px-4 py-2 text-sm font-medium text-stone-400"
+          className="rounded border border-amber-400 px-4 py-2 text-sm font-medium text-amber-900 disabled:opacity-50"
         >
-          Replace this clip — not yet available
+          Replace this clip
         </button>
       </div>
 
       <p className="text-xs text-stone-500">
-        Replacement promotes a reserve, supersedes this clip, rebinds the slot and queues a new
-        render. All of it lands together or not at all, so the control stays off until that
-        transaction exists.
+        Replacing supersedes this clip, promotes this sermon&apos;s next-best one into the same
+        date, and queues its render ahead of the backlog. All of it lands together or none of it
+        does. If the sermon has nothing left, the date is emptied and flagged for you rather than
+        left pointing at a clip you rejected.
       </p>
     </form>
   );
