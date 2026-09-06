@@ -35,6 +35,7 @@ function slot(overrides: Partial<PoolSlotFacts> = {}): PoolSlotFacts {
       exportJobId: "export-1",
       state: ProcessingJobState.SUCCEEDED,
       qcStatus: RenderQcStatus.PASSED,
+      hasChecksum: true,
     },
     latestDecision: null,
     decisionIsAboutBoundRender: false,

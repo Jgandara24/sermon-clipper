@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { PlatformPicker } from "@/components/platform-picker";
 import { requireCurrentUser, requirePrimaryWorkspaceMembership } from "@/lib/auth";
+import { isPlatformOperator } from "@/lib/operator-auth";
 import { hasWorkspacePermission } from "@/lib/authorization";
 import { isEligibleForAutoPost, parseFacebookConnection } from "@/lib/facebook-connection";
 import { prisma } from "@/lib/prisma";
@@ -57,6 +59,10 @@ export default async function CalendarPage() {
   const user = await requireCurrentUser();
   const membership = await requirePrimaryWorkspaceMembership(user.id);
   const canManageSchedule = hasWorkspacePermission(membership.role, "MANAGE_SCHEDULE");
+  // Staff only. A church sees that a day has no clip; it is never offered a control to borrow one
+  // from an earlier sermon, because that is an editorial judgement Pulpit Engine makes on their
+  // behalf and records (plan §2.2, Decision J).
+  const isOperator = isPlatformOperator(user);
   const facebookConnection = parseFacebookConnection(membership.workspace.settings);
   const isLive = isEligibleForAutoPost(facebookConnection);
 
@@ -149,9 +155,20 @@ export default async function CalendarPage() {
                               : "Posted clip (regenerated since)")}
                         </p>
                         {post.publishStatus === "UNFILLED" ? (
-                          <p className="mt-1 text-xs text-stone-500">
-                            This sermon made fewer clips than its week has days.
-                          </p>
+                          <>
+                            <p className="mt-1 text-xs text-stone-500">
+                              This sermon made fewer clips than its week has days.
+                            </p>
+                            {isOperator && post.projectId ? (
+                              <Link
+                                href={`/app/operator/projects/${post.projectId}`}
+                                data-testid="calendar-shortage-link"
+                                className="mt-1 inline-block text-xs text-teal-800 underline"
+                              >
+                                Resolve this shortage
+                              </Link>
+                            ) : null}
+                          </>
                         ) : null}
                         {post.clip ? (
                           <p className="mt-1 text-xs text-stone-500">Rank #{post.clip.rank}</p>

@@ -153,7 +153,14 @@ export async function loadOperatorProjectPool(
       owningProjectId: slot.projectId,
       scheduledDate: slot.scheduledDate,
       publishStatus: slot.publishStatus,
-      boundRender: job ? { exportJobId: job.id, state: job.state, qcStatus: job.qcStatus } : null,
+      boundRender: job
+        ? {
+            exportJobId: job.id,
+            state: job.state,
+            qcStatus: job.qcStatus,
+            hasChecksum: Boolean(job.qcChecksum),
+          }
+        : null,
       latestDecision: latest?.decision ?? null,
       // The same four facts delivery keys on (P2.8). A pool that said "accepted" about a file the
       // slot no longer holds would be repeating the defect one screen further out.
@@ -203,6 +210,7 @@ export async function loadOperatorProjectPool(
             exportJobId: slot.exportJob.id,
             state: slot.exportJob.state,
             qcStatus: slot.exportJob.qcStatus,
+            hasChecksum: Boolean(slot.exportJob.qcChecksum),
           }
         : null,
     })),
