@@ -18,6 +18,15 @@ import { JobFailureError } from "@/lib/jobs/types";
 
 export const REANALYSIS_BLOCKED = "REANALYSIS_BLOCKED";
 
+/**
+ * The church-visible refusal. It names the remedy, not the counts.
+ *
+ * P2.3 added editorial reviews to the durable set without adding a word here, deliberately. A
+ * review can only exist against a slot whose bound export passed QC, and that export is itself
+ * durable work on the same project — so `reviews` can never be the only non-zero count, and this
+ * sentence is never incomplete. Naming staff review to a church would also mean explaining a
+ * process that is not theirs, next to the "approved" they do recognise.
+ */
 export const REANALYSIS_BLOCKED_MESSAGE =
   "This sermon's clips have been edited, approved, exported, or scheduled, so they were not " +
   "regenerated. To analyse it again, upload it as a new project.";
@@ -31,6 +40,8 @@ export type DurableWorkCounts = {
   exports: number;
   /** Scheduled posts in flight, published, or blocked by an operator: a record this project delivered. */
   posts: number;
+  /** Editorial decisions. A human watched a file and said something about it; a rebuild orphans it. */
+  reviews: number;
 };
 
 export type ReanalysisAssessment =
@@ -38,7 +49,7 @@ export type ReanalysisAssessment =
   | { allowed: false; work: DurableWorkCounts };
 
 export type ReanalysisPolicyClient =
-  | Pick<PrismaClient, "clipEdit" | "clipApproval" | "exportJob" | "scheduledPost">
+  | Pick<PrismaClient, "clipEdit" | "clipApproval" | "exportJob" | "scheduledPost" | "clipReview">
   | Prisma.TransactionClient;
 
 /**
@@ -63,7 +74,7 @@ export async function countDurableWork(
   params: { projectId: string },
 ): Promise<DurableWorkCounts> {
   const clipScope = { clip: { projectId: params.projectId } };
-  const [totalEdits, systemEdits, approvals, exports, posts] = await Promise.all([
+  const [totalEdits, systemEdits, approvals, exports, posts, reviews] = await Promise.all([
     client.clipEdit.count({ where: clipScope }),
     // ANALYZE writes each clip's first document itself. Asked as a positive — "is this the
     // machine's document?" — for the reason the fallback hold records: a negative JSON filter is
@@ -79,12 +90,18 @@ export async function countDurableWork(
         publishStatus: { in: [...DURABLE_PUBLISH_STATES] },
       },
     }),
+    // Counted on the immutable snapshot, not the live link. `ClipReview.projectId` is nullable
+    // and cleared when a project is deleted; `projectIdSnapshot` is written once and never moves,
+    // so it still names this project after any amount of destruction. Every decision counts,
+    // whatever it said: a REVISE is as much a human judgement as an ACCEPT, and a rebuild would
+    // leave it pointing at a clip that no longer exists.
+    client.clipReview.count({ where: { projectIdSnapshot: params.projectId } }),
   ]);
-  return { edits: Math.max(0, totalEdits - systemEdits), approvals, exports, posts };
+  return { edits: Math.max(0, totalEdits - systemEdits), approvals, exports, posts, reviews };
 }
 
 export function hasDurableWork(work: DurableWorkCounts): boolean {
-  return work.edits + work.approvals + work.exports + work.posts > 0;
+  return work.edits + work.approvals + work.exports + work.posts + work.reviews > 0;
 }
 
 /** Whether the project's clips may be rebuilt, and if not, what stands in the way. */
@@ -118,7 +135,8 @@ export function describeDurableWork(work: DurableWorkCounts): string {
   return (
     `durable work on this project's clips: ${work.edits} saved edit(s), ` +
     `${work.approvals} approval record(s), ${work.exports} export job(s), ` +
-    `${work.posts} scheduled post(s) in flight, published or blocked`
+    `${work.posts} scheduled post(s) in flight, published or blocked, ` +
+    `${work.reviews} editorial review(s)`
   );
 }
 

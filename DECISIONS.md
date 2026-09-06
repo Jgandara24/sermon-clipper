@@ -3698,3 +3698,30 @@ check is skipped, and it is a read: it returns the target workspace so callers c
 and signed media URLs to that church, and confers no ability to write anything into it.
 
 Status: Active. Do not add a route, action, or settings toggle that grants this marker.
+
+## 2026-09-05 - Forbidden Content Is Revisable Exactly When A Trim Can Remove It
+
+The S15 actionability table says `CONTENT` is replace-only and boundary, crop, caption and audio
+defects are revisable. For `FORBIDDEN_CONTENT` it says "mid-clip", which needed a definition
+before P2.3 could store an actionability on each finding.
+
+The definition is not a tolerance somebody picked. A forbidden span is revisable exactly when
+excising it leaves **one continuous range** — which is P1.5's rule, already enforced by
+`src/lib/exports/continuous-range.ts`, where the renderer refuses a document that would render as
+more than one span. Cut a span off either end and one range remains; cut one out of the middle and
+two do, which the renderer will not render. So "at the edge" is precisely the set of spans a trim
+can actually remove, and it needed no new number.
+
+This also matches the editorial standard, which permits excluding a short slide at the edge of a
+candidate by moving a boundary, "but only when the resulting boundaries still contain a complete
+thought" (§5). The second half of that sentence is a judgement only the reviewer can make, which
+is why a reviewer may state an actionability explicitly and override the table.
+
+**A finding with no position is treated as mid-clip.** It cannot be shown to be trimmable, and the
+cost of being wrong runs one way: an unnecessary replacement costs one reserve clip, while a
+mistaken "revisable" publishes forbidden content that nobody removed.
+
+**Actionability is stored per finding, not derived at read time.** A later change to this table
+must not rewrite what a past finding demanded — the same reason the review tables are append-only.
+
+Status: Active. If this rule ever changes, change it forward; do not reinterpret stored rows.
