@@ -1,7 +1,7 @@
 import { createReadStream, statSync } from "node:fs";
 import { Readable } from "node:stream";
 import { apiError } from "@/lib/api/response";
-import { verifySignedMediaUrl } from "@/lib/media/signed-url";
+import { mediaKeyBelongsToWorkspace, verifySignedMediaUrl } from "@/lib/media/signed-url";
 import { getStorageProvider } from "@/lib/storage";
 
 function toWebStream(nodeStream: ReturnType<typeof createReadStream>): ReadableStream<Uint8Array> {
@@ -25,12 +25,8 @@ export async function GET(request: Request) {
     );
   }
 
-  const workspaceSegment = `/${verified.workspaceId}/`;
-  if (
-    !verified.key.startsWith("fixtures/") &&
-    !verified.key.startsWith(`${verified.workspaceId}/`) &&
-    !verified.key.includes(workspaceSegment)
-  ) {
+  // The same predicate the signer uses, so the two sides cannot drift apart.
+  if (!mediaKeyBelongsToWorkspace(verified.key, verified.workspaceId)) {
     return apiError("PERMISSION_DENIED", "Invalid media link.", { status: 403 });
   }
 

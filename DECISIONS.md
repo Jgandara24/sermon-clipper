@@ -3810,3 +3810,30 @@ rule refuses new work; it does not confiscate finished work over an editorial de
 a different clip.
 
 Status: Active. Do not render a clip no slot is waiting on.
+
+## 2026-09-05 - A Signed Media URL Is Signed For The Workspace That Owns The File
+
+`createSignedMediaUrl` puts a workspace id inside the HMAC payload, and `/api/media/signed`
+checks the storage key against that id before serving. There is no session check on that route —
+the signature *is* the authorization — so the id in the signature decides what the link can reach.
+
+For every caller before P2.5 the two ideas were the same thing: the viewer's workspace was the
+file's workspace. A platform operator reviewing another church's render is the first caller where
+they differ, and the natural line to write is the wrong one. Passing the operator's own workspace
+id produces a link that is signed perfectly and then refused with a bare 403 at playback, which is
+a miserable thing to diagnose from a `<video>` element that simply shows nothing.
+
+So the rule is now enforced at both ends by one shared predicate, `mediaKeyBelongsToWorkspace`.
+The route calls it before serving, as it always did. `createSignedMediaUrl` now calls it before
+signing and throws `SignedMediaScopeError` if the key does not belong to the workspace it was
+asked to sign for. A mis-scoped link cannot be minted at all, and the failure names the line that
+got it wrong.
+
+Sharing the predicate is the other half. Two copies of "does this key live under this workspace"
+would eventually disagree, and the disagreement would surface as a 403 nobody could explain.
+
+The operator page therefore signs with the *reviewed church's* workspace id, which it reads from
+the slot it just loaded — never from the operator's session. The read model builds the URL itself
+so no page-level code chooses a workspace id at all.
+
+Status: Active. Sign with the owner of the file, never the viewer.

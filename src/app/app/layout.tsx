@@ -12,7 +12,12 @@ export default async function AuthenticatedLayout({
   const membership = await requirePrimaryWorkspaceMembership(user.id);
 
   return (
-    <AppShell user={user} workspace={membership.workspace} role={membership.role}>
+    <AppShell
+      user={user}
+      workspace={membership.workspace}
+      role={membership.role}
+      isPlatformOperator={user.isPlatformOperator}
+    >
       {children}
     </AppShell>
   );
