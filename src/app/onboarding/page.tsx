@@ -64,6 +64,16 @@ export default async function OnboardingPage() {
                 >
                   <option value="1">1 (Sunday only)</option>
                   <option value="2">2 (Sunday &amp; Wednesday)</option>
+                  {/*
+                    Present but unselectable. Rev2 §9 puts three services a week out of scope for
+                    this product phase, and a church that streams three times needs to see that we
+                    know rather than to find two options and wonder. `SermonsPerWeek` stays `1 | 2`
+                    and both server schemas stay `.min(1).max(2)`, so a forged `3` is refused
+                    whatever this markup says — the disabled attribute is courtesy, not a control.
+                  */}
+                  <option value="3" disabled>
+                    3 services — Coming later
+                  </option>
                 </select>
               </div>
               <div>

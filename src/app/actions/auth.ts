@@ -4,6 +4,7 @@ import { AuthProvider, NotificationStatus, WorkspaceRole } from "@prisma/client"
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { sermonsPerWeekSchema } from "@/lib/church-profile-input";
 import { DEV_SESSION_COOKIE, getPrimaryWorkspaceForUser, requireCurrentUser } from "@/lib/auth";
 import {
   AUTH_SESSION_COOKIE,
@@ -32,7 +33,8 @@ const onboardingSchema = z.object({
   workspaceName: z.string().trim().min(2).max(80),
   timezone: z.string().trim().min(2).max(80),
   serviceDay: z.string().trim().min(2).max(24),
-  sermonsPerWeek: z.coerce.number().int().min(1).max(2).default(1),
+  // Shared with the profile action, so the two cannot disagree about what is supported.
+  sermonsPerWeek: sermonsPerWeekSchema.default(1),
   secondServiceDay: z.string().trim().min(2).max(24).optional(),
 });
 
