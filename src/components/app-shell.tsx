@@ -2,6 +2,7 @@ import type { WorkspaceAccessPlan, WorkspaceRole } from "@prisma/client";
 import {
   Activity,
   Calendar,
+  ClipboardCheck,
   CreditCard,
   Download,
   FolderOpen,
@@ -30,6 +31,11 @@ type AppShellProps = {
     name: string | null;
   };
   role: WorkspaceRole;
+  /**
+   * Platform staff, which is not a workspace role and cannot be derived from one. Passed in
+   * separately for exactly that reason — see `src/lib/operator-auth.ts`.
+   */
+  isPlatformOperator?: boolean;
 };
 
 const navItems = [
@@ -41,17 +47,22 @@ const navItems = [
   { href: "/app/settings/billing", label: "Billing", icon: CreditCard, permission: "MANAGE_BILLING" },
   { href: "/app/settings/imports", label: "Auto-import", icon: Rss, permission: "MANAGE_OPERATIONS" },
   { href: "/app/settings/operations", label: "Operations", icon: Activity, permission: "MANAGE_OPERATIONS" },
+  // Cross-workspace, so it is gated by the platform-operator marker rather than by a permission.
+  // Hiding it is a courtesy, not the control: each operator page checks the marker itself.
+  { href: "/app/operator/review", label: "Review queue", icon: ClipboardCheck, operatorOnly: true },
 ] satisfies Array<{
   href: string;
   label: string;
   icon: React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>;
   permission?: WorkspacePermission;
+  operatorOnly?: boolean;
 }>;
 
-export function AppShell({ children, workspace, user, role }: AppShellProps) {
-  const visibleNavItems = navItems.filter(
-    (item) => !item.permission || hasWorkspacePermission(role, item.permission),
-  );
+export function AppShell({ children, workspace, user, role, isPlatformOperator = false }: AppShellProps) {
+  const visibleNavItems = navItems.filter((item) => {
+    if ("operatorOnly" in item && item.operatorOnly) return isPlatformOperator;
+    return !item.permission || hasWorkspacePermission(role, item.permission);
+  });
   const access = decideWorkspaceAccess(workspace, "read");
 
   return (

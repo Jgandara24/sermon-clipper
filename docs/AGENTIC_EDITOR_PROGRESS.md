@@ -11,7 +11,7 @@ build the whole implementation plan in order.
 
 ## Where the build stands
 
-`main` is at `862e29a` (PR #85, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
+`main` is at `56a2aa8` (PR #87, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
 
 | Work | State | Evidence |
 |---|---|---|
@@ -34,7 +34,8 @@ build the whole implementation plan in order.
 | P2.2 platform-operator authorization | done | 2026-09-05; `src/lib/operator-auth.ts` reads the marker, `src/lib/operations/platform-operator.ts` grants it, `npm run set:platform-operator` is the only door. No route, action, or toggle |
 | P2.3 append-only review and feedback services | done | 2026-09-05; `src/lib/review/{types,feedback-policy,snapshots,service}.ts`. Exact-render check, S15 table, bare `REPLACE` refused, reanalysis now blocks after any review |
 | P2.4 render only scheduled review clips | done | 2026-09-05; `src/lib/review/{final-render-eligibility,render-coordinator}.ts`, called after analysis and on a worker sweep. Records nothing while `AUTOMATIC_PUBLISHING_ENABLED` is false |
-| P2.5–P8 | not started | |
+| P2.5 exact-render operator review queue | done | 2026-09-05; `/app/operator/review` and its detail page, `src/lib/review/query.ts`. Signs the reviewed church's file, shows the four identity facts, hides every selector signal |
+| P2.6–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -200,6 +201,45 @@ image could not be checked either.
 named and again with the bundled family named, and compare the frames. Until then the head of each
 stack is frozen. The existing guard test was narrowed rather than deleted: it now asserts the first
 family of each retired preset, which is the part that reaches a file.
+
+### P2.5 deviations
+
+**The authorization check is in each page, never in a layout.** Next 16's own guidance is explicit
+and contradicts the obvious design: "A layout also does not control whether the rest of the route
+renders. Route segments and parallel route slots are rendered by the router, so a layout that
+hides or swaps them does not stop them from running or from appearing in the RSC Payload."
+An `app/app/operator/layout.tsx` holding `requirePlatformOperator()` would look like a gate and be
+a decoration. Both operator pages call it themselves, next to the data.
+
+**An operator must also be a member of some workspace.** `app/app/layout.tsx` calls
+`requirePrimaryWorkspaceMembership`, which redirects to `/onboarding`, and the operator pages live
+under `/app` because that is where the plan puts them and where the nav item lives. So a pure staff
+account belonging to no church cannot reach the queue, which sits awkwardly beside P2.2's note that
+the marker is deliberately independent of workspace membership. The *authorization* is still
+independent — no role grants it — but the *route* is not. Moving the pages to a top-level
+`/operator` segment with its own layout would fix it; not done, because it diverges from the plan's
+file list and from the shell the nav item belongs to.
+
+**The signed-URL trap is closed at the source, not documented.** `createSignedMediaUrl` now throws
+if the key does not belong to the workspace it was asked to sign for, and the media route and the
+signer share one predicate so they cannot drift. The plan lists `signed-url.ts` as a file to touch;
+this is what it needed. Recorded in `DECISIONS.md`.
+
+**Hiding the selector is checked at runtime, not just by careful selecting.** `ClipScore` is never
+included in a query here, but that is a rule someone breaks by adding one convenient field.
+`assertNoSelectorSignal` walks every DTO before it is returned and throws on `score`, `subscores`,
+`rationale`, `excerpt` or `modelVersion`. `total` is deliberately *not* on that list: QC writes a
+free-form details document that could reasonably count things, and a false positive would break the
+operator's page over nothing — a spread `ClipScore` is still caught by the other four.
+
+**One test assertion was wrong in a way worth remembering.** The first version checked that the
+serialised queue did not contain the score's value, `"87"`. It failed, because `"87"` appears
+inside a UUID. Searching a JSON blob full of identifiers for a two-digit number proves nothing; the
+test now pins the DTO's exact key set instead, which is a stronger claim and cannot collide.
+
+**The e2e fixture writes real bytes.** An `ExportedFile` row without a file on disk makes the
+signed link return 404, which would have let the scoping assertion pass for the wrong reason — the
+point of that check is that the link *works*, not that it is shaped correctly.
 
 ### P2.4 deviations
 

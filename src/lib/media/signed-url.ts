@@ -7,6 +7,12 @@ export const MIN_MEDIA_URL_SECRET_LENGTH = 32;
 
 type SignedMediaUrlInput = {
   key: string;
+  /**
+   * The workspace that **owns the file**, which is not always the workspace of the person being
+   * shown it. A platform operator reviewing another church's render must sign with that church's
+   * id (P2.5); signing with their own produces a link the media route refuses, because the route
+   * checks the key against the id inside the signature.
+   */
   workspaceId: string;
   expiresInSeconds?: number;
   contentType?: string;
@@ -55,6 +61,36 @@ function getSigningSecret(): string {
   return "dev-only-sermon-clipper-media-url-secret";
 }
 
+/**
+ * Whether a storage key lives under a workspace's prefix.
+ *
+ * One predicate, two callers: the media route enforces it before serving, and
+ * `createSignedMediaUrl` enforces it before signing. Sharing it is the point — if the mint side
+ * and the serve side ever disagreed, the disagreement would show up as a 403 at playback with
+ * nothing to explain it.
+ */
+export function mediaKeyBelongsToWorkspace(key: string, workspaceId: string): boolean {
+  return (
+    key.startsWith("fixtures/") ||
+    key.startsWith(`${workspaceId}/`) ||
+    key.includes(`/${workspaceId}/`)
+  );
+}
+
+/** A URL was signed for a workspace that does not own the file. */
+export class SignedMediaScopeError extends Error {
+  constructor(
+    readonly key: string,
+    readonly workspaceId: string,
+  ) {
+    super(
+      `Refusing to sign "${key}" for workspace ${workspaceId}: the key does not belong to it. ` +
+        "Sign with the workspace that owns the file, not the workspace of the person viewing it.",
+    );
+    this.name = "SignedMediaScopeError";
+  }
+}
+
 function expiresAtFromNow(seconds: number): number {
   return Math.floor(Date.now() / 1000) + seconds;
 }
@@ -100,6 +136,13 @@ export function createSignedMediaUrl({
   filename,
   disposition = "inline",
 }: SignedMediaUrlInput): string {
+  // Fails here rather than at playback. A mis-scoped link is signed perfectly and then refused by
+  // the media route with a bare 403, which is a miserable thing to debug from the browser; this
+  // turns it into an error at the line that got it wrong.
+  if (!mediaKeyBelongsToWorkspace(key, workspaceId)) {
+    throw new SignedMediaScopeError(key, workspaceId);
+  }
+
   const expiresAt = String(expiresAtFromNow(expiresInSeconds));
   const params = new URLSearchParams({
     key,
