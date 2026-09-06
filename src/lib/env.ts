@@ -171,6 +171,10 @@ const fieldSchemas = {
   // Facebook Auto-Posting Will Reuse Pulpit Engine's Meta App/Business Manager") — a System
   // User token, not a per-church OAuth token. Absence of META_SYSTEM_USER_TOKEN must fail
   // closed (see src/lib/integrations/facebook.ts), never silently no-op.
+  // P2.4 added two consumers beyond the publisher: the scheduled-render coordinator, which
+  // records no export work at all while this is false, and the final-render eligibility rule,
+  // which is inert while it is false and starts refusing manual export of unscheduled reserves
+  // when it is true. That second one is church-visible; docs/DEPLOYMENT.md says so.
   AUTOMATIC_PUBLISHING_ENABLED: exactTrue,
   META_SYSTEM_USER_TOKEN: optionalString,
   META_GRAPH_API_VERSION: z.string().default("v23.0"),
@@ -217,6 +221,11 @@ const fieldSchemas = {
   CHANNEL_POLL_INTERVAL_MS: rawNumber(60 * 60_000),
   // Facebook publish-worker polling cadence (Tier 3), same pattern. Default 15 minutes.
   FACEBOOK_PUBLISH_POLL_INTERVAL_MS: rawNumber(15 * 60_000),
+  // How often the worker looks for a scheduled slot with no bound export (P2.4). Its job is to
+  // catch slots armed while automatic publishing was off, so enabling the switch later cannot
+  // strand them — that is a backlog to work through, not a race to win, and every sweep is a
+  // no-op while the switch is false. Default 15 minutes, matching the publish poll it feeds.
+  SCHEDULED_RENDER_SWEEP_INTERVAL_MS: rawNumber(15 * 60_000),
 } satisfies Record<string, z.ZodType>;
 
 type EnvSchemaMap = typeof fieldSchemas;

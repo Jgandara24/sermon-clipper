@@ -11,7 +11,7 @@ build the whole implementation plan in order.
 
 ## Where the build stands
 
-`main` is at `e6664b8` (PR #83, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
+`main` is at `862e29a` (PR #85, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
 
 | Work | State | Evidence |
 |---|---|---|
@@ -33,7 +33,8 @@ build the whole implementation plan in order.
 | P2.1 deploy migration wave 2 | done | 2026-09-05; `clip_reviews`, `clip_review_feedback`, the platform-operator marker and the editorial program tables. Append-only enforced by a database trigger, not by the service that writes it |
 | P2.2 platform-operator authorization | done | 2026-09-05; `src/lib/operator-auth.ts` reads the marker, `src/lib/operations/platform-operator.ts` grants it, `npm run set:platform-operator` is the only door. No route, action, or toggle |
 | P2.3 append-only review and feedback services | done | 2026-09-05; `src/lib/review/{types,feedback-policy,snapshots,service}.ts`. Exact-render check, S15 table, bare `REPLACE` refused, reanalysis now blocks after any review |
-| P2.4–P8 | not started | |
+| P2.4 render only scheduled review clips | done | 2026-09-05; `src/lib/review/{final-render-eligibility,render-coordinator}.ts`, called after analysis and on a worker sweep. Records nothing while `AUTOMATIC_PUBLISHING_ENABLED` is false |
+| P2.5–P8 | not started | |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -199,6 +200,42 @@ image could not be checked either.
 named and again with the bundled family named, and compare the frames. Until then the head of each
 stack is frozen. The existing guard test was narrowed rather than deleted: it now asserts the first
 family of each retired preset, which is the part that reaches a file.
+
+### P2.4 deviations
+
+**The final-render rule is gated on the publishing switch, and the plan does not say to gate it.**
+The plan says to apply it to both the automatic and manual export paths. It is applied to both —
+but only once `AUTOMATIC_PUBLISHING_ENABLED` is true. Ungated, it would refuse **every** export in
+the product today, because `AUTOMATIC_SCHEDULE_ARMING_ENABLED` is still false and therefore no
+`ScheduledPost` rows are being created at all. Even with arming on, refusing a church's Tier 2
+manual export to prevent a delivery cost that is not yet being incurred is the wrong trade. The
+cost of the gate is that the rule has no production mileage until the switch flips, and that
+flipping it changes church-visible behaviour — recorded in `DECISIONS.md` and called out in
+`docs/DEPLOYMENT.md` beside the switch.
+
+**The plan's "or a reserve selected by the atomic replacement command" needed no exception.** P2.7
+binds the promoted reserve to the slot inside the same transaction, before it enqueues that
+reserve's export, so by the time the rule is asked the reserve *is* the scheduled clip. The
+eligibility helper takes a client so P2.7 can call it inside its transaction.
+
+**Eligibility is checked after the route's idempotent early return, not before it.** A clip
+replaced out of its slot keeps the file it already has. The rule refuses new renders; confiscating
+a finished one over an editorial decision made about a different clip would punish the church for
+something it did not do.
+
+**A slot can fail forever, on purpose.** A slot whose export another slot already binds cannot
+write its binding — `ScheduledPost.exportJobId` is unique — so it is logged as an error event and
+retried on every sweep. That state is unreachable through any normal path (`clipId` is unique too,
+and the idempotency key contains the clip), so it is a "should never happen" that says so loudly
+every fifteen minutes rather than one that hides.
+
+**Tests live in a new integration file, not in the three the plan lists.** `analyze-job` and
+`phase-6-7-workflow` needed no change: the coordinator no-ops with the switch off, which is their
+state, and asserting a no-op there would say nothing. The coordinator's real behaviour needs slots,
+clips and export rows, which is a new
+`tests/integration/scheduled-render-coordinator.integration.test.ts`. The plan's "worker-isolation
+test" is `npm run worker:build`, whose `tsc -p tsconfig.worker.json` step proves the coordinator
+pulls no Next server code into the worker bundle; it passes.
 
 ### P2.3 deviations
 

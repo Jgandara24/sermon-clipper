@@ -1,5 +1,6 @@
 import { runOnePendingExportJob } from "@/lib/exports/runner";
 import { recoverStaleExportJobs } from "@/lib/exports/queue";
+import { coordinateScheduledRenders } from "@/lib/review/render-coordinator";
 import { applyStaleFailureSideEffects, recoverStaleProcessingJobs } from "@/lib/jobs/queue";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { jobHandlers } from "@/lib/jobs/handlers";
@@ -37,6 +38,7 @@ const RECOVERY_INTERVAL_MS = env.WORKER_RECOVERY_INTERVAL_MS;
 const CLEANUP_SCAN_INTERVAL_MS = env.WORKER_CLEANUP_INTERVAL_MS;
 const CHANNEL_POLL_INTERVAL_MS = env.CHANNEL_POLL_INTERVAL_MS;
 const FACEBOOK_PUBLISH_POLL_INTERVAL_MS = env.FACEBOOK_PUBLISH_POLL_INTERVAL_MS;
+const SCHEDULED_RENDER_SWEEP_INTERVAL_MS = env.SCHEDULED_RENDER_SWEEP_INTERVAL_MS;
 const COST_ROLLUP_INTERVAL_MS = env.COST_ROLLUP_INTERVAL_MS;
 const WORKER_PROCESS_HEARTBEAT_INTERVAL_MS = workerProcessHeartbeatIntervalMs();
 let shuttingDown = false;
@@ -44,6 +46,7 @@ let lastRecoveryAt = 0;
 let lastCleanupScanAt = 0;
 let lastChannelPollAt = 0;
 let lastFacebookPublishPollAt = 0;
+let lastScheduledRenderSweepAt = 0;
 let lastCostRollupAt = 0;
 let lastWorkerHeartbeatAt = 0;
 const SUPPORTED_TYPES = Object.keys(jobHandlers) as ProcessingJobType[];
@@ -177,6 +180,23 @@ async function loop() {
           },
           markAttempted: () => {
             lastCostRollupAt = now;
+          },
+        },
+        {
+          // Runs before the publish poll in the same tick's task list, which is the useful order:
+          // a slot bound this sweep is eligible for the poll that follows rather than waiting a
+          // whole interval. Ordering is a convenience, not a guarantee — the coordinator is
+          // idempotent and the publisher fails closed on an unbound slot either way.
+          name: "scheduled_render_sweep",
+          due: now - lastScheduledRenderSweepAt >= SCHEDULED_RENDER_SWEEP_INTERVAL_MS,
+          run: async () => {
+            const sweep = await coordinateScheduledRenders(prisma);
+            if (sweep.slotsBound || sweep.failures.length) {
+              console.log("[worker] scheduled render sweep", { sweep });
+            }
+          },
+          markAttempted: () => {
+            lastScheduledRenderSweepAt = now;
           },
         },
         {

@@ -11,6 +11,10 @@ import {
 import { buildExportIdempotencyKey, DEFAULT_EDIT_VERSION } from "@/lib/exports/edit-version";
 import { enqueueExportJob } from "@/lib/exports/queue";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
+import {
+  assessFinalRender,
+  FINAL_RENDER_REFUSED,
+} from "@/lib/review/final-render-eligibility";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
 import { checkExportJobLimits } from "@/lib/rate-limit";
@@ -90,6 +94,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const existing = await prisma.exportJob.findUnique({ where: { idempotencyKey } });
   if (existing) {
     return apiData({ exportJobId: existing.id });
+  }
+
+  // Only a clip a posting slot is waiting on gets a final file (P2.4). Checked after the
+  // idempotent early return above, so a render that already exists stays downloadable even if
+  // the clip has since been replaced out of its slot — that file is already paid for, and taking
+  // it away would punish the church for an editorial decision made about a different clip.
+  //
+  // Inert until automatic publishing is on; see `assessFinalRender` for why.
+  const finalRender = await assessFinalRender(prisma, { clipId: clip.id });
+  if (!finalRender.allowed) {
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: auth.workspace.id,
+      category: "export",
+      eventType: "export_rejected_unscheduled_reserve",
+      severity: "warning",
+      message: "Export request rejected: the clip is a reserve with no posting slot.",
+      metadata: { clipId: clip.id, editVersion },
+    });
+    return apiError(FINAL_RENDER_REFUSED, finalRender.message, { status: 409 });
   }
 
   // Metadata only: it names the downloaded file. A caller that renames gets the job it already
