@@ -4,14 +4,13 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-09-05, after the editor delta plan closed and the product owner chose to
-build the whole implementation plan in order.
+**Last updated:** 2026-09-06, after P3.9 merged and P3 closed. The P3 exit review is below.
 
 ---
 
 ## Where the build stands
 
-`main` is at `4ae7720` (PR #89, 2026-09-05). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
+`main` is at `32256bb` (PR #102, 2026-09-06). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
 
 | Work | State | Evidence |
 |---|---|---|
@@ -56,6 +55,40 @@ take no paying customer until automatic publishing works. The 90-day launch date
 no longer binds. Automatic publishing turns on at the end of P2, after the product owner runs the
 Tier 3 sandbox test by hand (`docs/TIER3_SANDBOX_TEST_CHECKLIST.md`), and not before. Recorded in
 `DECISIONS.md` as "Build The Whole Plan In Order; No Customer Until Publishing Works".
+
+### P3 exit review, 2026-09-06
+
+All twelve P3 exit criteria (`AGENTIC_EDITOR_IMPLEMENTATION_PLAN.md` §12) checked against `main` at
+`32256bb`. Eleven are provable from code and tests today. One is not, and cannot be.
+
+P3 was a read-model and interface phase with no migration, which is why so little of it needs the
+real product — unlike P2, whose exit criteria are mostly Jake's to perform.
+
+| # | Criterion | Proof on `main` |
+|---|---|---|
+| 1 | Complete retained pool, no internal limit | `loadChurchProjectPool` filters on `RETAINED_CLIP_STATUSES`, the same constant `analyze.ts:500` writes. `ChurchProjectPool = Omit<OperatorProjectPool, "limits" \| "slots">` removes the limit at the type level, so a leak cannot compile. Both church surfaces use that loader |
+| 2 | Cross-workspace operator inspection | `operator/projects/[projectId]/page.tsx` gates on `requirePlatformOperator()` and finds the project by id with no workspace filter. **See the caveat below** |
+| 3 | One rank-ordered reserve queue, no backup map | `reserve-policy.ts:77` takes the lowest rank, id breaks the tie. No backup mapping model in the schema |
+| 4 | Ranks never change; thin pools stay thin | Only two writers assign a rank: `analyze.ts:555` from the sort index at creation, and `posting-schedule.ts:139` for slots. Nothing updates one later |
+| 5 | Settings affect only new projects | `project-service.ts:75` freezes `candidateLimit` and `targetClipCount` into `processingConfig` at creation; `readCandidateLimit` prefers the snapshot and resolves current controls only for a legacy project |
+| 6 | On-demand previews, no final MP4 before selection | `source-range-preview.tsx` creates no `ExportJob`, uses `preload="none"`, and mounts only while open. The only `enqueueExportJob` in the fill path is `prior-service-fill.ts:219`, after the operator's selection |
+| 7 | Lineage and exhaustion exceptions visible | `replacementLineageForProject` and `editorialExceptionsForProject` in `review/query.ts` feed the operator project page. A `REPLACE` that found no reserve is retained as lineage with no replacement clip |
+| 8 | Fill needs one explicit selection, never automatic | `applyPriorServiceFill` has exactly one caller, `operator-prior-service-fill.ts`. No job handler and no scheduler reach it |
+| 9 | Fill needs renderable source; fill is not replacement | `assessPriorServiceFill` refuses with `source_not_renderable` and with `candidate_is_same_service` |
+| 10 | Missed slot moves only by operator action | One caller, `operator-reschedule-missed.ts`. `tests/integration/reschedule-missed.integration.test.ts:356` greps the source for importers and fails if a second one appears |
+| 11 | Three services visible, disabled, invalid server-side | `sermonsPerWeekSchema` is `max(2)` in `church-profile-input.ts`, shared by the onboarding action and the profile action. `COMING_LATER_SERMONS_PER_WEEK` binds the disabled option to the rule |
+| 12 | No migration, does not gate the 30-day clock | Zero `prisma/migrations` changes across the whole P3 range. The three start preconditions in `start-editorial-program.ts` are the exact accepted render, the atomic replacement and the sandbox publication — none is a P3 deliverable |
+
+**The one criterion code cannot prove.** Criterion 2 says *Jake* can inspect the pool across
+workspaces. The route is cross-workspace by construction and the gate is correct, but
+`isPlatformOperator` is a column on his production `User` row. No test and no read of this
+repository can tell you what that column holds in production. `scripts/set-platform-operator.ts`
+is the only writer; deployment step 14 bootstrapped it. One operator sign-in confirms it, and
+nothing else does.
+
+**Two worth one real look, though the code stands on its own.** Criterion 1 — P3.1 shipped a
+regression that emptied every church project page and the unit tests did not catch it, so the pool
+deserves one look at a real service. Criterion 6 — preview playback against real signed media.
 
 ### P1.5, in two parts
 
