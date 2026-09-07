@@ -109,8 +109,19 @@ export default async function SettingsPage({
       <div className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
         <p className="text-sm font-medium text-teal-800">Settings</p>
         <h2 className="mt-1 text-xl font-semibold">Church profile</h2>
+        {/*
+          This paragraph used to tell churches that their profile decided the size of the
+          candidate pool. It never did: the retained count is a staff control (plan §2.2,
+          product-owner Decision 1) that a church can neither see nor change, and saying otherwise
+          invites a conversation about a number they have no lever for. What these settings
+          actually control is the posting calendar — which days a sermon's clips go out on, and how
+          many go out each day.
+
+          `tests/church-profile-input.test.ts` greps this file for the old wording, so the phrase
+          is described here rather than quoted.
+        */}
         <p className="mt-1 text-sm text-stone-500">
-          Controls how many clips we generate per sermon and how many posts go out per day.
+          Controls which days your clips go out and how many go out each day.
         </p>
         {/* S9: each project keeps the profile it was created with, so a change here cannot
             silently re-date or re-schedule sermons that are already in flight. */}
@@ -165,6 +176,16 @@ export default async function SettingsPage({
                 >
                   <option value="1">1 (Sunday only)</option>
                   <option value="2">2 (Sunday &amp; Wednesday)</option>
+                  {/*
+                    Present but unselectable. Rev2 §9 puts three services a week out of scope for
+                    this product phase, and a church that streams three times needs to see that we
+                    know rather than to find two options and wonder. `SermonsPerWeek` stays `1 | 2`
+                    and both server schemas stay `.min(1).max(2)`, so a forged `3` is refused
+                    whatever this markup says — the disabled attribute is courtesy, not a control.
+                  */}
+                  <option value="3" disabled>
+                    3 services — Coming later
+                  </option>
                 </select>
               </div>
               <div>

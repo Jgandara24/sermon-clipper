@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { sermonsPerWeekSchema } from "@/lib/church-profile-input";
 import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/auth";
 import { isValidIanaTimezone } from "@/lib/church-profile";
 import { prisma } from "@/lib/prisma";
@@ -16,7 +17,8 @@ const churchProfileSchema = z.object({
     .max(80)
     .refine(isValidIanaTimezone, 'Must be a valid timezone like "America/Chicago".'),
   serviceDay: z.string().trim().min(2).max(24),
-  sermonsPerWeek: z.coerce.number().int().min(1).max(2),
+  // Shared with the onboarding action, so the two cannot disagree about what is supported.
+  sermonsPerWeek: sermonsPerWeekSchema,
   secondServiceDay: z.string().trim().min(2).max(24).optional(),
   postsPerDay: z.coerce.number().int().min(1).max(10),
 });

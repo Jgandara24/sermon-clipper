@@ -47,7 +47,8 @@ build the whole implementation plan in order.
 | P3.6 apply a prior-service fill atomically | done | 2026-09-06; `src/lib/review/prior-service-fill.ts`. Source-video lock serialises it against cleanup; exact conditional claim; no second `REPLACE`; exception resolved in place; delivery still needs a fresh acceptance |
 | P3.7 operator shortage-resolution action | done | 2026-09-06; `src/app/actions/operator-prior-service-fill.ts`, its form, the options loader, and an operator-only calendar link. Nothing preselected, confirmation re-checked server side, review link waits for a real file |
 | P3.8 reschedule a missed slot explicitly | done | 2026-09-06; `src/lib/schedule/reschedule-missed.ts` and its operator action. Same row mutated, binding retained, no automatic caller — asserted by a grep test |
-| P3.9–P8 | not started | |
+| P3.9 third-service option shown as coming later | done | 2026-09-06; disabled option in onboarding and settings, one shared `sermonsPerWeekSchema`, and the false candidate-count claim removed from church settings |
+| P4–P8 | not started | P3.9 is the last P3 slice. P4–P8 need their measured commit-by-commit update written and approved first — see the planning-status note at `AGENTIC_EDITOR_IMPLEMENTATION_PLAN.md` §13 |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to
@@ -251,6 +252,30 @@ asserting "the replacement's render is claimed first" was answered by a priority
 by an earlier test in the same file. The test now settles the queue before making its claim. That
 is the third time a global query has made a test lie; the pattern to watch for is any assertion
 about "the next" or "the count" of something not scoped to the test's own rows.
+
+### P3.9 deviations
+
+**The removal was the substance.** The church settings page told churches their profile "controls
+how many clips we generate per sermon". It never did — the retained candidate count is a staff
+control (plan §2.2, product-owner Decision 1) that a church can neither see nor change, and saying
+otherwise invites a conversation about a number they have no lever for. The copy now describes what
+those settings actually control: which days clips go out and how many per day.
+
+**One shared `sermonsPerWeekSchema`, in `src/lib/church-profile-input.ts`.** The onboarding action
+and the profile action each carried their own `.min(1).max(2)`. Two copies of a rule about what the
+product supports is two places to forget when three services arrive, so the rule is single-sourced
+beside `SUPPORTED_SERMONS_PER_WEEK` and the `SermonsPerWeek` type. A disabled `<option>` is
+courtesy; the schema is the control, and the test proves a forged `3` is refused.
+
+**A guard test caught its own explanation.** The comment recording the removed claim quoted it
+verbatim, which the grep guard duly failed on. The comment now describes the old wording instead of
+reproducing it, and says why — the alternative was loosening a guard to accommodate a comment.
+
+**Source-reading tests, because there is still no component environment.** Two claims are about
+what the page markup says — the disabled option exists, the forbidden phrases do not — and with no
+jsdom in the repo the honest way to assert them is to read the file. The behavioural claims are in
+the e2e, against a workspace deliberately seeded with a hidden override so the page has something
+real to leak.
 
 ### P3.8 deviations
 
