@@ -47,7 +47,10 @@ const LOUDNORM = "loudnorm=I=-16:TP=-1.5:LRA=11";
 export function buildExportAudioFilter(originalVolume: number | undefined): string {
   if (originalVolume === undefined || !Number.isFinite(originalVolume)) return LOUDNORM;
   const volume = Math.min(2, Math.max(0, originalVolume));
-  return volume === 1 ? LOUDNORM : `${LOUDNORM},volume=${volume}`;
+  // Dynamic loudnorm produces double samples. Volume defaults to float, which forces an
+  // intermediate resampler and fails channel-layout negotiation on FFmpeg 6 for both mono
+  // and stereo AAC. Keep double precision through gain; the encoder converts at its boundary.
+  return volume === 1 ? LOUDNORM : `${LOUDNORM},volume=${volume}:precision=double`;
 }
 
 export type ExportFfmpegArgsParams = {

@@ -16,13 +16,13 @@ describe("buildExportAudioFilter", () => {
 
   it("applies the original volume after normalisation, so half as loud means half as loud", () => {
     // Before loudnorm a gain would be undone by it; after, it is what the preview plays.
-    expect(buildExportAudioFilter(0.5)).toBe(`${LOUDNORM},volume=0.5`);
-    expect(buildExportAudioFilter(0)).toBe(`${LOUDNORM},volume=0`);
+    expect(buildExportAudioFilter(0.5)).toBe(`${LOUDNORM},volume=0.5:precision=double`);
+    expect(buildExportAudioFilter(0)).toBe(`${LOUDNORM},volume=0:precision=double`);
   });
 
   it("keeps the schema's bounds, and ignores nonsense", () => {
-    expect(buildExportAudioFilter(5)).toBe(`${LOUDNORM},volume=2`);
-    expect(buildExportAudioFilter(-1)).toBe(`${LOUDNORM},volume=0`);
+    expect(buildExportAudioFilter(5)).toBe(`${LOUDNORM},volume=2:precision=double`);
+    expect(buildExportAudioFilter(-1)).toBe(`${LOUDNORM},volume=0:precision=double`);
     expect(buildExportAudioFilter(Number.NaN)).toBe(LOUDNORM);
   });
 });
