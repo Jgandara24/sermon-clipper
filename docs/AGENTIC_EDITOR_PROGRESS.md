@@ -4,13 +4,13 @@
 *actual*: what shipped, what deviated, and what the next agent needs to know that the plan does not
 say. `DECISIONS.md` remains the authoritative record of decisions; this is a working index.
 
-**Last updated:** 2026-09-06, after P3.9 merged and P3 closed. The P3 exit review is below.
+**Last updated:** 2026-09-08, after the P3 production browser checks. The exit review and results are below.
 
 ---
 
 ## Where the build stands
 
-`main` is at `32256bb` (PR #102, 2026-09-06). Production web and worker both run P1's last commit; Wave 2 is additive, so they keep running after the migration.
+`main` is at `b510960` (PR #103). Production reports `b510960`, verified against `/api/health` on 2026-09-08 at `https://web-production-2a243.up.railway.app`.
 
 | Work | State | Evidence |
 |---|---|---|
@@ -89,6 +89,31 @@ nothing else does.
 **Two worth one real look, though the code stands on its own.** Criterion 1 — P3.1 shipped a
 regression that emptied every church project page and the unit tests did not catch it, so the pool
 deserves one look at a real service. Criterion 6 — preview playback against real signed media.
+
+### P3 production browser results, 2026-09-08
+
+Jake and Codex completed the browser checks in Chrome. Full steps, initial failures, and retest
+observations are in [P3_EXIT_MANUAL_TEST.md](P3_EXIT_MANUAL_TEST.md). Dates use America/Chicago
+(the run was 2026-09-09 UTC).
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| 2 — operator access | PASS AFTER GRANT | The initial request redirected to `/app?error=permission-denied`. Jake approved the operator grant to `jake@jakegandara.com`. The documented script succeeded; the review queue and cross-workspace project page then opened. |
+| 1 — complete pool | PASS | First Baptist Demo's test service showed 6 ranked clips and 6 cards. The operator page showed the same 6 candidates. The ceiling of 18 and posting-date section appeared only on the operator page. |
+| 6 — source preview | PASS | The church preview waited for Play, started at 175.57 seconds, stopped and reset, replayed, and closed. Jake confirmed audio. The browser export count stayed at 0; a final database query also found 0 export jobs. |
+
+The demo service, **P3 Demo Test — Clip Count Retest 8-11**, used a separate copy of the existing
+recording. Finalize, Probe, Transcribe, and Analyze all succeeded and produced 6 new clips. Existing
+clips and transcripts were not copied. Automatic publishing and schedule arming stayed disabled.
+
+**Test limits.** Operator access was retested in the existing session; a fresh sign-in after the
+grant was not tested. Playback positions were sampled, not measured frame by frame. Storage objects
+were not audited separately from the export-job checks. These checks do not replace the Tier 3
+sandbox publishing test or start the 30-day review phase.
+
+**Follow-up.** The operator page reported `TRANSCRIPTION PROVIDER FALLBACK`; the transcript used
+`whisper_cpp`. Investigate the primary-provider failure and review caption accuracy before a
+publishing test. Caption accuracy was outside this check.
 
 ### P1.5, in two parts
 
