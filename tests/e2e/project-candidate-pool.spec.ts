@@ -296,10 +296,10 @@ test.describe("the candidate pool a church sees", () => {
       expect(html).not.toContain(forbidden);
     }
 
-    // The score total is two digits, and two digits turn up inside Next's chunk hashes. Checked
-    // against what a person can actually read instead, which is where a leaked score would show.
+    // Two score digits can also appear inside chunk hashes or the account email's timestamp.
+    // Check the visible numeric value, not a substring of an unrelated longer number.
     const visible = await page.locator("body").innerText();
-    expect(visible).not.toContain("93");
+    expect(visible).not.toMatch(/(^|\D)93(\D|$)/);
     expect(visible).not.toContain("Score");
     await expect(page.getByText("score breakdown")).toHaveCount(0);
 
