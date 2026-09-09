@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/app/actions/auth";
+import { TranscriptionAlertBanner } from "@/components/operator/transcription-alert-banner";
 import { hasWorkspacePermission, type WorkspacePermission } from "@/lib/authorization";
 import { decideWorkspaceAccess, workspaceAccessLabel } from "@/lib/billing/access";
 
@@ -117,6 +118,7 @@ export function AppShell({ children, workspace, user, role, isPlatformOperator =
               </button>
             </form>
           </header>
+          {isPlatformOperator ? <TranscriptionAlertBanner /> : null}
           <main className="flex-1 px-5 py-6 lg:px-8">{children}</main>
         </div>
       </div>

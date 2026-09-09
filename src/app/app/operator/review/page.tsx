@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePlatformOperator } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { listTranscriptionAlerts } from "@/lib/operations/transcription-alerts";
 import { editorialProgramStatus } from "@/lib/review/editorial-program";
 import { listOperatorReviewQueue } from "@/lib/review/query";
 
@@ -15,11 +16,12 @@ export const dynamic = "force-dynamic";
  * still let it run and still put it in the RSC payload. The check goes next to the data.
  */
 export default async function OperatorReviewQueuePage() {
-  await requirePlatformOperator();
+  const user = await requirePlatformOperator();
 
-  const [rows, program] = await Promise.all([
+  const [rows, program, transcriptionAlerts] = await Promise.all([
     listOperatorReviewQueue(prisma),
     editorialProgramStatus(prisma),
+    listTranscriptionAlerts(prisma, user),
   ]);
 
   return (
@@ -31,6 +33,33 @@ export default async function OperatorReviewQueuePage() {
           Every scheduled slot awaiting a decision, across every church, soonest first.
         </p>
       </div>
+
+      <section id="transcription-alerts" aria-labelledby="transcription-alerts-heading">
+        <h2 id="transcription-alerts-heading" className="text-lg font-semibold">Transcription alerts</h2>
+        {transcriptionAlerts.length === 0 ? (
+          <p className="mt-2 text-sm text-stone-500">No open backup transcription alerts.</p>
+        ) : (
+          <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <p>
+              The primary transcription provider could not complete these services. The app selected
+              the backup provider. Check the provider credit balance, API access, and service status.
+              Review the transcript and clips before the publishing hold is resolved.
+            </p>
+            <ul data-testid="operator-transcription-alerts" className="mt-3 grid gap-2">
+              {transcriptionAlerts.map((alert) => (
+                <li key={alert.id}>
+                  {alert.project ? (
+                    <Link href={`/app/operator/projects/${alert.project.id}`} className="font-medium underline">
+                      {alert.workspace.name} · {alert.project.name}
+                    </Link>
+                  ) : null}
+                  {" · "}{alert.createdAt.toLocaleString("en-US", { timeZone: "UTC" })} UTC
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       {/*
         Where the phase stands, above the work rather than on a page of its own. The reviewer

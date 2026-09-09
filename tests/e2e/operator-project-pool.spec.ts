@@ -13,6 +13,7 @@ import {
 import { ANALYSIS_RETAINED_CLIP_STATUS } from "../../src/lib/analysis/clip-status";
 import { prisma } from "../../src/lib/prisma";
 import { getStorageProvider } from "../../src/lib/storage";
+import { openTranscriptionFallbackHold } from "../../src/lib/transcription/fallback-hold";
 import { signInAs, signOutTestSessions } from "./auth-session";
 
 process.env.STORAGE_LOCAL_ROOT = path.join(process.cwd(), ".data", "e2e-storage");
@@ -270,6 +271,81 @@ test.afterAll(async () => {
 });
 
 test.describe("Operator service inspection", () => {
+  test("notifies staff about fallback across churches and clears only when the hold is resolved", async ({ page, context }) => {
+    await signInAs(context, fixture.operatorId);
+    const before = await context.request.get("/api/operator/transcription-alerts");
+    expect(before.status()).toBe(200);
+    expect(before.headers()["cache-control"]).toContain("no-store");
+    const baseline = (await before.json()).data.count;
+
+    await page.clock.install();
+    await page.goto("/app/operator/review");
+    await expect(page.getByTestId("operator-transcription-alerts").getByRole("link", { name: "Inspected Church · Inspected Service" })).toHaveCount(0);
+
+    try {
+      for (const jobId of ["first-attempt", "retry"]) {
+        await openTranscriptionFallbackHold(prisma, {
+          workspaceId: fixture.churchWorkspaceId,
+          projectId: fixture.projectId,
+          jobId,
+          primaryProvider: "scribe",
+          usedProvider: "whisper_cpp",
+          reason: "failed",
+        });
+      }
+      await page.clock.fastForward(60_001);
+      const banner = page.getByTestId("operator-transcription-alert");
+      await expect(banner).toContainText(`Backup transcription needs review: ${baseline + 1}`);
+
+      // The link reloads the list even when staff already have the review page open.
+      await banner.getByRole("link", { name: "View affected services" }).click();
+      const alerts = page.getByTestId("operator-transcription-alerts");
+      await expect(alerts.getByRole("link", { name: "Inspected Church · Inspected Service" })).toHaveCount(1);
+      await expect(alerts.getByRole("link", { name: "Inspected Church · Inspected Service" })).toHaveAttribute("href", `/app/operator/projects/${fixture.projectId}`);
+
+      // A stalled connection must time out, retain the warning, and allow the next check.
+      await page.route("**/api/operator/transcription-alerts", () => {});
+      const stalled = page.waitForRequest("**/api/operator/transcription-alerts");
+      await page.clock.fastForward(60_001);
+      await stalled;
+      await page.clock.fastForward(15_001);
+      await expect(banner).toContainText("could not check for new transcription alerts");
+      await expect(banner).toContainText(`Backup transcription needs review: ${baseline + 1}`);
+      await page.unroute("**/api/operator/transcription-alerts");
+      await page.clock.fastForward(60_001);
+      await expect(banner).not.toContainText("could not check for new transcription alerts");
+
+      // A failed refresh retains the existing warning, and reports that the check failed.
+      await page.route("**/api/operator/transcription-alerts", (route) => route.fulfill({ status: 503 }));
+      await page.clock.fastForward(60_001);
+      await expect(banner).toContainText(`Backup transcription needs review: ${baseline + 1}`);
+      await expect(banner).toContainText("could not check for new transcription alerts");
+      await page.unroute("**/api/operator/transcription-alerts");
+
+      await prisma.editorialException.updateMany({
+        where: { projectId: fixture.projectId, exceptionType: "transcription_provider_fallback" },
+        data: { state: "RESOLVED", resolvedAt: new Date() },
+      });
+      await page.clock.fastForward(60_001);
+      if (baseline === 0) await expect(banner).toHaveCount(0);
+      else await expect(banner).toContainText(`Backup transcription needs review: ${baseline}`);
+      await page.reload();
+      await expect(page.getByTestId("operator-transcription-alerts").getByRole("link", { name: "Inspected Church · Inspected Service" })).toHaveCount(0);
+    } finally {
+      await prisma.editorialException.deleteMany({
+        where: { projectId: fixture.projectId, exceptionType: "transcription_provider_fallback" },
+      });
+    }
+  });
+
+  test("keeps the master account alert endpoint private", async ({ page, context }) => {
+    expect((await context.request.get("/api/operator/transcription-alerts")).status()).toBe(401);
+    await signInAs(context, fixture.churchOwnerId);
+    expect((await context.request.get("/api/operator/transcription-alerts")).status()).toBe(403);
+    await page.goto("/app");
+    await expect(page.getByTestId("operator-transcription-alert")).toHaveCount(0);
+  });
+
   test("an operator reads another church's whole pool, dates included", async ({
     page,
     context,
