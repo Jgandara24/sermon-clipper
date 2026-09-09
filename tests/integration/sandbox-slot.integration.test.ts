@@ -114,6 +114,15 @@ describe("one explicit sandbox slot", () => {
       .rejects.toMatchObject({ code: "PROJECT_MISSING" });
   });
 
+  it("refuses a source whose transcript is shared with another service", async () => {
+    const f = await fixture();
+    await prisma.project.create({ data: {
+      workspaceId: f.workspaceId, sourceVideoId: f.sourceId, name: "Another service on this source", status: "READY",
+    } });
+    await expect(prepareSandboxSlot(prisma, input(f), options)).rejects.toMatchObject({ code: "SHARED_SOURCE" });
+    expect(await writeCounts(f)).toEqual({ slots: 0, jobs: 0, exports: 0, reviews: 0, audits: 0 });
+  });
+
   it.each(["AUTOMATIC_PUBLISHING_ENABLED", "AUTOMATIC_SCHEDULE_ARMING_ENABLED"])("refuses %s when enabled", async (flag) => {
     const f = await fixture();
     await expect(prepareSandboxSlot(prisma, input(f), { ...options, runtime: { ...runtime, [flag]: "true" } }))

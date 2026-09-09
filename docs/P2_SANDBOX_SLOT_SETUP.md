@@ -64,6 +64,8 @@ phase. A repeated apply cannot create a second slot for the service.
 - The human-reference phase has not started.
 - The service is READY and belongs to the exact workspace supplied.
 - The source object exists, belongs to that workspace, and has not expired.
+- The source record belongs to this service alone. A shared source also shares
+  its transcript, so it cannot isolate the P2 test from another service's processing.
 - The transcript is nonempty and names the configured primary provider.
 - No open transcription fallback hold exists.
 - No queued, running, waiting, or retrying processing job exists for the service.

@@ -96,7 +96,8 @@ export async function prepareSandboxSlot(
         where: { id: input.projectId, workspaceId: input.workspaceId },
         include: {
           workspace: { select: { id: true, name: true, settings: true, updatedAt: true } },
-          sourceVideo: { include: { transcript: { include: { _count: { select: { segments: true } } } } } },
+          sourceVideo: { include: { _count: { select: { projects: true } },
+            transcript: { include: { _count: { select: { segments: true } } } } } },
           generatedClips: { orderBy: [{ rank: "asc" }, { id: "asc" }], include: { scheduledPosts: { select: { id: true } } } },
         },
       });
@@ -105,6 +106,11 @@ export async function prepareSandboxSlot(
       const source = project.sourceVideo;
       if (!source?.storageKey || source.workspaceId !== input.workspaceId) {
         refuse("SOURCE_MISSING", "The service needs a stored source in the same workspace.");
+      }
+      // A transcript is owned by SourceVideo, not Project. A second project could replace the
+      // words this test uses through its own processing path. Keep test intake isolated.
+      if (source._count.projects !== 1) {
+        refuse("SHARED_SOURCE", "Use a separate source record for this test service; its transcript is shared.");
       }
       if (input.apply && !(await lockSourceVideoForRetention(tx, source.id))) {
         refuse("SOURCE_MISSING", "The source no longer exists.");
