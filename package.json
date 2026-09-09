@@ -19,6 +19,7 @@
     "launch:phase8": "tsx scripts/collect-launch-evidence.ts --require-complete",
     "lint": "eslint",
     "prepare": "git config core.hooksPath .githooks || true",
+    "prepare:sandbox-slot": "tsx scripts/prepare-sandbox-slot.ts",
     "program:evidence": "tsx scripts/start-editorial-program.ts --evidence",
     "program:pause": "tsx scripts/start-editorial-program.ts --pause",
     "program:resume": "tsx scripts/start-editorial-program.ts --resume",
