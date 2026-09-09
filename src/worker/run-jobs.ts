@@ -24,6 +24,7 @@ import {
   sweepOrphanedExportedFiles,
 } from "@/lib/retention";
 import { releaseReservationForJob } from "@/lib/usage-ledger";
+import { purgeAbandonedSrts } from "@/lib/transcription/srt-storage";
 import {
   assertWorkerRuntimeReady,
   automaticPublishingEnabled,
@@ -133,13 +134,17 @@ async function loop() {
               console.error("[worker] abandoned upload sweep failed", error);
               return { scanned: 0, removed: [] as string[] };
             });
-            if (cleanupScan.enqueued || orphanSweep.rowsDeleted || uploadSweep.removed.length) {
-              console.log("[worker] retention cleanup scan", { cleanupScan, orphanSweep, uploadSweep });
+            const srtSweep = await purgeAbandonedSrts(prisma).catch((error: unknown) => {
+              console.error("[worker] unused subtitle sweep failed", error);
+              return { scanned: 0, removed: 0, kept: 0, failed: 1 };
+            });
+            if (cleanupScan.enqueued || orphanSweep.rowsDeleted || uploadSweep.removed.length || srtSweep.removed || srtSweep.failed) {
+              console.log("[worker] retention cleanup scan", { cleanupScan, orphanSweep, uploadSweep, srtSweep });
               await recordOperationalEventSafely(prisma, {
                 category: "worker",
                 eventType: "retention_scan",
                 message: "Retention scan enqueued cleanup work.",
-                metadata: { cleanupScan, orphanSweep, uploadSweep },
+                metadata: { cleanupScan, orphanSweep, uploadSweep, srtSweep },
               });
             }
           },

@@ -10,7 +10,8 @@ A word ID is the segment UUID followed by its word index.
 - TRANSCRIBE checks durable work on every project that uses its source. It checks
   before storage/provider work and again before replacing the transcript.
 - The SRT upload route checks the same source scope before receiving the body and
-  after the body arrives. A refusal returns `REANALYSIS_BLOCKED` with status 409.
+  after the body arrives, then under the source lock before committing its staged
+  input and queue entry. A refusal returns `REANALYSIS_BLOCKED` with status 409.
 - Durable work includes human edits, approval records, export jobs in any state,
   delivered/in-flight/blocked posts, and review snapshots. Machine initial edits
   do not count. A review's cleared live link does not remove its snapshot check.
@@ -90,9 +91,10 @@ transcript versions.
   or serialization refusal. The transaction must roll back; do not bypass its guard
   to retry. The controlled 409 tests cover current edit, approval, and export routes
   under their normal READ COMMITTED transactions.
-- The SRT object's write, source pointer update, and queue changes are still separate
-  operations. SRT uploads still use one source key and select one project to analyze.
-  Atomic upload replacement and shared-project rebuild policy remain further work.
+- SRT bytes are staged under a new immutable key. The pointer and queue changes now
+  commit together, and an age-based sweep recovers unreferenced objects. The route
+  still selects one project to analyze. See [SRT_UPLOAD_SAFETY.md](SRT_UPLOAD_SAFETY.md)
+  for failure recovery, job-claim scope, and cleanup limits.
 - Untouched shared projects remain allowed by the existing policy. This does not
   prove that every sibling's machine-generated editor state is rebuilt after a
   source transcript changes. A sibling's stale clip is refused until it is rebuilt.
@@ -103,5 +105,6 @@ transcript versions.
 - Existing transcripts, held services, and human review results are not repaired
   by deploying these checks. They require separate review.
 
-Atomic SRT storage/queue changes and a policy for rebuilding untouched shared projects
-remain independent engineering work. Manual caption and exact-MP4 checks remain pending.
+The TRANSCRIBE-to-ANALYZE retry handoff and a policy for rebuilding untouched shared
+projects remain independent engineering work. Manual caption and exact-MP4 checks
+remain pending.

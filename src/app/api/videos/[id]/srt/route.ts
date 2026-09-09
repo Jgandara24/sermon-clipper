@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { ProcessingJobType } from "@prisma/client";
 import { after } from "next/server";
 import {
   REANALYSIS_BLOCKED,
@@ -8,12 +6,12 @@ import {
 } from "@/lib/analysis/reanalysis-policy";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
-import { enqueueJob } from "@/lib/jobs/queue";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
 import { getStorageProvider } from "@/lib/storage";
 import { SrtParseError, parseSrt } from "@/lib/transcription/srt";
+import { replaceSrtOverride, SrtUploadRefusedError } from "@/lib/transcription/srt-upload";
 
 const MAX_SRT_BYTES = 2 * 1024 * 1024;
 
@@ -42,7 +40,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!assessment.allowed) {
     return apiError(REANALYSIS_BLOCKED, REANALYSIS_BLOCKED_MESSAGE, { status: 409 });
   }
-  const project = await prisma.project.findFirst({ where: { sourceVideoId: sourceVideo.id } });
+  const project = await prisma.project.findFirst({
+    where: { sourceVideoId: sourceVideo.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
 
   if (!request.body) {
     return apiError("UPLOAD_INTERRUPTED", "Upload lost connection — resume?");
@@ -70,24 +70,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const storage = getStorageProvider();
-  const srtKey = `srt/${workspace.id}/${sourceVideo.id}.srt`;
-  await storage.writeFromWebStream(srtKey, new Blob([text]).stream(), MAX_SRT_BYTES);
-
-  await prisma.sourceVideo.update({
-    where: { id: sourceVideo.id },
-    data: { srtOverrideKey: srtKey },
-  });
+  let result;
+  try {
+    result = await replaceSrtOverride(prisma, storage, { source: sourceVideo, project, text, maxBytes: MAX_SRT_BYTES });
+  } catch (error) {
+    if (error instanceof SrtUploadRefusedError) return apiError(error.code, error.message, { status: 409 });
+    throw error;
+  }
 
   if (project) {
-    await prisma.processingJob.deleteMany({
-      where: { projectId: project.id, type: ProcessingJobType.TRANSCRIBE },
-    });
-    await enqueueJob(prisma, {
-      projectId: project.id,
-      type: ProcessingJobType.TRANSCRIBE,
-      idempotencyKey: `transcribe:${project.id}:srt:${randomUUID()}`,
-    });
-
     after(async () => {
       for (let i = 0; i < 3; i += 1) {
         const processed = await runOnePendingJob();
@@ -96,5 +87,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
   }
 
-  return apiData({ sourceVideoId: sourceVideo.id, srtKey });
+  return apiData(result);
 }
