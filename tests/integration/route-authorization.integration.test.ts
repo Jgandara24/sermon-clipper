@@ -53,6 +53,7 @@ import * as exportsRoute from "@/app/api/exports/route";
 import * as healthRoute from "@/app/api/health/route";
 import * as pulpitWebhookRoute from "@/app/api/integrations/pulpit-engine/webhook/route";
 import * as mediaSignedRoute from "@/app/api/media/signed/route";
+import * as transcriptionAlertsRoute from "@/app/api/operator/transcription-alerts/route";
 import * as projectCancelRoute from "@/app/api/projects/[id]/cancel/route";
 import * as projectClipsRoute from "@/app/api/projects/[id]/clips/route";
 import * as projectRoute from "@/app/api/projects/[id]/route";
@@ -90,6 +91,7 @@ type RouteAuth =
       /** Params for cases that never reach the resource (auth is checked first). */
       params?: () => Record<string, string | string[]>;
     }
+  | { kind: "platform-operator" }
   | { kind: "signed-url" }
   | { kind: "public" }
   | { kind: "stripe-webhook" }
@@ -107,6 +109,7 @@ type RouteSpec = {
 // Fixture state, populated in beforeAll. Foreign* are workspace-B resources used to prove a
 // workspace-A session can't reach another tenant's rows.
 const sessionTokens = {} as Record<WorkspaceRole, string>;
+let operatorSessionToken: string;
 const fixtures = {
   workspaceAId: "",
   ownProjectId: "",
@@ -118,6 +121,13 @@ const fixtures = {
 };
 
 const ROUTES: RouteSpec[] = [
+  {
+    file: "operator/transcription-alerts/route.ts",
+    method: "GET",
+    module: transcriptionAlertsRoute,
+    handler: transcriptionAlertsRoute.GET,
+    auth: { kind: "platform-operator" },
+  },
   {
     file: "billing/checkout/route.ts",
     method: "POST",
@@ -375,6 +385,12 @@ async function createUserWithSession(label: string) {
 }
 
 beforeAll(async () => {
+  const operator = await createUserWithSession("platform-operator");
+  operatorSessionToken = operator.token;
+  await prisma.user.update({
+    where: { id: operator.user.id },
+    data: { isPlatformOperator: true },
+  });
   // Dummy Stripe config so the webhook route exercises its signature check (400) instead of
   // short-circuiting on missing configuration (503). Never used for a real API call here.
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_authz_matrix_test_secret";
@@ -639,6 +655,29 @@ describe("route authorization matrix", () => {
         const body = (await response.json()) as Record<string, unknown>;
         expect(body.error).toBeTruthy();
         expect(body.data).toBeUndefined();
+      });
+    }
+  });
+
+  describe("platform-operator routes", () => {
+    for (const spec of ROUTES.filter((route) => route.auth.kind === "platform-operator")) {
+      it(`${routeLabel(spec)} rejects anonymous requests`, async () => {
+        expect((await callRoute(spec, null)).status).toBe(401);
+      });
+
+      for (const role of ALL_ROLES) {
+        it(`${routeLabel(spec)} rejects church ${role}`, async () => {
+          const response = await callRoute(spec, sessionTokens[role]);
+          expect(response.status).toBe(403);
+          expect((await response.json()).data).toBeUndefined();
+        });
+      }
+
+      it(`${routeLabel(spec)} permits an operator without a church membership`, async () => {
+        const response = await callRoute(spec, operatorSessionToken);
+        expect(response.status).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("private, no-store");
+        expect(await response.json()).toEqual({ data: { count: expect.any(Number) } });
       });
     }
   });
