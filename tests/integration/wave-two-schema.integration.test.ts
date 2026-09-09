@@ -467,9 +467,10 @@ describe("agentic editor Wave 2 schema", () => {
       WHERE NOT tgisinternal AND tgrelid IN ('clip_reviews'::regclass, 'clip_review_feedback'::regclass)
       ORDER BY tgname
     `;
-    expect(triggers.map((row) => row.tgname)).toEqual([
+    // These append-only guards must remain installed alongside later write-boundary guards.
+    expect(triggers.map((row) => row.tgname)).toEqual(expect.arrayContaining([
       "clip_review_feedback_append_only",
       "clip_reviews_append_only",
-    ]);
+    ]));
   });
 });

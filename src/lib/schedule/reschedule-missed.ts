@@ -135,7 +135,7 @@ export async function rescheduleMissedSlot(
   const now = input.now ?? new Date();
 
   const outcome = await client.$transaction(async (tx) => {
-    const slot = await tx.scheduledPost.findUnique({
+    let slot = await tx.scheduledPost.findUnique({
       where: { id: input.scheduledPostId },
       include: {
         workspace: { select: { settings: true } },
@@ -144,6 +144,22 @@ export async function rescheduleMissedSlot(
     });
     if (!slot) {
       throw new RescheduleMissedRefusedError("SLOT_MISSING", "That date no longer exists.");
+    }
+
+    // Acquire retention locks before changing the slot, matching ANALYZE's project/source
+    // order. Otherwise ANALYZE can hold the source while waiting for this row to be changed.
+    if (slot.project) {
+      const projectId = slot.project.id;
+      const sourceVideoId = slot.project.sourceVideoId;
+      await tx.$queryRaw`SELECT id FROM projects WHERE id = ${projectId}::uuid FOR NO KEY UPDATE`;
+      if (sourceVideoId) await lockSourceVideoForRetention(tx, sourceVideoId);
+      slot = await tx.scheduledPost.findUnique({ where: { id: input.scheduledPostId }, include: {
+        workspace: { select: { settings: true } },
+        project: { select: { id: true, sourceVideoId: true, expiresAt: true } },
+      } });
+      if (!slot || slot.project?.id !== projectId || slot.project.sourceVideoId !== sourceVideoId) {
+        throw new RescheduleMissedRefusedError("SLOT_MOVED", "This date changed. Reload and look again.");
+      }
     }
 
     const profile = parseChurchProfile(slot.workspace.settings);
@@ -212,7 +228,6 @@ export async function rescheduleMissedSlot(
     // The source has to outlive the new posting date, which is later than the one retention was
     // last computed against. Locked first, because cleanup may be reading this same expiry now.
     if (slot.project?.sourceVideoId) {
-      await lockSourceVideoForRetention(tx, slot.project.sourceVideoId);
       const expiresAt = sourceExpiresAtForSchedule([input.newDate]);
       if (expiresAt && (slot.project.expiresAt === null || slot.project.expiresAt < expiresAt)) {
         await tx.project.update({ where: { id: slot.project.id }, data: { expiresAt } });

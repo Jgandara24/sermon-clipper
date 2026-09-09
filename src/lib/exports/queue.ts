@@ -1,6 +1,7 @@
 import { type ExportJob, Prisma, ProcessingJobState, type PrismaClient } from "@prisma/client";
 import { EXPORT_MAX_ATTEMPTS, retryRunAfter, staleCutoff, workerId } from "@/lib/worker/reliability";
 import { buildExportIdempotencyKey } from "./edit-version";
+import { ClipTranscriptChangedError, isClipTranscriptChanged } from "@/lib/analysis/source-write-boundary";
 
 const MAX_ATTEMPTS = EXPORT_MAX_ATTEMPTS; // initial attempt + 2 retries, per guide §15 step 6
 
@@ -53,6 +54,7 @@ export async function enqueueExportJob(
       },
     });
   } catch (error) {
+    if (isClipTranscriptChanged(error)) throw new ClipTranscriptChangedError();
     // Same race-safe contract as enqueueJob: the loser of a concurrent enqueue returns
     // the winner's row instead of surfacing the unique-constraint violation.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

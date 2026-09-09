@@ -9,6 +9,7 @@ import { buildInitialEditorState } from "@/lib/editor/types";
 import { INITIAL_EDIT_VERSION } from "@/lib/exports/edit-version";
 import { getAnalysisProvider, type AnalysisProviderSelection } from "@/lib/analysis";
 import { assertReanalysisAllowed } from "@/lib/analysis/reanalysis-policy";
+import { transcriptChangedError } from "@/lib/analysis/source-write-boundary";
 import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidate-limit";
 import { ANALYSIS_RETAINED_CLIP_STATUS } from "@/lib/analysis/clip-status";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
@@ -315,9 +316,22 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
   const kept = deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
 
   await prisma.$transaction(async (tx) => {
-    // The binding check. The early one saved the cost of analysis; this one closes the window
-    // between it and the deletes below, in which a person could have saved an edit. A refusal
-    // here rolls back nothing, because nothing has been written yet.
+    // Match replacement/scheduling lock order. First durable writers take the source lock too,
+    // so they either commit before this count or recheck a missing/stale clip after this commit.
+    // NO KEY UPDATE allows a first post/review's project foreign-key check to finish while it
+    // holds the source lock. FOR UPDATE here would invert those locks and cause a deadlock.
+    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${project.id}::uuid FOR NO KEY UPDATE`;
+    if (!project.sourceVideoId) throw transcriptChangedError();
+    await tx.$queryRaw`SELECT id FROM source_videos WHERE id = ${project.sourceVideoId}::uuid FOR UPDATE`;
+    const current = await tx.project.findUnique({ where: { id: project.id }, include: {
+      sourceVideo: { include: { transcript: { select: { id: true, updatedAt: true } } } },
+    } });
+    if (!current?.sourceVideo || current.sourceVideoId !== project.sourceVideoId ||
+        current.sourceVideo?.transcriptRevision !== project.sourceVideo?.transcriptRevision ||
+        current.sourceVideo?.transcript?.id !== transcript.id ||
+        current.sourceVideo?.transcript?.updatedAt.getTime() !== transcript.updatedAt.getTime()) {
+      throw transcriptChangedError();
+    }
     await assertReanalysisAllowed(tx, { projectId: project.id });
 
     await tx.scriptureReference.deleteMany({ where: { projectId: project.id } });
@@ -490,6 +504,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
           workspaceId: project.workspaceId,
           projectId: project.id,
           rank: idx + 1,
+          transcriptRevision: current.sourceVideo.transcriptRevision,
           startMs: clip.startMs,
           endMs: clip.endMs,
           title: clip.title,

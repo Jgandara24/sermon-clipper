@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { ProcessingJobType } from "@prisma/client";
 import { assertSourceReanalysisAllowed } from "@/lib/analysis/reanalysis-policy";
+import { transcriptChangedError } from "@/lib/analysis/source-write-boundary";
 import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import {
   finishRuntimeMeasurement,
@@ -402,11 +403,12 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
     if (!current || current.updatedAt.getTime() !== sourceVideo.updatedAt.getTime() ||
         current.transcript?.id !== sourceVideo.transcript?.id ||
         current.transcript?.updatedAt.getTime() !== sourceVideo.transcript?.updatedAt.getTime()) {
-      throw new JobFailureError("TRANSCRIPT_CHANGED",
-        "This sermon's source or transcript changed during processing. Refresh before trying again.",
-        { retryable: false, preservesProject: true });
+      throw transcriptChangedError();
     }
     await assertSourceReanalysisAllowed(tx, { sourceVideoId: sourceVideo.id });
+    // Durable writers share the source lock. Advance the token in the same commit as the words
+    // so a request for an old clip cannot save after waiting for this replacement to finish.
+    await tx.sourceVideo.update({ where: { id: sourceVideo.id }, data: { transcriptRevision: { increment: 1 } } });
     await tx.transcript.deleteMany({ where: { sourceVideoId: sourceVideo.id } });
     const transcript = await tx.transcript.create({
       data: {

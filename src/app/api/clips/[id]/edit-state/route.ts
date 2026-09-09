@@ -2,6 +2,7 @@ import { ClipApprovalState, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
+import { CLIP_TRANSCRIPT_CHANGED, CLIP_TRANSCRIPT_CHANGED_MESSAGE, isClipTranscriptChanged } from "@/lib/analysis/source-write-boundary";
 import { approvalStateAfterEditorSave, publishApprovalBlockMessage } from "@/lib/approval";
 import { buildDefaultEditorState, editorStateSchema } from "@/lib/editor/types";
 import { prisma } from "@/lib/prisma";
@@ -151,6 +152,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return edit;
     });
   } catch (error) {
+    if (isClipTranscriptChanged(error)) {
+      return apiError(CLIP_TRANSCRIPT_CHANGED, CLIP_TRANSCRIPT_CHANGED_MESSAGE, { status: 409 });
+    }
     // The version check above isn't atomic with the insert; @@unique([clipId, version])
     // catches the race (e.g. an autosave landing alongside a manual save). Surface it as
     // the same 409 the version check produces so the client's conflict recovery runs.

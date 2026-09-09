@@ -499,6 +499,8 @@ model SourceVideo {
   thumbnailKey   String?      @map("thumbnail_key")
   language       String?
   srtOverrideKey String?      @map("srt_override_key")
+  // Rollout baseline is 0; each committed transcript replacement advances it.
+  transcriptRevision Int     @default(0) @map("transcript_revision")
   copyrightAckAt DateTime?    @map("copyright_ack_at")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
@@ -681,6 +683,8 @@ model GeneratedClip {
   id           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspaceId  String              @map("workspace_id") @db.Uuid
   projectId    String              @map("project_id") @db.Uuid
+  // The source revision used by ANALYZE. It never changes on an existing clip.
+  transcriptRevision Int           @default(0) @map("transcript_revision")
   rank         Int
   startMs      Int                 @map("start_ms")
   endMs        Int                 @map("end_ms")
