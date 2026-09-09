@@ -94,6 +94,12 @@ write checks or plan the rollback with workers stopped. Test this release proced
 an isolated environment before any production deployment. No production migration,
 worker restart, or deployment was performed for these local tests.
 
+The [populated upgrade test](SOURCE_REVISION_UPGRADE_TEST.md) now runs the 26-to-27
+migration path with synthetic old rows. It preserves old words, editor JSON, detached
+review records, and completed jobs. It also exercises current handlers and stale
+write refusals after the upgrade. This supplies local data-preservation evidence;
+the production release and worker-drain checks remain separate.
+
 ## Limits and further work
 
 These are P1.7 corrections. They retain one transcript per source, not a history of
