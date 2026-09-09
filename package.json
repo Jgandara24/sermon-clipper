@@ -18,6 +18,7 @@
     "evaluate:analysis-routing": "tsx scripts/evaluate-analysis-routing.ts",
     "launch:phase8": "tsx scripts/collect-launch-evidence.ts --require-complete",
     "lint": "eslint",
+    "measure:local-media": "tsx scripts/measure-local-media.ts",
     "prepare": "git config core.hooksPath .githooks || true",
     "prepare:sandbox-slot": "tsx scripts/prepare-sandbox-slot.ts",
     "program:evidence": "tsx scripts/start-editorial-program.ts --evidence",
