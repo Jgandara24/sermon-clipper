@@ -144,3 +144,7 @@ Known bad or unavailable observations cannot receive a marker match.
 Every report keeps visual quality and caption accuracy `NOT_REVIEWED` and content
 mapping `NOT_VERIFIED`. This benchmark does not complete a P2 proof, select P4
 settings, authorize deployment, or replace the measured P0/P2 planning gate.
+
+The separate [audio timing benchmark](LOCAL_AUDIO_TIMING_BENCHMARK.md) uses a tone
+burst to inspect one audio event. It preserves this command's existing fixture.
+A video marker match cannot substitute for that separate audio observation.
