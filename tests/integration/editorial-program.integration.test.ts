@@ -11,7 +11,7 @@ import {
   SchedulePublishStatus,
   WorkspaceRole,
 } from "@prisma/client";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { assessScheduledPostDelivery, collectSwitchOnlyCensus } from "@/lib/delivery/query";
 import {
   collectStartEvidence,
@@ -40,6 +40,11 @@ import { appendClipReview } from "@/lib/review/service";
 
 const prisma = new PrismaClient();
 const originalPublishingEnabled = process.env.AUTOMATIC_PUBLISHING_ENABLED;
+const originalToken = process.env.META_SYSTEM_USER_TOKEN;
+const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+const extraWorkspaces: string[] = [];
+const createdFiles: string[] = [];
+const createdSlots: string[] = [];
 
 let userId: string;
 let workspaceId: string;
@@ -67,14 +72,15 @@ const eligibleSettings = {
 };
 
 /** A slot that fails delivery for the global switch and nothing else, once accepted. */
-async function createDeliverableSlot(label: string, options: { accept?: boolean } = {}) {
+async function createDeliverableSlot(label: string, options: { accept?: boolean; workspaceId?: string } = {}) {
+  const ownerWorkspaceId = options.workspaceId ?? workspaceId;
   serial += 1;
   const project = await prisma.project.create({
-    data: { workspaceId, name: `Program ${label} ${serial}` },
+    data: { workspaceId: ownerWorkspaceId, name: `Program ${label} ${serial}` },
   });
   const clip = await prisma.generatedClip.create({
     data: {
-      workspaceId,
+      workspaceId: ownerWorkspaceId,
       projectId: project.id,
       rank: serial,
       startMs: 0,
@@ -92,7 +98,7 @@ async function createDeliverableSlot(label: string, options: { accept?: boolean 
   const checksum = `sha256-${uniqueKey(label)}`;
   const outputFile = await prisma.exportedFile.create({
     data: {
-      storageKey: `exports/${workspaceId}/${uniqueKey(label)}.mp4`,
+      storageKey: `exports/${ownerWorkspaceId}/${uniqueKey(label)}.mp4`,
       bytes: BigInt(1024),
       width: 1080,
       height: 1920,
@@ -100,9 +106,10 @@ async function createDeliverableSlot(label: string, options: { accept?: boolean 
       downloadExpiresAt: new Date(Date.now() + 86_400_000),
     },
   });
+  createdFiles.push(outputFile.id);
   const exportJob = await prisma.exportJob.create({
     data: {
-      workspaceId,
+      workspaceId: ownerWorkspaceId,
       clipId: clip.id,
       state: ProcessingJobState.SUCCEEDED,
       idempotencyKey: uniqueKey(`export-${label}`),
@@ -116,13 +123,14 @@ async function createDeliverableSlot(label: string, options: { accept?: boolean 
   });
   const slot = await prisma.scheduledPost.create({
     data: {
-      workspaceId,
+      workspaceId: ownerWorkspaceId,
       projectId: project.id,
       clipId: clip.id,
       exportJobId: exportJob.id,
       scheduledDate: nextDate(),
     },
   });
+  createdSlots.push(slot.id);
 
   if (options.accept ?? true) {
     await appendClipReview(prisma, {
@@ -138,7 +146,7 @@ async function createDeliverableSlot(label: string, options: { accept?: boolean 
     });
   }
 
-  return { project, clip, exportJob, slot };
+  return { project, clip, exportJob, outputFile, slot };
 }
 
 /** Takes a slot out of the census without deleting the evidence attached to it. */
@@ -151,6 +159,9 @@ async function retire(scheduledPostId: string) {
 
 beforeAll(async () => {
   process.env.AUTOMATIC_PUBLISHING_ENABLED = "false";
+  // Local fixture configuration only. The census makes no Meta or storage call.
+  process.env.META_SYSTEM_USER_TOKEN = "test-census-token-not-real";
+  process.env.NEXT_PUBLIC_APP_URL = "https://sandbox.example.test";
   const user = await prisma.user.create({
     data: {
       email: `${uniqueKey("program")}@example.com`,
@@ -175,7 +186,9 @@ beforeAll(async () => {
 beforeEach(async () => {
   // The program is one row for the whole installation, so each case starts from none.
   await prisma.editorialProgram.deleteMany({ where: { key: HUMAN_REFERENCE_PROGRAM_KEY } });
+  await prisma.workspace.update({ where: { id: workspaceId }, data: { accessPlan: "PAID", paidAt: null } });
 });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 afterAll(async () => {
   await prisma.editorialProgram.deleteMany({ where: { key: HUMAN_REFERENCE_PROGRAM_KEY } });
@@ -183,9 +196,19 @@ afterAll(async () => {
     await prisma.publishAttempt.deleteMany({ where: { scheduledPost: { workspaceId } } });
     await prisma.workspace.delete({ where: { id: workspaceId } });
   }
+  for (const id of extraWorkspaces) await prisma.workspace.delete({ where: { id } });
+  await prisma.exportedFile.deleteMany({ where: { id: { in: createdFiles } } });
+  await prisma.operationalEvent.deleteMany({ where: {
+    eventType: { in: ["sandbox_proof_passed", "sandbox_proof_refused"] },
+    OR: createdSlots.map((id) => ({ metadata: { path: ["intendedScheduledPostId"], equals: id } })),
+  } });
   if (userId) await prisma.user.delete({ where: { id: userId } });
   if (originalPublishingEnabled === undefined) delete process.env.AUTOMATIC_PUBLISHING_ENABLED;
   else process.env.AUTOMATIC_PUBLISHING_ENABLED = originalPublishingEnabled;
+  if (originalToken === undefined) delete process.env.META_SYSTEM_USER_TOKEN;
+  else process.env.META_SYSTEM_USER_TOKEN = originalToken;
+  if (originalAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+  else process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
   await prisma.$disconnect();
 });
 
@@ -320,6 +343,156 @@ describe("the sandbox proof", () => {
       process.env.AUTOMATIC_PUBLISHING_ENABLED = "false";
       await retire(intended.slot.id);
     }
+  });
+});
+
+describe("sandbox census publisher prerequisites", () => {
+  it.each([
+    ["hold", "transcription_hold"],
+    ["trial", "workspace_access_denied"],
+    ["lapsed", "workspace_access_denied"],
+    ["token", "meta_system_token_missing"],
+    ["app-url", "public_app_url_unavailable"],
+    ["localhost-url", "public_app_url_unavailable"],
+    ["signing-secret", "media_signing_unavailable"],
+    ["storage-key", "export_storage_key_missing"],
+    ["foreign-key", "export_storage_scope_mismatch"],
+  ] as const)("refuses %s and records a refusal instead of a PASS", async (kind, reason) => {
+    const intended = await createDeliverableSlot(`prerequisite-${kind}`);
+    let holdId: string | undefined;
+    try {
+      // A positive control proves that only the condition below introduces the refusal.
+      expect((await collectSwitchOnlyCensus(prisma, { now: CENSUS_NOW })).switchOnly.map((row) => row.scheduledPostId))
+        .toEqual([intended.slot.id]);
+      if (kind === "hold") {
+        const hold = await prisma.editorialException.create({ data: {
+          workspaceId, projectId: intended.project.id, exceptionType: "transcription_provider_fallback", state: "OPEN", message: "Synthetic hold",
+        } });
+        holdId = hold.id;
+      } else if (kind === "trial" || kind === "lapsed") {
+        await prisma.workspace.update({ where: { id: workspaceId }, data: {
+          accessPlan: "TRIAL", paidAt: kind === "lapsed" ? new Date("2018-01-01") : null,
+          trialEndsAt: kind === "trial" ? new Date("2018-01-01") : new Date("2020-01-01"),
+        } });
+      } else if (kind === "token") vi.stubEnv("META_SYSTEM_USER_TOKEN", undefined);
+      else if (kind === "app-url") vi.stubEnv("NEXT_PUBLIC_APP_URL", undefined);
+      else if (kind === "localhost-url") vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
+      else if (kind === "signing-secret") {
+        vi.stubEnv("NODE_ENV", "production");
+        vi.stubEnv("MEDIA_URL_SECRET", undefined);
+      } else await prisma.exportedFile.update({ where: { id: intended.outputFile.id }, data: {
+        storageKey: kind === "storage-key" ? "" : "exports/a-different-workspace/fixture.mp4",
+      } });
+
+      const proof = await verifySandboxProof(prisma, { intendedScheduledPostId: intended.slot.id, now: CENSUS_NOW });
+      expect(proof).toMatchObject({ ok: false, reason: "intended_row_not_switch_only" });
+      expect(proof.census.rows.find((row) => row.scheduledPostId === intended.slot.id)?.withSwitchOn)
+        .toMatchObject({ eligible: false, reason });
+      expect(proof.census.switchOnly).toHaveLength(0);
+      const events = await prisma.operationalEvent.findMany({ where: {
+        category: "editorial_program", metadata: { path: ["intendedScheduledPostId"], equals: intended.slot.id },
+      } });
+      expect(events.map((event) => event.eventType)).toEqual(["sandbox_proof_refused"]);
+      if (holdId) expect((await prisma.editorialException.findUniqueOrThrow({ where: { id: holdId } })).state).toBe("OPEN");
+      expect((await prisma.scheduledPost.findUniqueOrThrow({ where: { id: intended.slot.id } })).publishStatus).toBe("NOT_STARTED");
+      expect(await prisma.processingJob.count({ where: { projectId: intended.project.id } })).toBe(0);
+    } finally {
+      await retire(intended.slot.id);
+    }
+  });
+
+  it("uses the census clock for an active trial and its exact expiry", async () => {
+    const intended = await createDeliverableSlot("trial-clock");
+    try {
+      await prisma.workspace.update({ where: { id: workspaceId }, data: {
+        accessPlan: "TRIAL", paidAt: null, trialStartedAt: new Date("2019-06-01"), trialEndsAt: CENSUS_NOW,
+      } });
+      expect((await collectSwitchOnlyCensus(prisma, { now: new Date(CENSUS_NOW.getTime() - 1) })).switchOnly.map((row) => row.scheduledPostId))
+        .toEqual([intended.slot.id]);
+      const expired = await collectSwitchOnlyCensus(prisma, { now: CENSUS_NOW });
+      expect(expired.switchOnly).toHaveLength(0);
+      expect(expired.rows[0].withSwitchOn).toMatchObject({
+        eligible: false, reason: "workspace_access_denied", accessReason: "trial_expired_read_only",
+      });
+    } finally { await retire(intended.slot.id); }
+  });
+
+  it("counts an eligible bystander in another workspace only after its hold resolves", async () => {
+    const intended = await createDeliverableSlot("held-bystander-target");
+    const workspace = await prisma.workspace.create({ data: {
+      ownerId: userId, name: "Census bystander", accessPlan: "PAID", settings: eligibleSettings,
+    } });
+    extraWorkspaces.push(workspace.id);
+    const bystander = await createDeliverableSlot("held-bystander", { workspaceId: workspace.id });
+    const hold = await prisma.editorialException.create({ data: {
+      workspaceId: workspace.id, projectId: bystander.project.id,
+      exceptionType: "transcription_provider_fallback", state: "OPEN", message: "Synthetic bystander hold",
+    } });
+    try {
+      const first = await verifySandboxProof(prisma, { intendedScheduledPostId: intended.slot.id, now: CENSUS_NOW });
+      expect(first.ok).toBe(true);
+      expect(first.census.rows.find((row) => row.scheduledPostId === bystander.slot.id)?.withSwitchOn)
+        .toMatchObject({ eligible: false, reason: "transcription_hold" });
+      await prisma.editorialException.update({ where: { id: hold.id }, data: { state: "RESOLVED" } });
+      const second = await verifySandboxProof(prisma, { intendedScheduledPostId: intended.slot.id, now: CENSUS_NOW });
+      expect(second).toMatchObject({ ok: false, reason: "other_rows_would_publish" });
+    } finally {
+      await retire(intended.slot.id);
+      await retire(bystander.slot.id);
+    }
+  });
+
+  it("does not apply another service's hold to the intended service", async () => {
+    const intended = await createDeliverableSlot("unrelated-hold");
+    const other = await prisma.project.create({ data: { workspaceId, name: "Unrelated held project" } });
+    await prisma.editorialException.create({ data: {
+      workspaceId, projectId: other.id, exceptionType: "transcription_provider_fallback", state: "OPEN", message: "Synthetic unrelated hold",
+    } });
+    try {
+      expect((await verifySandboxProof(prisma, { intendedScheduledPostId: intended.slot.id, now: CENSUS_NOW })).ok).toBe(true);
+    } finally { await retire(intended.slot.id); }
+  });
+
+  it("drops a row that is rescheduled after the due scan", async () => {
+    const intended = await createDeliverableSlot("rescheduled-during-census");
+    let changed = false;
+    const hooked = prisma.$extends({ query: { scheduledPost: { async findMany({ args, query }) {
+      const rows = await query(args);
+      if (!changed) {
+        changed = true;
+        await prisma.scheduledPost.update({ where: { id: intended.slot.id }, data: { scheduledDate: new Date("2020-01-01") } });
+      }
+      return rows;
+    } } } }) as unknown as PrismaClient;
+    try {
+      const census = await collectSwitchOnlyCensus(hooked, { now: CENSUS_NOW });
+      expect(changed).toBe(true);
+      expect(census.switchOnly).toHaveLength(0);
+      expect(census.rows.find((row) => row.scheduledPostId === intended.slot.id)).toBeUndefined();
+    } finally { await retire(intended.slot.id); }
+  });
+
+  it("keeps the census read-only and makes its process configuration safe to report", async () => {
+    const intended = await createDeliverableSlot("read-only-census");
+    try {
+      const before = await prisma.scheduledPost.findUniqueOrThrow({ where: { id: intended.slot.id } });
+      const eventsBefore = await prisma.operationalEvent.count();
+      const census = await collectSwitchOnlyCensus(prisma, { now: CENSUS_NOW });
+      expect(census.switchOnly.map((row) => row.scheduledPostId)).toEqual([intended.slot.id]);
+      expect(census).toMatchObject({ environment: {
+        metaTokenConfigured: true, publicAppUrlConfigured: true, mediaSigningConfigured: true,
+      } });
+      expect(JSON.stringify(census)).not.toContain("test-census-token-not-real");
+      expect(await prisma.operationalEvent.count()).toBe(eventsBefore);
+      expect(await prisma.scheduledPost.findUniqueOrThrow({ where: { id: intended.slot.id } })).toEqual(before);
+      const proof = await verifySandboxProof(prisma, { intendedScheduledPostId: intended.slot.id, now: CENSUS_NOW });
+      expect(proof.ok).toBe(true);
+      const event = await prisma.operationalEvent.findFirstOrThrow({ where: {
+        eventType: "sandbox_proof_passed", metadata: { path: ["intendedScheduledPostId"], equals: intended.slot.id },
+      } });
+      expect(event.message).not.toContain("may be enabled");
+      expect(event.metadata).toMatchObject({ activationAuthorized: false });
+    } finally { await retire(intended.slot.id); }
   });
 });
 

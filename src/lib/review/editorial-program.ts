@@ -347,18 +347,14 @@ export type SandboxProofFailure =
   | "other_rows_would_publish";
 
 /**
- * The dry run that decides whether the global switch may be turned on.
- *
- * The claim it establishes is narrow and total: with the switch simulated on and nothing else
- * changed, the set of rows that would publish is exactly `{ intendedScheduledPostId }`. Anything
- * else — a second row that would go out, or the intended row failing for some further reason — is
- * a refusal, because the point of the sandbox publish is to send one known clip to one known Page
- * and read the result.
+ * Check that only the intended due row passes the database and local process prerequisites
+ * with the global switch simulated on. Any other set is a refusal. This does not authorize
+ * activation, verify live Meta access or media retrieval, or prevent later state changes.
  *
  * It refuses outright if the switch is already on. A census taken with publishing live is not a
  * dry run; the rows it would have released may already be gone.
  *
- * Records the outcome either way. A refused proof is the more interesting audit entry of the two.
+ * Attempts to record the outcome either way through the best-effort operational audit writer.
  */
 export async function verifySandboxProof(
   client: PrismaClient,
@@ -394,7 +390,7 @@ export async function verifySandboxProof(
         ok: false,
         reason: "intended_row_not_switch_only",
         census,
-        detail: `The intended sandbox row cannot publish for the switch alone — ${why}.`,
+        detail: `The intended sandbox row does not pass the checked prerequisites with the switch on: ${why}.`,
       };
     }
 
@@ -404,8 +400,8 @@ export async function verifySandboxProof(
         reason: "other_rows_would_publish",
         census,
         detail:
-          `${others.length} other due row(s) would also publish the moment the switch is on: ` +
-          `${others.join(", ")}. Enabling would send clips this proof was never about.`,
+          `${others.length} other due row(s) also pass the checked prerequisites with the switch on: ` +
+          `${others.join(", ")}. Do not enable publishing.`,
       };
     }
 
@@ -417,13 +413,19 @@ export async function verifySandboxProof(
     eventType: result.ok ? "sandbox_proof_passed" : "sandbox_proof_refused",
     severity: result.ok ? "info" : "warning",
     message: result.ok
-      ? "The sandbox dry run found exactly the intended row. The global switch may be enabled."
+      ? "Only the intended row passed the checked prerequisites with the switch simulated on. This does not authorize activation or verify live Meta access or media retrieval."
       : `The sandbox dry run refused: ${result.detail}`,
     metadata: {
       intendedScheduledPostId: input.intendedScheduledPostId,
       dueRows: census.rows.length,
       switchOnlyRows: census.switchOnly.map((row) => row.scheduledPostId),
       globalPublishingEnabled: census.globalPublishingEnabled,
+      environment: census.environment,
+      takenAt: census.takenAt.toISOString(),
+      activationAuthorized: false,
+      scope: "due_rows_database_prerequisites_and_local_process_configuration",
+      liveMetaAccessChecked: false,
+      mediaRetrievalChecked: false,
       ...(result.ok ? {} : { reason: result.reason }),
     },
   });

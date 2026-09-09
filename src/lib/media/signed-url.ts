@@ -61,6 +61,16 @@ function getSigningSecret(): string {
   return "dev-only-sermon-clipper-media-url-secret";
 }
 
+/** Report signing readiness using the signing path's policy, without exposing the secret. */
+export function isMediaUrlSigningConfigured(): boolean {
+  try {
+    getSigningSecret();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Whether a storage key lives under a workspace's prefix.
  *

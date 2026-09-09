@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createSignedMediaUrl,
   createSignedUploadUrl,
+  isMediaUrlSigningConfigured,
   verifySignedMediaUrl,
   verifySignedUploadUrl,
 } from "@/lib/media/signed-url";
@@ -97,6 +98,7 @@ describe("signed media URLs", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("MEDIA_URL_SECRET", "");
     vi.stubEnv("AUTH_SECRET", "x".repeat(64));
+    expect(isMediaUrlSigningConfigured()).toBe(false);
 
     expect(() =>
       createSignedMediaUrl({
@@ -106,6 +108,7 @@ describe("signed media URLs", () => {
     ).toThrow("MEDIA_URL_SECRET must be configured");
 
     vi.stubEnv("MEDIA_URL_SECRET", "too-short");
+    expect(isMediaUrlSigningConfigured()).toBe(false);
     expect(() =>
       createSignedUploadUrl({
         uploadId: "upload-1",
@@ -113,5 +116,10 @@ describe("signed media URLs", () => {
         maxBytes: 1024,
       }),
     ).toThrow("MEDIA_URL_SECRET must be at least");
+
+    vi.stubEnv("MEDIA_URL_SECRET", "s".repeat(32));
+    expect(isMediaUrlSigningConfigured()).toBe(true);
+    expect(() => createSignedMediaUrl({ key: "exports/workspace-1/export.mp4", workspaceId: "workspace-1" }))
+      .not.toThrow();
   });
 });
