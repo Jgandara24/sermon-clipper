@@ -341,7 +341,8 @@ describe("the TRANSCRIBE handler", () => {
       const followup = await prisma.processingJob.findFirstOrThrow({ where: {
         projectId: fixture.project.id, type: ProcessingJobType.ANALYZE,
       } });
-      expect(followup.idempotencyKey).toBe(`analyze:${fixture.project.id}:${jobs[winner].id}`);
+      const transcript = await prisma.transcript.findUniqueOrThrow({ where: { sourceVideoId: fixture.sourceVideo.id } });
+      expect(followup.idempotencyKey).toBe(`analyze:${fixture.project.id}:${jobs[winner].id}:${transcript.id}`);
     } finally {
       read.mockRestore();
     }

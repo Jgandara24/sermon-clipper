@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { ProcessingJobType } from "@prisma/client";
+import { ProcessingJobState, ProcessingJobType } from "@prisma/client";
 import { assertSourceReanalysisAllowed } from "@/lib/analysis/reanalysis-policy";
 import { transcriptChangedError } from "@/lib/analysis/source-write-boundary";
 import { recordProcessingCostFactSafely } from "@/lib/cost/record";
@@ -12,7 +12,6 @@ import {
 } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
-import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import {
   getStorageProvider,
@@ -111,8 +110,9 @@ async function recordStorageDownloadFact(params: {
 
 /**
  * Transcribes the extracted audio (or parses a user-supplied SRT override, skipping ASR
- * entirely per guide §9 step 5), then persists the transcript + segments. Idempotent: re-running
- * replaces any existing transcript for this source video rather than duplicating it.
+ * entirely per guide §9 step 5), then persists the transcript, segments, and analysis follow-up
+ * together. A retry replaces the source transcript and queues analysis of the new words.
+ * Provider work can repeat; each attempt keeps its actual cost facts.
  */
 export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   const project = await prisma.project.findUniqueOrThrow({
@@ -392,6 +392,15 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   const fullText = segments.map((segment) => segment.text).join(" ");
 
   await prisma.$transaction(async (tx) => {
+    // Match ANALYZE/SRT/retention lock order. NO KEY UPDATE still permits a source-locked
+    // durable writer to finish its project foreign-key check while we wait for the source.
+    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${project.id}::uuid FOR NO KEY UPDATE`;
+    const currentProject = await tx.project.findUnique({
+      where: { id: project.id }, select: { sourceVideoId: true, workspaceId: true },
+    });
+    if (currentProject?.sourceVideoId !== sourceVideo.id || currentProject.workspaceId !== project.workspaceId) {
+      throw transcriptChangedError();
+    }
     // Two projects can transcribe the same source. Serialize their commits and reject a result
     // computed from an input or transcript that changed while storage/provider work was running.
     // Keep this lock short: no storage reads or provider calls occur in this transaction.
@@ -401,6 +410,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
       include: { transcript: { select: { id: true, updatedAt: true } } },
     });
     if (!current || current.updatedAt.getTime() !== sourceVideo.updatedAt.getTime() ||
+        current.transcriptRevision !== sourceVideo.transcriptRevision ||
         current.transcript?.id !== sourceVideo.transcript?.id ||
         current.transcript?.updatedAt.getTime() !== sourceVideo.transcript?.updatedAt.getTime()) {
       throw transcriptChangedError();
@@ -432,15 +442,15 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         },
       });
     }
-  });
-
-  // Keyed by this TRANSCRIBE job's own id (not just the project) so a re-run — e.g. after an
-  // SRT override upload — always enqueues a fresh ANALYZE pass instead of reusing an already-
-  // succeeded one.
-  await enqueueJob(prisma, {
-    projectId: project.id,
-    type: ProcessingJobType.ANALYZE,
-    idempotencyKey: `analyze:${project.id}:${job.id}`,
+    // The transcript UUID is new in this transaction, even on a retry of the same job.
+    // Never reuse its earlier completed analysis. If this insert fails, the words and
+    // revision roll back too. A committed transcript cannot lose its queue handoff.
+    await tx.processingJob.create({ data: {
+      projectId: project.id,
+      type: ProcessingJobType.ANALYZE,
+      state: ProcessingJobState.QUEUED,
+      idempotencyKey: `analyze:${project.id}:${job.id}:${transcript.id}`,
+    } });
   });
 
   return {

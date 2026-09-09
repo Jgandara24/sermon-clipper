@@ -15,12 +15,16 @@ A word ID is the segment UUID followed by its word index.
 - Durable work includes human edits, approval records, export jobs in any state,
   delivered/in-flight/blocked posts, and review snapshots. Machine initial edits
   do not count. A review's cleared live link does not remove its snapshot check.
-- The TRANSCRIBE commit locks the source row. It compares the source timestamp,
-  transcript ID, and transcript timestamp with those read before processing.
+- The TRANSCRIBE commit locks the project with `FOR NO KEY UPDATE`, then the source.
+  It checks that the project still uses the captured source and workspace. It compares
+  the source timestamp/revision, transcript ID, and transcript timestamp with the input.
   A changed input returns terminal `TRANSCRIPT_CHANGED` and preserves project state.
   The lock covers the database commit only, not the storage or provider call.
 - Source rows have a `transcriptRevision`. A successful TRANSCRIBE commit advances
-  it with the transcript and its segments. A failed or refused transaction does not.
+  it with the transcript, its segments, and a queued ANALYZE job. A failed or refused
+  transaction does not. The follow-up key includes the new transcript UUID as well as
+  the project and TRANSCRIBE job IDs. A retry cannot reuse a completed analysis for
+  older words. Existing job history is preserved.
 - Each generated clip keeps the revision used by ANALYZE. ANALYZE locks the project
   and source, then checks the captured transcript ID, timestamp, and revision before
   deleting the old pool. A stale result returns terminal `TRANSCRIPT_CHANGED`.
@@ -64,6 +68,17 @@ waits on the source. ANALYZE uses `FOR NO KEY UPDATE` on the project for that re
 Prior-service fill and missed-slot rescheduling acquire project/source locks before
 their retention writes and read again after waiting.
 
+The TRANSCRIBE handoff suite first reproduced five failures: a retry reused completed
+analysis; enqueue failure left the initial words committed; replacement reused the
+old queue entry without attempting a new insert; a changed project source was missed;
+and a project-first writer did not stop a competing transcript commit. All seven
+handoff tests pass after the repair. They run actual TRANSCRIBE and local heuristic
+ANALYZE handlers, test the rebuilt clip revision, and preserve completed job history
+and per-attempt cost facts. Failure injection covers both initial and replacement
+transactions. Two lock tests check project-first ordering and a source-first durable
+post's compatible project foreign-key check. Saved human work still refuses a retry
+before storage is read.
+
 ## Migration and deployment
 
 Migration `20260909150000_source_write_boundary` adds the counters and database guards.
@@ -102,9 +117,18 @@ transcript versions.
   for the P2 test.
 - A late conflict can occur after paid work has completed. It stops persistence;
   it cannot reverse a provider charge. A job that refuses queues no new analysis.
+- The atomic handoff covers transcript persistence and insertion of its follow-up,
+  not the provider call or the runner's later terminal-state update. If the worker
+  retries after an uncertain commit or lost success response, it can call the provider
+  again and replace the transcript again. Each committed replacement has a new queued
+  follow-up; actual per-attempt cost facts remain separate from that transaction.
+  This is not an exactly-once provider-result checkpoint. Earlier queued analysis
+  jobs remain in history and can still run; ANALYZE reads the current words at start
+  and refuses if those words change while it works. The job key is a traceable enqueue
+  identity, not a promise to analyze a retained historical transcript.
 - Existing transcripts, held services, and human review results are not repaired
   by deploying these checks. They require separate review.
 
-The TRANSCRIBE-to-ANALYZE retry handoff and a policy for rebuilding untouched shared
-projects remain independent engineering work. Manual caption and exact-MP4 checks
-remain pending.
+A policy for rebuilding untouched shared projects remains separate work. Manual
+caption and exact-MP4 checks remain pending. TRANSCRIBE does not settle a hold;
+the existing ANALYZE hold checks still apply.
