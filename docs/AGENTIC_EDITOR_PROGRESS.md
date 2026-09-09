@@ -100,7 +100,7 @@ observations are in [P3_EXIT_MANUAL_TEST.md](P3_EXIT_MANUAL_TEST.md). Dates use 
 |---|---|---|
 | 2 — operator access | PASS AFTER GRANT | The initial request redirected to `/app?error=permission-denied`. Jake approved the operator grant to `jake@jakegandara.com`. The documented script succeeded; the review queue and cross-workspace project page then opened. |
 | 1 — complete pool | PASS | First Baptist Demo's test service showed 6 ranked clips and 6 cards. The operator page showed the same 6 candidates. The ceiling of 18 and posting-date section appeared only on the operator page. |
-| 6 — source preview | PASS | The church preview waited for Play, started at 175.57 seconds, stopped and reset, replayed, and closed. Jake confirmed audio. The browser export count stayed at 0; a final database query also found 0 export jobs. |
+| 6 — source preview | PASS | The church preview waited for Play, started at 175.57 seconds, stopped and reset, replayed, and closed. Jake confirmed audio. The browser export count stayed at 0; a final database query also found 0 export jobs for First Baptist Demo. |
 
 The demo service, **P3 Demo Test — Clip Count Retest 8-11**, used a separate copy of the existing
 recording. Finalize, Probe, Transcribe, and Analyze all succeeded and produced 6 new clips. Existing

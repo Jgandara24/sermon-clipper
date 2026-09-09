@@ -23,9 +23,8 @@ selected the demo recording, and confirmed audio. Codex operated the browser and
 
 **Base URL:** `https://web-production-2a243.up.railway.app`
 
-This is the Railway deployment of this repository. It is not `app.pulpitengine.com`, which belongs
-to the old Pulpit Engine build in a separate Google Cloud project. The health check above is the
-proof: it reports this repository's commit.
+Use this Railway URL for these tests. The health check above reports this repository's commit.
+The tests did not verify the deployment or hosting of `app.pulpitengine.com`.
 
 Add your own notes under each `Notes:` line as you go.
 
@@ -241,9 +240,11 @@ null by design.
 | What you see | What it means |
 |---|---|
 | "The sermon recording for this service has been deleted, so this moment can no longer be played." | The signed URL is null. Either retention purged the media, or you chose a borrowed clip. Choose another clip or another service. |
-| The player appears but play fails | Open the browser network tab. Find the request to `/api/media/signed`. Read its status. |
-| `/api/media/signed` returns **403** "Invalid media link." | The signature expired. A signed URL lives 15 minutes (`DEFAULT_MEDIA_URL_TTL_SECONDS`). Reload the page and press play within 15 minutes. |
-| `/api/media/signed` returns **404** "Storage hiccup" | Storage cannot find the key. Stop and report it. |
+| The player appears but play fails | Open the browser network tab. Find the request to `/api/media/signed`. Read its status and, if it redirects, the status of the storage request. |
+| `/api/media/signed` returns **410** "This media link expired. Request a fresh link." | The signed link expired. The default lifetime is 15 minutes (`DEFAULT_MEDIA_URL_TTL_SECONDS`). Reload the page and press play within 15 minutes. |
+| `/api/media/signed` returns **403** "Invalid media link." | The signature is invalid, or the media key does not belong to the signed workspace. Stop and report it. |
+| `/api/media/signed` returns **307** | Production redirects valid links to signed storage URLs. This is expected. If playback fails, inspect the following storage request and report its status and error. |
+| `/api/media/signed` returns **404** "Storage hiccup — try again in a minute." | This is the local-storage error when the file cannot be read. Production uses the storage redirect above. Stop and report it. |
 | Playback runs past the clip end and keeps playing the sermon | The stop rule failed. Stop and report it. |
 | Playback starts at minute 0 | The seek to the clip start failed. Stop and report it. |
 | The export job count went up | **Stop immediately.** A preview created a render. This breaks criterion 6. |
