@@ -3,18 +3,22 @@ import { arch, platform, release, tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { measureLocalMedia } from "@/lib/evaluation/local-media-measurement";
+import { compareSyntheticMarker, measureSyntheticMarker } from "@/lib/evaluation/synthetic-marker-timing";
 import { detectResourceBackend, localFfmpegVersion, runMeasuredProcess,
   type ResourceBackend } from "@/lib/evaluation/local-process-measurement";
 
-export const syntheticBenchmarkInput = z.object({ durationSeconds: z.number().int().min(2).max(10).default(4) }).strict();
+export const syntheticBenchmarkInput = z.object({ durationSeconds: z.number().int().min(2).max(10).default(4),
+  observeMarker: z.boolean().default(false) }).strict();
 type CommandMeasurement = Awaited<ReturnType<typeof runMeasuredProcess>>;
 type Stage = { id: string; command: { executable: "ffmpeg"; args: string[] }; measurement: CommandMeasurement };
 
 /** Synthetic media only. No input URL, user recording, database, or storage-provider path. */
 export async function benchmarkLocalDerivatives(rawInput: unknown = {}) {
-  const { durationSeconds } = syntheticBenchmarkInput.parse(rawInput);
+  const { durationSeconds, observeMarker } = syntheticBenchmarkInput.parse(rawInput);
   const stages: Stage[] = [];
   const artifacts: Awaited<ReturnType<typeof measureLocalMedia>>[] = [];
+  const markerObservations: { artifactId: string; observation: Awaited<ReturnType<typeof measureSyntheticMarker>> }[] = [];
+  const markerComparisons: { artifactId: string; comparison: ReturnType<typeof compareSyntheticMarker> }[] = [];
   let backend: ResourceBackend = { kind: "unavailable", reason: "not_probed" };
   let ffmpeg: string | null = null;
   let directory: string | null = null;
@@ -62,6 +66,21 @@ export async function benchmarkLocalDerivatives(rawInput: unknown = {}) {
     ]) artifacts.push(await measureLocalMedia({ sourceFile: source, ...artifact }));
     const sizes = await Promise.all([source, proxy, audio, range].map(async (file) => (await stat(file)).size));
     retainedMediaBytesBeforeCleanup = sizes.reduce((total, size) => total + size, 0);
+    if (observeMarker) {
+      phase = "marker_observation";
+      const sourceObservation = await measureSyntheticMarker(source, 80);
+      markerObservations.push({ artifactId: "synthetic-source", observation: sourceObservation });
+      for (const target of [
+        { file: proxy, crop: 40 as const, artifactId: "synthetic-full-proxy", sourceStartMs: 0, sourceEndMs: durationSeconds * 1000 },
+        { file: range, crop: 80 as const, artifactId: "synthetic-middle-half", sourceStartMs: durationSeconds * 250, sourceEndMs: durationSeconds * 750 },
+      ]) {
+        const observation = await measureSyntheticMarker(target.file, target.crop);
+        markerObservations.push({ artifactId: target.artifactId, observation });
+        markerComparisons.push({ artifactId: target.artifactId, comparison: compareSyntheticMarker(sourceObservation, observation,
+          { sourceStartMs: target.sourceStartMs, sourceEndMs: target.sourceEndMs, fixtureMarkerAtMs: durationSeconds * 500 }) });
+      }
+      if (markerComparisons.some(({ comparison }) => comparison.status !== "matched")) throw new Error("Marker observation did not match.");
+    }
   } catch {
     failure = `${phase}_failed`;
   } finally {
@@ -77,6 +96,7 @@ export async function benchmarkLocalDerivatives(rawInput: unknown = {}) {
     fixture: { durationSeconds, width: 640, height: 360, fps: 30, markerAtMs: durationSeconds * 500,
       sourceKind: "generated_test_pattern_and_sine", encodingPolicy: "experimental_fixture_v1" },
     stages, artifacts,
+    markerTiming: { requested: observeMarker, scope: "synthetic_marker_event_only", observations: markerObservations, comparisons: markerComparisons },
     storage: { retainedMediaBytesBeforeCleanup, peakDiskBytes: null, cleanup },
     review: { visualQuality: "NOT_REVIEWED", captionAccuracy: "NOT_REVIEWED", sourceContentMapping: "NOT_VERIFIED" },
     unmeasured: ["exact_disk_peak", "remote_transfer", "provider_cost", "production_cost", "human_quality"],
@@ -89,7 +109,8 @@ export async function benchmarkLocalDerivatives(rawInput: unknown = {}) {
       "Source generation, each derivation, and later media inspection are separate measurements. Do not double-count them.",
       "Stored bytes are measured only after all outputs exist. Peak disk, filesystem allocation, and cache effects are not measured.",
       "Full-source proxy/audio and the middle-half range have different purposes. The partial range's size ratio is not encoding savings.",
-      "The marker and declared interval do not independently verify content alignment. Quality and mapping remain unreviewed.",
+      "Optional marker inspection measures only a generated video event. It does not verify full content, audio alignment, caption timing, or quality.",
+      "Marker inspection wall time is separate from creation and media inspection. Its CPU and memory are not measured.",
       "Encoding parameters are fixed test candidates, not selected production settings. Cleanup removes only this run's media; check the reported cleanup result.",
     ],
   };

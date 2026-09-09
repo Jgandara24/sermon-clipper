@@ -34,11 +34,11 @@ export const localMeasurementEnvironment = () => ({
 type CapturedProcess = {
   outcome: "succeeded" | "failed"; exitCode: number | null; signal: NodeJS.Signals | null;
   failure: "timeout" | "output_limit" | "spawn_failed" | "nonzero_exit" | null;
-  wallTimeMs: number; stdout: string; stderr: string;
+  wallTimeMs: number; stdout: Buffer; stderr: string;
 };
 
-/** Each launch owns a POSIX process group, so timeout kills the timer and its command. */
-async function captureProcess(command: string, args: readonly string[], timeoutMs: number): Promise<CapturedProcess> {
+/** Internal bounded capture. Raw bytes must never enter a report. Each launch owns its POSIX process group. */
+export async function captureLocalProcess(command: string, args: readonly string[], timeoutMs: number): Promise<CapturedProcess> {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) throw new Error("Invalid process timeout.");
   if (platform() !== "darwin" && platform() !== "linux") throw new Error("Local process measurements require macOS or Linux.");
   const started = performance.now();
@@ -46,7 +46,7 @@ async function captureProcess(command: string, args: readonly string[], timeoutM
     const child = spawn(command, [...args], {
       env: localMeasurementEnvironment(), stdio: ["ignore", "pipe", "pipe"], detached: true,
     });
-    let stdout = "";
+    const stdout: Buffer[] = [];
     let stderr = "";
     let bytes = 0;
     let failure: CapturedProcess["failure"] = null;
@@ -61,7 +61,7 @@ async function captureProcess(command: string, args: readonly string[], timeoutM
     const collect = (stream: "stdout" | "stderr", chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > 1024 * 1024) { stop("output_limit"); return; }
-      if (stream === "stdout") stdout += chunk.toString("utf8");
+      if (stream === "stdout") stdout.push(chunk);
       else stderr += chunk.toString("utf8");
     };
     child.stdout.on("data", (chunk: Buffer) => collect("stdout", chunk));
@@ -71,7 +71,7 @@ async function captureProcess(command: string, args: readonly string[], timeoutM
       clearTimeout(timer);
       failure ??= exitCode === 0 ? null : "nonzero_exit";
       resolve({ outcome: failure ? "failed" : "succeeded", exitCode, signal, failure,
-        wallTimeMs: Math.round((performance.now() - started) * 1000) / 1000, stdout, stderr });
+        wallTimeMs: Math.round((performance.now() - started) * 1000) / 1000, stdout: Buffer.concat(stdout), stderr });
     });
   });
 }
@@ -84,15 +84,15 @@ export async function detectResourceBackend(): Promise<ResourceBackend> {
     kind = "darwin_time";
     version = `macOS system time; Darwin ${release()}`;
   } else if (platform() === "linux") {
-    const probe = await captureProcess("/usr/bin/time", ["--version"], 5000);
-    if (probe.outcome !== "succeeded" || !/GNU [Tt]ime/.test(probe.stdout)) {
+    const probe = await captureLocalProcess("/usr/bin/time", ["--version"], 5000);
+    if (probe.outcome !== "succeeded" || !/GNU [Tt]ime/.test(probe.stdout.toString("utf8"))) {
       return { kind: "unavailable", reason: "native_timer_unavailable" };
     }
     kind = "gnu_time";
-    version = probe.stdout.split(/\r?\n/)[0];
+    version = probe.stdout.toString("utf8").split(/\r?\n/)[0];
   } else return { kind: "unavailable", reason: "unsupported_platform" };
   const backend = { kind, version };
-  const probe = await captureProcess("/usr/bin/time", timeArgs(kind, process.execPath, ["-e", ""]), 5000);
+  const probe = await captureLocalProcess("/usr/bin/time", timeArgs(kind, process.execPath, ["-e", ""]), 5000);
   return probe.outcome === "succeeded" && parseNativeTime(kind, probe.stderr).status === "measured"
     ? backend : { kind: "unavailable", reason: "native_timer_unavailable" };
 }
@@ -109,8 +109,8 @@ export async function runMeasuredProcess(
 ) {
   const { backend } = options;
   const captured = backend.kind === "unavailable"
-    ? await captureProcess(command, args, options.timeoutMs)
-    : await captureProcess("/usr/bin/time", timeArgs(backend.kind, command, args), options.timeoutMs);
+    ? await captureLocalProcess(command, args, options.timeoutMs)
+    : await captureLocalProcess("/usr/bin/time", timeArgs(backend.kind, command, args), options.timeoutMs);
   const resources: ResourceMeasurement = backend.kind === "unavailable"
     ? { status: "unavailable", reason: backend.reason }
     : captured.failure === "timeout" || captured.failure === "output_limit" || captured.failure === "spawn_failed"
@@ -122,7 +122,7 @@ export async function runMeasuredProcess(
 }
 
 export async function localFfmpegVersion() {
-  const result = await captureProcess("ffmpeg", ["-version"], 5000);
+  const result = await captureLocalProcess("ffmpeg", ["-version"], 5000);
   if (result.outcome !== "succeeded") throw new Error("FFmpeg is not available.");
-  return result.stdout.split(/\r?\n/)[0];
+  return result.stdout.toString("utf8").split(/\r?\n/)[0];
 }

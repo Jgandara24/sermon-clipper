@@ -34,9 +34,55 @@ argument arrays. Temporary paths are replaced with artifact labels.
 | Range | 640×360 H.264/AAC | Middle half of the source |
 
 A red box appears halfway through the generated source. It is a test marker.
-The command does not compare that marker with the output content. The interval
-remains declared and unverified. Each artifact independently reads the source.
+The command can inspect that event with `--observe-marker`. Without this option,
+no marker check runs. The full interval remains declared and unverified in both
+modes. Each artifact independently reads the source.
 This does not measure a shared download cache or a coordinated derivative build.
+
+## Optional synthetic marker timing
+
+```bash
+npm run benchmark:local-derivatives -- --output OUTPUTS/marker-benchmark.json --observe-marker
+```
+
+This option checks one generated video event in the source, proxy, and range.
+It does not inspect the audio derivative. A default four-second fixture should
+show the marker at 2,000 ms in source and proxy, and 1,000 ms in the range. The
+comparison uses the observed source event minus the declared range start. It also
+checks the source event against the fixture's intended marker time.
+
+The `markerTiming` field keeps separate observations and comparisons. A comparison
+is `matched`, `mismatch`, or `unavailable`. If a requested comparison is not matched,
+the benchmark records `marker_observation_failed` and exits nonzero. The observations
+and successful creation measurements remain in the report. Owned media cleanup
+still runs. Omitting the option leaves `requested: false` and empty marker lists.
+
+- ffprobe supplies each decoded video's `best_effort_timestamp_time`. The report
+  retains those frame times, sampled red-pixel counts, and separate container,
+  video, and first-frame starts. It never substitutes frame indices for timestamps.
+- This fixture supports only zero container/video/first-frame starts and constant
+  30 fps. Nonzero starts are reported and refused; they are not normalized by guess.
+  Duplicate, backward, missing, and variable frame times are refused. A 0.002 ms
+  cadence allowance covers rounding of ffprobe's six-decimal-second timestamps.
+- The crop is 80×80 at the source/range upper left and 40×40 in the half-size proxy.
+  FFmpeg area-scales it to 8×8 RGB24. A pixel qualifies at R≥220, G≤40, B≤40. Presence
+  requires all 64 pixels; absence requires at most 32. At least two absent frames
+  must precede at least two present frames. Intermediate or flickering states refuse.
+  These settings describe this fixture only; they do not classify sermon content.
+- Decoding preserves frame cadence. The decoded frame count must equal the probed
+  timestamp count. The file identity and size/time metadata must remain unchanged
+  during inspection. Each probe/decode is limited to 10 seconds and one MiB of output.
+  Only local regular MP4 fixtures of at most 50 MiB and 360 probed frames are accepted.
+  Decoding stops at 361 frames so an excessive output cannot be a partial match.
+- Event tolerance is one measured frame interval, using the larger source/output
+  interval. This covers event quantization for fractional range starts. It is not a
+  production synchronization target. A match cannot prove every frame, a whole
+  interval, audio alignment, caption timing, or real-sermon quality.
+
+Marker inspection reports probe/decode and total wall time separately from media
+inspection and creation. Marker inspection CPU and memory remain `NOT_MEASURED`.
+Raw pixels, probe metadata, process output, and temporary paths are not copied into
+the report. Projected frame times and red-pixel counts are retained for review.
 
 ## Measurements and scope
 
@@ -90,6 +136,10 @@ Parser tests cover units, missing/ambiguous metrics, and zero values. Real comma
 tests cover artifact facts, native measurements, failed encoding, output limits,
 process-group timeout, temporary cleanup, report overwrite refusal, and rejected
 external input. Tests do not prove real-sermon quality or production resource use.
+Marker tests cover correct source/proxy/range events, duration bounds and an odd
+duration, an encoded wrong range with unchanged declared mapping, absent/flickering
+markers, nonzero starts, unavailable clocks, extraction counts, and frame cadence.
+Known bad or unavailable observations cannot receive a marker match.
 
 Every report keeps visual quality and caption accuracy `NOT_REVIEWED` and content
 mapping `NOT_VERIFIED`. This benchmark does not complete a P2 proof, select P4

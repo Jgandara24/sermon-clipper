@@ -12,7 +12,7 @@ it("benchmarks generated files through the CLI, records child resources, and rem
   const directory = await mkdtemp(path.join(os.tmpdir(), "benchmark-cli-test-"));
   const output = path.join(directory, "report.json");
   const env = { ...localMeasurementEnvironment(), TMPDIR: directory };
-  const args = ["--import", "tsx", "scripts/benchmark-local-derivatives.ts", "--output", output];
+  const args = ["--import", "tsx", "scripts/benchmark-local-derivatives.ts", "--output", output, "--observe-marker"];
   try {
     await exec(process.execPath, args, { env, timeout: 60_000, killSignal: "SIGKILL" });
     const text = await readFile(output, "utf8");
@@ -32,6 +32,17 @@ it("benchmarks generated files through the CLI, records child resources, and rem
       expect(stage.measurement.resources.peakRssBytes).toBeGreaterThan(1_000_000);
     }
     expect(report.artifacts).toHaveLength(3);
+    expect(report.markerTiming).toMatchObject({ requested: true, scope: "synthetic_marker_event_only" });
+    expect(report.markerTiming.observations).toHaveLength(3);
+    for (const { observation } of report.markerTiming.observations) {
+      expect(observation).toMatchObject({ status: "observed", clocks: { containerStartMs: 0, videoStartMs: 0, firstFrameMs: 0 },
+        inspection: { cpuAndMemory: "NOT_MEASURED" } });
+      expect(observation.probedFrameCount).toBe(observation.decodedFrameCount);
+      expect(observation.inspection.probeWallTimeMs).toBeGreaterThan(0);
+      expect(observation.inspection.decodeWallTimeMs).toBeGreaterThan(0);
+    }
+    expect(report.markerTiming.comparisons.map(({ comparison }: { comparison: { status: string; observedEventMs: number } }) =>
+      [comparison.status, comparison.observedEventMs])).toEqual([["matched", 2000], ["matched", 1000]]);
     const [proxy, audio, range] = report.artifacts;
     expect(proxy.artifact.probe.video).toMatchObject({ width: 320, height: 180, codec: "h264" });
     expect(audio.artifact.probe.audio).toMatchObject({ channels: 1, sampleRateHz: 16000, codec: "flac" });
@@ -64,6 +75,7 @@ it("records a failed encoder without exposing raw output and cleans its owned di
     const text = await readFile(output, "utf8");
     const report = JSON.parse(text);
     expect(report).toMatchObject({ outcome: "failed", failure: "source_generation_failed", artifacts: [],
+      markerTiming: { requested: false, observations: [], comparisons: [] },
       storage: { cleanup: "removed", retainedMediaBytesBeforeCleanup: null } });
     expect(report.stages).toHaveLength(1);
     expect(report.stages[0].measurement).toMatchObject({ outcome: "failed", exitCode: 7 });
