@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "benchmark:local-derivatives": "tsx scripts/benchmark-local-derivatives.ts",
     "audit:caption-faces": "bash scripts/compare-caption-faces.sh",
     "audit:event-exposure": "tsx scripts/audit-event-exposure.ts",
     "audit:legacy-exports": "tsx scripts/audit-legacy-exports.ts",

@@ -51,13 +51,13 @@ jobs:
       # answering: apt then sits on an open connection, and with no limit here the check ran to
       # the job's own 30-minute cap before anyone could re-run it. Five minutes is far longer
       # than this install has ever legitimately taken and turns that stall into a fast retry.
-      - name: Install ffmpeg
+      - name: Install media measurement tools
         timeout-minutes: 5
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo -E apt-get update -o Acquire::Retries=3
-          sudo -E apt-get install -y -o Acquire::Retries=3 ffmpeg
+          sudo -E apt-get install -y -o Acquire::Retries=3 ffmpeg time
       - run: npm ci
       - run: npm run prisma:generate
       - run: npm run db:migrate:deploy
