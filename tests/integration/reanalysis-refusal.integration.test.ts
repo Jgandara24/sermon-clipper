@@ -16,6 +16,7 @@ import {
   SourceOrigin,
   WorkspaceRole,
 } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // The same cookie mock the route-authorization matrix uses; its guard test pins the cookie name.
@@ -30,10 +31,11 @@ vi.mock("next/headers", () => ({
 }));
 
 import { POST as uploadSrt } from "@/app/api/videos/[id]/srt/route";
-import { REANALYSIS_BLOCKED } from "@/lib/analysis/reanalysis-policy";
+import { REANALYSIS_BLOCKED, assessSourceReanalysis } from "@/lib/analysis/reanalysis-policy";
 import { createSessionToken, hashSecret } from "@/lib/auth/email-otp";
 import { runTranscribeJob } from "@/lib/jobs/handlers/transcribe";
 import { runOnePendingJob } from "@/lib/jobs/runner";
+import { getStorageProvider } from "@/lib/storage";
 
 const prisma = new PrismaClient();
 const created: { workspaces: string[]; users: string[] } = { workspaces: [], users: [] };
@@ -132,6 +134,49 @@ afterAll(async () => {
 });
 
 describe("the SRT upload route", () => {
+  it("rechecks saved work after waiting for the upload body", async () => {
+    const fixture = await seedEditedProject();
+    await prisma.clipEdit.deleteMany({ where: { clipId: fixture.clip.id } });
+    cookieState.sessionToken = fixture.sessionToken;
+    const request = new Request("http://test.local/srt", { method: "POST", body: "not an srt" });
+    vi.spyOn(request, "text").mockImplementationOnce(async () => {
+      await prisma.clipEdit.create({ data: { clipId: fixture.clip.id, version: 2, editorState: {} } });
+      return "not an srt";
+    });
+    try {
+      const response = await uploadSrt(request, { params: Promise.resolve({ id: fixture.sourceVideo.id }) });
+      expect(response?.status).toBe(409);
+      expect(await response?.json()).toMatchObject({ error: { code: REANALYSIS_BLOCKED } });
+    } finally {
+      cookieState.sessionToken = null;
+    }
+  });
+
+  it("checks every service sharing the source, not only the first service", async () => {
+    const fixture = await seedEditedProject();
+    const sibling = await prisma.project.create({ data: {
+      workspaceId: fixture.workspaceId, sourceVideoId: fixture.sourceVideo.id,
+      name: unique("shared-source"), status: ProjectStatus.READY,
+    } });
+    // Put the saved edit on the service the old findFirst check does not inspect.
+    const first = await prisma.project.findFirstOrThrow({ where: { sourceVideoId: fixture.sourceVideo.id } });
+    const protectedId = first.id === fixture.project.id ? sibling.id : fixture.project.id;
+    await prisma.generatedClip.update({ where: { id: fixture.clip.id }, data: { projectId: protectedId } });
+    cookieState.sessionToken = fixture.sessionToken;
+    try {
+      // An invalid body stops the old path before storage. A correct guard answers 409 first.
+      const response = await uploadSrt(new Request("http://test.local/srt", {
+        method: "POST", body: "not an srt",
+      }), { params: Promise.resolve({ id: fixture.sourceVideo.id }) });
+      expect(response?.status).toBe(409);
+      expect(await response?.json()).toMatchObject({ error: { code: REANALYSIS_BLOCKED } });
+    } finally {
+      cookieState.sessionToken = null;
+    }
+    expect(await prisma.processingJob.count({ where: { project: { sourceVideoId: fixture.sourceVideo.id } } })).toBe(0);
+    expect((await prisma.sourceVideo.findUniqueOrThrow({ where: { id: fixture.sourceVideo.id } })).srtOverrideKey).toBeNull();
+  });
+
   it("answers 409 before writing anything once a person has edited a clip", async () => {
     const fixture = await seedEditedProject();
     cookieState.sessionToken = fixture.sessionToken;
@@ -169,6 +214,161 @@ describe("the SRT upload route", () => {
 });
 
 describe("the TRANSCRIBE handler", () => {
+  it.each(["approval", "export", "post", "detached review"] as const)("protects a sibling's %s", async (kind) => {
+    const fixture = await seedEditedProject();
+    await prisma.clipEdit.deleteMany({ where: { clipId: fixture.clip.id } });
+    await prisma.project.create({ data: {
+      workspaceId: fixture.workspaceId, sourceVideoId: fixture.sourceVideo.id,
+      name: unique("sibling-durable-work"), status: ProjectStatus.READY,
+    } });
+    if (kind === "approval") {
+      await prisma.clipApproval.create({ data: {
+        workspaceId: fixture.workspaceId, clipId: fixture.clip.id,
+        reviewToken: unique("approval"), reviewTokenExpiresAt: new Date("2027-01-01"),
+      } });
+    } else if (kind === "export") {
+      await prisma.exportJob.create({ data: {
+        workspaceId: fixture.workspaceId, clipId: fixture.clip.id,
+        filename: "never-rendered.mp4", idempotencyKey: unique("export"), state: "FAILED",
+      } });
+    } else if (kind === "post") {
+      await prisma.scheduledPost.create({ data: {
+        workspaceId: fixture.workspaceId, projectId: fixture.project.id,
+        scheduledDate: new Date("2027-01-01"), platform: "FACEBOOK", publishStatus: "BLOCKED",
+      } });
+    } else {
+      // No live links and no export row: the immutable snapshot alone must protect this source.
+      await prisma.clipReview.create({ data: {
+        workspaceId: fixture.workspaceId, decision: "REVISE",
+        projectIdSnapshot: fixture.project.id, clipIdSnapshot: fixture.clip.id,
+        scheduledPostIdSnapshot: randomUUID(), exportJobIdSnapshot: randomUUID(),
+        clipRank: 1, clipStartMs: 0, clipEndMs: 6000, editVersion: 1, checksum: "fixture",
+      } });
+    }
+    const assessment = await assessSourceReanalysis(prisma, { sourceVideoId: fixture.sourceVideo.id });
+    expect(assessment.allowed).toBe(false);
+    if (assessment.allowed) throw new Error("Expected a source refusal");
+    const expected = { edits: 0, approvals: 0, exports: 0, posts: 0, reviews: 0 };
+    const field = { approval: "approvals", export: "exports", post: "posts", "detached review": "reviews" } as const;
+    expected[field[kind]] = 1;
+    expect(assessment.work).toEqual(expected);
+  });
+
+  it("allows untouched shared projects and excludes saved work on a different source", async () => {
+    const fixture = await seedEditedProject();
+    await prisma.clipEdit.updateMany({ where: { clipId: fixture.clip.id }, data: {
+      editorState: { systemInitial: true },
+    } });
+    await prisma.project.create({ data: {
+      workspaceId: fixture.workspaceId, sourceVideoId: fixture.sourceVideo.id,
+      name: unique("shared-untouched"), status: ProjectStatus.READY,
+    } });
+    const other = await prisma.sourceVideo.create({ data: {
+      workspaceId: fixture.workspaceId, origin: SourceOrigin.UPLOAD,
+    } });
+    const otherProject = await prisma.project.create({ data: {
+      workspaceId: fixture.workspaceId, sourceVideoId: other.id, name: unique("separate-source"),
+    } });
+    await prisma.generatedClip.create({ data: {
+      workspaceId: fixture.workspaceId, projectId: otherProject.id, rank: 1,
+      startMs: 0, endMs: 6000, title: "Other source", summary: "Separate words",
+      edits: { create: { version: 1, editorState: {} } },
+    } });
+    await expect(assessSourceReanalysis(prisma, { sourceVideoId: fixture.sourceVideo.id }))
+      .resolves.toEqual({ allowed: true });
+  });
+
+  it("rechecks a sibling edit saved while the transcript input is being read", async () => {
+    const fixture = await seedEditedProject();
+    await prisma.clipEdit.deleteMany({ where: { clipId: fixture.clip.id } });
+    const sibling = await prisma.project.create({ data: {
+      workspaceId: fixture.workspaceId, sourceVideoId: fixture.sourceVideo.id,
+      name: unique("shared-in-flight"), status: ProjectStatus.READY,
+    } });
+    await prisma.sourceVideo.update({ where: { id: fixture.sourceVideo.id }, data: {
+      srtOverrideKey: `srt/${fixture.workspaceId}/in-flight.srt`,
+    } });
+    const job = await prisma.processingJob.create({ data: {
+      projectId: sibling.id, type: ProcessingJobType.TRANSCRIBE,
+      state: ProcessingJobState.RUNNING, idempotencyKey: unique("shared-in-flight"),
+    } });
+    const read = vi.spyOn(getStorageProvider(), "readAsBuffer").mockImplementationOnce(async () => {
+      await prisma.clipEdit.create({ data: {
+        clipId: fixture.clip.id, version: 2, editorState: { version: 2 },
+      } });
+      return Buffer.from("1\n00:00:00,000 --> 00:00:06,000\nnew words would replace the old words\n");
+    });
+    try {
+      await expect(runTranscribeJob({ job, prisma })).rejects.toMatchObject({ code: REANALYSIS_BLOCKED });
+      expect(read).toHaveBeenCalledOnce();
+    } finally {
+      read.mockRestore();
+    }
+    expect((await prisma.transcript.findUniqueOrThrow({ where: { sourceVideoId: fixture.sourceVideo.id } })).id)
+      .toBe(fixture.sourceVideo.transcript?.id);
+    expect(await prisma.processingJob.count({ where: { projectId: sibling.id, type: ProcessingJobType.ANALYZE } })).toBe(0);
+  });
+
+  it("lets one of two concurrent source replacements commit, without overwriting its words", async () => {
+    const fixture = await seedEditedProject();
+    await prisma.clipEdit.deleteMany({ where: { clipId: fixture.clip.id } });
+    await prisma.sourceVideo.update({ where: { id: fixture.sourceVideo.id }, data: {
+      srtOverrideKey: `srt/${fixture.workspaceId}/competing.srt`,
+    } });
+    const jobs = await Promise.all([0, 1].map((index) => prisma.processingJob.create({ data: {
+      projectId: fixture.project.id, type: ProcessingJobType.TRANSCRIBE,
+      state: ProcessingJobState.RUNNING, idempotencyKey: unique(`competing-${index}`),
+    } })));
+    let reads = 0;
+    let release!: () => void;
+    const bothReading = new Promise<void>((resolve) => { release = resolve; });
+    const read = vi.spyOn(getStorageProvider(), "readAsBuffer").mockImplementation(async () => {
+      reads += 1;
+      const words = reads === 1 ? "first distinct transcript" : "second distinct transcript";
+      if (reads === 2) release();
+      await bothReading;
+      return Buffer.from(`1\n00:00:00,000 --> 00:00:06,000\n${words}\n`);
+    });
+    try {
+      const outcomes = await Promise.allSettled(jobs.map((job) => runTranscribeJob({ job, prisma })));
+      expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+      const refused = outcomes.find((outcome) => outcome.status === "rejected");
+      expect(refused?.status === "rejected" ? refused.reason : null).toMatchObject({
+        code: "TRANSCRIPT_CHANGED", retryable: false, preservesProject: true,
+      });
+      expect(await prisma.processingJob.count({ where: { projectId: fixture.project.id, type: ProcessingJobType.ANALYZE } })).toBe(1);
+      const winner = outcomes.findIndex((outcome) => outcome.status === "fulfilled");
+      const followup = await prisma.processingJob.findFirstOrThrow({ where: {
+        projectId: fixture.project.id, type: ProcessingJobType.ANALYZE,
+      } });
+      expect(followup.idempotencyKey).toBe(`analyze:${fixture.project.id}:${jobs[winner].id}`);
+    } finally {
+      read.mockRestore();
+    }
+  });
+
+  it("refuses before storage when another service on the source has a saved edit", async () => {
+    const fixture = await seedEditedProject();
+    const sibling = await prisma.project.create({ data: {
+      workspaceId: fixture.workspaceId, sourceVideoId: fixture.sourceVideo.id,
+      name: unique("shared-transcription"), status: ProjectStatus.READY,
+    } });
+    await prisma.sourceVideo.update({ where: { id: fixture.sourceVideo.id }, data: {
+      srtOverrideKey: `srt/${fixture.workspaceId}/${unique("never-written")}.srt`,
+    } });
+    const job = await prisma.processingJob.create({ data: {
+      projectId: sibling.id, type: ProcessingJobType.TRANSCRIBE,
+      state: ProcessingJobState.RUNNING, idempotencyKey: unique("shared-refusal"),
+    } });
+    await expect(runTranscribeJob({ job, prisma })).rejects.toMatchObject({
+      code: REANALYSIS_BLOCKED, retryable: false, preservesProject: true,
+    });
+    expect((await prisma.transcript.findUniqueOrThrow({ where: { sourceVideoId: fixture.sourceVideo.id } })).id)
+      .toBe(fixture.sourceVideo.transcript?.id);
+    expect(await prisma.clipEdit.count({ where: { clipId: fixture.clip.id } })).toBe(1);
+    expect(await prisma.processingJob.count({ where: { projectId: sibling.id, type: ProcessingJobType.ANALYZE } })).toBe(0);
+  });
+
   it("refuses before it reads the override, and leaves the transcript as it was", async () => {
     const fixture = await seedEditedProject();
     // A key that exists nowhere: if the handler reached storage this would fail differently.

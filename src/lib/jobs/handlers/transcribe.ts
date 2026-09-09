@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ProcessingJobType } from "@prisma/client";
-import { assertReanalysisAllowed } from "@/lib/analysis/reanalysis-policy";
+import { assertSourceReanalysisAllowed } from "@/lib/analysis/reanalysis-policy";
 import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import {
   finishRuntimeMeasurement,
@@ -116,7 +116,7 @@ async function recordStorageDownloadFact(params: {
 export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: job.projectId },
-    include: { sourceVideo: true },
+    include: { sourceVideo: { include: { transcript: { select: { id: true, updatedAt: true } } } } },
   });
 
   const sourceVideo = project.sourceVideo;
@@ -126,9 +126,9 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
 
   // P1.7. A new transcript repoints every positional word id and triggers a clip rebuild, so a
   // re-run is refused before anything is downloaded or paid for once a person has done durable
-  // work on this project's clips. A first transcription has no clips and passes. Asked again
+  // work on any project sharing these words. A first transcription has no clips and passes. Asked again
   // inside the transaction that replaces the transcript, which is the answer that binds.
-  await assertReanalysisAllowed(prisma, { projectId: project.id });
+  await assertSourceReanalysisAllowed(prisma, { sourceVideoId: sourceVideo.id });
 
   const storage = getStorageProvider();
   const transcriptionKeyterms = readScribeKeyterms(project.processingConfig);
@@ -391,7 +391,22 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   const fullText = segments.map((segment) => segment.text).join(" ");
 
   await prisma.$transaction(async (tx) => {
-    await assertReanalysisAllowed(tx, { projectId: project.id });
+    // Two projects can transcribe the same source. Serialize their commits and reject a result
+    // computed from an input or transcript that changed while storage/provider work was running.
+    // Keep this lock short: no storage reads or provider calls occur in this transaction.
+    await tx.$queryRaw`SELECT id FROM source_videos WHERE id = ${sourceVideo.id}::uuid FOR UPDATE`;
+    const current = await tx.sourceVideo.findUnique({
+      where: { id: sourceVideo.id },
+      include: { transcript: { select: { id: true, updatedAt: true } } },
+    });
+    if (!current || current.updatedAt.getTime() !== sourceVideo.updatedAt.getTime() ||
+        current.transcript?.id !== sourceVideo.transcript?.id ||
+        current.transcript?.updatedAt.getTime() !== sourceVideo.transcript?.updatedAt.getTime()) {
+      throw new JobFailureError("TRANSCRIPT_CHANGED",
+        "This sermon's source or transcript changed during processing. Refresh before trying again.",
+        { retryable: false, preservesProject: true });
+    }
+    await assertSourceReanalysisAllowed(tx, { sourceVideoId: sourceVideo.id });
     await tx.transcript.deleteMany({ where: { sourceVideoId: sourceVideo.id } });
     const transcript = await tx.transcript.create({
       data: {

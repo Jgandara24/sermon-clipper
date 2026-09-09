@@ -4,7 +4,7 @@ import { after } from "next/server";
 import {
   REANALYSIS_BLOCKED,
   REANALYSIS_BLOCKED_MESSAGE,
-  assessReanalysis,
+  assessSourceReanalysis,
 } from "@/lib/analysis/reanalysis-policy";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
@@ -38,13 +38,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // before anything is written, so a refused upload leaves no file behind and no job queued. The
   // worker asks the same question again before it deletes anything; this is the answer at request
   // time, so the member is told now rather than watching a job fail later.
-  const project = await prisma.project.findFirst({ where: { sourceVideoId: sourceVideo.id } });
-  if (project) {
-    const assessment = await assessReanalysis(prisma, { projectId: project.id });
-    if (!assessment.allowed) {
-      return apiError(REANALYSIS_BLOCKED, REANALYSIS_BLOCKED_MESSAGE, { status: 409 });
-    }
+  const assessment = await assessSourceReanalysis(prisma, { sourceVideoId: sourceVideo.id });
+  if (!assessment.allowed) {
+    return apiError(REANALYSIS_BLOCKED, REANALYSIS_BLOCKED_MESSAGE, { status: 409 });
   }
+  const project = await prisma.project.findFirst({ where: { sourceVideoId: sourceVideo.id } });
 
   if (!request.body) {
     return apiError("UPLOAD_INTERRUPTED", "Upload lost connection — resume?");
@@ -53,6 +51,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const text = await request.text();
   if (Buffer.byteLength(text, "utf-8") > MAX_SRT_BYTES) {
     return apiError("FILE_TOO_LARGE", "SRT files are limited to 2 MB.", { status: 413 });
+  }
+
+  // Receiving the body can take time. Work saved on any sharing service during that wait must
+  // still stop this upload before it writes storage or queues a transcription.
+  const afterUpload = await assessSourceReanalysis(prisma, { sourceVideoId: sourceVideo.id });
+  if (!afterUpload.allowed) {
+    return apiError(REANALYSIS_BLOCKED, REANALYSIS_BLOCKED_MESSAGE, { status: 409 });
   }
 
   try {
