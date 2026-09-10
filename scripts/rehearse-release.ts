@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { prepareRehearsal } from "./lib/release-rehearsal-files";
 import { LocalRuntime, unusedPort } from "./lib/rehearsal-runtime";
@@ -10,6 +10,7 @@ import { shutdownCase } from "./lib/rehearsal-shutdown";
 import { migrationFailures } from "./lib/rehearsal-migrations";
 import { localStorageTests } from "./lib/rehearsal-storage-tests";
 import { postWriteRecovery } from "./lib/rehearsal-recovery";
+import { removeFixtureObject } from "./lib/rehearsal-cleanup";
 
 async function main() {
   const args = process.argv.slice(2).join(" ");
@@ -128,8 +129,7 @@ async function main() {
         const ownershipFile = path.join(root, "owned-storage-objects.json");
         if (existsSync(ownershipFile)) ownedObjects = JSON.parse(readFileSync(ownershipFile, "utf8"));
         for (const object of ownedObjects) {
-          if (path.dirname(object.file) !== path.join(root, "storage") || sha256(readFileSync(object.file)) !== object.hash) throw new Error("Owned object cleanup identity differs.");
-          unlinkSync(object.file);
+          removeFixtureObject(root, object.file, object.hash, 0); // All owning databases were removed above.
         }
         results.ownedObjectCleanup = { removed: ownedObjects.length, prerequisite: "All owned databases dropped and the owned cluster stopped." };
       } catch (error) {

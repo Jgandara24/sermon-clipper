@@ -5,6 +5,7 @@ import { REHEARSAL_REFS, sha256 } from "./release-rehearsal";
 import { assertBuildSchema, until } from "./rehearsal-shutdown";
 import { dataSnapshot } from "./rehearsal-fixtures";
 import { RehearsalPostgres } from "./rehearsal-postgres";
+import { removeFixtureObject } from "./rehearsal-cleanup";
 
 export async function postWriteRecovery(pg: RehearsalPostgres, backup: { archive: string; sha256: string }, build: { worker: string; recover: string }) {
   const name = await pg.create(); await pg.restore(name, backup);
@@ -19,6 +20,28 @@ export async function postWriteRecovery(pg: RehearsalPostgres, backup: { archive
   const before = await dataSnapshot(pg, name);
   const journal = async () => (await pg.sql(name, "SELECT jsonb_agg(to_jsonb(j) ORDER BY id) FROM source_copy_operations j")).stdout.trim();
   const beforeJournal = await journal();
+  const journalRefusals: string[] = [];
+  const expectConstraint = async (label: string, sql: string) => {
+    let refused = false;
+    try { await pg.sql(name, sql); } catch (error) { refused = /violates (check|unique) constraint/.test(String(error)); }
+    if (!refused) throw new Error(`Journal constraint was not enforced: ${label}`);
+    journalRefusals.push(label);
+  };
+  for (const constraint of ["state", "id", "source", "key"]) {
+    const newId = constraint === "id" ? operationIds[0] : randomUUID();
+    const source = constraint === "source" ? `(SELECT source_video_id FROM source_copy_operations WHERE id='${operationIds[0]}')` : `'${randomUUID()}'::uuid`;
+    const key = constraint === "key" ? `fixture/${operationIds[0]}` : `fixture/${randomUUID()}`;
+    await expectConstraint(constraint, `INSERT INTO source_copy_operations(id,plan_hash,manifest,source_video_id,storage_key,state,retain_until) VALUES ('${newId}','fixture','{}',${source},'${key}','${constraint === "state" ? "INVALID" : "PREPARED"}',NOW()+INTERVAL '1 day')`);
+  }
+  let referencedCleanupRefused = 0;
+  for (const [index, operationId] of operationIds.entries()) {
+    // Cleanup must wait while a journal still owns the object. Do not delete to prove refusal.
+    const references = (await pg.sql(name, `SELECT count(*) FROM source_copy_operations WHERE storage_key='fixture/${operationId}'`)).stdout.trim();
+    if (references !== "1") throw new Error("Expected fixture journal reference is missing.");
+    try { removeFixtureObject(pg.runtime.root, objects[index], sha256("owned synthetic copy"), Number(references)); }
+    catch (error) { if (String(error).includes("still has references")) referencedCleanupRefused++; else throw error; }
+  }
+  if (referencedCleanupRefused !== 2 || objects.some(file => !existsSync(file))) throw new Error("Referenced fixture cleanup was not refused.");
   let oldBuildRefused = false;
   try { await assertBuildSchema(pg, name, REHEARSAL_REFS.baseline); } catch { oldBuildRefused = true; }
   if (!oldBuildRefused) throw new Error("Old build was accepted after candidate writes.");
@@ -51,7 +74,7 @@ export async function postWriteRecovery(pg: RehearsalPostgres, backup: { archive
   if (JSON.stringify(before) !== JSON.stringify(await dataSnapshot(pg, name)) || beforeJournal !== await journal()) throw new Error("Recovery changed durable fixture facts.");
   const hashes = objects.map(file => sha256(readFileSync(file)));
   if (hashes.some(hash => hash !== sha256("owned synthetic copy"))) throw new Error("Recovery changed stored fixture bytes.");
-  return { status: "PASS", database: name, oldBuildRefused, staleWriteRefused, recovered, objectHashes: hashes, createdObjectPaths: objects,
+  return { status: "PASS", database: name, oldBuildRefused, staleWriteRefused, journalRefusals, referencedCleanupRefused, recovered, objectHashes: hashes, createdObjectPaths: objects,
     snapshotSha256: sha256(JSON.stringify(before)), journalSha256: sha256(beforeJournal),
     limit: "Candidate restart preserves post-migration facts. No alternative compatible rollback build was selected." };
 }

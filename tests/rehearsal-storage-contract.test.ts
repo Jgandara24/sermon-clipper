@@ -1,11 +1,25 @@
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { describe, expect, it } from "vitest";
 import { storageContract, StorageBudget } from "../scripts/lib/rehearsal-storage-contract";
 import { sha256 } from "../scripts/lib/release-rehearsal";
+import { removeFixtureObject } from "../scripts/lib/rehearsal-cleanup";
 
 describe("disposable storage contract", () => {
+  it("refuses referenced or changed fixture cleanup before removing a file", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "p2-cleanup-test-"));
+    try {
+      await mkdir(path.join(root, "storage"));
+      const file = path.join(root, "storage", "owned.bin");
+      await writeFile(file, "fixture", { flag: "wx" });
+      expect(() => removeFixtureObject(root, file, sha256("fixture"), 1)).toThrow("references");
+      expect(() => removeFixtureObject(root, file, sha256("different"), 0)).toThrow("identity");
+      expect(await readFile(file, "utf8")).toBe("fixture");
+      removeFixtureObject(root, file, sha256("fixture"), 0);
+      await expect(readFile(file)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
   it("checks conditional copies against owned disk objects", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "p2-storage-contract-"));
     const objects = new Map<string, { file: string; owner: string | null }>();
