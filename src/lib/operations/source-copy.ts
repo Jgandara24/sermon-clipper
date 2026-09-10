@@ -131,10 +131,12 @@ export async function applySourceCopy(client: PrismaClient, storage: CopyStorage
     await tx.$queryRaw`SELECT id FROM source_copy_operations WHERE id = ${plan.operationId}::uuid FOR UPDATE`;
     const op = await tx.sourceCopyOperation.findUniqueOrThrow({ where: { id: plan.operationId } });
     requireFact(op.planHash === hash, "OPERATION_CONFLICT");
+    // Match TRANSCRIBE, ANALYZE, and retention: project before source. Taking the
+    // source first can deadlock with a writer that already holds the project.
+    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${plan.input.projectId}::uuid FOR NO KEY UPDATE`;
     await tx.$queryRaw`SELECT id FROM source_videos WHERE id = ${plan.facts.sourceId}::uuid FOR UPDATE`;
     // Prevent permission revocation, expiry edits, and entitlement changes between
     // the final access check and registration. Locks are held only during apply.
-    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${plan.input.projectId}::uuid FOR SHARE`;
     await tx.$queryRaw`SELECT id FROM users WHERE id = ${plan.input.operatorId}::uuid FOR SHARE`;
     await tx.$queryRaw`SELECT id FROM workspaces WHERE id = ${plan.input.workspaceId}::uuid FOR SHARE`;
     await tx.$queryRaw`SELECT id FROM workspace_members WHERE

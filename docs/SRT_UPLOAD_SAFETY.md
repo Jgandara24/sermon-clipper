@@ -78,7 +78,8 @@ independent work. The conditional transition protects the queued jobs it superse
 The TRANSCRIBE worker still checks its captured source before replacing words; a late
 conflict can occur after provider work and cannot reverse a provider charge.
 
-Transcript replacement and its later ANALYZE enqueue still have a separate retry
-question. This upload repair does not claim to make that worker handoff atomic.
+TRANSCRIBE now commits the transcript, revision, and ANALYZE queue entry in one
+transaction. Provider calls and the runner's terminal-state update remain outside
+that transaction. A retry after an uncertain response can repeat provider work.
 Existing historical word mappings and human caption verdicts remain unverified.
 See [TRANSCRIPT_REPLACEMENT_SAFETY.md](TRANSCRIPT_REPLACEMENT_SAFETY.md).

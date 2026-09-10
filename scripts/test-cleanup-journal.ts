@@ -52,10 +52,15 @@ async function main() {
     await sql(readFileSync(path.join(migrations, migration, "migration.sql"), "utf8"));
     await check("populated migration preserves transcripts", snapshotSql, before);
     await check("backfill creates ACTIVE gates only", "SELECT count(*) FROM source_media_gates WHERE state='ACTIVE' AND generation=0 AND operation_id IS NULL", "2");
+    const unusedSource = randomUUID();
+    await sql(`INSERT INTO source_videos(id,workspace_id,origin,updated_at) VALUES('${unusedSource}','${ws}','upload',now());INSERT INTO source_media_gates(source_id) VALUES('${unusedSource}')`);
+    await reject("direct gate deletion refused", `DELETE FROM source_media_gates WHERE source_id='${unusedSource}'`, "CLEANUP_HISTORY_IMMUTABLE");
+    await check("unused source deletion preserves existing app behavior", `DELETE FROM source_videos WHERE id='${unusedSource}'`);
+    await check("unused gate removed with its source", `SELECT count(*) FROM source_media_gates WHERE source_id='${unusedSource}'`, "0");
     const manifest = canonicalManifest({ version: 1, createdAt: "2026-09-10T00:00:00Z", approvalExpiresAt: "2026-09-10T00:20:00Z", operationId: op, operatorId: user, workspaceId: ws, identity: { environment: "local-disposable", provider: "fixture", account: "fixture-account", bucket: "fixture-bucket", endpoint: "fixture://cleanup" },
       backupManifestHash: hash("backup"), preservedRecordsHash: hash("preserved"), items });
     const audit = (kind: string, id: string, rev: number, action: string, operation: string | null = op) =>
-      `INSERT INTO cleanup_audit_events VALUES('${randomUUID()}',${operation ? q(operation) : "NULL"},'${kind}','${id}',${rev},'${action}','${user}','{}',now());`;
+      `INSERT INTO cleanup_audit_events(id,operation_id,target_type,target_id,revision,action,actor_id,evidence,created_at) VALUES('${randomUUID()}',${operation ? q(operation) : "NULL"},'${kind}','${id}',${rev},'${action}','${user}','{}',now());`;
     const objects = items.map(() => randomUUID());
     const prepare = `INSERT INTO cleanup_operations(id,workspace_id,operator_id,canonical_manifest,manifest,manifest_hash,backup_manifest_hash,preserved_records_hash,storage_identity)
       VALUES('${op}','${ws}','${user}',${q(manifest)},${q(manifest)},'${hash(manifest)}','${hash("backup")}','${hash("preserved")}',encode(digest((${q(manifest)}::jsonb->'identity')::text,'sha256'),'hex'));
@@ -76,6 +81,10 @@ async function main() {
     await reject("state jump refused", `UPDATE cleanup_operations SET state='COMPLETE',revision=1 WHERE id='${op}'`, "CLEANUP_TRANSITION_INVALID");
     const opState = (state: string, rev: number) => `UPDATE cleanup_operations SET state='${state}',revision=${rev} WHERE id='${op}';${audit("operation", op, rev, state)}`;
     await reject("audit required at commit", `UPDATE cleanup_operations SET state='QUIESCING',revision=1 WHERE id='${op}'`, "CLEANUP_AUDIT_REQUIRED");
+    // A previously committed event must not stand in for an atomic audit write.
+    const staleSession = randomUUID();
+    await sql(audit("session", staleSession, 0, "ACTIVE", null));
+    await reject("previous transaction audit cannot authorize a transition", `INSERT INTO source_media_sessions(id,source_id,generation,owner_id,purpose) VALUES('${staleSession}','${sources[0]}',0,'${user}','fixture')`, "CLEANUP_AUDIT_TRANSACTION_REQUIRED");
     await check("missing audit rolled operation back", `SELECT state FROM cleanup_operations WHERE id='${op}'`, "PREPARED");
     const approval = randomUUID();
     const grant = (expiry: string, digest = hash(manifest)) => `INSERT INTO cleanup_approvals VALUES('${approval}','${op}','${digest}','${user}','EXECUTE',now(),now()+interval '${expiry}',NULL);`;
@@ -93,6 +102,7 @@ async function main() {
     await check("ACTIVE session admission", `BEGIN;${admit(session)}COMMIT;`);
     const gate = (i: number, state: string, generation: number) => `UPDATE source_media_gates SET state='${state}',generation=${generation},operation_id='${op}' WHERE source_id='${sources[i]}';${audit("gate", sources[i], generation, state)}`;
     await check("quiesce while draining", `BEGIN;${opState("QUIESCING", 1)}${gate(0, "QUIESCING", 1)}${gate(1, "QUIESCING", 1)}COMMIT;`);
+    await reject("abort with unresolved gates or sessions refused", `BEGIN;${opState("ABORTED", 2)}COMMIT;`, "CLEANUP_ABORT_UNRESOLVED");
     await reject("quiescing admission refused", `BEGIN;${admit(randomUUID(), 1)}COMMIT;`, "CLEANUP_SOURCE_NOT_ACTIVE");
     await reject("open session blocks retirement", `BEGIN;${gate(0, "RETIRED", 2)}COMMIT;`, "CLEANUP_SESSION_OPEN");
     await check("session uncertainty recorded", `BEGIN;UPDATE source_media_sessions SET state='UNCERTAIN',revision=1 WHERE id='${session}';${audit("session", session, 1, "UNCERTAIN", null)}COMMIT;`);
@@ -131,6 +141,7 @@ async function main() {
     await check("explicit reconciliation state", `BEGIN;${opState("APPLYING", 5)}COMMIT;`);
     for (let i = 1; i < 6; i++) await sql(`BEGIN;${objState(i, "INTENT_RECORDED", 1)}${objState(i, "ABSENCE_CONFIRMED", 2, ",absence_evidence='{\"fixtureAbsent\":true}'")}${clear(i)}${objState(i, "RECORD_COMMITTED", 3)}COMMIT;`);
     await check("complete six records", `BEGIN;${opState("COMPLETE", 6)}COMMIT;`);
+    await reject("used source deletion retains journal", `DELETE FROM source_videos WHERE id='${sources[0]}'`, "foreign key constraint");
     await reject("restore disabled", `BEGIN;${gate(0, "RESTORING", 3)}COMMIT;`, "CLEANUP_RESTORE_DISABLED");
     await reject("audit truncate refused", "TRUNCATE cleanup_audit_events", "CLEANUP_HISTORY_IMMUTABLE");
     await reject("audit immutable", "DELETE FROM cleanup_audit_events", "CLEANUP_HISTORY_IMMUTABLE");

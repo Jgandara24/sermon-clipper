@@ -71,7 +71,8 @@ phase. A repeated apply cannot create a second slot for the service.
 - No queued, running, waiting, or retrying processing job exists for the service.
 - No existing service slot, saved human edit, approval, export, or editorial
   review exists. Use a fresh test service; preserve historical evidence.
-- The selected clip is retained, unused, and inside the source duration.
+- The selected clip is retained, unused, inside the source duration, and uses the current source transcript revision.
+- The next reserve also uses the current source transcript revision. A stale next reserve causes refusal; setup does not skip ahead to a later candidate.
 - At least one other eligible same-service reserve remains. The lowest eligible
   rank is named in the plan. Hidden, superseded, and scheduled clips cannot fill it.
   If that next reserve is outside the source duration, setup stops. It does not

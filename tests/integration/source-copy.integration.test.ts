@@ -78,6 +78,48 @@ async function counts(workspaceId: string) {
     exports: await prisma.exportJob.count({ where: { workspaceId } }), transcripts: await prisma.transcript.count({ where: { sourceVideo: { workspaceId } } }) };
 }
 describe("separate source copy with disposable disk and database fixtures", () => {
+  it("waits for a project-first writer without holding its source lock", async () => {
+    const f = await fixture(), p = await f.plan();
+    let projectLocked!: (pid: number) => void, continueWriter!: () => void;
+    const locked = new Promise<number>(resolve => { projectLocked = resolve; });
+    const proceed = new Promise<void>(resolve => { continueWriter = resolve; });
+    const writer = prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM projects WHERE id = ${f.project.id}::uuid FOR NO KEY UPDATE`;
+      const [backend] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+      projectLocked(backend.pid);
+      await proceed;
+      // A source-first copy would hold this row while waiting for our project.
+      await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '1500ms'");
+      await tx.$queryRaw`SELECT id FROM source_videos WHERE id = ${f.source.id}::uuid FOR UPDATE`;
+      return "writer completed";
+    }, { timeout: 10000 });
+    let copy: ReturnType<typeof apply> | undefined;
+    try {
+      const pid = await locked;
+      copy = apply(f, p);
+      // Observe an actual lock wait, rather than use a delay to guess the race.
+      let waiting = false;
+      const deadline = Date.now() + 5000;
+      while (!waiting && Date.now() < deadline) {
+        const [observed] = await prisma.$queryRaw<{ waiting: boolean }[]>`
+          SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+            WHERE ${pid}::int = ANY(pg_blocking_pids(pid))
+              AND query LIKE '%FROM projects%') AS waiting`;
+        waiting = observed.waiting;
+        if (!waiting) await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      expect(waiting).toBe(true);
+      continueWriter();
+      const results = await Promise.allSettled([writer, copy]);
+      expect(results[0]).toEqual({ status: "fulfilled", value: "writer completed" });
+      expect(results[1].status).toBe("fulfilled");
+      expect(f.copies()).toBe(1);
+      expect(await counts(f.target.id)).toMatchObject({ sources: 1, projects: 0, jobs: 0 });
+    } finally {
+      continueWriter();
+      await Promise.allSettled([writer, ...(copy ? [copy] : [])]);
+    }
+  }, 15000);
   it.each(["versionId", "lastModified"] as const)("refuses identical bytes with changed %s", async field => {
     const f = await fixture(), p = await f.plan();
     const inspect = f.storage.inspect.bind(f.storage);

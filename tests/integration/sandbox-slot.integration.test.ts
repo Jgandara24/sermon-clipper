@@ -185,6 +185,40 @@ describe("one explicit sandbox slot", () => {
     expect((await writeCounts(f)).slots).toBe(0);
   });
 
+  it("refuses a stale selected clip after transcription completes without a pool rebuild", async () => {
+    const f = await fixture();
+    // A completed transcription advances the source. A canceled follow-up leaves no active job.
+    await prisma.sourceVideo.update({ where: { id: f.sourceId }, data: { transcriptRevision: { increment: 1 } } });
+    await expect(prepareSandboxSlot(prisma, input(f), options)).rejects.toMatchObject({ code: "CLIP_INELIGIBLE" });
+    expect(await writeCounts(f)).toEqual({ slots: 0, jobs: 0, exports: 0, reviews: 0, audits: 0 });
+  });
+
+  it("refuses the next stale reserve instead of promising a later current reserve", async () => {
+    const f = await fixture();
+    await prisma.sourceVideo.update({ where: { id: f.sourceId }, data: { transcriptRevision: { increment: 1 } } });
+    const currentClip = await prisma.generatedClip.create({ data: {
+      workspaceId: f.workspaceId, projectId: f.projectId, rank: 0, title: "Current selected clip",
+      summary: "Fixture.", startMs: 0, endMs: 40_000, status: "SUGGESTED", transcriptRevision: 1,
+      edits: { create: { version: 1, editorState: { systemInitial: true } } },
+    } });
+    await prisma.generatedClip.create({ data: {
+      workspaceId: f.workspaceId, projectId: f.projectId, rank: 4, title: "Later current reserve",
+      summary: "Fixture.", startMs: 120_000, endMs: 160_000, status: "SUGGESTED", transcriptRevision: 1,
+      edits: { create: { version: 1, editorState: { systemInitial: true } } },
+    } });
+    await expect(prepareSandboxSlot(prisma, { ...input(f), clipId: currentClip.id }, options))
+      .rejects.toMatchObject({ code: "RESERVE_INELIGIBLE" });
+    expect(await writeCounts(f)).toEqual({ slots: 0, jobs: 0, exports: 0, reviews: 0, audits: 0 });
+  });
+
+  it("refuses apply when transcription advances after the read-only plan", async () => {
+    const f = await fixture();
+    const preview = await prepareSandboxSlot(prisma, input(f), options);
+    await prisma.sourceVideo.update({ where: { id: f.sourceId }, data: { transcriptRevision: { increment: 1 } } });
+    await expect(apply(f, preview.confirmation)).rejects.toMatchObject({ code: "CLIP_INELIGIBLE" });
+    expect(await writeCounts(f)).toEqual({ slots: 0, jobs: 0, exports: 0, reviews: 0, audits: 0 });
+  });
+
   it("refuses saved human edits and keeps them intact", async () => {
     const f = await fixture();
     await prisma.clipEdit.create({ data: { clipId: f.clipId, version: 2, editorState: { captions: "human change" } } });

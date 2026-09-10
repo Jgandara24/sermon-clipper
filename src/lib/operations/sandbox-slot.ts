@@ -139,17 +139,18 @@ export async function prepareSandboxSlot(
       const durationMs = Number(source.durationS) * 1000;
       const candidates = project.generatedClips.map((row) => ({ ...row, isScheduled: row.scheduledPosts.length > 0 }));
       const rangeIsUsable = (row: typeof candidates[number]) => row.workspaceId === input.workspaceId &&
-        row.supersededAt === null && row.startMs >= 0 && row.endMs <= durationMs;
+        row.supersededAt === null && row.transcriptRevision === source.transcriptRevision &&
+        row.startMs >= 0 && row.endMs <= durationMs;
       const clip = candidates.find((row) => row.id === input.clipId);
       if (!clip || !rangeIsUsable(clip) || !isPromotableReserve(clip, new Set())) {
-        refuse("CLIP_INELIGIBLE", "The chosen clip must be an unused, retained range in this service.");
+        refuse("CLIP_INELIGIBLE", "The chosen clip must use the current transcript and be an unused, retained range in this service.");
       }
       // Match REPLACE's policy before checking source coverage. Filtering invalid ranges first
       // could promise rank 3 here while the real replacement would still promote bad rank 2.
       const selection = selectReserve(candidates, { excludeClipIds: [clip.id] });
       const reserve = candidates.find((row) => row.id === selection.selected?.id);
       if (!reserve) refuse("NO_RESERVE", "Keep at least one unused same-service reserve for the replacement proof.");
-      if (!rangeIsUsable(reserve)) refuse("RESERVE_INELIGIBLE", "The next reserve selected by REPLACE is not a usable source range.");
+      if (!rangeIsUsable(reserve)) refuse("RESERVE_INELIGIBLE", "The next reserve selected by REPLACE must use the current transcript and a usable source range.");
 
       const profile = parseChurchProfile(project.workspace.settings);
       const date = new Date(`${input.date}T00:00:00.000Z`);

@@ -1415,7 +1415,7 @@ model SourceMediaGate {
   generation  BigInt               @default(0)
   operationId String?              @map("operation_id") @db.Uuid
   updatedAt   DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
-  source      SourceVideo          @relation(fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  source      SourceVideo          @relation(fields: [sourceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   operation   CleanupOperation?    @relation(fields: [operationId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   sessions    SourceMediaSession[]
 
@@ -1461,6 +1461,7 @@ model CleanupAuditEvent {
   operationId String?           @map("operation_id") @db.Uuid
   targetType  String            @map("target_type")
   targetId    String            @map("target_id") @db.Uuid
+  transactionId BigInt @default(dbgenerated("txid_current()")) @map("transaction_id")
   revision    BigInt
   action      String
   actorId     String            @map("actor_id") @db.Uuid

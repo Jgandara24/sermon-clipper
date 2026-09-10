@@ -52,7 +52,7 @@ CREATE TABLE cleanup_approvals (
  CHECK (revoked_at IS NULL OR revoked_at>=issued_at)
 );
 CREATE TABLE source_media_gates (
- source_id uuid PRIMARY KEY REFERENCES source_videos(id) ON DELETE RESTRICT,
+ source_id uuid PRIMARY KEY REFERENCES source_videos(id) ON DELETE CASCADE,
  state text NOT NULL DEFAULT 'ACTIVE' CHECK (state IN ('ACTIVE','QUIESCING','RETIRED','RESTORING')),
  generation bigint NOT NULL DEFAULT 0 CHECK (generation>=0),
  operation_id uuid REFERENCES cleanup_operations(id) ON DELETE RESTRICT,
@@ -86,7 +86,7 @@ CREATE UNIQUE INDEX media_key_reservations_held ON media_key_reservations(storag
 CREATE TABLE cleanup_audit_events (
  id uuid PRIMARY KEY, operation_id uuid REFERENCES cleanup_operations(id) ON DELETE RESTRICT,
  target_type text NOT NULL CHECK (target_type IN ('operation','object','gate','session','reservation','approval')),
- target_id uuid NOT NULL, revision bigint NOT NULL CHECK (revision>=0),
+ target_id uuid NOT NULL, transaction_id bigint NOT NULL DEFAULT txid_current(), revision bigint NOT NULL CHECK (revision>=0),
  action text NOT NULL, actor_id uuid NOT NULL, evidence jsonb NOT NULL CHECK (jsonb_typeof(evidence)='object'),
  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
  UNIQUE(target_type,target_id,revision)
@@ -103,6 +103,10 @@ CREATE TRIGGER source_media_gates_no_truncate BEFORE TRUNCATE ON source_media_ga
 CREATE TRIGGER source_media_sessions_no_truncate BEFORE TRUNCATE ON source_media_sessions FOR EACH STATEMENT EXECUTE FUNCTION cleanup_immutable();
 CREATE TRIGGER media_key_reservations_no_truncate BEFORE TRUNCATE ON media_key_reservations FOR EACH STATEMENT EXECUTE FUNCTION cleanup_immutable();
 CREATE TRIGGER cleanup_audit_events_no_truncate BEFORE TRUNCATE ON cleanup_audit_events FOR EACH STATEMENT EXECUTE FUNCTION cleanup_immutable();
+-- The server supplies this value. Callers cannot reuse a prior transaction's event.
+CREATE FUNCTION cleanup_audit_stamp() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN NEW.transaction_id := txid_current(); RETURN NEW; END $$;
+CREATE TRIGGER cleanup_audit_transaction BEFORE INSERT ON cleanup_audit_events FOR EACH ROW EXECUTE FUNCTION cleanup_audit_stamp();
 CREATE TRIGGER cleanup_audit_immutable BEFORE UPDATE OR DELETE ON cleanup_audit_events FOR EACH ROW EXECUTE FUNCTION cleanup_immutable();
 
 -- Scope identity cannot change. Valid state changes advance one revision, with matching audit at commit.
@@ -155,7 +159,15 @@ CREATE TRIGGER cleanup_reservation_change BEFORE INSERT OR UPDATE OR DELETE ON m
 
 CREATE FUNCTION cleanup_gate_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'CLEANUP_HISTORY_IMMUTABLE' USING ERRCODE='23514'; END IF;
+ IF TG_OP='DELETE' THEN
+   -- Only an unused backfill gate may follow its deleted parent. Direct deletion and
+   -- all gate/session/audit history remain protected. Cleanup object FKs also restrict sources.
+   IF OLD.state='ACTIVE' AND OLD.generation=0 AND OLD.operation_id IS NULL AND
+      NOT EXISTS(SELECT 1 FROM source_videos WHERE id=OLD.source_id) AND
+      NOT EXISTS(SELECT 1 FROM source_media_sessions WHERE source_id=OLD.source_id) AND
+      NOT EXISTS(SELECT 1 FROM cleanup_audit_events WHERE target_type='gate' AND target_id=OLD.source_id) THEN RETURN OLD; END IF;
+   RAISE EXCEPTION 'CLEANUP_HISTORY_IMMUTABLE' USING ERRCODE='23514';
+ END IF;
  IF TG_OP='INSERT' THEN
    IF NEW.state<>'ACTIVE' OR NEW.generation<>0 THEN RAISE EXCEPTION 'CLEANUP_GATE_INITIAL' USING ERRCODE='23514'; END IF;
  ELSE
@@ -206,6 +218,9 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM cleanup_audit_events a WHERE a.target_type=kind AND a.target_id=target AND a.revision=rev
    AND a.action=expected_action AND a.operation_id IS NOT DISTINCT FROM op) THEN
    RAISE EXCEPTION 'CLEANUP_AUDIT_REQUIRED' USING ERRCODE='23514'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM cleanup_audit_events a WHERE a.target_type=kind AND a.target_id=target AND a.revision=rev
+   AND a.action=expected_action AND a.operation_id IS NOT DISTINCT FROM op AND a.transaction_id=txid_current()) THEN
+   RAISE EXCEPTION 'CLEANUP_AUDIT_TRANSACTION_REQUIRED' USING ERRCODE='23514'; END IF;
  RETURN NULL;
 END $$;
 CREATE CONSTRAINT TRIGGER cleanup_op_audit AFTER INSERT OR UPDATE ON cleanup_operations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION cleanup_require_audit();
@@ -252,6 +267,11 @@ BEGIN
    RAISE EXCEPTION 'CLEANUP_RESERVATIONS_REQUIRED' USING ERRCODE='23514'; END IF;
  IF EXISTS(SELECT 1 FROM cleanup_objects WHERE operation_id=oid AND state<>'PLANNED') AND op.state NOT IN ('APPLYING','NEEDS_RECONCILIATION','COMPLETE') THEN
    RAISE EXCEPTION 'CLEANUP_EXECUTION_STATE_REQUIRED' USING ERRCODE='23514'; END IF;
+ IF op.state='ABORTED' AND (
+    EXISTS(SELECT 1 FROM source_media_gates WHERE operation_id=oid) OR
+    EXISTS(SELECT 1 FROM media_key_reservations WHERE operation_id=oid AND state='HELD') OR
+    EXISTS(SELECT 1 FROM source_media_sessions s JOIN cleanup_objects o ON o.source_id=s.source_id WHERE o.operation_id=oid AND s.state<>'COMPLETE')) THEN
+   RAISE EXCEPTION 'CLEANUP_ABORT_UNRESOLVED' USING ERRCODE='23514'; END IF;
  IF op.state='COMPLETE' AND EXISTS(SELECT 1 FROM cleanup_objects WHERE operation_id=oid AND state<>'RECORD_COMMITTED') THEN
    RAISE EXCEPTION 'CLEANUP_COMPLETION_INVALID' USING ERRCODE='23514'; END IF;
  RETURN NULL;
