@@ -1315,3 +1315,18 @@ model ChannelImportedVideo {
   @@index([projectId])
   @@map("channel_imported_videos")
 }
+
+// Private staff copy journal. No public API relation or cascade can erase recovery evidence.
+model SourceCopyOperation {
+  id            String   @id @db.Uuid
+  planHash      String   @map("plan_hash")
+  manifest      Json
+  sourceVideoId String   @unique @map("source_video_id") @db.Uuid
+  storageKey    String   @unique @map("storage_key")
+  state         String   @default("PREPARED")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+  retainUntil   DateTime @map("retain_until") @db.Timestamptz(6)
+
+  @@map("source_copy_operations")
+}
