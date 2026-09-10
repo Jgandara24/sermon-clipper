@@ -26,9 +26,8 @@ import {
  * looking at that exception and naming one specific clip. Rev2 §9 puts automatic cross-project
  * borrowing out of scope, and the way to keep it out of scope is to have no code that could do it.
  *
- * **The lock is the source video, not the project.** P2.7 locks the project row because its race
- * is two replacements choosing the same reserve. This command's race is different: it is against
- * source cleanup deleting the very media the new render needs. `lockSourceVideoForRetention`
+ * The project is locked before the source, matching ANALYZE and replacement. The source lock
+ * protects against source cleanup deleting the media the new render needs. `lockSourceVideoForRetention`
  * serializes the two, and the outcome is decided by whoever gets there first —
  *
  * - cleanup first: the source key is null by the time this re-reads it, and the fill refuses.
@@ -128,7 +127,7 @@ export async function applyPriorServiceFill(
       };
     }
 
-    const candidate = await tx.generatedClip.findUnique({
+    let candidate = await tx.generatedClip.findUnique({
       where: { id: input.candidateClipId },
       include: { project: true },
     });
@@ -137,6 +136,14 @@ export async function applyPriorServiceFill(
         "CANDIDATE_MISSING",
         "That clip no longer exists. Reanalysis may have replaced it.",
       );
+    }
+
+    // Retention updates this project later. Acquire it before the source to match ANALYZE;
+    // re-read after waiting so a concurrent rebuild or expiry extension is not overwritten.
+    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${candidate.project.id}::uuid FOR NO KEY UPDATE`;
+    candidate = await tx.generatedClip.findUnique({ where: { id: input.candidateClipId }, include: { project: true } });
+    if (!candidate) {
+      throw new PriorServiceFillRefusedError("CANDIDATE_MISSING", "That clip was replaced. Reload and look again.");
     }
 
     // **The lock.** Taken before every durable purge fact is read, so what is read below cannot

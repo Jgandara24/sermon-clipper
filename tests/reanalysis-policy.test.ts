@@ -3,6 +3,7 @@ import {
   REANALYSIS_BLOCKED,
   assertReanalysisAllowed,
   assessReanalysis,
+  assessSourceReanalysis,
   countDurableWork,
   hasDurableWork,
   reanalysisBlockedError,
@@ -106,6 +107,28 @@ describe("assessReanalysis", () => {
     expect(assessment.allowed).toBe(false);
     if (assessment.allowed) throw new Error("unreachable");
     expect(hasDurableWork(assessment.work)).toBe(true);
+  });
+});
+
+describe("source-owned transcript scope", () => {
+  it("counts all sibling projects, including reviews whose live link is gone", async () => {
+    const counts = fakeClient({ reviews: 1 });
+    const client = { ...counts, project: { findMany: vi.fn().mockResolvedValue([{ id: "p1" }, { id: "p2" }]) } };
+    await expect(assessSourceReanalysis(client as never, { sourceVideoId: "source" }))
+      .resolves.toMatchObject({ allowed: false, work: { reviews: 1 } });
+    expect(client.project.findMany).toHaveBeenCalledWith({
+      where: { sourceVideoId: "source" }, select: { id: true },
+    });
+    expect(client.clipEdit.count).toHaveBeenNthCalledWith(1, {
+      where: { clip: { projectId: { in: ["p1", "p2"] } } },
+    });
+    expect(client.clipReview.count).toHaveBeenCalledWith({
+      where: { projectIdSnapshot: { in: ["p1", "p2"] } },
+    });
+    expect(client.scheduledPost.count).toHaveBeenCalledWith({ where: {
+      OR: [{ clip: { projectId: { in: ["p1", "p2"] } } }, { projectId: { in: ["p1", "p2"] } }],
+      publishStatus: { in: ["IN_PROGRESS", "SUCCEEDED", "BLOCKED"] },
+    } });
   });
 });
 

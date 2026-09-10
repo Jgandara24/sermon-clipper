@@ -30,8 +30,9 @@ const USAGE = `Usage:
       Show which start preconditions the database can prove, and which it cannot.
 
   npm run program:sandbox-proof -- --post <scheduled-post-uuid>
-      The dry run. Proves that with the global switch simulated on, exactly this row would
-      publish. Refuses if any other due row would, or if the switch is already enabled.
+      Check that exactly this due row passes the database and local configuration checks
+      with the global switch simulated on. Record the result as an operational event.
+      This does not verify live Meta access or media retrieval, or authorize activation.
       Run this BEFORE enabling AUTOMATIC_PUBLISHING_ENABLED. If it refuses, do not enable.
 
   npm run program:start -- (--user-id <uuid> | --email <address>)
@@ -78,8 +79,11 @@ async function main() {
       const proof = await verifySandboxProof(prisma, { intendedScheduledPostId: post });
       console.log(`Due rows scanned: ${proof.census.rows.length}`);
       console.log(`AUTOMATIC_PUBLISHING_ENABLED: ${proof.census.globalPublishingEnabled}`);
+      console.log(`Census time: ${proof.census.takenAt.toISOString()}`);
+      console.log(`Local process configuration: ${JSON.stringify(proof.census.environment)}`);
+      console.log("Scope: database prerequisites and local configuration. Live Meta access and media retrieval were not tested.");
       console.log(
-        `Rows the switch alone is holding back: ${proof.census.switchOnly.length}` +
+        `Rows that pass the checked prerequisites with the switch on: ${proof.census.switchOnly.length}` +
           (proof.census.switchOnly.length > 0
             ? `\n  ${proof.census.switchOnly.map((row) => row.scheduledPostId).join("\n  ")}`
             : ""),
@@ -97,8 +101,8 @@ async function main() {
         return;
       }
       console.log(
-        `\nPASSED. Exactly ${post} would publish. You may now enable ` +
-          "AUTOMATIC_PUBLISHING_ENABLED for the controlled sandbox call.",
+        `\nPASSED. Only ${post} passed the checked prerequisites with the switch simulated on. ` +
+          "Complete the manual Meta, media, and worker-configuration checks. Obtain separate authorization before enabling publishing.",
       );
       return;
     }

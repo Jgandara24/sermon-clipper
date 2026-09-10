@@ -46,15 +46,21 @@ identity facts — clip, edit version, the slot's bound export, and the QC-time 
 delivery will later require all four to still match. Do not edit the clip or re-render after this;
 either would invalidate the acceptance, correctly.
 
-### 4. Prove that exactly one row would publish
+### 4. Check that only the intended row passes the sandbox census
 
 ```sh
 npm run program:sandbox-proof -- --post <scheduled-post-uuid>
 ```
 
-This is a read-only dry run. It scans exactly the rows the publisher would scan, judges each one
-twice — as it stands, and with the global switch simulated on and **nothing else changed** — and
-reports which rows the switch alone is holding back.
+The census reads the database. It uses the publisher's due-row filter and checks each row twice.
+The second check simulates the global switch on. It changes no other input. The command also
+attempts to write an operational audit event. It does not change settings, claims, or holds.
+
+The checks include workspace access at the census time, the clip service's transcription hold,
+Page connection settings, program and pilot holds, and the exact export, QC, review, and approval
+requirements. The command also checks for a nonempty bound storage key and its workspace scope.
+It uses the publisher's local token-presence and app-URL checks and the media signing policy.
+Configuration output contains booleans only. It does not expose a token, secret, or URL.
 
 It passes only when that set is exactly your intended row. It refuses when:
 
@@ -62,17 +68,29 @@ It passes only when that set is exactly your intended row. It refuses when:
 |---|---|
 | `global_switch_already_enabled` | Publishing is already on. The dry run is a claim about what turning it on *would* do, so it is meaningless now — and rows may already have gone out. |
 | `intended_row_not_switch_only` | Your row would still fail for some further reason, which the message names, or it is not due at all. |
-| `other_rows_would_publish` | Another due row would go out alongside yours. The message lists them. |
+| `other_rows_would_publish` | Another due row also passes the checked prerequisites. The message lists those rows. |
 
-Every run is recorded as an operational event (`sandbox_proof_passed` / `sandbox_proof_refused`),
-so the decision to enable is auditable afterwards.
+The audit event is `sandbox_proof_passed` or `sandbox_proof_refused`. Audit storage is best effort;
+save the command output as evidence. A PASS is not authorization to enable publishing.
+
+This is a report of database reads and configuration in the command's process. It does not lock
+the rows. Rows can change during or after the scan. A row rescheduled before its detail read is
+excluded, but a newly due row can appear after the initial scan. Repeat the census immediately
+before an authorized sandbox test. Confirm that the worker uses the same database and settings.
+
+The command makes no Meta or storage request. It does not verify token permissions, Page access,
+file existence, media quality, public URL reachability, or Meta's ability to retrieve the file.
+The shared app-URL check preserves the publisher's existing policy; it is not full URL validation.
+Test configuration can use a fake token and a development signing secret. A local fixture PASS
+is therefore not a production or human quality proof. Complete the manual checks separately.
 
 **If the census is not exactly the intended row, do not enable.** Deal with the other rows first —
 block them, or let them fail for a reason you understand — and run the proof again.
 
 ### 5. Enable the switch, publish, and verify
 
-Set `AUTOMATIC_PUBLISHING_ENABLED=true` and let the publisher run. Then check:
+After the manual checks and explicit authorization, set `AUTOMATIC_PUBLISHING_ENABLED=true`
+and let the publisher run. Then check:
 
 - the slot is `SUCCEEDED` and carries a `facebookPostId`;
 - the post on the Page is the file you accepted;

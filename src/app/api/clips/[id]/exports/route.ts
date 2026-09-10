@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
+import { CLIP_TRANSCRIPT_CHANGED, CLIP_TRANSCRIPT_CHANGED_MESSAGE, isClipTranscriptChanged } from "@/lib/analysis/source-write-boundary";
 import type { EditorState } from "@/lib/editor/types";
 import { buildDefaultExportFilename } from "@/lib/export/filename";
 import {
@@ -138,12 +139,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return apiError("RATE_LIMITED", limit.message, { status: 429, retryable: true });
   }
 
-  const job = await enqueueExportJob(prisma, {
-    clipId: clip.id,
-    workspaceId: auth.workspace.id,
-    filename,
-    editVersion,
-  });
+  try {
+    const job = await enqueueExportJob(prisma, {
+      clipId: clip.id,
+      workspaceId: auth.workspace.id,
+      filename,
+      editVersion,
+    });
 
-  return apiData({ exportJobId: job.id });
+    return apiData({ exportJobId: job.id });
+  } catch (error) {
+    if (isClipTranscriptChanged(error)) {
+      return apiError(CLIP_TRANSCRIPT_CHANGED, CLIP_TRANSCRIPT_CHANGED_MESSAGE, { status: 409 });
+    }
+    throw error;
+  }
 }

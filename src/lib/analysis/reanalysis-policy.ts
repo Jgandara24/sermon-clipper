@@ -68,12 +68,13 @@ export type ReanalysisPolicyClient =
  */
 const DURABLE_PUBLISH_STATES = ["IN_PROGRESS", "SUCCEEDED", "BLOCKED"] as const;
 
-/** Counts the durable work on a project's clips. Every count is a database count, never a load. */
+/** Counts durable work on the named projects. Every count is a database count, never a load. */
 export async function countDurableWork(
   client: ReanalysisPolicyClient,
-  params: { projectId: string },
+  params: { projectId: string } | { projectIds: string[] },
 ): Promise<DurableWorkCounts> {
-  const clipScope = { clip: { projectId: params.projectId } };
+  const projectId = "projectId" in params ? params.projectId : { in: params.projectIds };
+  const clipScope = { clip: { projectId } };
   const [totalEdits, systemEdits, approvals, exports, posts, reviews] = await Promise.all([
     client.clipEdit.count({ where: clipScope }),
     // ANALYZE writes each clip's first document itself. Asked as a positive — "is this the
@@ -86,7 +87,7 @@ export async function countDurableWork(
     client.exportJob.count({ where: clipScope }),
     client.scheduledPost.count({
       where: {
-        OR: [clipScope, { projectId: params.projectId }],
+        OR: [clipScope, { projectId }],
         publishStatus: { in: [...DURABLE_PUBLISH_STATES] },
       },
     }),
@@ -95,7 +96,7 @@ export async function countDurableWork(
     // so it still names this project after any amount of destruction. Every decision counts,
     // whatever it said: a REVISE is as much a human judgement as an ACCEPT, and a rebuild would
     // leave it pointing at a clip that no longer exists.
-    client.clipReview.count({ where: { projectIdSnapshot: params.projectId } }),
+    client.clipReview.count({ where: { projectIdSnapshot: projectId } }),
   ]);
   return { edits: Math.max(0, totalEdits - systemEdits), approvals, exports, posts, reviews };
 }
@@ -146,5 +147,32 @@ export async function assertReanalysisAllowed(
   params: { projectId: string },
 ): Promise<void> {
   const assessment = await assessReanalysis(client, params);
+  if (!assessment.allowed) throw reanalysisBlockedError(assessment.work);
+}
+
+type SourceReanalysisClient = ReanalysisPolicyClient & Pick<PrismaClient, "project">;
+
+/**
+ * TRANSCRIBE and SRT replace source-owned words, so their scope is every project on the source.
+ * ANALYZE still uses the project-only policy: it rebuilds only that project's candidates.
+ * Resolve the project IDs to retain the immutable review-snapshot check even if a review's
+ * live project link was cleared. Aggregate in the database rather than loading saved documents.
+ */
+export async function assessSourceReanalysis(
+  client: SourceReanalysisClient,
+  params: { sourceVideoId: string },
+): Promise<ReanalysisAssessment> {
+  const projects = await client.project.findMany({
+    where: { sourceVideoId: params.sourceVideoId }, select: { id: true },
+  });
+  const work = await countDurableWork(client, { projectIds: projects.map((project) => project.id) });
+  return hasDurableWork(work) ? { allowed: false, work } : { allowed: true };
+}
+
+export async function assertSourceReanalysisAllowed(
+  client: SourceReanalysisClient,
+  params: { sourceVideoId: string },
+): Promise<void> {
+  const assessment = await assessSourceReanalysis(client, params);
   if (!assessment.allowed) throw reanalysisBlockedError(assessment.work);
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
+import { CLIP_TRANSCRIPT_CHANGED, CLIP_TRANSCRIPT_CHANGED_MESSAGE, isClipTranscriptChanged } from "@/lib/analysis/source-write-boundary";
 import { buildReviewUrl } from "@/lib/approval";
 import { requestClipApproval } from "@/lib/approval";
 import { prisma } from "@/lib/prisma";
@@ -32,14 +33,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return apiError("PERMISSION_DENIED", "You don't have access to that workspace.", { status: 403 });
   }
 
-  const approval = await requestClipApproval({
-    prisma,
-    clipId: clip.id,
-    workspaceId: auth.workspace.id,
-    requesterId: auth.user.id,
-    reviewerEmail: parsed.data.reviewerEmail || null,
-    reviewerPhone: parsed.data.reviewerPhone || null,
-  });
+  let approval;
+  try {
+    approval = await requestClipApproval({
+      prisma,
+      clipId: clip.id,
+      workspaceId: auth.workspace.id,
+      requesterId: auth.user.id,
+      reviewerEmail: parsed.data.reviewerEmail || null,
+      reviewerPhone: parsed.data.reviewerPhone || null,
+    });
+  } catch (error) {
+    if (isClipTranscriptChanged(error)) {
+      return apiError(CLIP_TRANSCRIPT_CHANGED, CLIP_TRANSCRIPT_CHANGED_MESSAGE, { status: 409 });
+    }
+    throw error;
+  }
   const notifications = await prisma.approvalNotification.findMany({
     where: { approvalId: approval.id },
     orderBy: { createdAt: "desc" },

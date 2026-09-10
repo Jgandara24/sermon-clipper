@@ -1,19 +1,17 @@
-import { randomUUID } from "node:crypto";
-import { ProcessingJobType } from "@prisma/client";
 import { after } from "next/server";
 import {
   REANALYSIS_BLOCKED,
   REANALYSIS_BLOCKED_MESSAGE,
-  assessReanalysis,
+  assessSourceReanalysis,
 } from "@/lib/analysis/reanalysis-policy";
 import { requireApiWorkspace } from "@/lib/api/auth";
 import { apiData, apiError } from "@/lib/api/response";
-import { enqueueJob } from "@/lib/jobs/queue";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
 import { getStorageProvider } from "@/lib/storage";
 import { SrtParseError, parseSrt } from "@/lib/transcription/srt";
+import { replaceSrtOverride, SrtUploadRefusedError } from "@/lib/transcription/srt-upload";
 
 const MAX_SRT_BYTES = 2 * 1024 * 1024;
 
@@ -38,13 +36,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // before anything is written, so a refused upload leaves no file behind and no job queued. The
   // worker asks the same question again before it deletes anything; this is the answer at request
   // time, so the member is told now rather than watching a job fail later.
-  const project = await prisma.project.findFirst({ where: { sourceVideoId: sourceVideo.id } });
-  if (project) {
-    const assessment = await assessReanalysis(prisma, { projectId: project.id });
-    if (!assessment.allowed) {
-      return apiError(REANALYSIS_BLOCKED, REANALYSIS_BLOCKED_MESSAGE, { status: 409 });
-    }
+  const assessment = await assessSourceReanalysis(prisma, { sourceVideoId: sourceVideo.id });
+  if (!assessment.allowed) {
+    return apiError(REANALYSIS_BLOCKED, REANALYSIS_BLOCKED_MESSAGE, { status: 409 });
   }
+  const project = await prisma.project.findFirst({
+    where: { sourceVideoId: sourceVideo.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
 
   if (!request.body) {
     return apiError("UPLOAD_INTERRUPTED", "Upload lost connection — resume?");
@@ -53,6 +51,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const text = await request.text();
   if (Buffer.byteLength(text, "utf-8") > MAX_SRT_BYTES) {
     return apiError("FILE_TOO_LARGE", "SRT files are limited to 2 MB.", { status: 413 });
+  }
+
+  // Receiving the body can take time. Work saved on any sharing service during that wait must
+  // still stop this upload before it writes storage or queues a transcription.
+  const afterUpload = await assessSourceReanalysis(prisma, { sourceVideoId: sourceVideo.id });
+  if (!afterUpload.allowed) {
+    return apiError(REANALYSIS_BLOCKED, REANALYSIS_BLOCKED_MESSAGE, { status: 409 });
   }
 
   try {
@@ -65,24 +70,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const storage = getStorageProvider();
-  const srtKey = `srt/${workspace.id}/${sourceVideo.id}.srt`;
-  await storage.writeFromWebStream(srtKey, new Blob([text]).stream(), MAX_SRT_BYTES);
-
-  await prisma.sourceVideo.update({
-    where: { id: sourceVideo.id },
-    data: { srtOverrideKey: srtKey },
-  });
+  let result;
+  try {
+    result = await replaceSrtOverride(prisma, storage, { source: sourceVideo, project, text, maxBytes: MAX_SRT_BYTES });
+  } catch (error) {
+    if (error instanceof SrtUploadRefusedError) return apiError(error.code, error.message, { status: 409 });
+    throw error;
+  }
 
   if (project) {
-    await prisma.processingJob.deleteMany({
-      where: { projectId: project.id, type: ProcessingJobType.TRANSCRIBE },
-    });
-    await enqueueJob(prisma, {
-      projectId: project.id,
-      type: ProcessingJobType.TRANSCRIBE,
-      idempotencyKey: `transcribe:${project.id}:srt:${randomUUID()}`,
-    });
-
     after(async () => {
       for (let i = 0; i < 3; i += 1) {
         const processed = await runOnePendingJob();
@@ -91,5 +87,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
   }
 
-  return apiData({ sourceVideoId: sourceVideo.id, srtKey });
+  return apiData(result);
 }

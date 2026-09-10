@@ -7,6 +7,7 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import { env } from "@/lib/env";
+import { ClipTranscriptChangedError, isClipTranscriptChanged } from "@/lib/analysis/source-write-boundary";
 import { sendApprovalNotification } from "@/lib/notifications/approval";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 
@@ -152,6 +153,9 @@ export async function requestClipApproval(params: {
     });
 
     return saved;
+  }).catch((error: unknown) => {
+    if (isClipTranscriptChanged(error)) throw new ClipTranscriptChangedError();
+    throw error;
   });
 
   const reviewUrl = buildReviewUrl(approval.reviewToken, params.appBaseUrl);

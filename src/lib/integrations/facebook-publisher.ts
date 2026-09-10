@@ -12,6 +12,7 @@ import {
   settlePublishAttempt,
 } from "@/lib/delivery/publish-attempts";
 import { assessScheduledPostDelivery, duePublishWhere } from "@/lib/delivery/query";
+import { resolvePublicAppUrl } from "@/lib/integrations/facebook-publish-config";
 import { isEligibleForAutoPost, parseFacebookConnection } from "@/lib/facebook-connection";
 import {
   publishScheduledVideo as defaultPublishScheduledVideo,
@@ -84,18 +85,6 @@ function reportPublishingDisabled(client: PrismaClient): Promise<void> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/**
- * Meta downloads file_url asynchronously AFTER the POST returns an id — a localhost or
- * missing app URL would mark rows SUCCEEDED while the video silently never materializes.
- * Publishing is skipped entirely (rows left NOT_STARTED) until the URL is configured.
- */
-function resolvePublicAppUrl(): string | null {
-  const appUrl = env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-  if (!appUrl) return null;
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)([:/]|$)/i.test(appUrl)) return null;
-  return appUrl;
 }
 
 function buildCaption(clip: { title: string; hookText: string | null }): string {
@@ -263,9 +252,8 @@ export async function publishDueScheduledPosts(
   const assessDelivery = deps.assessDelivery ?? assessScheduledPostDelivery;
 
   const duePosts = await client.scheduledPost.findMany({
-    // Shared with P2.9's sandbox census, which claims exactly one of these rows would go out if
-    // the global switch were flipped. Two definitions of "due" would make that claim about a
-    // different population than the one this loop walks.
+    // Shared with P2.9's sandbox census so both inspect the same due population. The census
+    // checks local prerequisites; this path also makes the live Meta and media requests.
     where: duePublishWhere(now()),
     orderBy: { scheduledDate: "asc" },
     include: {

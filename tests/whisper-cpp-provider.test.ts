@@ -70,7 +70,7 @@ describe("parseWhisperCppOutput", () => {
 
     expect(words).not.toContain("[_BEG_]");
     expect(words).not.toContain("[_TT_160]");
-    expect(words).toEqual(["This", "is", "a", "test", "sermon", "about", "peace", "."]);
+    expect(words).toEqual(["This", "is", "a", "test", "sermon", "about", "peace."]);
   });
 
   it("preserves per-word timing and confidence", () => {
@@ -86,5 +86,27 @@ describe("parseWhisperCppOutput", () => {
     expect(result.segments[0].words.every((w) => w.isFiller === false && w.deleted === false)).toBe(
       true,
     );
+  });
+
+  it("keeps subword pieces and punctuation together for captions", () => {
+    const raw = JSON.stringify({ transcription: [{ offsets: { from: 0, to: 2500 },
+      text: " Philippians four. I'm rejoicing.", tokens: [
+        { text: " Philipp", offsets: { from: 0, to: 300 }, p: 0.81 },
+        { text: "ians", offsets: { from: 300, to: 500 }, p: 1 },
+        { text: " four", offsets: { from: 600, to: 900 }, p: 1 },
+        { text: ".", offsets: { from: 900, to: 900 }, p: 1 },
+        { text: " I", offsets: { from: 1000, to: 1100 }, p: 1 },
+        { text: "'m", offsets: { from: 1100, to: 1200 }, p: 1 },
+        { text: " re", offsets: { from: 1300, to: 1400 }, p: 1 },
+        { text: "jo", offsets: { from: 1400, to: 1600 }, p: 1 },
+        { text: "icing", offsets: { from: 1600, to: 1800 }, p: 1 },
+        { text: ".", offsets: { from: 2500, to: 2500 }, p: 1 },
+      ] }] });
+    const { words } = parseWhisperCppOutput(raw).segments[0];
+    expect(words.map((word) => word.word).join(" ")).toBe("Philippians four. I'm rejoicing.");
+    expect(words[0]).toMatchObject({ startMs: 0, endMs: 500 });
+    expect(words[0].confidence).toBeCloseTo(0.9);
+    // Punctuation at the segment end must not stretch a spoken word over silence.
+    expect(words.at(-1)).toMatchObject({ word: "rejoicing.", startMs: 1300, endMs: 1800 });
   });
 });
