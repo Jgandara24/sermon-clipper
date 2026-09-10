@@ -410,6 +410,8 @@ model Workspace {
 
   @@index([ownerId])
   @@map("workspaces")
+  cleanupOperations CleanupOperation[]
+
 }
 
 model StripeWebhookEvent {
@@ -511,6 +513,9 @@ model SourceVideo {
 
   @@index([workspaceId])
   @@map("source_videos")
+  mediaGate SourceMediaGate?
+  cleanupObjects CleanupObject[]
+
 }
 
 model Transcript {
@@ -580,6 +585,8 @@ model Project {
   @@index([workspaceId])
   @@index([sourceVideoId])
   @@map("projects")
+  cleanupObjects CleanupObject[]
+
 }
 
 // Master routing is versioned. Projects copy one policy into processingConfig when analysis
@@ -1329,4 +1336,138 @@ model SourceCopyOperation {
   retainUntil   DateTime @map("retain_until") @db.Timestamptz(6)
 
   @@map("source_copy_operations")
+}
+
+// Dormant cleanup journal. SQL migration owns state, scope, audit, and partial-index constraints.
+model CleanupOperation {
+  id                   String                @id @db.Uuid
+  workspaceId          String                @map("workspace_id") @db.Uuid
+  operatorId           String                @map("operator_id") @db.Uuid
+  canonicalManifest    String                @map("canonical_manifest")
+  manifest             Json
+  manifestHash         String                @map("manifest_hash")
+  backupManifestHash   String                @map("backup_manifest_hash")
+  preservedRecordsHash String                @map("preserved_records_hash")
+  storageIdentity      String                @map("storage_identity")
+  state                String                @default("PREPARED")
+  revision             BigInt                @default(0)
+  ownerId              String?               @map("owner_id") @db.Uuid
+  ownershipGeneration  BigInt                @default(0) @map("ownership_generation")
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  objects              CleanupObject[]
+  approvals            CleanupApproval[]
+  gates                SourceMediaGate[]
+  reservations         MediaKeyReservation[]
+  auditEvents          CleanupAuditEvent[]
+
+  @@unique([id, manifestHash])
+  @@map("cleanup_operations")
+}
+
+model CleanupObject {
+  id              String           @id @db.Uuid
+  operationId     String           @map("operation_id") @db.Uuid
+  ordinal         Int
+  sourceId        String           @map("source_id") @db.Uuid
+  projectId       String           @map("project_id") @db.Uuid
+  fieldName       String           @map("field_name")
+  storageKey      String           @map("storage_key")
+  bytes           BigInt
+  sha256          String
+  etag            String
+  headModifiedAt  String           @map("head_modified_at")
+  listModifiedAt  String           @map("list_modified_at")
+  metadata        Json
+  state           String           @default("PLANNED")
+  revision        BigInt           @default(0)
+  absenceEvidence Json?            @map("absence_evidence")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  operation       CleanupOperation @relation(fields: [operationId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  source          SourceVideo      @relation(fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([operationId, ordinal])
+  @@unique([operationId, storageKey])
+  @@unique([operationId, sourceId, fieldName])
+  @@map("cleanup_objects")
+}
+
+model CleanupApproval {
+  id           String           @id @db.Uuid
+  operationId  String           @map("operation_id") @db.Uuid
+  manifestHash String           @map("manifest_hash")
+  approverId   String           @map("approver_id") @db.Uuid
+  scope        String
+  issuedAt     DateTime         @map("issued_at") @db.Timestamptz(6)
+  expiresAt    DateTime         @map("expires_at") @db.Timestamptz(6)
+  revokedAt    DateTime?        @map("revoked_at") @db.Timestamptz(6)
+  operation    CleanupOperation @relation(fields: [operationId, manifestHash], references: [id, manifestHash], onDelete: Restrict, onUpdate: NoAction)
+
+  @@map("cleanup_approvals")
+}
+
+model SourceMediaGate {
+  sourceId    String               @id @map("source_id") @db.Uuid
+  state       String               @default("ACTIVE")
+  generation  BigInt               @default(0)
+  operationId String?              @map("operation_id") @db.Uuid
+  updatedAt   DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  source      SourceVideo          @relation(fields: [sourceId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  operation   CleanupOperation?    @relation(fields: [operationId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  sessions    SourceMediaSession[]
+
+  @@map("source_media_gates")
+}
+
+model SourceMediaSession {
+  id               String                @id @db.Uuid
+  sourceId         String                @map("source_id") @db.Uuid
+  generation       BigInt
+  ownerId          String                @map("owner_id") @db.Uuid
+  purpose          String
+  state            String                @default("ACTIVE")
+  revision         BigInt                @default(0)
+  terminalEvidence Json?                 @map("terminal_evidence")
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
+  gate             SourceMediaGate       @relation(fields: [sourceId], references: [sourceId], onDelete: Restrict, onUpdate: NoAction)
+  reservations     MediaKeyReservation[]
+
+  @@map("source_media_sessions")
+}
+
+model MediaKeyReservation {
+  id              String              @id @db.Uuid
+  storageIdentity String              @map("storage_identity")
+  storageKey      String              @map("storage_key")
+  operationId     String?             @map("operation_id") @db.Uuid
+  sessionId       String?             @map("session_id") @db.Uuid
+  state           String              @default("HELD")
+  revision        BigInt              @default(0)
+  resolution      Json?
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @default(now()) @map("updated_at") @db.Timestamptz(6)
+  operation       CleanupOperation?   @relation(fields: [operationId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  session         SourceMediaSession? @relation(fields: [sessionId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@map("media_key_reservations")
+}
+
+model CleanupAuditEvent {
+  id          String            @id @db.Uuid
+  operationId String?           @map("operation_id") @db.Uuid
+  targetType  String            @map("target_type")
+  targetId    String            @map("target_id") @db.Uuid
+  revision    BigInt
+  action      String
+  actorId     String            @map("actor_id") @db.Uuid
+  evidence    Json
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  operation   CleanupOperation? @relation(fields: [operationId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([targetType, targetId, revision])
+  @@map("cleanup_audit_events")
 }
