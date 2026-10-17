@@ -1,0 +1,7450 @@
+{
+ "reportVersion": "p4-scene-evidence-report-v1",
+ "createdAt": "2026-10-17T18:00:35.769Z",
+ "labelSet": {
+  "file": "p4-human-labels-2026-10-17.json",
+  "sha256": "f26ddac1031a1c01bbadee5dcc9760b5b12baff60ac5f0424de016daa31f30e8",
+  "schemaVersion": "p4-human-labels-v1"
+ },
+ "processing": "Local and offline. No network request, upload, or paid service.",
+ "derivativeSettings": {
+  "proxyCrf": 18,
+  "proxyPreset": "ultrafast",
+  "proxyAudioBitrateBps": 64000,
+  "flacCompressionLevel": 5,
+  "encoderThreads": 4,
+  "timeoutMs": 7200000
+ },
+ "videoSettings": {
+  "sceneThreshold": 5,
+  "blackPixelThreshold": 0.1,
+  "blackPictureRatio": 0.98,
+  "blackMinimumMs": 200,
+  "freezeNoiseRatio": 0.001,
+  "freezeMinimumMs": 200,
+  "threads": 4,
+  "timeoutMs": 7200000,
+  "maxMetadataBytes": 1073741824
+ },
+ "thresholds": [
+  1,
+  2,
+  3,
+  5,
+  8,
+  10,
+  15,
+  20,
+  30,
+  50
+ ],
+ "results": [
+  {
+   "recording": "recording-1",
+   "sourceSha256": "72a348eff1424d6b759205d846a1e481d5b9ad95764d4e14aa78f6db6be642a0",
+   "sourceByteCount": 158665289,
+   "derivatives": {
+    "derivationVersion": "analysis-audio-proxy-v2",
+    "configurationSha256": "4f6d5bafabbaa015bb8f06c4c28f1ef6b4a6d72d12316b7e65a383965e0e6b4b",
+    "original": {
+     "codec": "h264",
+     "width": 854,
+     "height": 480,
+     "startMs": 0,
+     "sampleAspectRatio": "1:1",
+     "rotationDegrees": 0
+    },
+    "proxy": {
+     "sha256": "d6dbd12925f7b97516d508ff2483c1c4d688045760765469a98dba1d464f1b09",
+     "byteCount": 603102100,
+     "video": {
+      "codec": "h264",
+      "width": 854,
+      "height": 480,
+      "startMs": 0,
+      "sampleAspectRatio": "1:1",
+      "rotationDegrees": 0
+     }
+    },
+    "wallMs": 99453
+   },
+   "evidence": {
+    "detectorVersion": "ffmpeg-video-facts-v1",
+    "configurationSha256": "92c4689cc2bd136bfc0ae8568074a50a5634a92cd2dd3b119f56e9c8f1bb826a",
+    "toolchainSha256": "76150bbfd7243f4013e45150e0f4ffb8a0658fd81a901bc8fb5174fa26b1e740",
+    "frameCount": 67622,
+    "configuredThreshold": 5,
+    "scenesAtConfiguredThreshold": 49,
+    "blackIntervals": 1,
+    "freezeIntervals": 328,
+    "derivedDetectionRuleMatchesScdet": true,
+    "wallMs": 169586
+   },
+   "evaluation": {
+    "evaluationVersion": "scene-change-evaluation-v1",
+    "frameCount": 67622,
+    "firstFrameMs": 0,
+    "lastFrameMs": 2820360,
+    "medianFramePeriodMs": 40,
+    "tolerancesMs": [
+     43,
+     250,
+     1000
+    ],
+    "runs": [
+     {
+      "threshold": 1,
+      "detections": 95,
+      "detectionsPerMinute": 2.021,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 2,
+         "250": 2,
+         "1000": 2
+        },
+        "missed": 4,
+        "medianAbsoluteErrorMs": 2294.25,
+        "maximumAbsoluteErrorMs": 11385.958
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 8,
+         "250": 8,
+         "1000": 8
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.4165,
+        "maximumAbsoluteErrorMs": 4.333
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 6,
+         "250": 7,
+         "1000": 7
+        },
+        "missed": 5,
+        "medianAbsoluteErrorMs": 52,
+        "maximumAbsoluteErrorMs": 15613.768
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 9.339,
+        "maximumAbsoluteErrorMs": 9.339
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 2,
+         "250": 2,
+         "1000": 2
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.25,
+        "maximumAbsoluteErrorMs": 0.458
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 479562,
+        "nearestScore": 1.071,
+        "signedErrorMs": 11385.958,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 479562,
+        "nearestScore": 1.071,
+        "signedErrorMs": -1585.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 1060810,
+        "nearestScore": 1.096,
+        "signedErrorMs": 0.25,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 1073820,
+        "nearestScore": 1.231,
+        "signedErrorMs": -2.75,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24858,
+        "nearestScore": 1.855,
+        "signedErrorMs": -3003.167,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24858,
+        "nearestScore": 1.855,
+        "signedErrorMs": -7048.875,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 323865,
+        "nearestScore": 14.334,
+        "signedErrorMs": -0.208,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": 0.167,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 752502,
+        "nearestScore": 11.837,
+        "signedErrorMs": 0.25,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": 0.5,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2158490,
+        "nearestScore": 13.388,
+        "signedErrorMs": 0.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2173050,
+        "nearestScore": 15.414,
+        "signedErrorMs": 4.125,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2241200,
+        "nearestScore": 13.245,
+        "signedErrorMs": 2.708,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2304640,
+        "nearestScore": 14.471,
+        "signedErrorMs": 4.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -88,
+        "matchedWithinMs": {
+         "43": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 63814,
+        "nearestScore": 13.717,
+        "signedErrorMs": -16,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639722,
+        "nearestScore": 2.342,
+        "signedErrorMs": 0.909,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 702952,
+        "nearestScore": 1.051,
+        "signedErrorMs": -14067.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639722,
+        "nearestScore": 2.342,
+        "signedErrorMs": 0.909,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 702952,
+        "nearestScore": 1.051,
+        "signedErrorMs": -14118.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 702952,
+        "nearestScore": 1.051,
+        "signedErrorMs": -15613.768,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 702952,
+        "nearestScore": 1.051,
+        "signedErrorMs": -14067.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 702952,
+        "nearestScore": 1.051,
+        "signedErrorMs": -14118.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -0.042,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 3,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 2,
+        "unlabeledDetectionsMs": [
+         688021
+        ]
+       }
+      ]
+     },
+     {
+      "threshold": 2,
+      "detections": 57,
+      "detectionsPerMinute": 1.213,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 68088.6875,
+        "maximumAbsoluteErrorMs": 275524.75
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 8,
+         "250": 8,
+         "1000": 8
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.4165,
+        "maximumAbsoluteErrorMs": 4.333
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 6,
+         "250": 7,
+         "1000": 7
+        },
+        "missed": 5,
+        "medianAbsoluteErrorMs": 52,
+        "maximumAbsoluteErrorMs": 28167.768
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 9.339,
+        "maximumAbsoluteErrorMs": 9.339
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 2,
+         "250": 2,
+         "1000": 2
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.25,
+        "maximumAbsoluteErrorMs": 0.458
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -61603.042,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -74574.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -262511.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -275524.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -3044.167,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -7089.875,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 323865,
+        "nearestScore": 14.334,
+        "signedErrorMs": -0.208,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": 0.167,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 752502,
+        "nearestScore": 11.837,
+        "signedErrorMs": 0.25,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": 0.5,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2158490,
+        "nearestScore": 13.388,
+        "signedErrorMs": 0.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2173050,
+        "nearestScore": 15.414,
+        "signedErrorMs": 4.125,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2241200,
+        "nearestScore": 13.245,
+        "signedErrorMs": 2.708,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2304640,
+        "nearestScore": 14.471,
+        "signedErrorMs": 4.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -88,
+        "matchedWithinMs": {
+         "43": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 63814,
+        "nearestScore": 13.717,
+        "signedErrorMs": -16,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639722,
+        "nearestScore": 2.342,
+        "signedErrorMs": 0.909,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639722,
+        "nearestScore": 2.342,
+        "signedErrorMs": 0.909,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -28167.768,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -0.042,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 2,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 3,
+      "detections": 52,
+      "detectionsPerMinute": 1.106,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 68088.6875,
+        "maximumAbsoluteErrorMs": 275524.75
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 8,
+         "250": 8,
+         "1000": 8
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.4165,
+        "maximumAbsoluteErrorMs": 4.333
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 6,
+         "250": 7,
+         "1000": 7
+        },
+        "missed": 5,
+        "medianAbsoluteErrorMs": 64.0455,
+        "maximumAbsoluteErrorMs": 28167.768
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 9.339,
+        "maximumAbsoluteErrorMs": 9.339
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 2,
+         "250": 2,
+         "1000": 2
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.25,
+        "maximumAbsoluteErrorMs": 0.458
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -61603.042,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -74574.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -262511.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -275524.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -3044.167,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -7089.875,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 323865,
+        "nearestScore": 14.334,
+        "signedErrorMs": -0.208,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": 0.167,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 752502,
+        "nearestScore": 11.837,
+        "signedErrorMs": 0.25,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": 0.5,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2158490,
+        "nearestScore": 13.388,
+        "signedErrorMs": 0.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2173050,
+        "nearestScore": 15.414,
+        "signedErrorMs": 4.125,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2241200,
+        "nearestScore": 13.245,
+        "signedErrorMs": 2.708,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2304640,
+        "nearestScore": 14.471,
+        "signedErrorMs": 4.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -88,
+        "matchedWithinMs": {
+         "43": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 63814,
+        "nearestScore": 13.717,
+        "signedErrorMs": -16,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -28167.768,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -0.042,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 2,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 5,
+      "detections": 49,
+      "detectionsPerMinute": 1.042,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 68088.6875,
+        "maximumAbsoluteErrorMs": 275524.75
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 8,
+         "250": 8,
+         "1000": 8
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.4165,
+        "maximumAbsoluteErrorMs": 4.333
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 6,
+         "250": 7,
+         "1000": 7
+        },
+        "missed": 5,
+        "medianAbsoluteErrorMs": 64.0455,
+        "maximumAbsoluteErrorMs": 28167.768
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 9.339,
+        "maximumAbsoluteErrorMs": 9.339
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 2,
+         "250": 2,
+         "1000": 2
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.25,
+        "maximumAbsoluteErrorMs": 0.458
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -61603.042,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -74574.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -262511.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -275524.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -3044.167,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -7089.875,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 323865,
+        "nearestScore": 14.334,
+        "signedErrorMs": -0.208,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": 0.167,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 752502,
+        "nearestScore": 11.837,
+        "signedErrorMs": 0.25,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": 0.5,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2158490,
+        "nearestScore": 13.388,
+        "signedErrorMs": 0.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2173050,
+        "nearestScore": 15.414,
+        "signedErrorMs": 4.125,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2241200,
+        "nearestScore": 13.245,
+        "signedErrorMs": 2.708,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2304640,
+        "nearestScore": 14.471,
+        "signedErrorMs": 4.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -88,
+        "matchedWithinMs": {
+         "43": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 63814,
+        "nearestScore": 13.717,
+        "signedErrorMs": -16,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -28167.768,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -0.042,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 2,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 8,
+      "detections": 48,
+      "detectionsPerMinute": 1.021,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 68088.6875,
+        "maximumAbsoluteErrorMs": 275524.75
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 8,
+         "250": 8,
+         "1000": 8
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.4165,
+        "maximumAbsoluteErrorMs": 4.333
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 6,
+         "250": 7,
+         "1000": 7
+        },
+        "missed": 5,
+        "medianAbsoluteErrorMs": 64.0455,
+        "maximumAbsoluteErrorMs": 28167.768
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 9.339,
+        "maximumAbsoluteErrorMs": 9.339
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 2,
+         "250": 2,
+         "1000": 2
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.25,
+        "maximumAbsoluteErrorMs": 0.458
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -61603.042,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -74574.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -262511.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -275524.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -3044.167,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -7089.875,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 323865,
+        "nearestScore": 14.334,
+        "signedErrorMs": -0.208,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": 0.167,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 752502,
+        "nearestScore": 11.837,
+        "signedErrorMs": 0.25,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": 0.5,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2158490,
+        "nearestScore": 13.388,
+        "signedErrorMs": 0.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2173050,
+        "nearestScore": 15.414,
+        "signedErrorMs": 4.125,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2241200,
+        "nearestScore": 13.245,
+        "signedErrorMs": 2.708,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2304640,
+        "nearestScore": 14.471,
+        "signedErrorMs": 4.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -88,
+        "matchedWithinMs": {
+         "43": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 63814,
+        "nearestScore": 13.717,
+        "signedErrorMs": -16,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -28167.768,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -0.042,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 2,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 10,
+      "detections": 45,
+      "detectionsPerMinute": 0.957,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 68088.6875,
+        "maximumAbsoluteErrorMs": 275524.75
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 8,
+         "250": 8,
+         "1000": 8
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.4165,
+        "maximumAbsoluteErrorMs": 4.333
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 6,
+         "250": 7,
+         "1000": 7
+        },
+        "missed": 5,
+        "medianAbsoluteErrorMs": 64.0455,
+        "maximumAbsoluteErrorMs": 28167.768
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 9.339,
+        "maximumAbsoluteErrorMs": 9.339
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 2,
+         "250": 2,
+         "1000": 2
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.25,
+        "maximumAbsoluteErrorMs": 0.458
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -61603.042,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": -74574.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -262511.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": -275524.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -3044.167,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 24817,
+        "nearestScore": 12.189,
+        "signedErrorMs": -7089.875,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 323865,
+        "nearestScore": 14.334,
+        "signedErrorMs": -0.208,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 406573,
+        "nearestScore": 14.9,
+        "signedErrorMs": 0.167,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 752502,
+        "nearestScore": 11.837,
+        "signedErrorMs": 0.25,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 798298,
+        "nearestScore": 14.077,
+        "signedErrorMs": 0.5,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2158490,
+        "nearestScore": 13.388,
+        "signedErrorMs": 0.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2173050,
+        "nearestScore": 15.414,
+        "signedErrorMs": 4.125,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2241200,
+        "nearestScore": 13.245,
+        "signedErrorMs": 2.708,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2304640,
+        "nearestScore": 14.471,
+        "signedErrorMs": 4.333,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -88,
+        "matchedWithinMs": {
+         "43": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 63814,
+        "nearestScore": 13.717,
+        "signedErrorMs": -16,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -28167.768,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -0.042,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 2,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 15,
+      "detections": 24,
+      "detectionsPerMinute": 0.511,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 161765.3125,
+        "maximumAbsoluteErrorMs": 383424.75
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 7,
+        "medianAbsoluteErrorMs": 80224.70850000001,
+        "maximumAbsoluteErrorMs": 264973.208
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 5,
+         "250": 6,
+         "1000": 6
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 2513,
+        "maximumAbsoluteErrorMs": 28167.768
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 9.339,
+        "maximumAbsoluteErrorMs": 9.339
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 2,
+         "250": 2,
+         "1000": 2
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0.25,
+        "maximumAbsoluteErrorMs": 0.458
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": 168250.958,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": 155279.667,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -370411.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -383424.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 49716,
+        "nearestScore": 17.091,
+        "signedErrorMs": 21854.833,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 49716,
+        "nearestScore": 17.091,
+        "signedErrorMs": 17809.125,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -264973.208,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": 229854.167,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -62103.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -107899.5,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2173050,
+        "nearestScore": 15.414,
+        "signedErrorMs": 14560.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2173050,
+        "nearestScore": 15.414,
+        "signedErrorMs": 4.125,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2206290,
+        "nearestScore": 17.444,
+        "signedErrorMs": -34907.292,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2206290,
+        "nearestScore": 17.444,
+        "signedErrorMs": -98345.667,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -88,
+        "matchedWithinMs": {
+         "43": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -4938,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -28167.768,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26621.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -26672.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 690398,
+        "nearestScore": 19.254,
+        "signedErrorMs": -0.042,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 2,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 20,
+      "detections": 11,
+      "detectionsPerMinute": 0.234,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 161765.3125,
+        "maximumAbsoluteErrorMs": 434141.75
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 8,
+        "medianAbsoluteErrorMs": 309913.7705,
+        "maximumAbsoluteErrorMs": 501000.333
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 5,
+         "250": 6,
+         "1000": 6
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 2513,
+        "maximumAbsoluteErrorMs": 78884.768
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 9.339,
+        "maximumAbsoluteErrorMs": 9.339
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": 25358.75,
+        "maximumAbsoluteErrorMs": 50717.042
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": 168250.958,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": 155279.667,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -421128.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -434141.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": 31030.833,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": 26985.125,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -264973.208,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": 229854.167,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -112820.75,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -158616.5,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2659490,
+        "nearestScore": 21.278,
+        "signedErrorMs": 501000.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2659490,
+        "nearestScore": 21.278,
+        "signedErrorMs": 486444.125,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2659490,
+        "nearestScore": 21.278,
+        "signedErrorMs": 418292.708,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2659490,
+        "nearestScore": 21.278,
+        "signedErrorMs": 354854.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -88,
+        "matchedWithinMs": {
+         "43": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 58892,
+        "nearestScore": 23.607,
+        "signedErrorMs": -4938,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -77338.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -40.091,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636427,
+        "nearestScore": 24.709,
+        "signedErrorMs": -0.458,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 636928,
+        "nearestScore": 29.702,
+        "signedErrorMs": -9.339,
+        "matchedWithinMs": {
+         "43": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -77389.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -78884.768,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -77338.51,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -77389.367,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 639681,
+        "nearestScore": 22.116,
+        "signedErrorMs": -50717.042,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 2,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 30,
+      "detections": 2,
+      "detectionsPerMinute": 0.043,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": 2197218.3125,
+        "maximumAbsoluteErrorMs": 2644018.833
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 8,
+        "medianAbsoluteErrorMs": 1193486.4165,
+        "maximumAbsoluteErrorMs": 2348014.792
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 12,
+        "medianAbsoluteErrorMs": 2032158.909,
+        "maximumAbsoluteErrorMs": 2612900
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": 2034942.661,
+        "maximumAbsoluteErrorMs": 2034942.661
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 2,
+        "medianAbsoluteErrorMs": 2008467.25,
+        "maximumAbsoluteErrorMs": 2035452.542
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2203703.958,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2190732.667,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1611070.25,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1598057.25,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2644018.833,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2639973.125,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2348014.792,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2265307.167,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1919378.25,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1873582.5,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 513390.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 498834.125,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 430682.708,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 367244.333,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2612900,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2608050,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2032158.909,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1954860.49,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2034942.661,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2035452.542,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2034942.661,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2032158.909,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2035452.542,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 2034942.661,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1954809.633,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1953314.232,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1954860.49,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1954809.633,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": 2671880,
+        "nearestScore": 31.616,
+        "signedErrorMs": 1981481.958,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 50,
+      "detections": 0,
+      "detectionsPerMinute": 0,
+      "groups": [
+       {
+        "group": "overlay-fade-edge",
+        "events": 6,
+        "pointEvents": 6,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 6,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "view-edge-scene-assisted",
+        "events": 8,
+        "pointEvents": 8,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 8,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 12,
+        "pointEvents": 12,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 12,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "cut-time-supplied-by-jake",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "cut-frame-observed-by-assistant",
+        "events": 2,
+        "pointEvents": 2,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "43": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 2,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       }
+      ],
+      "events": [
+       {
+        "id": "R1-OVERLAY-475025:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-475025:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-1068805:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:entry",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-OVERLAY-29689:exit",
+        "group": "overlay-fade-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet02:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet05:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-A:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:entry",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-STAGE-VIEW-sheet13-B:exit",
+        "group": "view-edge-scene-assisted",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V1-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V1-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-EXCLUSION:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-EXCLUSION:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-FULL-STAGE-SHOT",
+        "group": "cut-time-supplied-by-jake",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-WIDE-SHOT-START",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P1-FULL-STAGE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P0-EARLIER-WIDE:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P3-LATE-FRAMING:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:start",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V2-P2-SHORT-GAP:end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R1-V3-CAMERA-CHANGE",
+        "group": "cut-frame-observed-by-assistant",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "43": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V2_RETAINED_CAMERA_CUT#1",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R1-V3_INSTALLED_CAMERA_CUT#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     }
+    ]
+   },
+   "neighborhoods": [
+    {
+     "id": "R1-OVERLAY-475025:entry",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 468176,
+       "score": 0.853
+      },
+      {
+       "timeMs": 468051,
+       "score": 0.598
+      },
+      {
+       "timeMs": 468259,
+       "score": 0.549
+      }
+     ]
+    },
+    {
+     "id": "R1-OVERLAY-475025:exit",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 481189,
+       "score": 0.857
+      },
+      {
+       "timeMs": 481147,
+       "score": 0.437
+      },
+      {
+       "timeMs": 480188,
+       "score": 0.299
+      }
+     ]
+    },
+    {
+     "id": "R1-OVERLAY-1068805:entry",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 1060810,
+       "score": 1.096
+      },
+      {
+       "timeMs": 1060850,
+       "score": 0.488
+      },
+      {
+       "timeMs": 1060020,
+       "score": 0.467
+      }
+     ]
+    },
+    {
+     "id": "R1-OVERLAY-1068805:exit",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 1073820,
+       "score": 1.231
+      },
+      {
+       "timeMs": 1073780,
+       "score": 0.473
+      },
+      {
+       "timeMs": 1073110,
+       "score": 0.313
+      }
+     ]
+    },
+    {
+     "id": "R1-OVERLAY-29689:entry",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 28529,
+       "score": 0.247
+      },
+      {
+       "timeMs": 28195,
+       "score": 0.217
+      },
+      {
+       "timeMs": 28821,
+       "score": 0.211
+      }
+     ]
+    },
+    {
+     "id": "R1-OVERLAY-29689:exit",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 31907,
+       "score": 0.262
+      },
+      {
+       "timeMs": 31698,
+       "score": 0.259
+      },
+      {
+       "timeMs": 31990,
+       "score": 0.21
+      }
+     ]
+    },
+    {
+     "id": "R1-STAGE-VIEW-sheet02:entry",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 323865,
+       "score": 14.334
+      },
+      {
+       "timeMs": 324282,
+       "score": 0.301
+      },
+      {
+       "timeMs": 323240,
+       "score": 0.255
+      }
+     ]
+    },
+    {
+     "id": "R1-STAGE-VIEW-sheet02:exit",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 406573,
+       "score": 14.9
+      },
+      {
+       "timeMs": 406615,
+       "score": 0.727
+      },
+      {
+       "timeMs": 406948,
+       "score": 0.314
+      }
+     ]
+    },
+    {
+     "id": "R1-STAGE-VIEW-sheet05:entry",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 752502,
+       "score": 11.837
+      },
+      {
+       "timeMs": 751876,
+       "score": 0.503
+      },
+      {
+       "timeMs": 751584,
+       "score": 0.371
+      }
+     ]
+    },
+    {
+     "id": "R1-STAGE-VIEW-sheet05:exit",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 798298,
+       "score": 14.077
+      },
+      {
+       "timeMs": 798339,
+       "score": 1.178
+      },
+      {
+       "timeMs": 798464,
+       "score": 0.435
+      }
+     ]
+    },
+    {
+     "id": "R1-STAGE-VIEW-sheet13-A:entry",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 2158490,
+       "score": 13.388
+      },
+      {
+       "timeMs": 2158410,
+       "score": 0.547
+      },
+      {
+       "timeMs": 2158070,
+       "score": 0.378
+      }
+     ]
+    },
+    {
+     "id": "R1-STAGE-VIEW-sheet13-A:exit",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 2173050,
+       "score": 15.414
+      },
+      {
+       "timeMs": 2173090,
+       "score": 2.459
+      },
+      {
+       "timeMs": 2173420,
+       "score": 0.282
+      }
+     ]
+    },
+    {
+     "id": "R1-STAGE-VIEW-sheet13-B:entry",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 2241200,
+       "score": 13.245
+      },
+      {
+       "timeMs": 2241110,
+       "score": 0.253
+      },
+      {
+       "timeMs": 2241610,
+       "score": 0.207
+      }
+     ]
+    },
+    {
+     "id": "R1-STAGE-VIEW-sheet13-B:exit",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 2304640,
+       "score": 14.471
+      },
+      {
+       "timeMs": 2304680,
+       "score": 1.203
+      },
+      {
+       "timeMs": 2303760,
+       "score": 0.262
+      }
+     ]
+    },
+    {
+     "id": "R1-V1-EXCLUSION:start",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 58892,
+       "score": 23.607
+      },
+      {
+       "timeMs": 59351,
+       "score": 0.731
+      },
+      {
+       "timeMs": 58684,
+       "score": 0.099
+      }
+     ]
+    },
+    {
+     "id": "R1-V1-EXCLUSION:end",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 63814,
+       "score": 13.717
+      },
+      {
+       "timeMs": 63856,
+       "score": 0.64
+      },
+      {
+       "timeMs": 64231,
+       "score": 0.266
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-EXCLUSION:start",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 639681,
+       "score": 22.116
+      },
+      {
+       "timeMs": 639722,
+       "score": 2.342
+      },
+      {
+       "timeMs": 640306,
+       "score": 0.207
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-EXCLUSION:end",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 717800,
+       "score": 0.596
+      },
+      {
+       "timeMs": 717717,
+       "score": 0.494
+      },
+      {
+       "timeMs": 717592,
+       "score": 0.422
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-FULL-STAGE-SHOT",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 636928,
+       "score": 29.702
+      },
+      {
+       "timeMs": 636427,
+       "score": 24.709
+      },
+      {
+       "timeMs": 636469,
+       "score": 1.64
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-WIDE-SHOT-START",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 636928,
+       "score": 29.702
+      },
+      {
+       "timeMs": 636427,
+       "score": 24.709
+      },
+      {
+       "timeMs": 636469,
+       "score": 1.64
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-P1-FULL-STAGE:start",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 636928,
+       "score": 29.702
+      },
+      {
+       "timeMs": 636427,
+       "score": 24.709
+      },
+      {
+       "timeMs": 636469,
+       "score": 1.64
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-P1-FULL-STAGE:end",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 639681,
+       "score": 22.116
+      },
+      {
+       "timeMs": 639722,
+       "score": 2.342
+      },
+      {
+       "timeMs": 640306,
+       "score": 0.207
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-P0-EARLIER-WIDE:start",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 636928,
+       "score": 29.702
+      },
+      {
+       "timeMs": 636427,
+       "score": 24.709
+      },
+      {
+       "timeMs": 636469,
+       "score": 1.64
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-P0-EARLIER-WIDE:end",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 636928,
+       "score": 29.702
+      },
+      {
+       "timeMs": 636427,
+       "score": 24.709
+      },
+      {
+       "timeMs": 636469,
+       "score": 1.64
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-P3-LATE-FRAMING:start",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 717800,
+       "score": 0.596
+      },
+      {
+       "timeMs": 717717,
+       "score": 0.494
+      },
+      {
+       "timeMs": 717592,
+       "score": 0.422
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-P3-LATE-FRAMING:end",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 717800,
+       "score": 0.596
+      },
+      {
+       "timeMs": 717717,
+       "score": 0.494
+      },
+      {
+       "timeMs": 717592,
+       "score": 0.422
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-P2-SHORT-GAP:start",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 717800,
+       "score": 0.596
+      },
+      {
+       "timeMs": 717717,
+       "score": 0.494
+      },
+      {
+       "timeMs": 717592,
+       "score": 0.422
+      }
+     ]
+    },
+    {
+     "id": "R1-V2-P2-SHORT-GAP:end",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 717800,
+       "score": 0.596
+      },
+      {
+       "timeMs": 717717,
+       "score": 0.494
+      },
+      {
+       "timeMs": 717592,
+       "score": 0.422
+      }
+     ]
+    },
+    {
+     "id": "R1-V3-CAMERA-CHANGE",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 690398,
+       "score": 19.254
+      },
+      {
+       "timeMs": 690440,
+       "score": 0.854
+      },
+      {
+       "timeMs": 690315,
+       "score": 0.31
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "recording": "recording-2",
+   "sourceSha256": "975a85c0b63d88cb2e7a43f7e881cb26957a97a960af2dd7ca96ae49a2ba41bf",
+   "sourceByteCount": 167048669,
+   "derivatives": {
+    "derivationVersion": "analysis-audio-proxy-v2",
+    "configurationSha256": "4f6d5bafabbaa015bb8f06c4c28f1ef6b4a6d72d12316b7e65a383965e0e6b4b",
+    "original": {
+     "codec": "h264",
+     "width": 640,
+     "height": 360,
+     "startMs": 0,
+     "sampleAspectRatio": "1:1",
+     "rotationDegrees": 0
+    },
+    "proxy": {
+     "sha256": "15e090e89b6434a93b0eb0b97d8742c6ad1d77c08d0b8d89b2640f718cdd8f46",
+     "byteCount": 1266170471,
+     "video": {
+      "codec": "h264",
+      "width": 854,
+      "height": 480,
+      "startMs": 0,
+      "sampleAspectRatio": "1280:1281",
+      "rotationDegrees": 0
+     }
+    },
+    "wallMs": 209626
+   },
+   "evidence": {
+    "detectorVersion": "ffmpeg-video-facts-v1",
+    "configurationSha256": "92c4689cc2bd136bfc0ae8568074a50a5634a92cd2dd3b119f56e9c8f1bb826a",
+    "toolchainSha256": "76150bbfd7243f4013e45150e0f4ffb8a0658fd81a901bc8fb5174fa26b1e740",
+    "frameCount": 125364,
+    "configuredThreshold": 5,
+    "scenesAtConfiguredThreshold": 26,
+    "blackIntervals": 0,
+    "freezeIntervals": 84,
+    "derivedDetectionRuleMatchesScdet": true,
+    "wallMs": 301996
+   },
+   "evaluation": {
+    "evaluationVersion": "scene-change-evaluation-v1",
+    "frameCount": 125364,
+    "firstFrameMs": 0,
+    "lastFrameMs": 4178770,
+    "medianFramePeriodMs": 30,
+    "tolerancesMs": [
+     35,
+     250,
+     1000
+    ],
+    "runs": [
+     {
+      "threshold": 1,
+      "detections": 721,
+      "detectionsPerMinute": 10.352,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 3,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 3,
+         "250": 3,
+         "1000": 3
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0,
+        "maximumAbsoluteErrorMs": 0
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 67,
+        "maximumAbsoluteErrorMs": 67
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 3.333,
+        "maximumAbsoluteErrorMs": 3.333
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 785833,
+          "score": 12.51
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 785833,
+        "nearestScore": 12.51,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 921367,
+          "score": 1.272
+         },
+         {
+          "timeMs": 921467,
+          "score": 1.259
+         },
+         {
+          "timeMs": 921567,
+          "score": 1.063
+         },
+         {
+          "timeMs": 921767,
+          "score": 1.166
+         },
+         {
+          "timeMs": 921867,
+          "score": 1.125
+         },
+         {
+          "timeMs": 922867,
+          "score": 1.065
+         },
+         {
+          "timeMs": 922967,
+          "score": 1.068
+         },
+         {
+          "timeMs": 923867,
+          "score": 1.104
+         },
+         {
+          "timeMs": 923967,
+          "score": 1.387
+         },
+         {
+          "timeMs": 924167,
+          "score": 1.206
+         },
+         {
+          "timeMs": 930867,
+          "score": 12.657
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 3245570,
+          "score": 11.902
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 67,
+        "matchedWithinMs": {
+         "35": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 3.333,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 11,
+        "unlabeledDetectionsMs": [
+         921367,
+         921467,
+         921567,
+         921767,
+         921867,
+         922867,
+         922967,
+         923867,
+         923967,
+         924167
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 2,
+      "detections": 40,
+      "detectionsPerMinute": 0.574,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 3,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 3,
+         "250": 3,
+         "1000": 3
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0,
+        "maximumAbsoluteErrorMs": 0
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 67,
+        "maximumAbsoluteErrorMs": 67
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 3.333,
+        "maximumAbsoluteErrorMs": 3.333
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 785833,
+          "score": 12.51
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 785833,
+        "nearestScore": 12.51,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 930867,
+          "score": 12.657
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 3245570,
+          "score": 11.902
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 67,
+        "matchedWithinMs": {
+         "35": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 3.333,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 3,
+      "detections": 26,
+      "detectionsPerMinute": 0.373,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 3,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 3,
+         "250": 3,
+         "1000": 3
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0,
+        "maximumAbsoluteErrorMs": 0
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 67,
+        "maximumAbsoluteErrorMs": 67
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 3.333,
+        "maximumAbsoluteErrorMs": 3.333
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 785833,
+          "score": 12.51
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 785833,
+        "nearestScore": 12.51,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 930867,
+          "score": 12.657
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 3245570,
+          "score": 11.902
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 67,
+        "matchedWithinMs": {
+         "35": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 3.333,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 5,
+      "detections": 26,
+      "detectionsPerMinute": 0.373,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 3,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 3,
+         "250": 3,
+         "1000": 3
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0,
+        "maximumAbsoluteErrorMs": 0
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 67,
+        "maximumAbsoluteErrorMs": 67
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 3.333,
+        "maximumAbsoluteErrorMs": 3.333
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 785833,
+          "score": 12.51
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 785833,
+        "nearestScore": 12.51,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 930867,
+          "score": 12.657
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 3245570,
+          "score": 11.902
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 67,
+        "matchedWithinMs": {
+         "35": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 3.333,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 8,
+      "detections": 26,
+      "detectionsPerMinute": 0.373,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 3,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 3,
+         "250": 3,
+         "1000": 3
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0,
+        "maximumAbsoluteErrorMs": 0
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 67,
+        "maximumAbsoluteErrorMs": 67
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 3.333,
+        "maximumAbsoluteErrorMs": 3.333
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 785833,
+          "score": 12.51
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 785833,
+        "nearestScore": 12.51,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 930867,
+          "score": 12.657
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 3245570,
+          "score": 11.902
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 67,
+        "matchedWithinMs": {
+         "35": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 3.333,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 10,
+      "detections": 23,
+      "detectionsPerMinute": 0.33,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 3,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 3,
+         "250": 3,
+         "1000": 3
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 0,
+        "maximumAbsoluteErrorMs": 0
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 67,
+        "maximumAbsoluteErrorMs": 67
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 1,
+         "250": 1,
+         "1000": 1
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": 3.333,
+        "maximumAbsoluteErrorMs": 3.333
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 785833,
+          "score": 12.51
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 785833,
+        "nearestScore": 12.51,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 930867,
+          "score": 12.657
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": true,
+        "detectionsMs": [
+         {
+          "timeMs": 3245570,
+          "score": 11.902
+         }
+        ]
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 0,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": 930867,
+        "nearestScore": 12.657,
+        "signedErrorMs": 67,
+        "matchedWithinMs": {
+         "35": false,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": 3245570,
+        "nearestScore": 11.902,
+        "signedErrorMs": 3.333,
+        "matchedWithinMs": {
+         "35": true,
+         "250": true,
+         "1000": true
+        },
+        "missed": false
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 1,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 15,
+      "detections": 0,
+      "detectionsPerMinute": 0,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 3,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 20,
+      "detections": 0,
+      "detectionsPerMinute": 0,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 3,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 30,
+      "detections": 0,
+      "detectionsPerMinute": 0,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 3,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     },
+     {
+      "threshold": 50,
+      "detections": 0,
+      "detectionsPerMinute": 0,
+      "groups": [
+       {
+        "group": "camera-change-window",
+        "events": 3,
+        "pointEvents": 0,
+        "windowEvents": 3,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 0,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "earlier-detector-candidate-circular",
+        "events": 3,
+        "pointEvents": 3,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 3,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "diagnostic-exclusion-edge",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       },
+       {
+        "group": "diagnostic-tracking-context",
+        "events": 1,
+        "pointEvents": 1,
+        "windowEvents": 0,
+        "windowsDetected": 0,
+        "matchedWithinMs": {
+         "35": 0,
+         "250": 0,
+         "1000": 0
+        },
+        "missed": 1,
+        "medianAbsoluteErrorMs": null,
+        "maximumAbsoluteErrorMs": null
+       }
+      ],
+      "events": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3",
+        "group": "camera-change-window",
+        "detected": false,
+        "detectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+        "group": "earlier-detector-candidate-circular",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+        "group": "diagnostic-exclusion-edge",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       },
+       {
+        "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+        "group": "diagnostic-tracking-context",
+        "nearestDetectionMs": null,
+        "nearestScore": null,
+        "signedErrorMs": null,
+        "matchedWithinMs": {
+         "35": false,
+         "250": false,
+         "1000": false
+        },
+        "missed": true
+       }
+      ],
+      "reviewedWindows": [
+       {
+        "id": "R2-CAMERA-CHANGE-C1#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C2#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       },
+       {
+        "id": "R2-CAMERA-CHANGE-C3#0",
+        "detections": 0,
+        "unlabeledDetectionsMs": []
+       }
+      ]
+     }
+    ]
+   },
+   "neighborhoods": [
+    {
+     "id": "R2-CAMERA-CHANGE-C1:earlier-candidate",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 785833,
+       "score": 12.51
+      },
+      {
+       "timeMs": 785033,
+       "score": 0.364
+      },
+      {
+       "timeMs": 784933,
+       "score": 0.331
+      }
+     ]
+    },
+    {
+     "id": "R2-CAMERA-CHANGE-C2:earlier-candidate",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 930867,
+       "score": 12.657
+      },
+      {
+       "timeMs": 931567,
+       "score": 0.568
+      },
+      {
+       "timeMs": 930900,
+       "score": 0.454
+      }
+     ]
+    },
+    {
+     "id": "R2-CAMERA-CHANGE-C3:earlier-candidate",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 3245570,
+       "score": 11.902
+      },
+      {
+       "timeMs": 3246470,
+       "score": 0.213
+      },
+      {
+       "timeMs": 3246000,
+       "score": 0.173
+      }
+     ]
+    },
+    {
+     "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK:problem-end",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 930867,
+       "score": 12.657
+      },
+      {
+       "timeMs": 931567,
+       "score": 0.568
+      },
+      {
+       "timeMs": 930900,
+       "score": 0.454
+      }
+     ]
+    },
+    {
+     "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK:shot-end",
+     "strongestFramesWithin1000Ms": [
+      {
+       "timeMs": 3245570,
+       "score": 11.902
+      },
+      {
+       "timeMs": 3246470,
+       "score": 0.213
+      },
+      {
+       "timeMs": 3246000,
+       "score": 0.173
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -26,6 +26,7 @@ No new production query ran during this inspection.
 It maps the measured P0 costs and synthetic benchmarks to their limits.
 `docs/P2_STAGE5_READINESS_CHECKLIST.md` records missing real selection and exact-render evidence.
 The current inspection found no representative human region-label dataset under `evaluation/`.
+On 2026-10-17 a two-recording label set was added; see [the label set](P4_EVALUATION_LABELS.md).
 The assistant requested the dataset location from Jake.
 An unlocated dataset is not proof that no dataset exists elsewhere.
 
@@ -1231,3 +1232,57 @@ This is local evidence for the reserve gate; production census evidence remains 
 177 cases across eight database files passed in disposable PostgreSQL.
 All 2,811 unit tests, lint, type checking, the worker build, and the production build passed.
 The production build reported one existing warning in the legacy PROBE upload loop, `src/lib/jobs/handlers/probe.ts:193`.
+
+## PR #110 CI diagnosis — 2026-10-17
+
+CI run 39050872528 ran on head `0c9621d`. Three jobs failed, and `worker-image` passed.
+The base PR #106 passed all four jobs, so the P4 commit caused every failure.
+No code was changed for these failures; Jake decides the fixes first.
+
+**verify.** 14 tests in 12 unit files failed with `spawn ffmpeg ENOENT`.
+The `verify` job installs no ffmpeg, but the new P4 media tests spawn it.
+Examples are `tests/range-extraction.test.ts` and `tests/keyframes.test.ts`.
+Proposed fix: install ffmpeg in `verify`, as `integration` and `e2e` already do.
+
+**integration.** Four tests failed for four separate reasons.
+- `route-authorization` completeness: the matrix lacks three new routes.
+  They are `media/artifact`, `operator/clips/[id]/full-source-export`, and `uploads/[uploadId]/multipart`.
+- `route-authorization` direct upload: `PUT api/uploads/[uploadId]` queries the `uuid` column `multipart_uploads.id` with the test's non-UUID upload ID.
+  Prisma throws `Error creating UUID`, so the route returns 500 instead of metering the upload.
+  Production upload IDs are UUIDs, but the route must not fail on any other signed ID.
+- `source-revision-upgrade`: the test applies the Wave 2 baseline and one upgrade migration only.
+  Current code writes `transcripts.capabilities`, which only the Wave 3 migration adds.
+- `wave-two-schema`: the test expects exactly three applied migrations and now finds the Wave 3 migration too.
+
+**e2e.** `candidate-preview.spec.ts:238` expects "recording for this service has been deleted".
+The P4 commit replaced that text with "This preview is unavailable." in `src/components/candidates/source-range-preview.tsx`.
+The preview URL now comes from `sourcePreviewUrl`, so a deleted recording and a missing proxy look the same.
+A fix needs a copy decision: separate the two cases, or update the test to the new text.
+The `Error creating UUID` lines in the e2e server log have the same cause as the upload route failure.
+
+## Human label set and scene evidence — 2026-10-17
+
+**Label set.** [`evaluation/p4-human-labels-2026-10-17.json`](../evaluation/p4-human-labels-2026-10-17.json) holds 69 labels and 192 sampled-frame labels.
+It comes from the 65 `docs/P4_*.json` records on the local Codex branch at `7d7191a`.
+46 records carry a top-level Jake decision, and three aggregate records hold more.
+Later decisions override earlier ones within the same scope, and each label keeps what it replaced.
+Each label keeps its source record, checksum, date, time provenance, and stated limits.
+See [the label set](P4_EVALUATION_LABELS.md).
+This is the first representative human label dataset under `evaluation/`.
+It covers two recordings only.
+
+**Scene evidence.** The real proxy and `scdet` evidence pass ran locally on both recordings.
+At the test threshold 5, all three labeled cuts and all eight stage-view edges matched within one frame.
+Jake's exact time, 00:10:36.937339, was 9.339 ms after the start of the detected frame.
+All six promotional overlay fades were missed, because `scdet` does not detect gradual changes.
+Recording 2 cut scores were 11.9 to 12.7, so threshold 15 found none of them.
+The two recordings took 785.8 s in total.
+See [the scene evidence evaluation](P4_SCENE_EVIDENCE_EVALUATION.md).
+
+Eight of the scored edge labels were found with scene scores, so their agreement is partly circular.
+Only one cut time came from Jake directly.
+The result does not set a threshold, approve a model, or meet any P4 acceptance gate.
+Items 9, 10, 11, 12, 15, and 16 stay blocked on representative labels.
+P4 remains incomplete.
+
+Three new unit tests cover the scorer, and lint and type checking passed for the new files.
