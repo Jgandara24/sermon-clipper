@@ -5,6 +5,8 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { HeuristicAnalysisProvider } from "@/lib/analysis/heuristic-provider";
 import { createAnalyzeJobHandler } from "@/lib/jobs/handlers/analyze";
 import { runTranscribeJob } from "@/lib/jobs/handlers/transcribe";
+import * as transcriptionProviders from "@/lib/transcription";
+import { ScribeTranscriptionProvider } from "@/lib/transcription/scribe-provider";
 import { getStorageProvider } from "@/lib/storage";
 
 // Synthetic SRT and an explicit local analysis provider. No worker loop or paid call runs.
@@ -216,4 +218,36 @@ it("allows a source-first durable post to finish its project foreign-key check",
   expect((await worker!.outcome).error).toMatchObject({ code: "REANALYSIS_BLOCKED", preservesProject: true });
   expect((await sourceSnapshot(fixture)).transcript).toBeNull();
   expect(await analyzeJobs(fixture)).toHaveLength(0);
+});
+
+
+it("stores original Scribe events and clocks in the same transaction as display words", async () => {
+  const fixture = await seed();
+  await prisma.sourceVideo.update({ where: { id: fixture.source.id }, data: { srtOverrideKey: null, audioKey: "fixture-audio.wav" } });
+  const provider = new ScribeTranscriptionProvider({ apiKey: "fixture-only", request: async () => ({
+    language_code: "en", text: "Hello there.", words: [
+      { text: "Hello", start: 0, end: 2, type: "word", speaker_id: "one" },
+      { text: "[music]", start: 0.5, end: 3, type: "audio_event" },
+      { text: "there.", start: 1, end: 2, type: "word", speaker_id: "two", logprob: -0.2 },
+    ],
+  }) });
+  vi.spyOn(transcriptionProviders, "resolveTranscriptionProviders").mockReturnValue({
+    policy: { primary: "scribe", fallback: null }, primary: provider, fallback: null,
+  });
+  vi.spyOn(getStorageProvider(), "downloadToFile").mockResolvedValue(undefined);
+  await runTranscribeJob({ job: fixture.job, prisma });
+  const snapshot = await sourceSnapshot(fixture);
+  expect(snapshot.transcript?.providerEvidence).toMatchObject({
+    version: "scribe-response-evidence-v1", timestampClock: "submitted-audio-seconds", sourceOffsetMs: 0,
+    entries: [
+      { text: "Hello", start: 0, end: 2, logProbability: null },
+      { text: "[music]", start: 0.5, end: 3, type: "audio_event", logProbability: null },
+      { text: "there.", start: 1, end: 2, logProbability: -0.2 },
+    ],
+  });
+  expect(snapshot.transcript?.capabilities).toBeNull();
+  expect(snapshot.transcript?.providerEvidence).toMatchObject({ displayCapabilities: { wordTimestamps: { status: "derived" },
+    wordConfidence: { status: "unavailable" }, speakerLabels: { status: "native" },
+    audioEvents: { status: "native" }, sentences: { status: "unavailable" } } });
+  expect(snapshot.transcript?.segments[0].endMs).toBe(1000);
 });

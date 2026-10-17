@@ -1,3 +1,5 @@
+import { sermonPreparationEnabled } from "@/lib/media/preparation-config";
+import { runPreparedProbeJob } from "./prepared-probe";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -9,10 +11,12 @@ import { env } from "@/lib/env";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import { extractAudio, extractThumbnail } from "@/lib/media/probe";
+import { StorageDownloadError } from "@/lib/storage/types";
 import {
   getStorageProvider,
   storageProviderKind,
   storageTransferCostFact,
+  type StorageDownloadResult,
 } from "@/lib/storage";
 
 async function recordProbeStorageFact(params: {
@@ -25,6 +29,7 @@ async function recordProbeStorageFact(params: {
   bytes: number;
   wallTimeMs: number;
   outcome: ProcessingCostOutcome;
+  download?: StorageDownloadResult | void;
 }) {
   const price =
     params.direction === "download"
@@ -39,6 +44,7 @@ async function recordProbeStorageFact(params: {
       wallTimeMs: params.wallTimeMs,
       attempt: Math.max(1, params.attempt),
       outcome: params.outcome,
+      download: params.download,
     }),
     workspaceId: params.workspaceId,
     projectId: params.projectId,
@@ -80,6 +86,7 @@ async function recordProbeComputeFact(params: {
 
 /** Extracts a poster thumbnail and a 16kHz mono audio track for later transcription. */
 export const runProbeJob: JobHandler = async ({ job, prisma }) => {
+  if (sermonPreparationEnabled()) return runPreparedProbeJob({ job, prisma });
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: job.projectId },
     include: { sourceVideo: true },
@@ -109,14 +116,16 @@ export const runProbeJob: JobHandler = async ({ job, prisma }) => {
   try {
     let sourceBytes = Number(sourceVideo.sizeBytes ?? BigInt(0));
     const downloadStartedAt = Date.now();
+    let download: StorageDownloadResult | void;
     try {
-      await storage.downloadToFile(sourceVideo.storageKey, sourcePath);
+      download = await storage.downloadToFile(sourceVideo.storageKey, sourcePath);
       if (sourceBytes === 0) sourceBytes = (await stat(sourcePath)).size;
     } catch (error) {
       await recordProbeStorageFact({
         ...attribution,
         direction: "download",
         bytes: sourceBytes,
+        download: error instanceof StorageDownloadError ? error.download : undefined,
         wallTimeMs: Date.now() - downloadStartedAt,
         outcome: "failed",
       });
@@ -126,6 +135,7 @@ export const runProbeJob: JobHandler = async ({ job, prisma }) => {
       ...attribution,
       direction: "download",
       bytes: sourceBytes,
+      download,
       wallTimeMs: Date.now() - downloadStartedAt,
       outcome: "succeeded",
     });

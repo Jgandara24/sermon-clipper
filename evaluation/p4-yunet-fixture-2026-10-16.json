@@ -1,0 +1,176 @@
+{
+  "version": "p4-yunet-public-fixture-v1",
+  "scope": "ONE_PUBLIC_PORTRAIT_AT_THREE_SCALES_AND_BLANK_CONTROL",
+  "model": {
+    "modelId": "yunet-2023mar",
+    "version": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+    "roles": [
+      "FACE_DETECTION"
+    ],
+    "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+    "byteCount": 232589,
+    "upstreamRevision": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+    "licenseSpdx": "MIT",
+    "licenseReviewReference": "evaluation/p4-model-candidates-2026-10-16.json#yunet-2023mar",
+    "usage": "evaluation"
+  },
+  "licenseEvidence": {
+    "licenseFileSha256": "c83b8120c50ccbd4c4f96edf53141bdd566ebb8f8e9227e415326aa1b1aba958",
+    "readmeSha256": "a140c9e9574ff99d3dc1c435d5e8b5e60690dc91597e66387cbbb52be12cce4c"
+  },
+  "pointerSha256": "0b6ceccb83e3d6cb38ae9a92499469937eb210e0267f26f7e68c5a13b53818c3",
+  "fixtureEvidence": {
+    "imageUrl": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/astronaut.png",
+    "imageSha256": "88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5",
+    "licenseEvidenceUrl": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+    "licenseEvidenceSha256": "7f429eaa2284e18df7b170b19f675488347ff90dfee2eb101fbced2c072f4bde",
+    "licenseStatus": "UPSTREAM_DOCUMENTS_PUBLIC_DOMAIN",
+    "representativeSermonFootage": false
+  },
+  "runtime": {
+    "python": "3.13.7",
+    "platform": "macOS-26.6.2-x86_64-i386-64bit-Mach-O",
+    "machine": "x86_64",
+    "cpu": "Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz",
+    "packages": [
+      {
+        "name": "opencv-python-headless",
+        "version": "4.11.0.86",
+        "download": {
+          "url": "https://files.pythonhosted.org/packages/3b/43/68555327df94bb9b59a1fd645f63fafb0762515344d2046698762fc19d58/opencv_python_headless-4.11.0.86-cp37-abi3-macosx_13_0_x86_64.whl",
+          "archive_info": {
+            "hash": "sha256=a66c1b286a9de872c343ee7c3553b084244299714ebb50fbdcd76f07ebbe6c81",
+            "hashes": {
+              "sha256": "a66c1b286a9de872c343ee7c3553b084244299714ebb50fbdcd76f07ebbe6c81"
+            }
+          }
+        }
+      },
+      {
+        "name": "numpy",
+        "version": "2.2.6",
+        "download": {
+          "url": "https://files.pythonhosted.org/packages/73/ed/63d920c23b4289fdac96ddbdd6132e9427790977d5457cd132f18e76eae0/numpy-2.2.6-cp313-cp313-macosx_14_0_x86_64.whl",
+          "archive_info": {
+            "hash": "sha256=55a4d33fa519660d69614a9fad433be87e5252f4b03850642f88993f7b2ca566",
+            "hashes": {
+              "sha256": "55a4d33fa519660d69614a9fad433be87e5252f4b03850642f88993f7b2ca566"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "processMeasurement": {
+    "scope": "PYTHON_IMPORT_MODEL_LOAD_FOUR_INFERENCES_AND_PNG_OUTPUT",
+    "wallMs": 34940.085108042695,
+    "nativeRealSeconds": 34.93,
+    "userCpuSeconds": 0.52,
+    "systemCpuSeconds": 0.23,
+    "peakResidentBytes": 87883776
+  },
+  "inference": {
+    "opencvVersion": "4.11.0",
+    "numpyVersion": "2.2.6",
+    "threads": 12,
+    "backend": "DNN_BACKEND_OPENCV",
+    "target": "DNN_TARGET_CPU",
+    "opencl": false,
+    "settings": {
+      "scoreThreshold": 0.9,
+      "nmsThreshold": 0.3,
+      "topK": 5000
+    },
+    "modelLoadWallMs": 16.69907197356224,
+    "results": [
+      {
+        "fixture": "portrait-480.png",
+        "sha256": "73b553c22667fc539fdba1d2e92c62f8cbd635a7e31f6b44bb3cb0b9e037ebea",
+        "width": 854,
+        "height": 480,
+        "portraitSidePx": 480,
+        "expectedFaceCount": 1,
+        "observedFaceCount": 1,
+        "nativeFaces": [
+          [
+            351.41412353515625,
+            59.18006134033203,
+            90.42628479003906,
+            109.72215270996094,
+            374.22802734375,
+            97.27249908447266,
+            418.27191162109375,
+            98.89727020263672,
+            392.2828063964844,
+            119.40290832519531,
+            373.2474365234375,
+            133.73019409179688,
+            410.28857421875,
+            137.59780883789062,
+            0.942710816860199
+          ]
+        ],
+        "wallMs": 57.95165605377406
+      },
+      {
+        "fixture": "portrait-128.png",
+        "sha256": "c4c6f501d7d81dca4e730b96403cb29aacb68d9b93a3a1ab48f617f1a23b19c6",
+        "width": 854,
+        "height": 480,
+        "portraitSidePx": 128,
+        "expectedFaceCount": 1,
+        "observedFaceCount": 0,
+        "nativeFaces": [],
+        "wallMs": 33.333409926854074
+      },
+      {
+        "fixture": "portrait-64.png",
+        "sha256": "fb7264aa228ca3a477cec842e4f6dc3013a95d697e7882395948faf53a910126",
+        "width": 854,
+        "height": 480,
+        "portraitSidePx": 64,
+        "expectedFaceCount": 1,
+        "observedFaceCount": 0,
+        "nativeFaces": [],
+        "wallMs": 34.22209806740284
+      },
+      {
+        "fixture": "portrait-0.png",
+        "sha256": "6c5b55a2468900c107d251b9aba5d0b51a9a08cc01140247c02662b4a754f159",
+        "width": 854,
+        "height": 480,
+        "portraitSidePx": 0,
+        "expectedFaceCount": 0,
+        "observedFaceCount": 0,
+        "nativeFaces": [],
+        "wallMs": 33.09109411202371
+      }
+    ],
+    "nativeFaceColumns": [
+      "x",
+      "y",
+      "width",
+      "height",
+      "rightEyeX",
+      "rightEyeY",
+      "leftEyeX",
+      "leftEyeY",
+      "noseX",
+      "noseY",
+      "rightMouthX",
+      "rightMouthY",
+      "leftMouthX",
+      "leftMouthY",
+      "score"
+    ]
+  },
+  "productionApproved": false,
+  "qualityEvidence": null,
+  "limitations": [
+    "One portrait does not establish representative accuracy or false-positive rates.",
+    "Scores are native model estimates, not calibrated confidence.",
+    "A detected face does not prove a pastor or live camera footage.",
+    "Printed faces and presentation slides remain unresolved.",
+    "Settings describe this experiment and are not production defaults."
+  ]
+}

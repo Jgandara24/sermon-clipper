@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "p4-yamnet-object-identity-v1",
+  "metadataUrl": "https://storage.googleapis.com/storage/v1/b/audioset/o/yamnet.h5?generation=1574101619169609",
+  "downloadUrl": "https://storage.googleapis.com/audioset/yamnet.h5?generation=1574101619169609",
+  "metadata": {
+    "name": "yamnet.h5",
+    "bucket": "audioset",
+    "generation": "1574101619169609",
+    "metageneration": "2",
+    "size": "15296092",
+    "md5Hash": "gjQiXARYWXUr1KLhAfjNGg==",
+    "crc32c": "HZOGFQ==",
+    "updated": "2019-11-21T13:47:35.612Z",
+    "etag": "CMmy576x9OUCEAI="
+  },
+  "verifiedByteCount": 15296092,
+  "verifiedMd5Base64": "gjQiXARYWXUr1KLhAfjNGg==",
+  "sha256": "13c3308955bbfaef262f175ac9c40e47b134573a93984f009220dd7cc12a1744",
+  "sha256Provenance": "LOCALLY_COMPUTED_FROM_GENERATION_PINNED_BYTES_WITH_PROVIDER_MD5_MATCH",
+  "productionApproved": false
+}

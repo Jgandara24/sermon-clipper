@@ -1,3 +1,4 @@
+import { claimSourcePublication } from "@/lib/delivery/range-publication-claim";
 import type { PrismaClient } from "@prisma/client";
 import { parseChurchProfile, wallClockInstantInTimezone } from "@/lib/church-profile";
 import { env } from "@/lib/env";
@@ -8,7 +9,6 @@ import {
   hasUnsettledPublishIntent,
   INDETERMINATE_PUBLISH_EXCEPTION,
   INDETERMINATE_PUBLISH_MESSAGE,
-  recordPublishIntent,
   settlePublishAttempt,
 } from "@/lib/delivery/publish-attempts";
 import { assessScheduledPostDelivery, duePublishWhere } from "@/lib/delivery/query";
@@ -277,7 +277,7 @@ export async function publishDueScheduledPosts(
       // clip's most recently finished SUCCEEDED export, which could hand the publisher a render
       // of a cut nobody reviewed — the "latest successful export" path Rev2 §6 forbids. There is
       // deliberately no ordering and no fallback here: if the binding is absent, nothing posts.
-      exportJob: { select: { outputFile: { select: { storageKey: true } } } },
+      exportJob: { select: { rangeInput: { select: { sourceVideoId: true } }, outputFile: { select: { storageKey: true } } } },
     },
   });
 
@@ -376,29 +376,23 @@ export async function publishDueScheduledPosts(
         continue;
       }
 
-      // Durable claim, bound to the exact intent the eligibility decision was made about: this
-      // slot, still holding this clip and this export, still NOT_STARTED. Claiming on the id
-      // alone left a replacement race — a reserve swapped into the slot between the decision and
-      // the claim would be published against a verdict that was never about it.
-      const claim = await client.scheduledPost.updateMany({
-        where: {
-          id: post.id,
-          publishStatus: "NOT_STARTED",
-          clipId: post.clipId,
-          exportJobId: post.exportJobId,
-        },
-        data: { publishStatus: "IN_PROGRESS" },
-      });
-      if (claim.count === 0) continue;
-
-      // Intent before side effect. Written after the claim and before the provider call, so a
-      // process that dies mid-publish leaves proof that a call may have gone out.
-      const attemptId = await recordPublishIntent(client, {
-        scheduledPostId: post.id,
-        expectedClipId: post.clipId,
-        expectedExportJobId: post.exportJobId,
-        now: now(),
-      });
+      let attemptId: string;
+      if (post.exportJobId && post.clipId) {
+        const admitted = await claimSourcePublication(client, { workspaceId: post.workspaceId, scheduledPostId: post.id,
+          clipId: post.clipId, exportJobId: post.exportJobId, now: now() });
+        if (admitted.status === "LOST") continue;
+        if (admitted.status === "INELIGIBLE") {
+          summary.postsSkippedNotEligible++;
+          await recordOperationalEventSafely(client, { workspaceId: post.workspaceId, category: "facebook_publish",
+            eventType: "facebook_publish_ineligible", severity: "warning", message: describeDeliveryIneligibility(admitted.reason),
+            projectId: clip.projectId, metadata: { scheduledPostId: post.id, reason: admitted.reason, stage: "source_claim" } });
+          continue;
+        }
+        attemptId = admitted.attemptId;
+      } else {
+        summary.postsSkippedNotEligible++;
+        continue;
+      }
 
       try {
         const fileUrl = `${appUrl}${createSignedMediaUrl({

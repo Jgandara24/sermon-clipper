@@ -316,6 +316,7 @@ model User {
   clipApprovalRequests        ClipApproval[]
   authSessions                AuthSession[]
   resolvedEditorialExceptions EditorialException[]  @relation("EditorialExceptionResolver")
+  requestedFullSourceFallbacks ExportFullSourceFallback[]
   clipReviews                 ClipReview[]          @relation("ClipReviewReviewer")
   clipReviewFeedback          ClipReviewFeedback[]  @relation("ClipReviewFeedbackAuthor")
   startedEditorialPrograms    EditorialProgram[]    @relation("EditorialProgramStarter")
@@ -387,6 +388,7 @@ model Workspace {
   owner                   User                     @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   members                 WorkspaceMember[]
   invitations             WorkspaceInvitation[]
+  multipartUploads        MultipartUpload[]
   sourceVideos            SourceVideo[]
   projects                Project[]
   usageLedger             UsageLedger[]
@@ -404,6 +406,7 @@ model Workspace {
   scheduledPosts          ScheduledPost[]
   dailyCostRollups        DailyCostRollup[]
   editorialExceptions     EditorialException[]
+  fullSourceFallbacks ExportFullSourceFallback[]
   clipReviews             ClipReview[]
   clipReviewFeedback      ClipReviewFeedback[]
   editorialProgramState   EditorialProgramWorkspace[]
@@ -515,6 +518,11 @@ model SourceVideo {
   @@map("source_videos")
   mediaGate SourceMediaGate?
   cleanupObjects CleanupObject[]
+  mediaRegions MediaRegion[]
+  derivedArtifacts DerivedMediaArtifact[]
+  sermonSubmissions SermonTranscriptionSubmission[]
+  visualBoundaryEscalation VisualBoundaryEscalation?
+  fullSourceFallbacks ExportFullSourceFallback[]
 
 }
 
@@ -524,6 +532,11 @@ model Transcript {
   language      String
   provider      String
   fullText      String                   @map("full_text")
+  // Null means historical provenance was not captured. Never backfill invented capabilities.
+  capabilities  Json?
+  provenance    Json?
+  providerEvidence Json? @map("provider_evidence")
+  structure Json?
   // Generated column (to_tsvector over full_text) + GIN index, added via raw SQL in the migration.
   searchVector  Unsupported("tsvector")? @map("search_vector")
   createdAt     DateTime                 @default(now()) @map("created_at")
@@ -533,6 +546,68 @@ model Transcript {
   segments    TranscriptSegment[]
 
   @@map("transcripts")
+}
+
+// Source-owned facts survive project reanalysis. SQL checks validate interval and detector facts.
+model MediaRegion {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceVideoId       String   @map("source_video_id") @db.Uuid
+  identityKey         String   @unique @map("identity_key")
+  sourceSha256        String   @map("source_sha256")
+  kind                String
+  startMs             BigInt   @map("start_ms")
+  endMs               BigInt   @map("end_ms")
+  detectorVersion     String   @map("detector_version")
+  configurationSha256 String   @map("configuration_sha256")
+  inputSha256         String   @map("input_sha256")
+  evidenceSha256      String   @map("evidence_sha256")
+  confidence          Float
+  slideSubtype        String?  @map("slide_subtype")
+  ocrEvidence         String?  @map("ocr_evidence")
+  derivationEvidence  Json?    @map("derivation_evidence")
+  createdAt           DateTime @default(now()) @map("created_at")
+  sourceVideo SourceVideo @relation(fields: [sourceVideoId], references: [id], onDelete: Cascade)
+
+  @@index([sourceVideoId, startMs, endMs])
+  @@map("media_regions")
+}
+
+// Retain registration until storage deletion succeeds. Never cascade away cleanup ownership.
+model DerivedMediaArtifact {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceVideoId       String   @map("source_video_id") @db.Uuid
+  identityKey         String   @unique @map("identity_key")
+  sourceSha256        String   @map("source_sha256")
+  kind                String
+  startMs             BigInt   @map("start_ms")
+  endMs               BigInt   @map("end_ms")
+  derivationVersion   String   @map("derivation_version")
+  configurationSha256 String   @map("configuration_sha256")
+  storageKey          String   @unique @map("storage_key")
+  sha256              String
+  byteCount           BigInt   @map("byte_count")
+  retentionClass      String   @map("retention_class")
+  expiresAt           DateTime? @map("expires_at")
+  mappingStatus       String   @map("mapping_status")
+  mappingEvidenceSha256 String? @map("mapping_evidence_sha256")
+  visualQuality       String   @map("visual_quality")
+  deletedAt           DateTime? @map("deleted_at")
+  deletionEvidence    Json?    @map("deletion_evidence")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  publicationState    String   @default("PENDING") @map("publication_state")
+  publicationSessionId String? @map("publication_session_id") @db.Uuid
+  publicationEvidence Json?    @map("publication_evidence")
+  exportInputs        ExportRangeInput[]
+  reviews             MediaArtifactReview[]
+  sermonSubmissions   SermonTranscriptionSubmission[]
+  visualBoundaryEscalations VisualBoundaryEscalation[]
+  publicationSession SourceMediaSession? @relation(fields: [publicationSessionId, sourceVideoId], references: [id, sourceId], onDelete: Restrict, onUpdate: NoAction, map: "media_artifact_publication_session_fkey")
+  sourceVideo SourceVideo @relation(fields: [sourceVideoId], references: [id], onDelete: Restrict)
+
+  @@index([sourceVideoId, kind, startMs, endMs])
+  @@index([expiresAt, deletedAt])
+  @@map("derived_media_artifacts")
 }
 
 // word_timestamps modeled as `words` jsonb on the segment (guide §6 MVP alternative) rather than
@@ -834,6 +909,8 @@ model ExportJob {
   createdAt        DateTime           @default(now()) @map("created_at")
   updatedAt        DateTime           @updatedAt @map("updated_at")
 
+  rangeInput           ExportRangeInput?
+  fullSourceFallback   ExportFullSourceFallback?
   clip                 GeneratedClip  @relation(fields: [clipId], references: [id], onDelete: Cascade)
   workspace            Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   outputFile           ExportedFile?  @relation(fields: [outputFileId], references: [id], onDelete: SetNull)
@@ -1099,6 +1176,7 @@ model EditorialException {
   project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   scheduledPost ScheduledPost? @relation(fields: [scheduledPostId], references: [id], onDelete: SetNull)
   resolvedBy    User?          @relation("EditorialExceptionResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  fullSourceFallback ExportFullSourceFallback?
 
   @@index([workspaceId, state, createdAt])
   @@index([projectId])
@@ -1435,7 +1513,9 @@ model SourceMediaSession {
   updatedAt        DateTime              @default(now()) @map("updated_at") @db.Timestamptz(6)
   gate             SourceMediaGate       @relation(fields: [sourceId], references: [sourceId], onDelete: Restrict, onUpdate: NoAction)
   reservations     MediaKeyReservation[]
+  artifacts        DerivedMediaArtifact[]
 
+  @@unique([id, sourceId])
   @@map("source_media_sessions")
 }
 
@@ -1471,4 +1551,133 @@ model CleanupAuditEvent {
 
   @@unique([targetType, targetId, revision])
   @@map("cleanup_audit_events")
+}
+
+// Immutable review evidence binds each decision to the exact media and mapping bytes.
+model MediaArtifactReview {
+  id                    String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  artifactId            String @map("artifact_id") @db.Uuid
+  revision              Int
+  reviewerId            String @map("reviewer_id") @db.Uuid
+  decision              String
+  sourceSha256          String @map("source_sha256")
+  artifactSha256        String @map("artifact_sha256")
+  mappingEvidenceSha256 String @map("mapping_evidence_sha256")
+  evidence              Json
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  exportInputs          ExportRangeInput[]
+  artifact              DerivedMediaArtifact @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+
+  @@unique([artifactId, revision])
+  @@map("media_artifact_reviews")
+}
+
+model ExportRangeInput {
+  exportJobId           String @id @map("export_job_id") @db.Uuid
+  artifactId            String @map("artifact_id") @db.Uuid
+  reviewId              String @map("review_id") @db.Uuid
+  sourceVideoId         String @map("source_video_id") @db.Uuid
+  sourceSha256          String @map("source_sha256")
+  artifactSha256        String @map("artifact_sha256")
+  mappingEvidenceSha256 String @map("mapping_evidence_sha256")
+  editVersion           Int @map("edit_version")
+  startMs               BigInt @map("start_ms")
+  endMs                 BigInt @map("end_ms")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  exportJob             ExportJob @relation(fields: [exportJobId], references: [id], onDelete: Cascade)
+  artifact              DerivedMediaArtifact @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  review                MediaArtifactReview @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+
+  @@map("export_range_inputs")
+}
+
+// An explicit, operator-requested original-input export. The open exception keeps the fallback visible.
+model ExportFullSourceFallback {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exportJobId          String   @unique @map("export_job_id") @db.Uuid
+  workspaceId          String   @map("workspace_id") @db.Uuid
+  sourceVideoId        String   @map("source_video_id") @db.Uuid
+  editorialExceptionId String   @unique @map("editorial_exception_id") @db.Uuid
+  requestedByUserId    String?  @map("requested_by_user_id") @db.Uuid
+  reasonCode           String   @map("reason_code")
+  reason               String
+  editVersion          Int      @map("edit_version")
+  startMs              BigInt   @map("start_ms")
+  endMs                BigInt   @map("end_ms")
+  sourceByteCount      BigInt?  @map("source_byte_count")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  exportJob            ExportJob          @relation(fields: [exportJobId], references: [id], onDelete: Cascade)
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source               SourceVideo        @relation(fields: [sourceVideoId], references: [id], onDelete: Cascade)
+  editorialException   EditorialException @relation(fields: [editorialExceptionId], references: [id], onDelete: Restrict)
+  requestedBy          User?              @relation(fields: [requestedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt], map: "export_full_source_fallbacks_workspace_created_idx")
+  @@index([sourceVideoId], map: "export_full_source_fallbacks_source_idx")
+  @@index([requestedByUserId], map: "export_full_source_fallbacks_requester_idx")
+  @@map("export_full_source_fallbacks")
+}
+
+model SermonTranscriptionSubmission {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceVideoId String @map("source_video_id") @db.Uuid
+  artifactId String @map("artifact_id") @db.Uuid
+  requestIdentity String @unique @map("request_identity")
+  requestEvidence Json @map("request_evidence")
+  state String @default("STARTED")
+  result Json?
+  resultSha256 String? @map("result_sha256")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+  source SourceVideo @relation(fields: [sourceVideoId], references: [id], onDelete: Cascade)
+  artifact DerivedMediaArtifact @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  @@index([sourceVideoId, state])
+  @@map("sermon_transcription_submissions")
+}
+
+// Durable direct-upload ownership. Source ID remains as completion evidence after source deletion.
+model MultipartUpload {
+  id                String   @id @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  storageIdentity   String   @map("storage_identity")
+  storageKey        String   @unique @map("storage_key")
+  filename          String
+  totalBytes        BigInt   @map("total_bytes")
+  partBytes         BigInt   @map("part_bytes")
+  state             String   @default("NEW")
+  providerUploadId  String?  @map("provider_upload_id")
+  sourceVideoId     String?  @map("source_video_id") @db.Uuid
+  completedEtag     String?  @map("completed_etag")
+  recoveryEvidence  Json?    @map("recovery_evidence")
+  initiationRecoveryEvidence Json? @map("initiation_recovery_evidence")
+  cancellationRecoveryEvidence Json? @map("cancellation_recovery_evidence")
+  uncertainStage    String?  @map("uncertain_stage")
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, createdAt])
+  @@index([state, expiresAt])
+  @@map("multipart_uploads")
+}
+
+
+// At most one paid boundary escalation per source, including uncertain outcomes.
+model VisualBoundaryEscalation {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceVideoId String @unique @map("source_video_id") @db.Uuid
+  boundaryDecisionArtifactId String @map("boundary_decision_artifact_id") @db.Uuid
+  requestIdentity String @map("request_identity")
+  requestEvidence Json @map("request_evidence")
+  reservedCostMicroUsd BigInt @map("reserved_cost_micro_usd")
+  budgetMicroUsd BigInt @map("budget_micro_usd")
+  state String @default("STARTED")
+  result Json?
+  resultSha256 String? @map("result_sha256")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+  source SourceVideo @relation(fields: [sourceVideoId], references: [id], onDelete: Cascade)
+  boundaryDecision DerivedMediaArtifact @relation(fields: [boundaryDecisionArtifactId], references: [id], onDelete: Restrict)
+  @@map("visual_boundary_escalations")
 }

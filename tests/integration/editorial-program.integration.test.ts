@@ -75,8 +75,9 @@ const eligibleSettings = {
 async function createDeliverableSlot(label: string, options: { accept?: boolean; workspaceId?: string } = {}) {
   const ownerWorkspaceId = options.workspaceId ?? workspaceId;
   serial += 1;
+  const source = await prisma.sourceVideo.create({ data: { workspaceId: ownerWorkspaceId, origin: "UPLOAD", filename: "fixture.mp4" } });
   const project = await prisma.project.create({
-    data: { workspaceId: ownerWorkspaceId, name: `Program ${label} ${serial}` },
+    data: { workspaceId: ownerWorkspaceId, sourceVideoId: source.id, name: `Program ${label} ${serial}` },
   });
   const clip = await prisma.generatedClip.create({
     data: {
@@ -118,6 +119,8 @@ async function createDeliverableSlot(label: string, options: { accept?: boolean;
       editVersion: 1,
       qcStatus: RenderQcStatus.PASSED,
       qcChecksum: checksum,
+      qcDetails: { mediaInput: { kind: "ORIGINAL", sourceVideoId: source.id, editVersion: 1,
+        sourceInterval: { startMs: clip.startMs, endMs: clip.endMs } } },
       finishedAt: new Date(Date.UTC(2018, 11, 1)),
     },
   });

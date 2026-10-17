@@ -79,7 +79,7 @@ export async function requestScribe({
   language,
   keyterms,
 }: Parameters<ScribeRequest>[0]): Promise<ScribeResponse> {
-  const audio = await openAsBlob(audioPath, { type: "audio/wav" });
+  const audio = await openAsBlob(audioPath, { type: path.extname(audioPath).toLowerCase() === ".flac" ? "audio/flac" : "audio/wav" });
   const form = new FormData();
   form.append("file", audio, path.basename(audioPath));
   form.append("model_id", "scribe_v2");
@@ -104,6 +104,16 @@ export async function requestScribe({
 }
 
 export function parseScribeResponse(response: ScribeResponse): TranscriptionResult {
+  for (const item of response.words) {
+    if (!["word", "spacing", "audio_event"].includes(item.type) || typeof item.text !== "string" ||
+      !Number.isFinite(item.start) || !Number.isFinite(item.end) || item.start < 0 || item.end < item.start ||
+      (item.logprob !== undefined && !Number.isFinite(item.logprob))) {
+      throw new Error("ElevenLabs Scribe returned invalid provider evidence.");
+    }
+  }
+  if (response.language_probability !== undefined && !Number.isFinite(response.language_probability)) {
+    throw new Error("ElevenLabs Scribe returned invalid language probability.");
+  }
   const words = response.words
     .filter((item) => item.type === "word")
     .map((item) => ({
@@ -190,6 +200,13 @@ export function parseScribeResponse(response: ScribeResponse): TranscriptionResu
   flush();
 
   return {
+    providerEvidence: {
+      version: "scribe-response-evidence-v1", provider: "elevenlabs", modelVersion: "scribe_v2",
+      timestampClock: "submitted-audio-seconds", sourceOffsetMs: 0,
+      languageProbability: response.language_probability ?? null,
+      entries: response.words.map(item => ({ text: item.text, start: item.start, end: item.end, type: item.type,
+        speakerId: item.speaker_id ?? null, logProbability: item.logprob ?? null })),
+    },
     language: response.language_code || "en",
     segments,
   };

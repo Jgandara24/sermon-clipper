@@ -10,6 +10,7 @@ import {
   CONTINUOUS_RANGE_REQUIRED,
 } from "@/lib/exports/continuous-range";
 import { buildExportIdempotencyKey, DEFAULT_EDIT_VERSION } from "@/lib/exports/edit-version";
+import { ExportRangeUnavailableError } from "@/lib/exports/range-input";
 import { enqueueExportJob } from "@/lib/exports/queue";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import {
@@ -149,6 +150,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return apiData({ exportJobId: job.id });
   } catch (error) {
+    if (error instanceof ExportRangeUnavailableError) {
+      return apiError("EXPORT_RANGE_UNAVAILABLE", "This clip needs an approved media range before export.", { status: 409 });
+    }
     if (isClipTranscriptChanged(error)) {
       return apiError(CLIP_TRANSCRIPT_CHANGED, CLIP_TRANSCRIPT_CHANGED_MESSAGE, { status: 409 });
     }

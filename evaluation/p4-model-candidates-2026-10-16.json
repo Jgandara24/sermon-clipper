@@ -1,0 +1,159 @@
+{
+  "schemaVersion": "p4-model-candidates-v1",
+  "reviewedOn": "2026-10-16",
+  "scope": "Pinned license and artifact review, plus isolated OCR, boundary-ASR, public portrait, and synthetic audio-event fixtures. No model approved or activated for production.",
+  "candidates": [
+    {
+      "candidateId": "yunet-2023mar",
+      "roles": [
+        "FACE_DETECTION"
+      ],
+      "upstreamRevision": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+      "sourceUrl": "https://github.com/opencv/opencv_zoo/blob/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+      "codeLicense": "MIT",
+      "weightsLicense": "MIT",
+      "licenseEvidenceUrl": "https://github.com/opencv/opencv_zoo/blob/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/LICENSE",
+      "weightsLicenseScopeUrl": "https://github.com/opencv/opencv_zoo/blob/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/README.md",
+      "licenseFileSha256": "c83b8120c50ccbd4c4f96edf53141bdd566ebb8f8e9227e415326aa1b1aba958",
+      "readmeSha256": "a140c9e9574ff99d3dc1c435d5e8b5e60690dc91597e66387cbbb52be12cce4c",
+      "expectedSha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "expectedByteCount": 232589,
+      "checksumEvidence": "PINNED_GIT_LFS_POINTER_AND_DOWNLOADED_SHA256",
+      "downloadedBytesVerified": true,
+      "licenseReview": "PERMISSIVE_LICENSE_EVIDENCE_FOUND",
+      "evaluationStatus": "PUBLIC_PORTRAIT_FIXTURE_ONLY",
+      "productionStatus": "NOT_APPROVED",
+      "qualityEvidence": null,
+      "resourceEvidence": {
+        "report": "evaluation/p4-yunet-fixture-2026-10-16.json",
+        "scope": "ONE_PUBLIC_PORTRAIT_AT_THREE_SCALES_AND_BLANK_CONTROL"
+      },
+      "pointerSha256": "0b6ceccb83e3d6cb38ae9a92499469937eb210e0267f26f7e68c5a13b53818c3"
+    },
+    {
+      "candidateId": "yolox-s-2022nov",
+      "roles": [
+        "PERSON_DETECTION"
+      ],
+      "upstreamRevision": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+      "sourceUrl": "https://github.com/opencv/opencv_zoo/blob/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_detection_yolox/object_detection_yolox_2022nov.onnx",
+      "codeLicense": "Apache-2.0",
+      "weightsLicense": "Apache-2.0",
+      "licenseEvidenceUrl": "https://github.com/opencv/opencv_zoo/blob/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_detection_yolox/LICENSE",
+      "weightsLicenseScopeUrl": "https://github.com/opencv/opencv_zoo/blob/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_detection_yolox/README.md",
+      "licenseFileSha256": "0ec3668d3274bcf29e8a29e9576d5a2cd96fc78d3c5bec4387355a796e5d9088",
+      "readmeSha256": "389c9198224f76b1b662902efcd5d563cb748baf2b22b304670dc12eb75fab9d",
+      "expectedSha256": "c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063",
+      "expectedByteCount": 35858002,
+      "checksumEvidence": "PINNED_GIT_LFS_POINTER_AND_DOWNLOADED_SHA256",
+      "downloadedBytesVerified": true,
+      "licenseReview": "PERMISSIVE_LICENSE_EVIDENCE_FOUND",
+      "evaluationStatus": "PUBLIC_PORTRAIT_FIXTURE_ONLY",
+      "productionStatus": "NOT_APPROVED",
+      "qualityEvidence": null,
+      "resourceEvidence": {
+        "report": "evaluation/p4-yolox-fixture-2026-10-16.json",
+        "scope": "ONE_PUBLIC_PORTRAIT_AT_THREE_SCALES_AND_BLANK_CONTROL"
+      },
+      "pointerSha256": "ba443925c68c35c6a148579c1921b21bafbadf7c87c030e4e816052e90880adf",
+      "helperEvidence": {
+        "helperUrl": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_detection_yolox/yolox.py",
+        "helperSha256": "c99d8f103d93d27d0fb1807c7b91cb32d2d6c4959326cb88c801f17d00468f84",
+        "preprocessingReferenceUrl": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_detection_yolox/demo.py",
+        "preprocessingReferenceSha256": "44295a9a9616fd1d8dcb7ebf337f655d85db8e8e9413ca1d2e8a9891549c68d6"
+      }
+    },
+    {
+      "candidateId": "tesseract-eng-fast",
+      "roles": [
+        "OCR"
+      ],
+      "upstreamRevision": "87416418657359cb625c412a48b6e1d6d41c29bd",
+      "sourceUrl": "https://github.com/tesseract-ocr/tessdata_fast/blob/87416418657359cb625c412a48b6e1d6d41c29bd/eng.traineddata",
+      "codeLicense": "Apache-2.0",
+      "weightsLicense": "Apache-2.0",
+      "licenseEvidenceUrl": "https://github.com/tesseract-ocr/tessdata_fast/blob/87416418657359cb625c412a48b6e1d6d41c29bd/LICENSE",
+      "weightsLicenseScopeUrl": "https://github.com/tesseract-ocr/tessdata_fast/blob/87416418657359cb625c412a48b6e1d6d41c29bd/README.md",
+      "licenseFileSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "readmeSha256": "22fee9835bff02fb7013aa9786a2144ae3d4c219083089375985a62808e7215e",
+      "expectedSha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+      "expectedByteCount": 4113088,
+      "gitBlobSha1": "bbef4675053b5b468cdb477053e28b1c698ba08e",
+      "checksumEvidence": "PINNED_GIT_BLOB_AND_DOWNLOADED_SHA256",
+      "downloadedBytesVerified": true,
+      "licenseReview": "PERMISSIVE_LICENSE_EVIDENCE_FOUND",
+      "evaluationStatus": "SYNTHETIC_FIXTURE_ONLY",
+      "productionStatus": "NOT_APPROVED",
+      "qualityEvidence": null,
+      "resourceEvidence": {
+        "report": "evaluation/p4-ocr-fixture-2026-10-16.json",
+        "scope": "ONE_SYNTHETIC_FRAME_ONLY"
+      }
+    },
+    {
+      "candidateId": "yamnet",
+      "roles": [
+        "SPEECH_MUSIC",
+        "AUDIO_EVENTS"
+      ],
+      "upstreamRevision": "34a21326906b9574fa11c4d6d0a5c534ff039267",
+      "sourceUrl": "https://storage.googleapis.com/audioset/yamnet.h5?generation=1574101619169609",
+      "codeLicense": "Apache-2.0",
+      "weightsLicense": "Apache-2.0",
+      "licenseEvidenceUrl": "https://github.com/tensorflow/models/blob/34a21326906b9574fa11c4d6d0a5c534ff039267/research/audioset/yamnet/yamnet.py",
+      "weightsLicenseScopeUrl": "https://groups.google.com/g/audioset-users/c/Ly4guQnlv_o",
+      "secondaryModelCard": "https://www.kaggle.com/models/google/yamnet/tensorFlow2/yamnet/1",
+      "readmeUrl": "https://github.com/tensorflow/models/blob/34a21326906b9574fa11c4d6d0a5c534ff039267/research/audioset/yamnet/README.md",
+      "readmeSha256": "e837352cc8747b257c36e99f23bf02e136761c6b51f59a577fef786dfd95fd16",
+      "expectedSha256": "13c3308955bbfaef262f175ac9c40e47b134573a93984f009220dd7cc12a1744",
+      "expectedByteCount": 15296092,
+      "checksumEvidence": "GENERATION_PINNED_PROVIDER_MD5_AND_LOCALLY_COMPUTED_SHA256",
+      "downloadedBytesVerified": true,
+      "licenseReview": "PERMISSIVE_LICENSE_EVIDENCE_FOUND",
+      "evaluationStatus": "SYNTHETIC_FIXTURE_ONLY",
+      "productionStatus": "NOT_APPROVED",
+      "qualityEvidence": null,
+      "resourceEvidence": {
+        "report": "evaluation/p4-yamnet-fixture-2026-10-16.json",
+        "scope": "UPSTREAM_SYNTHETIC_TESTS_PLUS_SYNTHETIC_SPEECH"
+      },
+      "objectGeneration": "1574101619169609",
+      "providerMd5Base64": "gjQiXARYWXUr1KLhAfjNGg==",
+      "objectIdentityReport": "evaluation/p4-yamnet-object-identity-2026-10-16.json",
+      "sourceIdentityReport": "evaluation/p4-yamnet-source-identity-2026-10-16.json",
+      "runtimeRequirement": "Pinned yamnet.py imports tf_keras; the README requires Keras 2."
+    },
+    {
+      "candidateId": "whisper-base-en-boundary",
+      "roles": [
+        "BOUNDARY_ASR"
+      ],
+      "upstreamRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "sourceUrl": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en.bin",
+      "pointerUrl": "https://huggingface.co/ggerganov/whisper.cpp/raw/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en.bin",
+      "pointerSha256": "acd64e365f0210374e0f0c2a471e5806ccdaae2739cb3a537011df6c0533556b",
+      "codeLicense": "MIT",
+      "weightsLicense": "MIT",
+      "licenseEvidenceUrl": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/f049fff95a089aa9969deb009cdd4892b3e74916/LICENSE",
+      "licenseFileSha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "weightsLicenseScopeUrl": "https://raw.githubusercontent.com/openai/whisper/86098128c0b4f24f0e2aa2994de830614b474227/README.md",
+      "readmeSha256": "38c180c2a8d8ba628a3e131ad42bf06c8a51bb681efb30fbe28d5a0f4b65f288",
+      "weightsLicenseUrl": "https://raw.githubusercontent.com/openai/whisper/86098128c0b4f24f0e2aa2994de830614b474227/LICENSE",
+      "weightsLicenseFileSha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+      "expectedSha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+      "expectedByteCount": 147964211,
+      "checksumEvidence": "PINNED_GIT_LFS_POINTER_AND_DOWNLOADED_SHA256",
+      "downloadedBytesVerified": true,
+      "licenseReview": "PERMISSIVE_LICENSE_EVIDENCE_FOUND",
+      "evaluationStatus": "SYNTHETIC_FIXTURE_ONLY",
+      "productionStatus": "NOT_APPROVED",
+      "qualityEvidence": null,
+      "resourceEvidence": {
+        "report": "evaluation/p4-boundary-asr-fixture-2026-10-16.json",
+        "scope": "ONE_SYNTHETIC_SPEECH_WINDOW_ONLY"
+      },
+      "modelCardUrl": "https://huggingface.co/ggerganov/whisper.cpp/raw/5359861c739e955e79d9a303bcbc70fb988958b1/README.md",
+      "modelCardSha256": "21fd967098804f33fc84e803fb0e5ab7666d71801f4027cf28a65e7af09c1758"
+    }
+  ]
+}

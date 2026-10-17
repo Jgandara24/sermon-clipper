@@ -5,6 +5,8 @@ import { requireCurrentUser, requirePrimaryWorkspacePermission } from "@/lib/aut
 import { parseLowerThird } from "@/lib/brand-template";
 import { buildDefaultEditorState, type EditorState } from "@/lib/editor/types";
 import { createSignedMediaUrl } from "@/lib/media/signed-url";
+import { sermonPreparationEnabled } from "@/lib/media/preparation-config";
+import { sourcePreviewUrl } from "@/lib/media/proxy-preview";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
 
@@ -38,7 +40,25 @@ export default async function ClipEditorPage({ params }: { params: Promise<{ id:
   assertWorkspaceScope(clip.workspaceId, workspace.id, "clip");
 
   const sourceVideo = clip.project.sourceVideo;
-  if (!sourceVideo?.storageKey) {
+  if (!sourceVideo) {
+    notFound();
+  }
+  const sourceContentType = sourceVideo.filename?.toLowerCase().endsWith(".mov")
+    ? "video/quicktime"
+    : "video/mp4";
+  // With preparation on, the editor plays the registered uncropped proxy, which outlives an early-deleted original.
+  // Crop and caption positions are fractions of the frame, so the proxy's smaller size does not change them.
+  const sourceVideoUrl = sermonPreparationEnabled()
+    ? await sourcePreviewUrl(prisma, { id: sourceVideo.id, workspaceId: workspace.id, storageKey: sourceVideo.storageKey })
+    : sourceVideo.storageKey
+      ? createSignedMediaUrl({
+          key: sourceVideo.storageKey,
+          workspaceId: workspace.id,
+          contentType: sourceContentType,
+          filename: sourceVideo.filename ?? undefined,
+        })
+      : null;
+  if (!sourceVideoUrl) {
     notFound();
   }
 
@@ -66,20 +86,11 @@ export default async function ClipEditorPage({ params }: { params: Promise<{ id:
   const sourceDurationMs = sourceVideo.durationS
     ? Math.round(sourceVideo.durationS.toNumber() * 1000)
     : clip.endMs;
-  const sourceContentType = sourceVideo.filename?.toLowerCase().endsWith(".mov")
-    ? "video/quicktime"
-    : "video/mp4";
-
   return (
     <ClipEditor
       clipId={clip.id}
       clipTitle={clip.title}
-      sourceVideoUrl={createSignedMediaUrl({
-        key: sourceVideo.storageKey,
-        workspaceId: workspace.id,
-        contentType: sourceContentType,
-        filename: sourceVideo.filename ?? undefined,
-      })}
+      sourceVideoUrl={sourceVideoUrl}
       sourceDurationMs={sourceDurationMs}
       segments={(sourceVideo.transcript?.segments ?? []).map((segment) => ({
         id: segment.id,

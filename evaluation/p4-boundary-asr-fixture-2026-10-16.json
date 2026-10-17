@@ -1,0 +1,245 @@
+{
+  "version": "p4-boundary-synthetic-fixture-v1",
+  "scope": "ONE_SYNTHETIC_SPEECH_WINDOW_ONLY",
+  "model": {
+    "modelId": "whisper-base-en-boundary",
+    "version": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "sha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+    "upstreamRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "licenseSpdx": "MIT",
+    "licenseReviewReference": "evaluation/p4-model-candidates-2026-10-16.json#whisper-base-en-boundary",
+    "usage": "evaluation"
+  },
+  "licenseEvidence": {
+    "licenseFileSha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+    "readmeSha256": "38c180c2a8d8ba628a3e131ad42bf06c8a51bb681efb30fbe28d5a0f4b65f288",
+    "weightsLicenseFileSha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+    "pointerSha256": "acd64e365f0210374e0f0c2a471e5806ccdaae2739cb3a537011df6c0533556b"
+  },
+  "fixture": {
+    "kind": "synthetic-audio-only",
+    "voice": "Samantha",
+    "speechRate": 140,
+    "audioSha256": "7669fd595f3e533f39e99086e46e049099a9899177180d91c254b57aed685fb5",
+    "durationMs": 6539,
+    "expectedText": "This is a local boundary sampling test.",
+    "recognizedText": " This is a local boundary sampling test.",
+    "normalizedExactMatch": true,
+    "sourceOffsetMs": 61000,
+    "sampledDurationMs": 4539
+  },
+  "adapterEvidenceSha256": "cf5ada8fd56346a65c3c1b6fa21fffd494c3fd6e2099a114e155b59e5906ad4d",
+  "runtime": {
+    "platform": "macOS-26.6.2-x86_64-i386-64bit-Mach-O",
+    "machine": "x86_64",
+    "whisperVersion": "whisper.cpp version: 1.9.1",
+    "threads": 2,
+    "measurementScope": "whole-adapter-process-tree-including-node-and-media-tools",
+    "wallTimeMs": 5644.497775938362,
+    "nativeRealSeconds": 5.63,
+    "userCpuSeconds": 9.33,
+    "systemCpuSeconds": 1.08,
+    "peakResidentBytes": 297275392,
+    "binarySha256": "025847fa96b15caa3aeb42d04c92e19345e60b336e2ac0b963e8970ce92a3c58"
+  },
+  "temporaryOutputsRemoved": true,
+  "modelBytesRetained": false,
+  "representativeQuality": "NOT_MEASURED",
+  "boundaryRecall": null,
+  "productionApproved": false,
+  "adapterEvidence": {
+    "version": "bounded-whisper-boundary-asr-v1",
+    "binarySha256": "025847fa96b15caa3aeb42d04c92e19345e60b336e2ac0b963e8970ce92a3c58",
+    "model": {
+      "modelId": "whisper-base-en-boundary",
+      "version": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "sha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+      "upstreamRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "licenseSpdx": "MIT",
+      "licenseReviewReference": "evaluation/p4-model-candidates-2026-10-16.json#whisper-base-en-boundary",
+      "usage": "evaluation"
+    },
+    "language": "en",
+    "threads": 2,
+    "decoding": "cli-defaults",
+    "extraction": {
+      "threads": 1,
+      "flacCompressionLevel": 5,
+      "timeoutMs": 30000,
+      "maxMetadataBytes": 1048576,
+      "maxFileBytes": 1048576
+    },
+    "limits": {
+      "timeoutMs": 60000,
+      "maxOutputBytes": 1048576
+    },
+    "sourceVideoId": "11111111-1111-4111-8111-111111111111",
+    "sourceSha256": "7669fd595f3e533f39e99086e46e049099a9899177180d91c254b57aed685fb5",
+    "analysisAudioSha256": "7669fd595f3e533f39e99086e46e049099a9899177180d91c254b57aed685fb5",
+    "plan": {
+      "sourceVideoId": "11111111-1111-4111-8111-111111111111",
+      "sourceSha256": "7669fd595f3e533f39e99086e46e049099a9899177180d91c254b57aed685fb5",
+      "corridor": {
+        "startMs": 62000,
+        "endMs": 64539
+      },
+      "windows": [
+        {
+          "edge": "START",
+          "state": "AMBIGUOUS",
+          "sourceInterval": {
+            "startMs": 61000,
+            "endMs": 65539
+          },
+          "evidenceSha256": "7669fd595f3e533f39e99086e46e049099a9899177180d91c254b57aed685fb5"
+        }
+      ],
+      "maxWindowMs": 4539,
+      "maxTotalMs": 4539,
+      "totalMs": 4539
+    },
+    "configurationSha256": "f9154b202fe9b509a9a1a0fdf64dea2d7ccd5540448f76d81d12cc311460d03d",
+    "results": [
+      {
+        "edge": "START",
+        "sourceInterval": {
+          "startMs": 61000,
+          "endMs": 65539
+        },
+        "ambiguityEvidenceSha256": "7669fd595f3e533f39e99086e46e049099a9899177180d91c254b57aed685fb5",
+        "audioSha256": "02b513ac4343571d8d867cf5e7320f89bd6d3314e606ddf687629c95f038ccfe",
+        "audioByteCount": 62682,
+        "mappingEvidence": {
+          "version": "sermon-audio-sample-trim-v1",
+          "inputSha256": "7669fd595f3e533f39e99086e46e049099a9899177180d91c254b57aed685fb5",
+          "inputSourceInterval": {
+            "startMs": 60000,
+            "endMs": 66539
+          },
+          "corridor": {
+            "sourceInterval": {
+              "startMs": 61000,
+              "endMs": 65539
+            },
+            "detectorVersion": "boundary-window-request-v1",
+            "evidenceSha256": "7669fd595f3e533f39e99086e46e049099a9899177180d91c254b57aed685fb5",
+            "confidence": 0
+          },
+          "sourceOffsetMs": 61000,
+          "durationMs": 4539,
+          "sampleCount": 72624,
+          "sampleRateHz": 16000,
+          "channels": 1,
+          "startSamples": 16000,
+          "endSamples": 88624,
+          "sourcePcmSha256": "4ff0941a894b307c9da5fc3b469310e6708e50801465a22d9aa38e9e03af4a30",
+          "output": {
+            "sha256": "02b513ac4343571d8d867cf5e7320f89bd6d3314e606ddf687629c95f038ccfe",
+            "byteCount": 62682
+          },
+          "settings": {
+            "threads": 1,
+            "flacCompressionLevel": 5,
+            "timeoutMs": 30000,
+            "maxMetadataBytes": 1048576,
+            "maxFileBytes": 1048576
+          },
+          "toolchainSha256": "703b1b1193a043bb744aa3e825cca2574384cb25cc01632e7eb8aca73780dcde"
+        },
+        "rawOutputSha256": "70a4fa7a2695c3ed85e44d49e7e2e5bb6b45043938f3df8dcc9c4fd51188eb7a",
+        "language": "en",
+        "segments": [
+          {
+            "text": " This is a local boundary sampling test.",
+            "startMs": 61000,
+            "endMs": 65000,
+            "tokens": [
+              {
+                "text": "[_BEG_]",
+                "startMs": 61000,
+                "endMs": 61000,
+                "probability": 0.610801,
+                "confidenceUnit": "native_subword_token"
+              },
+              {
+                "text": " This",
+                "startMs": 61000,
+                "endMs": 61430,
+                "probability": 0.9694,
+                "confidenceUnit": "native_subword_token"
+              },
+              {
+                "text": " is",
+                "startMs": 61430,
+                "endMs": 61640,
+                "probability": 0.999565,
+                "confidenceUnit": "native_subword_token"
+              },
+              {
+                "text": " a",
+                "startMs": 61640,
+                "endMs": 61750,
+                "probability": 0.99482,
+                "confidenceUnit": "native_subword_token"
+              },
+              {
+                "text": " local",
+                "startMs": 62020,
+                "endMs": 62290,
+                "probability": 0.931808,
+                "confidenceUnit": "native_subword_token"
+              },
+              {
+                "text": " boundary",
+                "startMs": 62290,
+                "endMs": 63160,
+                "probability": 0.747052,
+                "confidenceUnit": "native_subword_token"
+              },
+              {
+                "text": " sampling",
+                "startMs": 63160,
+                "endMs": 63950,
+                "probability": 0.992371,
+                "confidenceUnit": "native_subword_token"
+              },
+              {
+                "text": " test",
+                "startMs": 64010,
+                "endMs": 64320,
+                "probability": 0.99918,
+                "confidenceUnit": "native_subword_token"
+              },
+              {
+                "text": ".",
+                "startMs": 64470,
+                "endMs": 64500,
+                "probability": 0.872042,
+                "confidenceUnit": "native_subword_token"
+              },
+              {
+                "text": "[_TT_200]",
+                "startMs": 65000,
+                "endMs": 65000,
+                "probability": 0.045542,
+                "confidenceUnit": "native_subword_token"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "role": "local_boundary_sampling",
+    "classification": "not_performed",
+    "boundaryStatus": "unresolved",
+    "coverage": "requested_windows_only",
+    "evidenceSha256": "cf5ada8fd56346a65c3c1b6fa21fffd494c3fd6e2099a114e155b59e5906ad4d",
+    "measurements": [
+      {
+        "edge": "START",
+        "wallTimeMs": 3653.964013,
+        "cpuTimeMs": null
+      }
+    ]
+  }
+}

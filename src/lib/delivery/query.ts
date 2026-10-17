@@ -1,3 +1,6 @@
+import { readOriginalRenderEvidence } from "@/lib/exports/original-render-evidence";
+import { assertOriginalRegionExportAllowed, assertRegionExportAllowed } from "@/lib/media-regions/export-policy";
+import { ExportFailureError } from "@/lib/exports/errors";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { parseDeliverySettings } from "@/lib/delivery/settings";
 import { env } from "@/lib/env";
@@ -71,6 +74,8 @@ async function loadDeliveryContext(
           editVersion: true,
           qcStatus: true,
           qcChecksum: true,
+          qcDetails: true,
+          rangeInput: { select: { sourceVideoId: true, sourceSha256: true, startMs: true, endMs: true } },
           outputFile: { select: { checksum: true, storageKey: true } },
         },
       },
@@ -101,6 +106,30 @@ async function loadDeliveryContext(
     select: { state: true },
   });
 
+  let deliveryExport: DeliveryFacts["exportJob"] = null;
+  if (exportJob) {
+    const { rangeInput, qcDetails, ...identity } = exportJob;
+    let sourceRegionStatus: "clear" | "blocked" | "unavailable" | undefined;
+    {
+      try {
+        if (rangeInput) await assertRegionExportAllowed(client, { workspaceId: slot.workspaceId, sourceVideoId: rangeInput.sourceVideoId,
+          sourceSha256: rangeInput.sourceSha256,
+          sourceInterval: { startMs: Number(rangeInput.startMs), endMs: Number(rangeInput.endMs) } });
+        else {
+          const original = readOriginalRenderEvidence(qcDetails, exportJob.editVersion);
+          if (!original) throw new ExportFailureError("EXPORT_REGION_EVIDENCE_MISSING", "Render this export again to verify its source boundaries.", { terminal: true });
+          await assertOriginalRegionExportAllowed(client, { workspaceId: slot.workspaceId,
+            sourceVideoId: original.sourceVideoId, sourceInterval: original.sourceInterval });
+        }
+        sourceRegionStatus = "clear";
+      } catch (error) {
+        if (!(error instanceof ExportFailureError)) throw error;
+        sourceRegionStatus = error.code === "EXPORT_FORBIDDEN_REGION" ? "blocked" : "unavailable";
+      }
+    }
+    deliveryExport = { ...identity, usesRangeInput: Boolean(rangeInput), sourceRegionStatus };
+  }
+
   const facts: DeliveryFacts = {
     globalPublishingEnabled: env.AUTOMATIC_PUBLISHING_ENABLED,
     programState: program?.state ?? null,
@@ -123,7 +152,7 @@ async function loadDeliveryContext(
           currentEditVersion: slot.clip.edits[0]?.version ?? 0,
         }
       : null,
-    exportJob: exportJob ?? null,
+    exportJob: deliveryExport,
     review:
       review && reviewedIdentity
         ? {

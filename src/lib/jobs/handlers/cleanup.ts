@@ -1,5 +1,6 @@
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
+import { attemptEarlyOriginalDeletion, earlyOriginalDeletionEnabled, type EarlyDeletionOutcome } from "@/lib/media/early-original-deletion";
 import {
   exportFileGraceCutoff,
   lockSourceVideoForRetention,
@@ -31,6 +32,7 @@ export const runCleanupJob: JobHandler = async ({ job, prisma }) => {
   /** Populated instead of purgedSourceKeys while SOURCE_RETENTION_DELETION_ENABLED is not "true". */
   const wouldPurgeSourceKeys: string[] = [];
   let sourcePurgeSkippedReason: string | null = null;
+  let earlyDeletion: EarlyDeletionOutcome | null = null;
 
   try {
     // Exported files: past-grace files always; every export once the project has expired.
@@ -62,6 +64,22 @@ export const runCleanupJob: JobHandler = async ({ job, prisma }) => {
     if (projectExpired && sourceVideo) {
       await prisma.$transaction(async (tx) => {
         if (!(await lockSourceVideoForRetention(tx, sourceVideo.id))) return;
+
+        // Hold the gate while deleting too. Journal retirement and session admission lock this row.
+        const [gate] = await tx.$queryRaw<Array<{ state: string }>>`
+          SELECT state FROM source_media_gates WHERE source_id = ${sourceVideo.id}::uuid FOR SHARE
+        `;
+        if (gate && gate.state !== "ACTIVE") {
+          sourcePurgeSkippedReason = "source media cleanup gate is not active";
+          return;
+        }
+        const session = await tx.sourceMediaSession.findFirst({
+          where: { sourceId: sourceVideo.id, state: { not: "COMPLETE" } }, select: { id: true },
+        });
+        if (session) {
+          sourcePurgeSkippedReason = "source media has an unfinished session";
+          return;
+        }
 
         const referencing = await tx.project.findMany({
           where: { sourceVideoId: sourceVideo.id },
@@ -107,6 +125,12 @@ export const runCleanupJob: JobHandler = async ({ job, prisma }) => {
         });
       });
     }
+
+    // Before the fallback date, only a passed range-coverage proof can delete the large original.
+    if (!projectExpired && sourceVideo?.storageKey && earlyOriginalDeletionEnabled()) {
+      earlyDeletion = await attemptEarlyOriginalDeletion(prisma, { workspaceId: project.workspaceId,
+        sourceVideoId: sourceVideo.id, now, processingJobId: job.id, projectId: project.id });
+    }
   } catch (error) {
     throw new JobFailureError(
       "STORAGE_UNAVAILABLE",
@@ -115,7 +139,7 @@ export const runCleanupJob: JobHandler = async ({ job, prisma }) => {
     );
   }
 
-  if (exportRowsDeleted > 0 || purgedSourceKeys.length > 0 || wouldPurgeSourceKeys.length > 0) {
+  if (exportRowsDeleted > 0 || purgedSourceKeys.length > 0 || wouldPurgeSourceKeys.length > 0 || sourcePurgeSkippedReason) {
     await recordOperationalEventSafely(prisma, {
       workspaceId: project.workspaceId,
       category: "worker",
@@ -124,7 +148,9 @@ export const runCleanupJob: JobHandler = async ({ job, prisma }) => {
       message:
         wouldPurgeSourceKeys.length > 0
           ? "Retention cleanup reported the source media it would delete. Deletion is switched off, so nothing was removed."
-          : "Retention cleanup removed expired media from storage.",
+          : sourcePurgeSkippedReason
+            ? "Retention cleanup kept source media because its safety checks did not permit deletion."
+            : "Retention cleanup removed expired media from storage.",
       projectId: project.id,
       jobId: job.id,
       metadata: {
@@ -135,8 +161,16 @@ export const runCleanupJob: JobHandler = async ({ job, prisma }) => {
         wouldPurgeSourceKeys,
         sourceDeletionEnabled: sourceRetentionDeletionEnabled(),
         sourcePurgeSkippedReason,
+        earlyOriginalDeletion: earlyDeletion,
       },
     });
+  }
+  if (earlyDeletion?.status === "REFUSED") {
+    // The proof event records successes in the deletion transaction. A refusal stays visible here.
+    await recordOperationalEventSafely(prisma, { workspaceId: project.workspaceId, category: "worker",
+      eventType: "early_original_deletion_refused", severity: "info",
+      message: "The original was kept because early deletion proof did not pass.",
+      projectId: project.id, jobId: job.id, metadata: earlyDeletion });
   }
 
   return {
@@ -147,6 +181,7 @@ export const runCleanupJob: JobHandler = async ({ job, prisma }) => {
       sourceMediaPurged: purgedSourceKeys.length > 0,
       sourceMediaReportOnly: wouldPurgeSourceKeys.length,
       sourceDeletionEnabled: sourceRetentionDeletionEnabled(),
+      earlyOriginalDeletion: earlyDeletion?.status ?? null,
     },
   };
 };

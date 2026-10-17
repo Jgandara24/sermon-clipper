@@ -1,9 +1,11 @@
 import { access, mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PrismaClient } from "@prisma/client";
 import {
   cleanupIdempotencyKey,
+  enqueueDueCleanupJobs,
   exportFileGraceCutoff,
   exportFileRetentionGraceMs,
   purgeAbandonedUploads,
@@ -127,5 +129,36 @@ describe("purgeAbandonedUploads", () => {
 
   it("reports nothing when no upload has ever been started", async () => {
     await expect(purgeAbandonedUploads()).resolves.toEqual({ scanned: 0, removed: [] });
+  });
+});
+
+describe("enqueueDueCleanupJobs early original deletion scan", () => {
+  function scanClient() {
+    const findMany = vi.fn(async () => [] as Array<{ id: string }>);
+    const client = {
+      exportedFile: { findMany: vi.fn(async () => []) },
+      project: { findMany },
+      processingJob: { findUnique: vi.fn(async () => null) },
+    };
+    return { client: client as unknown as PrismaClient, findMany };
+  }
+
+  afterEach(() => { delete process.env.P4_EARLY_ORIGINAL_DELETION_ENABLED; });
+
+  it("does not look for active projects while early deletion is off", async () => {
+    const { client, findMany } = scanClient();
+    await enqueueDueCleanupJobs(client, new Date("2026-10-16T00:00:00Z"));
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("finds active projects with a stored original and a ready candidate range when enabled", async () => {
+    process.env.P4_EARLY_ORIGINAL_DELETION_ENABLED = "true";
+    const { client, findMany } = scanClient();
+    const now = new Date("2026-10-16T00:00:00Z");
+    await enqueueDueCleanupJobs(client, now);
+    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: { expiresAt: { gt: now },
+      sourceVideo: { storageKey: { not: null }, derivedArtifacts: { some: { kind: "CANDIDATE_RANGE",
+        publicationState: "READY", deletedAt: null } } } } }));
   });
 });

@@ -1,0 +1,50 @@
+{
+  "version": "p4-ocr-synthetic-fixture-v1",
+  "scope": "ONE_SYNTHETIC_FRAME_ONLY",
+  "model": {
+    "modelId": "tesseract-eng-fast",
+    "version": "87416418657359cb625c412a48b6e1d6d41c29bd",
+    "roles": [
+      "OCR"
+    ],
+    "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+    "byteCount": 4113088,
+    "upstreamRevision": "87416418657359cb625c412a48b6e1d6d41c29bd",
+    "licenseSpdx": "Apache-2.0",
+    "licenseReviewReference": "evaluation/p4-model-candidates-2026-10-16.json#tesseract-eng-fast",
+    "usage": "evaluation"
+  },
+  "pinnedGitBlobSha1": "bbef4675053b5b468cdb477053e28b1c698ba08e",
+  "licenseEvidence": {
+    "licenseFileSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "readmeSha256": "22fee9835bff02fb7013aa9786a2144ae3d4c219083089375985a62808e7215e"
+  },
+  "fixture": {
+    "width": 854,
+    "height": 480,
+    "fontSha256": "2bfd40dc72e6759e248f82a52a40d551338979fffc9b5c070e685b4b7ad19e66",
+    "fontSize": 48,
+    "imageSha256": "ff0922beaae6c1a07cf8c3a4db17690bb77aaa18f73954dc0b953e08697d6bc2",
+    "expectedText": "SCRIPTURE SLIDE\nOCR TEST WORDS",
+    "recognizedText": "SCRIPTURE SLIDE\nOCR TEST WORDS\n",
+    "normalizedExactMatch": true
+  },
+  "runtime": {
+    "platform": "macOS-26.6.2-x86_64-i386-64bit-Mach-O",
+    "machine": "x86_64",
+    "tesseract": "tesseract 5.3.3",
+    "ffmpeg": "ffmpeg version 6.0 Copyright (c) 2000-2023 the FFmpeg developers",
+    "psm": 6,
+    "oem": 1,
+    "wallTimeMs": 320.3867319971323,
+    "nativeRealSeconds": 0.31,
+    "userCpuSeconds": 0.24,
+    "systemCpuSeconds": 0.03,
+    "peakResidentBytes": 36032512,
+    "stderr": ""
+  },
+  "representativeQuality": "NOT_MEASURED",
+  "slideRecall": null,
+  "productionApproved": false,
+  "modelBytesRetained": false
+}

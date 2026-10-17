@@ -28,11 +28,28 @@ export async function execFileWithTimeout(
       maxBuffer: options.maxBuffer,
     });
   } catch (error) {
-    const err = error as Error & { killed?: boolean; signal?: string };
-    if (err.killed && err.signal === "SIGKILL") {
+    const err = error as Error & { killed?: boolean; signal?: string; code?: string };
+    if (err.code !== "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" && err.killed && err.signal === "SIGKILL") {
       throw new ChildProcessTimeoutError(
         `${path.basename(binaryPath)} was killed after exceeding the ${options.timeoutMs}ms timeout.`,
       );
+    }
+    throw error;
+  }
+}
+
+/** Binary variant for bounded raw frames. The same timeout and termination rules apply. */
+export async function execFileBufferWithTimeout(
+  binaryPath: string, args: string[], options: { timeoutMs: number; maxBuffer: number },
+): Promise<{ stdout: Buffer; stderr: Buffer }> {
+  try {
+    return await execFileAsync(binaryPath, args, {
+      timeout: options.timeoutMs, killSignal: "SIGKILL", maxBuffer: options.maxBuffer, encoding: "buffer",
+    });
+  } catch (error) {
+    const err = error as Error & { killed?: boolean; signal?: string; code?: string };
+    if (err.code !== "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" && err.killed && err.signal === "SIGKILL") {
+      throw new ChildProcessTimeoutError(`${path.basename(binaryPath)} was killed after exceeding the ${options.timeoutMs}ms timeout.`);
     }
     throw error;
   }

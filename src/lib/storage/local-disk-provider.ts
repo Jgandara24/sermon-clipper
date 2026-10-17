@@ -1,17 +1,25 @@
-import { createWriteStream } from "node:fs";
-import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
+import { copyFile, link, mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { once } from "node:events";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeWebReadableStream } from "node:stream/web";
 import {
   StorageLimitExceededError,
   type StorageObjectListing,
   type StorageProvider,
+  type StorageObjectIdentity,
 } from "./types";
+import { exactByteCount, fileIdentity } from "./file-identity";
 
 export class LocalDiskStorageProvider implements StorageProvider {
   constructor(private readonly root: string) {}
+
+  getStorageIdentity(): string {
+    return createHash("sha256").update(JSON.stringify(["local-storage-v1", path.resolve(this.root)])).digest("hex");
+  }
 
   absolutePath(key: string): string {
     const rootResolved = path.resolve(this.root);
@@ -26,8 +34,9 @@ export class LocalDiskStorageProvider implements StorageProvider {
     try {
       await stat(this.absolutePath(key));
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
     }
   }
 
@@ -71,15 +80,45 @@ export class LocalDiskStorageProvider implements StorageProvider {
     return bytesWritten;
   }
 
-  async downloadToFile(key: string, destinationPath: string): Promise<void> {
+  async getObjectIdentity(key: string): Promise<StorageObjectIdentity> {
+    const identity = await fileIdentity(this.absolutePath(key));
+    return { ...identity, token: identity.sha256 };
+  }
+
+  async downloadToFile(key: string, destinationPath: string, expected?: StorageObjectIdentity): Promise<void> {
     await mkdir(path.dirname(destinationPath), { recursive: true });
-    await copyFile(this.absolutePath(key), destinationPath);
+    if (expected) {
+      try {
+        await pipeline(createReadStream(this.absolutePath(key)), exactByteCount(expected.byteCount), createWriteStream(destinationPath));
+        const actual = await fileIdentity(destinationPath);
+        if (actual.sha256 !== expected.sha256) throw new Error("Storage object changed before materialization.");
+      } catch (error) {
+        await rm(destinationPath, { force: true });
+        throw error;
+      }
+    } else await copyFile(this.absolutePath(key), destinationPath);
   }
 
   async uploadFile(key: string, sourcePath: string): Promise<void> {
     const target = this.absolutePath(key);
     await mkdir(path.dirname(target), { recursive: true });
     await copyFile(sourcePath, target);
+  }
+
+  async uploadFileIfAbsent(key: string, sourcePath: string): Promise<void> {
+    const target = this.absolutePath(key);
+    const parent = path.dirname(target);
+    await mkdir(parent, { recursive: true });
+    // The private copy and destination share a filesystem. link publishes complete bytes
+    // atomically and fails with EEXIST when another writer already owns the destination.
+    const directory = await mkdtemp(path.join(parent, ".publication-"));
+    try {
+      const staged = path.join(directory, "object");
+      await copyFile(sourcePath, staged);
+      await link(staged, target);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 
   async move(fromKey: string, toKey: string): Promise<void> {

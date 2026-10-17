@@ -44,13 +44,15 @@ const LOUDNORM = "loudnorm=I=-16:TP=-1.5:LRA=11";
  * written when it is not 1, so a document that never touched the control renders exactly the
  * bytes it always did.
  */
-export function buildExportAudioFilter(originalVolume: number | undefined): string {
-  if (originalVolume === undefined || !Number.isFinite(originalVolume)) return LOUDNORM;
+export function buildExportAudioFilter(originalVolume: number | undefined, durationMs?: number): string {
+  // Bound normalization to the selected clip, not the remaining material in its input container.
+  const normalization = durationMs === undefined ? LOUDNORM : `atrim=end=${(durationMs / 1000).toFixed(3)},${LOUDNORM}`;
+  if (originalVolume === undefined || !Number.isFinite(originalVolume)) return normalization;
   const volume = Math.min(2, Math.max(0, originalVolume));
   // Dynamic loudnorm produces double samples. Volume defaults to float, which forces an
   // intermediate resampler and fails channel-layout negotiation on FFmpeg 6 for both mono
   // and stereo AAC. Keep double precision through gain; the encoder converts at its boundary.
-  return volume === 1 ? LOUDNORM : `${LOUDNORM},volume=${volume}:precision=double`;
+  return volume === 1 ? normalization : `${normalization},volume=${volume}:precision=double`;
 }
 
 export type ExportFfmpegArgsParams = {
@@ -64,6 +66,8 @@ export type ExportFfmpegArgsParams = {
   outputHeight: number;
   /** The document's `audio.originalVolume`. Absent means 1, which writes no filter at all. */
   originalVolume?: number;
+  /** Use verified absolute media timestamps instead of offsets from container start. */
+  absoluteInputTimestamps?: boolean;
 };
 
 /**
@@ -80,6 +84,7 @@ export type ExportFfmpegArgsParams = {
 export function buildExportFfmpegArgs(params: ExportFfmpegArgsParams): string[] {
   return [
     "-y",
+    ...(params.absoluteInputTimestamps ? ["-seek_timestamp", "1"] : []),
     "-ss",
     (params.range.startMs / 1000).toFixed(3),
     "-i",
@@ -94,7 +99,7 @@ export function buildExportFfmpegArgs(params: ExportFfmpegArgsParams): string[] 
       params.assFilePath,
     ),
     "-af",
-    buildExportAudioFilter(params.originalVolume),
+    buildExportAudioFilter(params.originalVolume, rangeDurationMs(params.range)),
     "-c:v",
     "libx264",
     "-preset",

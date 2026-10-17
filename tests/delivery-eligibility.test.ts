@@ -47,6 +47,7 @@ function eligibleFacts(): DeliveryFacts {
       currentEditVersion: 3,
     },
     exportJob: {
+      sourceRegionStatus: "clear",
       id: EXPORT_ID,
       workspaceId: WORKSPACE_ID,
       clipId: CLIP_ID,
@@ -390,4 +391,30 @@ describe("describeDeliveryIneligibility", () => {
     expect(new Set(messages).size).toBe(reasons.length);
     for (const message of messages) expect(message.length).toBeGreaterThan(10);
   });
+});
+
+describe("current source regions for range exports", () => {
+  it.each(["blocked", "unavailable", undefined] as const)("refuses a range export with status %s", status => {
+    const facts = eligibleFacts();
+    facts.exportJob = { ...facts.exportJob!, usesRangeInput: true, sourceRegionStatus: status };
+    expectReason(facts, status === "blocked" ? "source_region_forbidden" : "source_region_check_unavailable");
+  });
+  it("permits a clear range only when all existing requirements also pass", () => {
+    const facts = eligibleFacts();
+    facts.exportJob = { ...facts.exportJob!, usesRangeInput: true, sourceRegionStatus: "clear" };
+    expect(assessDeliveryEligibility(facts)).toEqual({ eligible: true });
+    facts.review = null;
+    expectReason(facts, "editorial_review_missing");
+  });
+  it("keeps the global switch ahead of region refusals", () => {
+    const facts = eligibleFacts(); facts.globalPublishingEnabled = false;
+    facts.exportJob = { ...facts.exportJob!, usesRangeInput: true, sourceRegionStatus: "blocked" };
+    expectReason(facts, "global_publishing_disabled");
+  });
+});
+
+it.each(["blocked", "unavailable", undefined] as const)("refuses original export region status %s", status => {
+  const facts = eligibleFacts();
+  facts.exportJob = { ...facts.exportJob!, usesRangeInput: false, sourceRegionStatus: status };
+  expectReason(facts, status === "blocked" ? "source_region_forbidden" : "source_region_check_unavailable");
 });

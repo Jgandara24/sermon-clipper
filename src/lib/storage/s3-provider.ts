@@ -1,5 +1,8 @@
+import type { MultipartRequestMeasurement } from "./multipart-measurement";
+import { S3MultipartStorage } from "./s3-multipart";
+import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -10,14 +13,17 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
+  PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { exactByteCount } from "./file-identity";
 import {
   StorageLimitExceededError,
   type StorageObjectListing,
   type StorageProvider,
+  type StorageObjectIdentity,
 } from "./types";
 
 type S3StorageProviderOptions = {
@@ -27,13 +33,15 @@ type S3StorageProviderOptions = {
   accessKeyId: string;
   secretAccessKey: string;
   forcePathStyle?: boolean;
+  onMultipartRequest?: (measurement: MultipartRequestMeasurement) => Promise<void>;
 };
 
 export class S3StorageProvider implements StorageProvider {
   private readonly client: S3Client;
+  readonly multipart: S3MultipartStorage;
 
   constructor(private readonly options: S3StorageProviderOptions) {
-    this.client = new S3Client({
+    const clientOptions = {
       region: options.region,
       endpoint: options.endpoint,
       forcePathStyle: options.forcePathStyle ?? Boolean(options.endpoint),
@@ -41,7 +49,17 @@ export class S3StorageProvider implements StorageProvider {
         accessKeyId: options.accessKeyId,
         secretAccessKey: options.secretAccessKey,
       },
-    });
+    };
+    this.client = new S3Client(clientOptions);
+    // The browser supplies part bytes later. Do not sign a checksum of an absent request body.
+    this.multipart = new S3MultipartStorage(new S3Client({
+      ...clientOptions, requestChecksumCalculation: "WHEN_REQUIRED", maxAttempts: 1,
+    }), options.bucket, options.onMultipartRequest);
+  }
+
+  getStorageIdentity(): string {
+    const endpoint = this.options.endpoint ? new URL(this.options.endpoint).toString().replace(/\/$/, "") : "aws";
+    return createHash("sha256").update(JSON.stringify(["s3-storage-v1", endpoint, this.options.region, this.options.bucket])).digest("hex");
   }
 
   absolutePath(key: string): string {
@@ -96,15 +114,39 @@ export class S3StorageProvider implements StorageProvider {
     return bytesWritten;
   }
 
-  async downloadToFile(key: string, destinationPath: string): Promise<void> {
+  async getObjectIdentity(key: string): Promise<StorageObjectIdentity | null> {
+    const result = await this.client.send(new HeadObjectCommand({ Bucket: this.options.bucket, Key: key }));
+    if (!result.ETag || !Number.isSafeInteger(result.ContentLength) || result.ContentLength! < 0) return null;
+    return {
+      token: JSON.stringify([result.ETag, result.VersionId ?? null, result.ContentLength]),
+      byteCount: result.ContentLength!, etag: result.ETag, versionId: result.VersionId,
+    };
+  }
+
+  async downloadToFile(key: string, destinationPath: string, expected?: StorageObjectIdentity): Promise<void> {
+    if (expected && !expected.etag) throw new Error("A conditional S3 download requires an ETag.");
     await mkdir(path.dirname(destinationPath), { recursive: true });
     const result = await this.client.send(
-      new GetObjectCommand({ Bucket: this.options.bucket, Key: key }),
+      new GetObjectCommand({ Bucket: this.options.bucket, Key: key,
+        IfMatch: expected?.etag, VersionId: expected?.versionId }),
     );
     if (!result.Body) {
       throw new Error(`S3 object ${key} has no response body.`);
     }
-    await pipeline(toNodeReadable(result.Body), createWriteStream(destinationPath));
+    const body = toNodeReadable(result.Body);
+    if (expected && (result.ETag !== expected.etag ||
+        (expected.versionId !== undefined && result.VersionId !== expected.versionId))) {
+      body.destroy();
+      throw new Error("S3 response does not match the requested object identity.");
+    }
+    try {
+      if (expected) {
+        await pipeline(body, exactByteCount(expected.byteCount), createWriteStream(destinationPath));
+      } else await pipeline(body, createWriteStream(destinationPath));
+    } catch (error) {
+      await rm(destinationPath, { force: true });
+      throw error;
+    }
   }
 
   async uploadFile(key: string, sourcePath: string, contentType?: string): Promise<void> {
@@ -117,6 +159,22 @@ export class S3StorageProvider implements StorageProvider {
         ContentType: contentType,
       },
     }).done();
+  }
+
+  async uploadFileIfAbsent(key: string, sourcePath: string, contentType?: string): Promise<void> {
+    const facts = await stat(sourcePath);
+    if (!facts.isFile()) throw new Error("Conditional upload requires a regular file.");
+    const body = createReadStream(sourcePath);
+    try {
+      // R2 documents atomic conditions for PutObject. Do not use multipart here:
+      // CompleteMultipartUpload needs a separate provider capability proof.
+      await this.client.send(new PutObjectCommand({
+        Bucket: this.options.bucket, Key: key, Body: body,
+        ContentLength: facts.size, ContentType: contentType, IfNoneMatch: "*",
+      }));
+    } finally {
+      body.destroy();
+    }
   }
 
   async createSignedReadUrl(
@@ -218,7 +276,7 @@ export class S3StorageProvider implements StorageProvider {
   }
 }
 
-function toNodeReadable(body: unknown): NodeJS.ReadableStream {
+function toNodeReadable(body: unknown): Readable {
   if (body instanceof Readable) return body;
   if (body && typeof (body as { transformToWebStream?: unknown }).transformToWebStream === "function") {
     return Readable.fromWeb(

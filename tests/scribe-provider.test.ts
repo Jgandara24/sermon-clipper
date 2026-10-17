@@ -1,3 +1,4 @@
+import { offsetTranscriptionResult } from "@/lib/transcription/submitted-range";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -14,6 +15,28 @@ afterEach(() => {
 });
 
 describe("ScribeTranscriptionProvider", () => {
+  it("preserves provider audio events, overlapping clocks, and missing confidence before display normalization", () => {
+    const result = parseScribeResponse({ language_code: "en", text: "Hello there",
+      words: [{ text: "Hello", start: 0, end: 2, type: "word", speaker_id: "one" },
+        { text: "[music]", start: 0.5, end: 3, type: "audio_event", logprob: -0.2 },
+        { text: "there", start: 1, end: 2, type: "word", speaker_id: "two", logprob: -0.1 }] });
+    expect(result.providerEvidence?.entries).toEqual([
+      { text: "Hello", start: 0, end: 2, type: "word", speakerId: "one", logProbability: null },
+      { text: "[music]", start: 0.5, end: 3, type: "audio_event", speakerId: null, logProbability: -0.2 },
+      { text: "there", start: 1, end: 2, type: "word", speakerId: "two", logProbability: -0.1 },
+    ]);
+    const mapped = offsetTranscriptionResult(result, 60000);
+    expect(mapped.providerEvidence?.sourceOffsetMs).toBe(60000);
+    expect(mapped.providerEvidence?.entries).toEqual(result.providerEvidence?.entries);
+    expect(result.providerEvidence?.sourceOffsetMs).toBe(0);
+    expect(mapped.segments[0].startMs).toBe(60000);
+  });
+
+  it("refuses nonfinite clocks before JSON persistence can erase them", () => {
+    expect(() => parseScribeResponse({ language_code: "en", text: "Hello",
+      words: [{ text: "Hello", start: NaN, end: 1, type: "word" }] })).toThrow("invalid provider evidence");
+  });
+
   it("uses base Scribe v2 without paid keyterms by default", async () => {
     const calls: unknown[] = [];
     const provider = new ScribeTranscriptionProvider({

@@ -1,7 +1,13 @@
+import { readOriginalRenderEvidence } from "./original-render-evidence";
+import { assertOriginalRegionExportAllowed, assertRegionExportAllowed } from "@/lib/media-regions/export-policy";
+import { ExportFailureError } from "./errors";
 import { type ExportJob, Prisma, ProcessingJobState, type PrismaClient } from "@prisma/client";
 import { EXPORT_MAX_ATTEMPTS, retryRunAfter, staleCutoff, workerId } from "@/lib/worker/reliability";
-import { buildExportIdempotencyKey } from "./edit-version";
+import { buildExportIdempotencyKey, loadPinnedEditorState } from "./edit-version";
 import { ClipTranscriptChangedError, isClipTranscriptChanged } from "@/lib/analysis/source-write-boundary";
+
+import { enqueueApprovedRangeExportInTransaction } from "./range-input";
+import { rangeExportsEnabled } from "./range-policy";
 
 const MAX_ATTEMPTS = EXPORT_MAX_ATTEMPTS; // initial attempt + 2 retries, per guide §15 step 6
 
@@ -31,6 +37,12 @@ export async function enqueueExportJob(
     priority?: number;
   },
 ): Promise<ExportJob> {
+  if (rangeExportsEnabled()) {
+    const result = "$transaction" in client
+      ? await client.$transaction(tx => enqueueApprovedRangeExportInTransaction(tx, params))
+      : await enqueueApprovedRangeExportInTransaction(client, params);
+    return result.job;
+  }
   const idempotencyKey = buildExportIdempotencyKey({
     clipId: params.clipId,
     editVersion: params.editVersion,
@@ -77,6 +89,8 @@ export async function claimNextExportJob(client: PrismaClient): Promise<ExportJo
   const claimedBy = workerId();
   const candidate = await client.exportJob.findFirst({
     where: {
+      // Unapproved deployment settings cannot activate range exports.
+      ...(!rangeExportsEnabled() ? { rangeInput: { is: null } } : {}),
       state: { in: [ProcessingJobState.QUEUED, ProcessingJobState.RETRYING] },
       runAfter: { lte: now },
     },
@@ -90,6 +104,8 @@ export async function claimNextExportJob(client: PrismaClient): Promise<ExportJo
   const claim = await client.exportJob.updateMany({
     where: {
       id: candidate.id,
+      // Unapproved deployment settings cannot activate range exports.
+      ...(!rangeExportsEnabled() ? { rangeInput: { is: null } } : {}),
       state: { in: [ProcessingJobState.QUEUED, ProcessingJobState.RETRYING] },
       runAfter: { lte: now },
     },
@@ -119,20 +135,58 @@ export async function markExportJobSucceeded(
   jobId: string,
   outputFileId: string,
 ): Promise<boolean> {
-  const result = await client.exportJob.updateMany({
-    where: { id: jobId, state: ProcessingJobState.RUNNING },
-    data: {
-      state: ProcessingJobState.SUCCEEDED,
-      progress: 100,
-      finishedAt: new Date(),
-      heartbeatAt: null,
-      workerId: null,
-      outputFileId,
-      // Exports are free at MVP (processing minutes already paid) — see DECISIONS.md.
-      minutesCharged: 0,
-    },
+  const complete = async (db: Pick<PrismaClient, "exportJob"> | Prisma.TransactionClient) => {
+    const result = await db.exportJob.updateMany({
+      where: { id: jobId, state: ProcessingJobState.RUNNING },
+      data: {
+        state: ProcessingJobState.SUCCEEDED,
+        progress: 100,
+        finishedAt: new Date(),
+        heartbeatAt: null,
+        workerId: null,
+        outputFileId,
+        // Exports are free at MVP (processing minutes already paid) — see DECISIONS.md.
+        minutesCharged: 0,
+      },
+    });
+    return result.count > 0;
+  };
+  const pin = await client.exportRangeInput.findUnique({ where: { exportJobId: jobId }, include: { exportJob: true } });
+  if (!pin) return client.$transaction(async tx => {
+    const job = await tx.exportJob.findUniqueOrThrow({ where: { id: jobId },
+      include: { clip: { include: { project: true } }, fullSourceFallback: true } });
+    if (job.state !== ProcessingJobState.RUNNING) return false;
+    if (rangeExportsEnabled() && !job.fullSourceFallback) {
+      throw new ExportFailureError("FULL_SOURCE_FALLBACK_REQUIRED",
+        "This export needs an approved media range or an operator-approved full-source fallback.", { terminal: true });
+    }
+    const rendered = readOriginalRenderEvidence(job.qcDetails, job.editVersion);
+    if (!rendered) {
+      throw new ExportFailureError("EXPORT_REGION_EVIDENCE_MISSING", "Render this export again to verify its source boundaries.", { terminal: true });
+    }
+    const sourceVideoId = job.clip.project.sourceVideoId;
+    if (!sourceVideoId || job.clip.workspaceId !== job.workspaceId || job.clip.project.workspaceId !== job.workspaceId) {
+      throw new ExportFailureError("EXPORT_REGION_SOURCE_MISMATCH", "The source evidence does not match this workspace.", { terminal: true });
+    }
+    await tx.$queryRaw`SELECT id FROM source_videos WHERE id = ${sourceVideoId}::uuid FOR UPDATE`;
+    const state = await loadPinnedEditorState(tx, { clipId: job.clipId, editVersion: job.editVersion,
+      defaults: { sourceVideoId, startMs: job.clip.startMs, endMs: job.clip.endMs } });
+    if (state.source.videoId !== sourceVideoId || rendered.sourceVideoId !== sourceVideoId ||
+      state.source.startMs !== rendered.sourceInterval.startMs || state.source.endMs !== rendered.sourceInterval.endMs) {
+      throw new ExportFailureError("EXPORT_REGION_SOURCE_MISMATCH", "The source evidence does not match this workspace.", { terminal: true });
+    }
+    await assertOriginalRegionExportAllowed(tx, { workspaceId: job.workspaceId, sourceVideoId,
+      sourceInterval: { startMs: state.source.startMs, endMs: state.source.endMs } });
+    return complete(tx);
   });
-  return result.count > 0;
+  if (!rangeExportsEnabled()) throw new ExportFailureError("RANGE_EXPORTS_DISABLED", "Range exports are not enabled.", { terminal: true });
+  return client.$transaction(async tx => {
+    // Region registration takes the same source lock. Completion sees every committed region before this lock.
+    await tx.$queryRaw`SELECT id FROM source_videos WHERE id = ${pin.sourceVideoId}::uuid FOR UPDATE`;
+    await assertRegionExportAllowed(tx, { workspaceId: pin.exportJob.workspaceId, sourceVideoId: pin.sourceVideoId,
+      sourceSha256: pin.sourceSha256, sourceInterval: { startMs: Number(pin.startMs), endMs: Number(pin.endMs) } });
+    return complete(tx);
+  });
 }
 
 export type ExportJobFailureOutcome = "RETRYING" | "FAILED" | "SKIPPED";
