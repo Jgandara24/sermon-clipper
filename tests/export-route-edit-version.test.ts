@@ -25,6 +25,7 @@ vi.mock("@/lib/observability/operational-events", () => ({
 }));
 
 import { parseExportIdempotencyKeyVersion } from "@/lib/exports/edit-version";
+import { ExportRangeUnavailableError } from "@/lib/exports/range-input";
 import { enqueueExportJob } from "@/lib/exports/queue";
 import { checkExportJobLimits } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
@@ -64,6 +65,14 @@ function lookupKey(): string {
 }
 
 describe("POST /api/clips/[id]/exports edit-version pinning", () => {
+  it("returns a clear conflict when approved range coverage is missing", async () => {
+    (prisma.clipEdit.findFirst as Mock).mockResolvedValue(null);
+    (enqueueExportJob as Mock).mockRejectedValue(new ExportRangeUnavailableError());
+    const response = (await POST(request(), { params })) as Response;
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "EXPORT_RANGE_UNAVAILABLE" } });
+  });
+
   it("passes the selected edit version to the queue", async () => {
     (prisma.clipEdit.findFirst as Mock).mockResolvedValue({ version: 4 });
 

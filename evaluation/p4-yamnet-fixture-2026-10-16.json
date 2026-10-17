@@ -1,0 +1,687 @@
+{
+  "version": "p4-yamnet-synthetic-fixture-v1",
+  "scope": "UPSTREAM_SYNTHETIC_TESTS_PLUS_SYNTHETIC_SPEECH",
+  "model": {
+    "modelId": "yamnet",
+    "version": "gcs-generation-1574101619169609",
+    "roles": [
+      "SPEECH_MUSIC",
+      "AUDIO_EVENTS"
+    ],
+    "sha256": "13c3308955bbfaef262f175ac9c40e47b134573a93984f009220dd7cc12a1744",
+    "byteCount": 15296092,
+    "upstreamRevision": "34a21326906b9574fa11c4d6d0a5c534ff039267",
+    "licenseSpdx": "Apache-2.0",
+    "licenseReviewReference": "evaluation/p4-model-candidates-2026-10-16.json#yamnet",
+    "usage": "evaluation"
+  },
+  "objectIdentity": {
+    "generation": "1574101619169609",
+    "md5Base64": "gjQiXARYWXUr1KLhAfjNGg=="
+  },
+  "sourceEvidence": {
+    "yamnet.py": "7ef3df32b7ecb782490b5a04d7581a23cfcf701dbf476bc4d03deefe22cdb040",
+    "features.py": "e6cd53f81d072c7c43be4c7fff2b9dd0c5ccc7d64f2fbcfc85b44013d6d2ed5e",
+    "params.py": "925bb1e62461016031f98aea09aeac28975dd516f5747513767de5d1b06b6145",
+    "yamnet_class_map.csv": "cdf24d193e196d9e95912a2667051ae203e92a2ba09449218ccb40ef787c6df2"
+  },
+  "licenseEvidence": {
+    "readmeSha256": "e837352cc8747b257c36e99f23bf02e136761c6b51f59a577fef786dfd95fd16"
+  },
+  "fixtureEvidence": {
+    "speechText": "Please open your Bibles to the book of Romans, chapter eight, verse one.",
+    "voice": "Samantha",
+    "speechRate": 150,
+    "speechPeakNormalizedTo": 0.5,
+    "toneHz": [
+      261.63,
+      329.63,
+      392.0
+    ],
+    "toneGain": 0.15,
+    "representativeSermonAudio": false
+  },
+  "runtime": {
+    "python": "3.9.1",
+    "platform": "macOS-26.6.2-x86_64-i386-64bit",
+    "machine": "x86_64",
+    "cpu": "Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz",
+    "packages": {
+      "tensorflow": "2.15.1",
+      "tf-keras": "2.15.1",
+      "numpy": "1.26.4",
+      "h5py": "3.10.0"
+    }
+  },
+  "processMeasurement": {
+    "scope": "PYTHON_TENSORFLOW_IMPORT_MODEL_LOAD_SPEECH_SYNTHESIS_AND_FIVE_INFERENCES",
+    "wallMs": 86324.58513,
+    "nativeRealSeconds": 86.31,
+    "userCpuSeconds": 9.14,
+    "systemCpuSeconds": 1.92,
+    "peakResidentBytes": 373616640
+  },
+  "inference": {
+    "tensorflowVersion": "2.15.1",
+    "kerasPackage": "tf-keras 2.15.1",
+    "numpyVersion": "1.26.4",
+    "intraOpThreads": 2,
+    "interOpThreads": 1,
+    "params": {
+      "sampleRate": 16000.0,
+      "patchWindowSeconds": 0.96,
+      "patchHopSeconds": 0.48,
+      "classifierActivation": "sigmoid"
+    },
+    "modelLoadWallMs": 1287.1824650000008,
+    "classCount": 521,
+    "results": [
+      {
+        "fixture": "silence",
+        "sampleCount": 48000,
+        "durationMs": 3000.0,
+        "waveformSha256": "ea0787f65f73b0013d03b359490e3125211b28ad5c1502ffb1544c0ded4192f5",
+        "frameCount": 6,
+        "embeddingShape": [
+          6,
+          1024
+        ],
+        "spectrogramShape": [
+          336,
+          64
+        ],
+        "scoreMatrixSha256": "5321d9ecf54f368b170609e1a5945ce48c2d127e7e50df1cc3b154f55e88dcf2",
+        "inferenceWallMs": 159.8615550000062,
+        "clipMeanTop10": [
+          {
+            "classIndex": 494,
+            "className": "Silence",
+            "score": 1.0
+          },
+          {
+            "classIndex": 0,
+            "className": "Speech",
+            "score": 8.634594195200407e-08
+          },
+          {
+            "classIndex": 132,
+            "className": "Music",
+            "score": 7.066303329283799e-15
+          },
+          {
+            "classIndex": 500,
+            "className": "Inside, small room",
+            "score": 2.0754231303795008e-27
+          },
+          {
+            "classIndex": 3,
+            "className": "Narration, monologue",
+            "score": 9.704065097111595e-30
+          },
+          {
+            "classIndex": 165,
+            "className": "Tabla",
+            "score": 0.0
+          },
+          {
+            "classIndex": 166,
+            "className": "Cymbal",
+            "score": 0.0
+          },
+          {
+            "classIndex": 167,
+            "className": "Hi-hat",
+            "score": 0.0
+          },
+          {
+            "classIndex": 168,
+            "className": "Wood block",
+            "score": 0.0
+          },
+          {
+            "classIndex": 176,
+            "className": "Glockenspiel",
+            "score": 0.0
+          }
+        ],
+        "clipMeanNamedScores": {
+          "Speech": 8.634594195200407e-08,
+          "Narration, monologue": 9.704065097111595e-30,
+          "Music": 7.066303329283799e-15,
+          "Singing": 0.0,
+          "Silence": 1.0,
+          "Sine wave": 0.0,
+          "White noise": 0.0,
+          "Pink noise": 0.0
+        },
+        "frameNamedScores": {
+          "Speech": [
+            8.634594195200407e-08,
+            8.634594195200407e-08,
+            8.634594195200407e-08,
+            8.634594195200407e-08,
+            8.634594195200407e-08,
+            8.634594195200407e-08
+          ],
+          "Music": [
+            7.066303329283799e-15,
+            7.066303329283799e-15,
+            7.066303329283799e-15,
+            7.066303329283799e-15,
+            7.066303329283799e-15,
+            7.066303329283799e-15
+          ],
+          "Silence": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "frameTop1": [
+          "Silence",
+          "Silence",
+          "Silence",
+          "Silence",
+          "Silence",
+          "Silence"
+        ],
+        "upstreamExpectedClass": "Silence",
+        "upstreamExpectationMet": true
+      },
+      {
+        "fixture": "seeded-uniform-noise",
+        "sampleCount": 48000,
+        "durationMs": 3000.0,
+        "waveformSha256": "4a102fcd7fa58e04c61497a401de71b5b9c3d848700b1215bbaa11a388df2e2b",
+        "frameCount": 6,
+        "embeddingShape": [
+          6,
+          1024
+        ],
+        "spectrogramShape": [
+          336,
+          64
+        ],
+        "scoreMatrixSha256": "fc71e4d0faa536a8b01d1615079c8c8a50ec5618af93a0adaff185acedd97b5d",
+        "inferenceWallMs": 93.78608599999438,
+        "clipMeanTop10": [
+          {
+            "classIndex": 514,
+            "className": "White noise",
+            "score": 0.36126580834388733
+          },
+          {
+            "classIndex": 507,
+            "className": "Noise",
+            "score": 0.294326514005661
+          },
+          {
+            "classIndex": 509,
+            "className": "Static",
+            "score": 0.20467424392700195
+          },
+          {
+            "classIndex": 337,
+            "className": "Engine",
+            "score": 0.14991670846939087
+          },
+          {
+            "classIndex": 513,
+            "className": "Cacophony",
+            "score": 0.13260480761528015
+          },
+          {
+            "classIndex": 282,
+            "className": "Water",
+            "score": 0.12324366718530655
+          },
+          {
+            "classIndex": 287,
+            "className": "Waterfall",
+            "score": 0.12031523138284683
+          },
+          {
+            "classIndex": 343,
+            "className": "Heavy engine (low frequency)",
+            "score": 0.0982268750667572
+          },
+          {
+            "classIndex": 519,
+            "className": "Radio",
+            "score": 0.07817622274160385
+          },
+          {
+            "classIndex": 517,
+            "className": "Vibration",
+            "score": 0.07817158102989197
+          }
+        ],
+        "clipMeanNamedScores": {
+          "Speech": 0.021755078807473183,
+          "Narration, monologue": 0.0018783677369356155,
+          "Music": 0.010782428085803986,
+          "Singing": 0.0011903556296601892,
+          "Silence": 0.009815736673772335,
+          "Sine wave": 0.0020030534360557795,
+          "White noise": 0.36126580834388733,
+          "Pink noise": 0.025009462609887123
+        },
+        "frameNamedScores": {
+          "Speech": [
+            0.011766653507947922,
+            0.015956314280629158,
+            0.014680246822535992,
+            0.030965106561779976,
+            0.05179153382778168,
+            0.0053706117905676365
+          ],
+          "Music": [
+            0.006887719966471195,
+            0.0037770280614495277,
+            0.015289803966879845,
+            0.01739664189517498,
+            0.008148729801177979,
+            0.013194642029702663
+          ],
+          "Silence": [
+            0.004830934107303619,
+            0.005505233537405729,
+            0.00797459576278925,
+            0.005025255959481001,
+            0.03454380854964256,
+            0.0010145941050723195
+          ]
+        },
+        "frameTop1": [
+          "White noise",
+          "White noise",
+          "White noise",
+          "Engine",
+          "White noise",
+          "Waterfall"
+        ],
+        "upstreamExpectedClass": "White noise",
+        "upstreamExpectationMet": true
+      },
+      {
+        "fixture": "sine-440hz",
+        "sampleCount": 48000,
+        "durationMs": 3000.0,
+        "waveformSha256": "7ecacaa4091670100cda3f9b234ad00d95bd81eb18ac6784dcc4302d797a5ada",
+        "frameCount": 6,
+        "embeddingShape": [
+          6,
+          1024
+        ],
+        "spectrogramShape": [
+          336,
+          64
+        ],
+        "scoreMatrixSha256": "ac122cfaa34dfaed549e7d0106832124883b3b7a927643256cd6247a53c1abfe",
+        "inferenceWallMs": 95.2517270000044,
+        "clipMeanTop10": [
+          {
+            "classIndex": 383,
+            "className": "Telephone",
+            "score": 0.9955520033836365
+          },
+          {
+            "classIndex": 387,
+            "className": "Dial tone",
+            "score": 0.9817502498626709
+          },
+          {
+            "classIndex": 388,
+            "className": "Busy signal",
+            "score": 0.9813501834869385
+          },
+          {
+            "classIndex": 382,
+            "className": "Alarm",
+            "score": 0.954099178314209
+          },
+          {
+            "classIndex": 512,
+            "className": "Sidetone",
+            "score": 0.06293652206659317
+          },
+          {
+            "classIndex": 495,
+            "className": "Sine wave",
+            "score": 0.03541882336139679
+          },
+          {
+            "classIndex": 507,
+            "className": "Noise",
+            "score": 0.011522009037435055
+          },
+          {
+            "classIndex": 2,
+            "className": "Conversation",
+            "score": 0.005463908892124891
+          },
+          {
+            "classIndex": 498,
+            "className": "Sound effect",
+            "score": 0.0025400235317647457
+          },
+          {
+            "classIndex": 0,
+            "className": "Speech",
+            "score": 0.001475364319048822
+          }
+        ],
+        "clipMeanNamedScores": {
+          "Speech": 0.001475364319048822,
+          "Narration, monologue": 3.6254734823160106e-06,
+          "Music": 1.6951421457633842e-06,
+          "Singing": 1.9262492989557956e-10,
+          "Silence": 7.892717985669151e-05,
+          "Sine wave": 0.03541882336139679,
+          "White noise": 3.18474928503662e-13,
+          "Pink noise": 1.3794295247011863e-19
+        },
+        "frameNamedScores": {
+          "Speech": [
+            0.0015815127408131957,
+            0.0016149076400324702,
+            0.0015884853200986981,
+            0.001590496744029224,
+            0.0016069731209427118,
+            0.000869809475261718
+          ],
+          "Music": [
+            1.472019334869401e-06,
+            1.4987721215220517e-06,
+            1.3447406672639772e-06,
+            1.460508315176412e-06,
+            1.4376923900272232e-06,
+            2.957119932034402e-06
+          ],
+          "Silence": [
+            8.573380182497203e-05,
+            9.328806481789798e-05,
+            8.78187274793163e-05,
+            8.81395535543561e-05,
+            8.979777339845896e-05,
+            2.8785136237274855e-05
+          ]
+        },
+        "frameTop1": [
+          "Telephone",
+          "Telephone",
+          "Telephone",
+          "Telephone",
+          "Telephone",
+          "Telephone"
+        ],
+        "upstreamExpectedClass": "Sine wave",
+        "upstreamExpectationMet": true
+      },
+      {
+        "fixture": "synthetic-speech",
+        "sampleCount": 74228,
+        "durationMs": 4639.25,
+        "waveformSha256": "f333c87976874ad712e14f92a20051500b330f0c44b08d0900fc70f4bec5255c",
+        "frameCount": 9,
+        "embeddingShape": [
+          9,
+          1024
+        ],
+        "spectrogramShape": [
+          480,
+          64
+        ],
+        "scoreMatrixSha256": "af7b5631bb8052306c20833967b25601244c593907a7dabf1110c27f733e3d1b",
+        "inferenceWallMs": 104.78423600000042,
+        "clipMeanTop10": [
+          {
+            "classIndex": 0,
+            "className": "Speech",
+            "score": 0.9936497211456299
+          },
+          {
+            "classIndex": 5,
+            "className": "Speech synthesizer",
+            "score": 0.03774178400635719
+          },
+          {
+            "classIndex": 3,
+            "className": "Narration, monologue",
+            "score": 0.013780609704554081
+          },
+          {
+            "classIndex": 2,
+            "className": "Conversation",
+            "score": 0.00255162687972188
+          },
+          {
+            "classIndex": 500,
+            "className": "Inside, small room",
+            "score": 0.0013510682620108128
+          },
+          {
+            "classIndex": 519,
+            "className": "Radio",
+            "score": 0.00020480678358580917
+          },
+          {
+            "classIndex": 501,
+            "className": "Inside, large room or hall",
+            "score": 0.00015578290913254023
+          },
+          {
+            "classIndex": 383,
+            "className": "Telephone",
+            "score": 0.00011673000699374825
+          },
+          {
+            "classIndex": 153,
+            "className": "Synthesizer",
+            "score": 7.053525769151747e-05
+          },
+          {
+            "classIndex": 382,
+            "className": "Alarm",
+            "score": 6.723901606164873e-05
+          }
+        ],
+        "clipMeanNamedScores": {
+          "Speech": 0.9936497211456299,
+          "Narration, monologue": 0.013780609704554081,
+          "Music": 3.135408041998744e-05,
+          "Singing": 1.525016273262736e-06,
+          "Silence": 3.806310996878892e-05,
+          "Sine wave": 1.45752551361511e-06,
+          "White noise": 1.2488709444369306e-07,
+          "Pink noise": 1.270012539578147e-09
+        },
+        "frameNamedScores": {
+          "Speech": [
+            0.9999594688415527,
+            0.9999903440475464,
+            0.9987461566925049,
+            0.9813230037689209,
+            0.9999198913574219,
+            0.9999857544898987,
+            0.9970446825027466,
+            0.9981943964958191,
+            0.9676838517189026
+          ],
+          "Music": [
+            3.2341977203032e-06,
+            2.0328589300788735e-07,
+            5.292312835081248e-06,
+            0.0001628404133953154,
+            1.7038274791048025e-07,
+            3.221731503799674e-07,
+            2.390100053162314e-05,
+            2.339020647923462e-05,
+            6.283273251028731e-05
+          ],
+          "Silence": [
+            6.760982884657096e-09,
+            5.619352097356589e-13,
+            1.205736339215946e-06,
+            0.00027008773759007454,
+            1.621641132487639e-07,
+            1.577906034999632e-11,
+            7.4547606345731765e-06,
+            5.017964213038795e-06,
+            5.8632795116864145e-05
+          ]
+        },
+        "frameTop1": [
+          "Speech",
+          "Speech",
+          "Speech",
+          "Speech",
+          "Speech",
+          "Speech",
+          "Speech",
+          "Speech",
+          "Speech"
+        ]
+      },
+      {
+        "fixture": "synthetic-speech-over-steady-tones",
+        "sampleCount": 74228,
+        "durationMs": 4639.25,
+        "waveformSha256": "ca164fb1a6fca287d3c85086821fa0a75bd9f202b47d882d1d3abaf3a393684f",
+        "frameCount": 9,
+        "embeddingShape": [
+          9,
+          1024
+        ],
+        "spectrogramShape": [
+          480,
+          64
+        ],
+        "scoreMatrixSha256": "cb1175891893eb032431a27c5c7c423f97c0dc0610e9b8fc706013abb556f116",
+        "inferenceWallMs": 104.93794100000287,
+        "clipMeanTop10": [
+          {
+            "classIndex": 132,
+            "className": "Music",
+            "score": 0.14405089616775513
+          },
+          {
+            "classIndex": 512,
+            "className": "Sidetone",
+            "score": 0.12461333721876144
+          },
+          {
+            "classIndex": 387,
+            "className": "Dial tone",
+            "score": 0.1175309270620346
+          },
+          {
+            "classIndex": 383,
+            "className": "Telephone",
+            "score": 0.08522789925336838
+          },
+          {
+            "classIndex": 0,
+            "className": "Speech",
+            "score": 0.08037135750055313
+          },
+          {
+            "classIndex": 153,
+            "className": "Synthesizer",
+            "score": 0.0744674950838089
+          },
+          {
+            "classIndex": 388,
+            "className": "Busy signal",
+            "score": 0.07119853794574738
+          },
+          {
+            "classIndex": 382,
+            "className": "Alarm",
+            "score": 0.04852455109357834
+          },
+          {
+            "classIndex": 147,
+            "className": "Keyboard (musical)",
+            "score": 0.04733561351895332
+          },
+          {
+            "classIndex": 133,
+            "className": "Musical instrument",
+            "score": 0.02955523505806923
+          }
+        ],
+        "clipMeanNamedScores": {
+          "Speech": 0.08037135750055313,
+          "Narration, monologue": 0.0014045414282009006,
+          "Music": 0.14405089616775513,
+          "Singing": 0.0011176308616995811,
+          "Silence": 0.0018632999854162335,
+          "Sine wave": 0.010030188597738743,
+          "White noise": 7.676801760680974e-05,
+          "Pink noise": 4.927667305310024e-07
+        },
+        "frameNamedScores": {
+          "Speech": [
+            0.1248907521367073,
+            0.06878886371850967,
+            0.0301487036049366,
+            0.030431240797042847,
+            0.037985462695360184,
+            0.06737957894802094,
+            0.09388818591833115,
+            0.2048085480928421,
+            0.06502087414264679
+          ],
+          "Music": [
+            0.23081234097480774,
+            0.2470373958349228,
+            0.2596026659011841,
+            0.27599427103996277,
+            0.13109999895095825,
+            0.06320051848888397,
+            0.01644410565495491,
+            0.05797095596790314,
+            0.014295734465122223
+          ],
+          "Silence": [
+            0.002062037819996476,
+            0.0010184203274548054,
+            0.0009037124109454453,
+            0.00026101109688170254,
+            0.0027229231782257557,
+            0.005226688925176859,
+            0.00034974986920133233,
+            0.0034454604610800743,
+            0.0007796966237947345
+          ]
+        },
+        "frameTop1": [
+          "Music",
+          "Music",
+          "Music",
+          "Music",
+          "Synthesizer",
+          "Speech",
+          "Sidetone",
+          "Speech",
+          "Dial tone"
+        ]
+      }
+    ]
+  },
+  "temporaryOutputsRemoved": true,
+  "modelBytesRetained": false,
+  "productionApproved": false,
+  "qualityEvidence": null,
+  "limitations": [
+    "Synthetic fixtures do not establish accuracy on church audio, reverberation, or live music.",
+    "Scores are native sigmoid outputs, not calibrated confidence.",
+    "Audio-event labels do not identify sermon, worship, prayer, announcement, or other service roles.",
+    "Steady tones are not a music fixture; speech-over-music remains untested.",
+    "Settings describe this experiment and are not production defaults."
+  ]
+}

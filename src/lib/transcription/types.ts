@@ -16,7 +16,19 @@ export type TranscriptSegmentResult = {
   speakerLabel?: string;
 };
 
+export type TranscriptionProviderEvidence = {
+  version: "scribe-response-evidence-v1";
+  provider: "elevenlabs";
+  modelVersion: "scribe_v2";
+  timestampClock: "submitted-audio-seconds";
+  sourceOffsetMs: number;
+  languageProbability: number | null;
+  entries: Array<{ text: string; start: number; end: number; type: "word" | "spacing" | "audio_event";
+    speakerId: string | null; logProbability: number | null }>;
+};
+
 export type TranscriptionResult = {
+  providerEvidence?: TranscriptionProviderEvidence;
   language: string;
   segments: TranscriptSegmentResult[];
 };

@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { assertOriginalRegionExportAllowed, assertRegionExportAllowed } from "@/lib/media-regions/export-policy";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
@@ -12,6 +13,7 @@ import type { EditorState } from "@/lib/editor/types";
 import { countCaptionDialogueEvents } from "@/lib/export/ass-generator";
 import { renderClipExport } from "@/lib/export/render";
 import { probeVideoFile } from "@/lib/media/probe";
+import { StorageDownloadError } from "@/lib/storage/types";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import {
   evaluateRenderOutputQc,
@@ -23,11 +25,18 @@ import {
   getStorageProvider,
   storageProviderKind,
   storageTransferCostFact,
+  type StorageDownloadResult,
 } from "@/lib/storage";
 import { assertContinuousRange } from "./continuous-range";
 import { buildExportRenderPlan } from "./render-plan";
 import { loadPinnedEditorState } from "./edit-version";
 import { ExportFailureError } from "./errors";
+
+import { withMaterializedRange } from "@/lib/media-artifacts/read-lease";
+import { renderCandidateRangeExport } from "./range-render";
+import { rangeExportsEnabled } from "./range-policy";
+import { FULL_SOURCE_FALLBACK_COST_INPUT } from "./full-source-fallback";
+import type { ProcessingCostDetails } from "@/lib/cost/types";
 
 // Re-exported so existing importers (worker runner, tests) keep a single failure type.
 export { ExportFailureError };
@@ -46,6 +55,8 @@ async function recordExportStorageFact(params: {
   bytes: number;
   wallTimeMs: number;
   outcome: ProcessingCostOutcome;
+  download?: StorageDownloadResult | void;
+  details?: ProcessingCostDetails;
 }) {
   const price =
     params.direction === "download"
@@ -60,7 +71,9 @@ async function recordExportStorageFact(params: {
       wallTimeMs: params.wallTimeMs,
       attempt: Math.max(1, params.job.attempt),
       outcome: params.outcome,
+      download: params.download,
     }),
+    ...(params.details ? { details: params.details } : {}),
     workspaceId: params.job.workspaceId,
     projectId: params.projectId,
     clipId: params.job.clipId,
@@ -76,6 +89,7 @@ async function recordRenderFact(params: {
   cpuTimeMs: number;
   wallTimeMs: number;
   outcome: ProcessingCostOutcome;
+  details?: ProcessingCostDetails;
 }) {
   await recordProcessingCostFactSafely(params.prisma, {
     stage: "render",
@@ -90,6 +104,7 @@ async function recordRenderFact(params: {
     cacheState: "miss",
     attempt: Math.max(1, params.job.attempt),
     outcome: params.outcome,
+    ...(params.details ? { details: params.details } : {}),
     workspaceId: params.job.workspaceId,
     projectId: params.projectId,
     clipId: params.job.clipId,
@@ -125,8 +140,18 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     },
   });
 
+  const rangeInput = await prisma.exportRangeInput.findUnique({ where: { exportJobId: job.id } });
+  if (rangeInput && !rangeExportsEnabled()) throw new ExportFailureError("RANGE_EXPORTS_DISABLED", "Range exports are not enabled.", { terminal: true });
+  const fallback = rangeInput ? null : await prisma.exportFullSourceFallback.findUnique({ where: { exportJobId: job.id } });
+  // While ranges are the normal input, an original read needs an explicit, visible fallback record.
+  if (!rangeInput && !fallback && rangeExportsEnabled()) {
+    throw new ExportFailureError("FULL_SOURCE_FALLBACK_REQUIRED",
+      "This export needs an approved media range or an operator-approved full-source fallback.", { terminal: true });
+  }
+  const costDetails: ProcessingCostDetails | undefined = fallback ? { exportInput: FULL_SOURCE_FALLBACK_COST_INPUT,
+    fullSourceFallbackId: fallback.id, editorialExceptionId: fallback.editorialExceptionId } : undefined;
   const sourceVideo = clip.project.sourceVideo;
-  if (!sourceVideo?.storageKey || sourceVideo.width === null || sourceVideo.height === null) {
+  if (!sourceVideo || (!rangeInput && !sourceVideo.storageKey) || sourceVideo.width === null || sourceVideo.height === null) {
     throw new ExportFailureError("RENDER_FAILED", "Export failed on our side — your clip is safe.");
   }
 
@@ -137,6 +162,10 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     editVersion: job.editVersion,
     defaults: { sourceVideoId: sourceVideo.id, startMs: clip.startMs, endMs: clip.endMs },
   });
+
+  if (state.source.videoId !== sourceVideo.id) {
+    throw new ExportFailureError("EXPORT_REGION_SOURCE_MISMATCH", "The source evidence does not match this workspace.", { terminal: true });
+  }
 
   const segments = (sourceVideo.transcript?.segments ?? []).map((segment) => ({
     id: segment.id,
@@ -177,6 +206,20 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     brandTemplate,
   });
   const { range, cropPixels, assContent } = plan;
+  if (rangeInput && (rangeInput.sourceVideoId !== sourceVideo.id || rangeInput.editVersion !== job.editVersion ||
+    rangeInput.startMs !== BigInt(range.startMs) || rangeInput.endMs !== BigInt(range.endMs))) {
+    throw new ExportFailureError("EXPORT_RANGE_PIN_CHANGED", "The saved range input no longer matches this export.", { terminal: true });
+  }
+  if (fallback && (fallback.sourceVideoId !== sourceVideo.id || fallback.workspaceId !== job.workspaceId ||
+    fallback.editVersion !== job.editVersion || fallback.startMs !== BigInt(range.startMs) || fallback.endMs !== BigInt(range.endMs))) {
+    throw new ExportFailureError("FULL_SOURCE_FALLBACK_CHANGED", "The approved full-source fallback no longer matches this export.", { terminal: true });
+  }
+
+  const regionRequest = rangeInput ? { workspaceId: job.workspaceId, sourceVideoId: sourceVideo.id,
+    sourceSha256: rangeInput.sourceSha256, sourceInterval: range } : null;
+  const checkRegions = () => regionRequest ? assertRegionExportAllowed(prisma, regionRequest)
+    : assertOriginalRegionExportAllowed(prisma, { workspaceId: job.workspaceId, sourceVideoId: sourceVideo.id, sourceInterval: range });
+  await checkRegions();
 
   const storage = getStorageProvider();
   const exportsKey = `exports/${job.workspaceId}/${job.id}.mp4`;
@@ -194,63 +237,108 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   const outputDurationS = plan.outputDurationS;
 
   try {
-    const downloadStartedAt = Date.now();
-    try {
-      await storage.downloadToFile(sourceVideo.storageKey, sourceFilePath);
-      if (sourceBytes === 0) sourceBytes = (await stat(sourceFilePath)).size;
-    } catch (error) {
+    if (rangeInput) {
+      const downloadStartedAt = Date.now();
+      let downloaded = false;
+      try {
+        await withMaterializedRange(prisma, storage, { workspaceId: job.workspaceId, sourceVideoId: sourceVideo.id,
+          artifactId: rangeInput.artifactId, sourceSha256: rangeInput.sourceSha256, ownerId: randomUUID(),
+          sourceRange: range, temporaryRoot: workDir, exportJobId: job.id }, async materialized => {
+          downloaded = true;
+          sourceBytes = Number(materialized.artifact.byteCount);
+          await recordExportStorageFact({ prisma, job, projectId: clip.projectId, direction: "download", bytes: sourceBytes,
+            download: materialized.download, wallTimeMs: Date.now() - downloadStartedAt, outcome: "succeeded" });
+          const started = startRuntimeMeasurement();
+          try {
+            await renderCandidateRangeExport({ artifact: materialized.artifact, sourceVideoId: sourceVideo.id,
+              sourceSha256: rangeInput.sourceSha256, sourceWidth: materialized.sourceWidth, sourceHeight: materialized.sourceHeight, now: new Date(),
+              retentionHeldByExportJobId: materialized.retentionHeldByExportJobId,
+              render: { sourceFilePath: materialized.path, range, cropPixels, assFileContent: assContent, outputPath,
+                outputWidth: OUTPUT_WIDTH, outputHeight: OUTPUT_HEIGHT, originalVolume: plan.originalVolume } });
+          } catch (error) {
+            await recordRenderFact({ prisma, job, projectId: clip.projectId, durationS: outputDurationS,
+              ...finishRuntimeMeasurement(started), outcome: "failed" });
+            throw error;
+          }
+          await recordRenderFact({ prisma, job, projectId: clip.projectId, durationS: outputDurationS,
+            ...finishRuntimeMeasurement(started), outcome: "succeeded" });
+        });
+      } catch (error) {
+        if (!downloaded) await recordExportStorageFact({ prisma, job, projectId: clip.projectId, direction: "download",
+          bytes: error instanceof StorageDownloadError ? error.download?.transferredBytes ?? 0 : 0,
+          download: error instanceof StorageDownloadError ? error.download : undefined,
+          wallTimeMs: Date.now() - downloadStartedAt, outcome: "failed" });
+        // A failed pinned range never becomes an implicit original-source download.
+        throw new ExportFailureError("EXPORT_RANGE_INPUT_FAILED", "The approved range could not render. Review this export before retrying.",
+          { terminal: true, cause: error });
+      }
+    } else {
+      const downloadStartedAt = Date.now();
+      let download: StorageDownloadResult | void;
+      try {
+        download = await storage.downloadToFile(sourceVideo.storageKey!, sourceFilePath);
+        if (sourceBytes === 0) sourceBytes = (await stat(sourceFilePath)).size;
+      } catch (error) {
+        await recordExportStorageFact({
+          prisma,
+          job,
+          projectId: clip.projectId,
+          direction: "download",
+          bytes: sourceBytes,
+          download: error instanceof StorageDownloadError ? error.download : undefined,
+          wallTimeMs: Date.now() - downloadStartedAt,
+          outcome: "failed",
+          details: costDetails,
+        });
+        throw error;
+      }
       await recordExportStorageFact({
         prisma,
         job,
         projectId: clip.projectId,
         direction: "download",
         bytes: sourceBytes,
+        download,
         wallTimeMs: Date.now() - downloadStartedAt,
-        outcome: "failed",
+        outcome: "succeeded",
+        details: costDetails,
       });
-      throw error;
-    }
-    await recordExportStorageFact({
-      prisma,
-      job,
-      projectId: clip.projectId,
-      direction: "download",
-      bytes: sourceBytes,
-      wallTimeMs: Date.now() - downloadStartedAt,
-      outcome: "succeeded",
-    });
 
-    const renderStartedAt = startRuntimeMeasurement();
-    try {
-      await renderClipExport({
-        sourceFilePath,
-        range,
-        cropPixels,
-        assFileContent: assContent,
-        outputPath,
-        outputWidth: OUTPUT_WIDTH,
-        outputHeight: OUTPUT_HEIGHT,
-        originalVolume: plan.originalVolume,
-      });
-    } catch (error) {
+      const renderStartedAt = startRuntimeMeasurement();
+      try {
+        await renderClipExport({
+          sourceFilePath,
+          range,
+          cropPixels,
+          assFileContent: assContent,
+          outputPath,
+          outputWidth: OUTPUT_WIDTH,
+          outputHeight: OUTPUT_HEIGHT,
+          originalVolume: plan.originalVolume,
+        });
+      } catch (error) {
+        await recordRenderFact({
+          prisma,
+          job,
+          projectId: clip.projectId,
+          durationS: outputDurationS,
+          ...finishRuntimeMeasurement(renderStartedAt),
+          outcome: "failed",
+          details: costDetails,
+        });
+        throw error;
+      }
       await recordRenderFact({
         prisma,
         job,
         projectId: clip.projectId,
         durationS: outputDurationS,
         ...finishRuntimeMeasurement(renderStartedAt),
-        outcome: "failed",
+        outcome: "succeeded",
+        details: costDetails,
       });
-      throw error;
+
     }
-    await recordRenderFact({
-      prisma,
-      job,
-      projectId: clip.projectId,
-      durationS: outputDurationS,
-      ...finishRuntimeMeasurement(renderStartedAt),
-      outcome: "succeeded",
-    });
 
     const outputBytes = (await stat(outputPath)).size;
 
@@ -280,6 +368,8 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       },
     );
 
+    const regionCheck = await checkRegions();
+
     // The verdict is recorded either way, so a refused render leaves evidence rather than only a
     // failure code. The checksum stored here is the same value ExportedFile receives, so the two
     // can be asserted equal instead of assumed to agree.
@@ -289,7 +379,11 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         qcStatus: qc.status === "PASSED" ? RenderQcStatus.PASSED : RenderQcStatus.FAILED,
         qcCheckedAt: new Date(),
         qcChecksum: outputChecksum,
-        qcDetails: { version: QC_DETAILS_VERSION, checks: qc.checks } as Prisma.InputJsonValue,
+        qcDetails: { version: QC_DETAILS_VERSION, checks: qc.checks, regionCheck,
+          mediaInput: rangeInput ? { kind: "CANDIDATE_RANGE", artifactId: rangeInput.artifactId,
+            reviewId: rangeInput.reviewId, sha256: rangeInput.artifactSha256, editVersion: rangeInput.editVersion }
+            : { kind: "ORIGINAL", sourceVideoId: sourceVideo.id, sourceInterval: range, editVersion: job.editVersion,
+              ...(fallback ? { fullSourceFallbackId: fallback.id, editorialExceptionId: fallback.editorialExceptionId } : {}) } } as Prisma.InputJsonValue,
       },
     });
 
@@ -331,6 +425,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         bytes: outputBytes,
         wallTimeMs: Date.now() - uploadStartedAt,
         outcome: "failed",
+        details: costDetails,
       });
       throw error;
     }
@@ -342,6 +437,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       bytes: outputBytes,
       wallTimeMs: Date.now() - uploadStartedAt,
       outcome: "succeeded",
+      details: costDetails,
     });
     bytes = await storage.size(exportsKey);
     checksum = outputChecksum;

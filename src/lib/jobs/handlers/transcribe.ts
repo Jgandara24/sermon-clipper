@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -17,8 +18,12 @@ import {
   getStorageProvider,
   storageProviderKind,
   storageTransferCostFact,
+  type StorageDownloadResult,
 } from "@/lib/storage";
 import { extractAudioRange } from "@/lib/media/probe";
+import { StorageDownloadError } from "@/lib/storage/types";
+import { scribeTranscriptCapabilities } from "@/lib/transcription/scribe-capabilities";
+import { srtTranscriptProvenance } from "@/lib/transcription/provenance";
 import { applyFillerDetection } from "@/lib/transcription/filler-detection";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import {
@@ -91,6 +96,7 @@ async function recordStorageDownloadFact(params: {
   bytes: number;
   wallTimeMs: number;
   outcome: ProcessingCostOutcome;
+  download?: StorageDownloadResult | void;
 }) {
   await recordProcessingCostFactSafely(params.prisma, {
     ...storageTransferCostFact({
@@ -101,6 +107,7 @@ async function recordStorageDownloadFact(params: {
       wallTimeMs: params.wallTimeMs,
       attempt: Math.max(1, params.attempt),
       outcome: params.outcome,
+      download: params.download,
     }),
     workspaceId: params.workspaceId,
     projectId: params.projectId,
@@ -135,6 +142,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   const transcriptionKeyterms = readScribeKeyterms(project.processingConfig);
   let result: TranscriptionResult;
   let providerName: string;
+  let srtIdentity: { sha256: string; byteCount: number } | null = null;
 
   if (sourceVideo.srtOverrideKey) {
     const downloadStartedAt = Date.now();
@@ -164,6 +172,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
       });
       throw error;
     }
+    srtIdentity = { sha256: createHash("sha256").update(srtBuffer).digest("hex"), byteCount: srtBuffer.byteLength };
     const srtText = srtBuffer.toString("utf-8");
     const transcriptionStartedAt = startRuntimeMeasurement();
     try {
@@ -215,7 +224,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
     let downloadSucceeded = false;
     let providerUsed: TranscriptionProvider | null = null;
     try {
-      await storage.downloadToFile(sourceVideo.audioKey, audioPath);
+      const download = await storage.downloadToFile(sourceVideo.audioKey, audioPath);
       downloadSucceeded = true;
       await recordStorageDownloadFact({
         prisma,
@@ -224,6 +233,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         jobId: job.id,
         attempt: job.attempt,
         bytes: audioBytes,
+        download,
         wallTimeMs: Date.now() - downloadStartedAt,
         outcome: "succeeded",
       });
@@ -368,6 +378,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
           jobId: job.id,
           attempt: job.attempt,
           bytes: audioBytes,
+          download: error instanceof StorageDownloadError ? error.download : undefined,
           wallTimeMs: Date.now() - downloadStartedAt,
           outcome: "failed",
         });
@@ -425,6 +436,14 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
         sourceVideoId: sourceVideo.id,
         language: result.language,
         provider: providerName,
+        ...(result.providerEvidence ? { providerEvidence: { ...result.providerEvidence,
+          displayCapabilities: scribeTranscriptCapabilities(result.providerEvidence) } } : {}),
+        // Only an uploaded SRT has complete provenance here. Audio providers keep null until submission provenance exists.
+        ...(srtIdentity && providerName === "srt_upload" ? (() => {
+          const provenance = srtTranscriptProvenance({ sourceVideoId: sourceVideo.id, srtSha256: srtIdentity.sha256,
+            srtByteCount: srtIdentity.byteCount, language: result.language });
+          return { capabilities: provenance.capabilities, provenance };
+        })() : {}),
         fullText,
       },
     });

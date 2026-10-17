@@ -21,7 +21,7 @@ export async function POST(
   { params }: { params: Promise<{ uploadId: string }> },
 ) {
   const auth = await requireApiWorkspace("IMPORT_MEDIA");
-  if ("error" in auth) return auth.error;
+  if ("error" in auth) return auth.error!;
   const { workspace } = auth;
 
   const { uploadId } = await params;
@@ -30,6 +30,12 @@ export async function POST(
   if (!parsed.success) {
     return apiError("INVALID_FILE_TYPE", "That file isn't a video we can read.");
   }
+
+  if (!z.string().uuid().safeParse(uploadId).success) {
+    return apiError("INVALID_UPLOAD_REQUEST", "This upload request is invalid.");
+  }
+  const multipart = await prisma.multipartUpload.findFirst({ where: { id: uploadId, workspaceId: workspace.id }, select: { id: true } });
+  if (multipart) return apiError("MULTIPART_UPLOAD_REQUIRED", "Complete this upload through its multipart session.", { status: 409 });
 
   const storage = getStorageProvider();
   const tempKey = `tmp/${workspace.id}/${uploadId}`;

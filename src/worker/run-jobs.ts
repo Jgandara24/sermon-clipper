@@ -1,3 +1,4 @@
+import { reconcileMultipartUploads } from "@/lib/uploads/multipart-recovery";
 import { runOnePendingExportJob } from "@/lib/exports/runner";
 import { recoverStaleExportJobs } from "@/lib/exports/queue";
 import { coordinateScheduledRenders } from "@/lib/review/render-coordinator";
@@ -18,6 +19,8 @@ import {
 } from "@/lib/observability/error-reporting";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { prisma } from "@/lib/prisma";
+import { purgeExpiredMultipartUploads } from "@/lib/uploads/multipart-cleanup";
+import { closeStorageProvider, getStorageProvider } from "@/lib/storage";
 import {
   enqueueDueCleanupJobs,
   purgeAbandonedUploads,
@@ -45,6 +48,7 @@ const WORKER_PROCESS_HEARTBEAT_INTERVAL_MS = workerProcessHeartbeatIntervalMs();
 let shuttingDown = false;
 let lastRecoveryAt = 0;
 let lastCleanupScanAt = 0;
+let multipartRecoveryCursor: string | undefined;
 let lastChannelPollAt = 0;
 let lastFacebookPublishPollAt = 0;
 let lastScheduledRenderSweepAt = 0;
@@ -134,17 +138,28 @@ async function loop() {
               console.error("[worker] abandoned upload sweep failed", error);
               return { scanned: 0, removed: [] as string[] };
             });
+            const multipartRecovery = await reconcileMultipartUploads(prisma, getStorageProvider(), {
+              afterId: multipartRecoveryCursor,
+            }).catch((error: unknown) => {
+              console.error("[worker] multipart recovery scan failed", error);
+              return { scanned: 0, recovered: 0, pending: 0, failed: 1, nextCursor: multipartRecoveryCursor ?? null };
+            });
+            multipartRecoveryCursor = multipartRecovery.nextCursor ?? undefined;
+            const multipartSweep = await purgeExpiredMultipartUploads(prisma, getStorageProvider()).catch((error: unknown) => {
+              console.error("[worker] multipart upload sweep failed", error);
+              return { scanned: 0, aborted: 0, raced: 0, failed: 1, needsReview: 0 };
+            });
             const srtSweep = await purgeAbandonedSrts(prisma).catch((error: unknown) => {
               console.error("[worker] unused subtitle sweep failed", error);
               return { scanned: 0, removed: 0, kept: 0, failed: 1 };
             });
-            if (cleanupScan.enqueued || orphanSweep.rowsDeleted || uploadSweep.removed.length || srtSweep.removed || srtSweep.failed) {
-              console.log("[worker] retention cleanup scan", { cleanupScan, orphanSweep, uploadSweep, srtSweep });
+            if (cleanupScan.enqueued || orphanSweep.rowsDeleted || uploadSweep.removed.length || srtSweep.removed || srtSweep.failed || multipartSweep.aborted || multipartSweep.failed || multipartSweep.needsReview || multipartRecovery.recovered || multipartRecovery.failed) {
+              console.log("[worker] retention cleanup scan", { cleanupScan, orphanSweep, uploadSweep, srtSweep, multipartSweep, multipartRecovery });
               await recordOperationalEventSafely(prisma, {
                 category: "worker",
                 eventType: "retention_scan",
                 message: "Retention scan enqueued cleanup work.",
-                metadata: { cleanupScan, orphanSweep, uploadSweep, srtSweep },
+                metadata: { cleanupScan, orphanSweep, uploadSweep, srtSweep, multipartSweep, multipartRecovery },
               });
             }
           },
@@ -286,6 +301,7 @@ recordWorkerProcessHeartbeat(prisma, {
 });
 loop().then(async () => {
   console.log("[worker] shutting down");
+  await closeStorageProvider();
   await flushErrorReporting();
   process.exit(0);
 });

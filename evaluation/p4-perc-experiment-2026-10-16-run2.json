@@ -1,0 +1,127 @@
+{
+  "version": "perc-retrieval-deletion-experiment-v1",
+  "runId": "db695926-e611-4fe2-8c71-a09b4116864d",
+  "scope": "SYNTHETIC_RTMPS_FEED_ONLY",
+  "steps": [
+    {
+      "step": "verify_token",
+      "outcome": "PASSED",
+      "elapsedMs": 290,
+      "detail": {
+        "status": "active"
+      }
+    },
+    {
+      "step": "create_live_input",
+      "outcome": "PASSED",
+      "elapsedMs": 459,
+      "detail": {
+        "liveInputId": "23158c43bd52f2112ee4cad67fc0b368",
+        "recordingMode": "automatic"
+      }
+    },
+    {
+      "step": "push_synthetic_feed",
+      "outcome": "PASSED",
+      "elapsedMs": 90733,
+      "detail": {
+        "pushSeconds": 90
+      }
+    },
+    {
+      "step": "wait_for_recording",
+      "outcome": "PASSED",
+      "elapsedMs": 30938,
+      "detail": {
+        "videoId": "c579160132b17775f27f4d8ad4598c86",
+        "observations": 3,
+        "recordingCount": 1,
+        "reportedDurationS": 88,
+        "readyAfterPushMs": 30938
+      }
+    },
+    {
+      "step": "create_mp4_download",
+      "outcome": "PASSED",
+      "elapsedMs": 347,
+      "detail": {
+        "initialStatus": "inprogress"
+      }
+    },
+    {
+      "step": "wait_for_mp4_download",
+      "outcome": "PASSED",
+      "elapsedMs": 15366,
+      "detail": {
+        "observations": 2,
+        "percentComplete": [
+          0,
+          100
+        ]
+      }
+    },
+    {
+      "step": "download_and_verify_mp4",
+      "outcome": "PASSED",
+      "elapsedMs": 2560,
+      "detail": {
+        "byteCount": 28546140,
+        "durationS": 88.067
+      }
+    },
+    {
+      "step": "delete_and_confirm",
+      "outcome": "PASSED",
+      "elapsedMs": 0,
+      "detail": {
+        "residual": []
+      }
+    }
+  ],
+  "retrieval": {
+    "byteCount": 28546140,
+    "sha256": "4e79d39d54d0e0616eb3e9329a94989f357ac8733b85f5f8bcaad9afcd805a31",
+    "durationS": 88.067,
+    "width": 1280,
+    "height": 720,
+    "hasAudio": true,
+    "providerDurationS": 88,
+    "pushSeconds": 90
+  },
+  "deletion": {
+    "videoDeleteRequest": "Cloudflare DELETE /accounts/:id/stream/:id failed with HTTP 200.",
+    "videoAbsent": {
+      "confirmed": true,
+      "observations": 1,
+      "elapsedMs": 302
+    },
+    "downloadsAbsent": {
+      "confirmed": true,
+      "observations": 1,
+      "elapsedMs": 132
+    },
+    "downloadUrlUnavailable": {
+      "confirmed": true,
+      "observations": 4,
+      "elapsedMs": 46884
+    },
+    "liveInputDeleteRequest": "ACCEPTED",
+    "liveInputAbsent": {
+      "confirmed": true,
+      "observations": 1,
+      "elapsedMs": 163
+    }
+  },
+  "costEstimate": {
+    "storedMinutes": 1.5,
+    "deliveredMinutes": 1.5,
+    "storageMonthUsdIfHeldAllMonth": 0.0075,
+    "mp4DeliveryUsd": 0.0015,
+    "priceEvidenceUrl": "https://developers.cloudflare.com/stream/pricing/",
+    "pricesCheckedOn": "2026-10-16",
+    "status": "ESTIMATE_NOT_INVOICE"
+  },
+  "residualResources": [],
+  "conclusion": "RETRIEVAL_AND_DELETION_PROVEN",
+  "productionApproved": false
+}

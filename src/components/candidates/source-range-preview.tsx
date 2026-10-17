@@ -87,8 +87,7 @@ export function SourceRangePreview({
   if (!mediaUrl) {
     return (
       <p data-testid="preview-unavailable" className="mt-2 text-xs text-stone-500">
-        The sermon recording for this service has been deleted, so this moment can no longer be
-        played.
+        This preview is unavailable.
       </p>
     );
   }

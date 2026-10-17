@@ -22,6 +22,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ uplo
     );
   }
 
+  const multipart = await prisma.multipartUpload.findFirst({
+    where: { id: uploadId, workspaceId: verified.workspaceId }, select: { id: true },
+  });
+  if (multipart) return apiError("MULTIPART_UPLOAD_REQUIRED", "Send file parts through this upload's multipart session.", { status: 409 });
+
   if (!request.body) {
     await recordOperationalEventSafely(prisma, {
       workspaceId: verified.workspaceId,

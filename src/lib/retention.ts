@@ -190,6 +190,17 @@ export async function enqueueDueCleanupJobs(client: PrismaClient, now = new Date
     projectIds.add(project.id);
   }
 
+  // Early deletion candidates: an active project whose original remains and whose source has approved ranges.
+  // The cleanup job proves coverage under locks; this scan only finds work.
+  if (process.env.P4_EARLY_ORIGINAL_DELETION_ENABLED === "true") {
+    const early = await client.project.findMany({
+      where: { expiresAt: { gt: now }, sourceVideo: { storageKey: { not: null },
+        derivedArtifacts: { some: { kind: "CANDIDATE_RANGE", publicationState: "READY", deletedAt: null } } } },
+      select: { id: true }, orderBy: { id: "asc" }, take: 50,
+    });
+    for (const project of early) projectIds.add(project.id);
+  }
+
   let enqueued = 0;
   for (const projectId of projectIds) {
     const idempotencyKey = cleanupIdempotencyKey(projectId, now);

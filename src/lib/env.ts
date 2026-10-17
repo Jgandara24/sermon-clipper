@@ -101,6 +101,8 @@ const fieldSchemas = {
   // Storage
   STORAGE_PROVIDER: z.string().default("local"),
   STORAGE_LOCAL_ROOT: optionalString,
+  STORAGE_CACHE_ROOT: optionalString,
+  STORAGE_CACHE_MAX_BYTES: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
   STORAGE_S3_BUCKET: optionalString,
   STORAGE_S3_REGION: z.string().default("auto"),
   STORAGE_S3_ENDPOINT: optionalString,
@@ -112,6 +114,7 @@ const fieldSchemas = {
     .transform((raw) => raw === "true"),
   STORAGE_DOWNLOAD_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   STORAGE_UPLOAD_PRICE_PER_GB_USD: optionalNonNegativeNumber,
+  STORAGE_MULTIPART_REQUEST_PRICING_JSON: optionalString,
 
   // Email / notifications
   RESEND_API_KEY: optionalString,

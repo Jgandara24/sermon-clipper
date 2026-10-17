@@ -1,0 +1,73 @@
+{
+  "version": "perc-retrieval-deletion-experiment-v1",
+  "runId": "0d829f65-93e4-4ffa-8611-4f71daa9762d",
+  "scope": "SYNTHETIC_RTMPS_FEED_ONLY",
+  "steps": [
+    {
+      "step": "verify_token",
+      "outcome": "PASSED",
+      "elapsedMs": 416,
+      "detail": {
+        "status": "active"
+      }
+    },
+    {
+      "step": "create_live_input",
+      "outcome": "PASSED",
+      "elapsedMs": 436,
+      "detail": {
+        "liveInputId": "d067a387f7ea0cef67ce799110af7bcf",
+        "recordingMode": "automatic"
+      }
+    },
+    {
+      "step": "push_synthetic_feed",
+      "outcome": "FAILED",
+      "elapsedMs": 2518,
+      "detail": {
+        "error": "PERC_PUSH_FAILED_224: [tls @ 0x7fef4d908740] Error in the push function.\n[tls @ 0x7fef4d908740] IO error: Broken pipe\nav_interleaved_write_frame(): Broken pipe\n[out#0/flv @ 0x7fef4d80a840] Error muxing a packet\n[out#0/flv @ 0x7fef4d80a840] Error writing trailer: Broken pipe\n[tls @ 0x7fef4d908740] The specified session has been invalidated for some reason.\n    Last message repeated 1 times\n"
+      }
+    },
+    {
+      "step": "wait_for_recording",
+      "outcome": "SKIPPED",
+      "elapsedMs": 0
+    },
+    {
+      "step": "create_mp4_download",
+      "outcome": "SKIPPED",
+      "elapsedMs": 0
+    },
+    {
+      "step": "wait_for_mp4_download",
+      "outcome": "SKIPPED",
+      "elapsedMs": 0
+    },
+    {
+      "step": "download_and_verify_mp4",
+      "outcome": "SKIPPED",
+      "elapsedMs": 0
+    },
+    {
+      "step": "delete_and_confirm",
+      "outcome": "PASSED",
+      "elapsedMs": 0,
+      "detail": {
+        "residual": []
+      }
+    }
+  ],
+  "retrieval": null,
+  "deletion": {
+    "liveInputDeleteRequest": "ACCEPTED",
+    "liveInputAbsent": {
+      "confirmed": true,
+      "observations": 1,
+      "elapsedMs": 286
+    }
+  },
+  "costEstimate": null,
+  "residualResources": [],
+  "conclusion": "FAILED",
+  "productionApproved": false
+}

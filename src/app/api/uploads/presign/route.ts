@@ -1,3 +1,7 @@
+import { getStorageProvider, storageProviderKind } from "@/lib/storage";
+import { multipartUploadSettings } from "@/lib/uploads/multipart-config";
+import { registerMultipartUpload } from "@/lib/uploads/multipart-session";
+import { multipartErrorResponse } from "@/lib/uploads/multipart-response";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireApiWorkspace } from "@/lib/api/auth";
@@ -13,13 +17,14 @@ import { checkUploadPresignLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   filename: z.string().trim().min(1).max(255),
-  size: z.number().int().positive(),
+  size: z.number().int().positive().safe(),
+  transport: z.literal("relay").optional(),
   type: z.string().trim().min(1).max(255).optional(),
 });
 
 export async function POST(request: Request) {
   const auth = await requireApiWorkspace("IMPORT_MEDIA");
-  if ("error" in auth) return auth.error;
+  if ("error" in auth) return auth.error!;
   const { workspace } = auth;
 
   const json = await request.json().catch(() => null);
@@ -94,7 +99,23 @@ export async function POST(request: Request) {
     });
   }
 
+  if (storageProviderKind() === "s3" && parsed.data.transport !== "relay") {
+    try {
+      const settings = multipartUploadSettings();
+      if (settings) {
+        const expiresAt = new Date(Date.now() + settings.lifetimeSeconds * 1000);
+        const row = await registerMultipartUpload(prisma, getStorageProvider(), {
+          id: uploadId, workspaceId: workspace.id, filename: parsed.data.filename,
+          totalBytes: parsed.data.size, partBytes: settings.partBytes, expiresAt,
+        });
+        return apiData({ uploadId: row.id, transport: "multipart", partBytes: Number(row.partBytes),
+          totalBytes: Number(row.totalBytes), expiresAt: row.expiresAt.toISOString() });
+      }
+    } catch (error) { return multipartErrorResponse(error); }
+  }
+
   return apiData({
+    transport: "relay",
     uploadId,
     uploadUrl: createSignedUploadUrl({ uploadId, workspaceId: workspace.id, maxBytes: plan.maxUploadBytes }),
     method: "PUT",

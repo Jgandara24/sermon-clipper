@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as rangePublication from "@/lib/delivery/range-publication-claim";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { publishDueScheduledPosts } from "@/lib/integrations/facebook-publisher";
 
 const originalToken = process.env.META_SYSTEM_USER_TOKEN;
@@ -25,7 +26,7 @@ const eligibleSettings = {
   facebookConnection: { pageId: "1128280933691493", autoPostEnabled: true },
 };
 
-function makeClient(options: { heldProjectIds: string[] }) {
+function makeClient(options: { heldProjectIds: string[]; rangeInput?: boolean }) {
   const claims: string[] = [];
   const events: Array<Record<string, unknown>> = [];
   const client = {
@@ -33,6 +34,7 @@ function makeClient(options: { heldProjectIds: string[] }) {
       findMany: async () => [
         {
           id: "post-1",
+          clipId: "clip-1", exportJobId: "export-1",
           workspaceId: "ws-1",
           scheduledDate: new Date("2026-07-20T00:00:00Z"),
           attemptCount: 0,
@@ -49,7 +51,7 @@ function makeClient(options: { heldProjectIds: string[] }) {
             hookText: "You need to hear this.",
           },
           // The slot's own binding: the publisher no longer looks up the clip's newest export.
-          exportJob: { outputFile: { storageKey: "exports/ws-1/clip.mp4" } },
+          exportJob: { rangeInput: options.rangeInput ? { sourceVideoId: "source-1" } : null, outputFile: { storageKey: "exports/ws-1/clip.mp4" } },
         },
       ],
       updateMany: async ({ where }: { where: { id: string } }) => {
@@ -76,8 +78,8 @@ function makeClient(options: { heldProjectIds: string[] }) {
   return { client, claims, events };
 }
 
-async function run(heldProjectIds: string[]) {
-  const { client, claims, events } = makeClient({ heldProjectIds });
+async function run(heldProjectIds: string[], rangeInput = false) {
+  const { client, claims, events } = makeClient({ heldProjectIds, rangeInput });
   let metaCalls = 0;
   const summary = await publishDueScheduledPosts(client as never, {
     now: () => new Date("2026-07-20T15:00:00Z"),
@@ -119,9 +121,39 @@ describe("publishDueScheduledPosts transcription fallback hold", () => {
   });
 
   it("publishes normally when the project carries no hold", async () => {
-    const { summary, metaCalls } = await run([]);
+    const claim = vi.spyOn(rangePublication, "claimSourcePublication").mockResolvedValue({ status: "CLAIMED", attemptId: "fixture-intent" });
+    try {
+      const { summary, metaCalls } = await run([]);
+      expect(summary.postsPublished).toBe(1);
+      expect(metaCalls).toBe(1);
+    } finally { claim.mockRestore(); }
+  });
+});
 
-    expect(summary.postsPublished).toBe(1);
-    expect(metaCalls).toBe(1);
+describe.each([false, true])("source publication claim (range=%s)", rangeInput => {
+  it("makes no provider call after the transactional region check refuses", async () => {
+    const claim = vi.spyOn(rangePublication, "claimSourcePublication").mockResolvedValue({ status: "INELIGIBLE", reason: "source_region_forbidden" });
+    try {
+      const result = await run([], rangeInput);
+      expect(result.metaCalls).toBe(0);
+      expect(result.claims).toHaveLength(0);
+      expect(result.summary.postsSkippedNotEligible).toBe(1);
+      expect(result.events).toContainEqual(expect.objectContaining({ eventType: "facebook_publish_ineligible",
+        metadata: expect.objectContaining({ stage: "source_claim", reason: "source_region_forbidden" }) }));
+    } finally { claim.mockRestore(); }
+  });
+  it("uses the transactional intent without making a legacy claim", async () => {
+    const claim = vi.spyOn(rangePublication, "claimSourcePublication").mockResolvedValue({ status: "CLAIMED", attemptId: "range-attempt" });
+    try {
+      const result = await run([], rangeInput);
+      expect(result.metaCalls).toBe(1);
+      expect(result.claims).toHaveLength(0);
+      expect(claim).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ exportJobId: "export-1", clipId: "clip-1" }));
+    } finally { claim.mockRestore(); }
+  });
+  it("does not call the provider after another worker wins the claim", async () => {
+    const claim = vi.spyOn(rangePublication, "claimSourcePublication").mockResolvedValue({ status: "LOST" });
+    try { expect((await run([], rangeInput)).metaCalls).toBe(0); }
+    finally { claim.mockRestore(); }
   });
 });

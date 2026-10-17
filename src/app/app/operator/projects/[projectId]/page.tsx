@@ -1,7 +1,13 @@
+import { sourceViewImages } from "@/lib/media/source-view-images";
+import { SourceViewImages } from "@/components/operator/source-view-images";
+import { sourcePreviewUrl } from "@/lib/media/proxy-preview";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EditorialExceptionList } from "@/components/operator/editorial-exception-list";
+import { FullSourceFallbackForm } from "@/components/operator/full-source-fallback-form";
+import { fullSourceExportFallbackEnabled } from "@/lib/exports/full-source-fallback";
+import { rangeExportsEnabled } from "@/lib/exports/range-policy";
 import { OperatorProjectCandidatePool } from "@/components/operator/project-candidate-pool";
 import { requirePlatformOperator } from "@/lib/auth";
 import { loadOperatorProjectPool } from "@/lib/candidates/query";
@@ -52,7 +58,7 @@ export default async function OperatorProjectPage({
       speaker: true,
       workspaceId: true,
       workspace: { select: { name: true } },
-      sourceVideo: { select: { thumbnailKey: true, storageKey: true } },
+      sourceVideo: { select: { id: true, workspaceId: true, thumbnailKey: true, storageKey: true } },
     },
   });
   if (!project) notFound();
@@ -71,14 +77,9 @@ export default async function OperatorProjectPage({
   // One signed link to the church's recording, shared by every candidate preview (P3.4). Signed
   // for the church, like everything else here. Null once retention has purged the media, so the
   // preview says so rather than offering a link that 404s.
-  const previewUrl = project.sourceVideo?.storageKey
-    ? createSignedMediaUrl({
-        key: project.sourceVideo.storageKey,
-        workspaceId: project.workspaceId,
-        contentType: "video/mp4",
-        disposition: "inline",
-      })
-    : null;
+  const previewUrl = await sourcePreviewUrl(prisma, project.sourceVideo);
+  const viewImages = await sourceViewImages(prisma, project.sourceVideo);
+  assertNoSelectorSignal(viewImages, "sourceViewImages");
 
   // Fill options, only for the dates that have nothing to post. Loaded on the page rather than
   // fetched by the form, so nothing is requested until an operator has actually opened a service
@@ -97,6 +98,12 @@ export default async function OperatorProjectPage({
   const shortages = Object.fromEntries(
     shortageEntries.filter((entry): entry is [string, NonNullable<typeof entry>[1]] => entry !== null),
   );
+
+  // A scheduled clip with no render, while ranges are the normal input, may need an explicit fallback.
+  // Shown only when both switches are on and the original remains. The server re-checks everything.
+  const fallbackSlots = fullSourceExportFallbackEnabled() && rangeExportsEnabled() && pool.renderSourceAvailable
+    ? pool.slots.filter((slot) => slot.clipId !== null && slot.boundRender === null && slot.publishStatus === "NOT_STARTED")
+    : [];
 
   const thumbnailUrl = project.sourceVideo?.thumbnailKey
     ? createSignedMediaUrl({
@@ -146,6 +153,26 @@ export default async function OperatorProjectPage({
           <EditorialExceptionList rows={exceptions} />
         </div>
       </section>
+
+      <SourceViewImages images={viewImages} />
+
+      {fallbackSlots.length > 0 ? (
+        <section data-testid="operator-full-source-fallback" className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+          <h2 className="font-semibold">Full-source export fallback</h2>
+          <p className="mt-1 text-sm text-stone-500">
+            These scheduled clips have no render. Use this only when no approved range covers the clip.
+          </p>
+          <div className="mt-3 grid gap-4">
+            {fallbackSlots.map((slot) => (
+              <FullSourceFallbackForm
+                key={slot.scheduledPostId}
+                clipId={slot.clipId!}
+                clipTitle={pool.candidates.find((candidate) => candidate.clipId === slot.clipId)?.title ?? "Scheduled clip"}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <OperatorProjectCandidatePool
         pool={pool}

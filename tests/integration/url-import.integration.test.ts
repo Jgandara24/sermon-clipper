@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -20,7 +20,7 @@ import { JobFailureError } from "@/lib/jobs/types";
 import { MAX_UPLOAD_BYTES } from "@/lib/limits";
 import { YtDlpDownloadError, type YtDlpMetadata } from "@/lib/media/ytdlp";
 import { createDraftProjectForWorkspace } from "@/lib/project-service";
-import { getStorageProvider } from "@/lib/storage";
+import { closeStorageProvider, getStorageProvider } from "@/lib/storage";
 
 const execFileAsync = promisify(execFile);
 const prisma = new PrismaClient();
@@ -45,7 +45,7 @@ function metadataFixture(overrides: Partial<YtDlpMetadata> = {}): YtDlpMetadata 
 }
 
 beforeAll(async () => {
-  process.env.STORAGE_LOCAL_ROOT = path.join(process.cwd(), ".data", "integration-storage");
+  process.env.STORAGE_LOCAL_ROOT ??= path.join(process.cwd(), ".data", "integration-storage");
 
   // A real 5-second mp4: the injected download fake copies this into the handler's workDir so
   // the unchanged ffprobe/probe flow runs against a genuine video file.
@@ -94,6 +94,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await closeStorageProvider();
   await rm(fixtureDir, { recursive: true, force: true });
   if (workspaceId) {
     await prisma.workspace.delete({ where: { id: workspaceId } }).catch(() => {});
@@ -207,12 +208,14 @@ describe("URL import pipeline", () => {
       where: { jobId: job.id, eventType: "processing_cost_fact" },
       orderBy: { createdAt: "asc" },
     });
-    expect(costEvents).toHaveLength(2);
-    expect(costEvents.map((event) => event.category)).toEqual(["cost", "cost"]);
+    expect(costEvents).toHaveLength(3);
+    expect(costEvents.map((event) => event.category)).toEqual(["cost", "cost", "cost"]);
     expect(costEvents.map((event) => (event.metadata as { provider: string }).provider)).toEqual(
       expect.arrayContaining(["yt_dlp_direct", "railway_egress"]),
     );
-    for (const event of costEvents) {
+    const storageEvent = costEvents.find(event => (event.metadata as { provider: string }).provider === "local_storage");
+    expect(storageEvent?.metadata).toMatchObject({ stage: "download", bytes: (await stat(tinyVideoPath)).size });
+    for (const event of costEvents.filter(event => event.id !== storageEvent?.id)) {
       expect(event.metadata).toMatchObject({
         details: {
           channelImportSourceId: channelSource.id,

@@ -1,3 +1,4 @@
+import { sourcePreviewUrl } from "@/lib/media/proxy-preview";
 import { FileVideo, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -69,14 +70,7 @@ export default async function ProjectPage({
   // One signed link to the sermon recording, shared by every candidate's preview — each plays its
   // own span of it through byte ranges (P3.4). Null once retention has purged the media, which is
   // how the preview learns to say so instead of minting a link that 404s at playback.
-  const previewUrl = project.sourceVideo?.storageKey
-    ? createSignedMediaUrl({
-        key: project.sourceVideo.storageKey,
-        workspaceId: workspace.id,
-        contentType: "video/mp4",
-        disposition: "inline",
-      })
-    : null;
+  const previewUrl = await sourcePreviewUrl(prisma, project.sourceVideo);
   const candidates = (pool?.candidates ?? []).map((candidate) => {
     const extra = extrasByClipId.get(candidate.clipId);
     return {

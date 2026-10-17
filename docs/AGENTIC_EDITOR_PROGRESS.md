@@ -47,7 +47,8 @@ say. `DECISIONS.md` remains the authoritative record of decisions; this is a wor
 | P3.7 operator shortage-resolution action | done | 2026-09-06; `src/app/actions/operator-prior-service-fill.ts`, its form, the options loader, and an operator-only calendar link. Nothing preselected, confirmation re-checked server side, review link waits for a real file |
 | P3.8 reschedule a missed slot explicitly | done | 2026-09-06; `src/lib/schedule/reschedule-missed.ts` and its operator action. Same row mutated, binding retained, no automatic caller — asserted by a grep test |
 | P3.9 third-service option shown as coming later | done | 2026-09-06; disabled option in onboarding and settings, one shared `sermonsPerWeekSchema`, and the false candidate-count claim removed from church settings |
-| P4–P8 | not started | P3.9 is the last P3 slice. P4–P8 need their measured commit-by-commit update written and approved first — see the planning-status note at `AGENTIC_EDITOR_IMPLEMENTATION_PLAN.md` §13 |
+| P4 | local contracts, Wave 3, registration, cache, and source leases tested; derivative worker incomplete | See [P4 implementation status](P4_IMPLEMENTATION_STATUS.md) for all 25 requirements and 17 acceptance checks. Measured model and runtime choices remain pending. |
+| P5–P8 | not started | The measured commit plan remains pending. See `AGENTIC_EDITOR_IMPLEMENTATION_PLAN.md` §13. |
 
 **The decision that sets the order (2026-09-05).** The product owner chose to build the whole
 plan in order — P1.5's remainder, then P1.6 through P1.12, then P2, P3, P4, P5 and P6 — and to

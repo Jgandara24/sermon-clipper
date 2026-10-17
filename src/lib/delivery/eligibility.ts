@@ -48,6 +48,8 @@ export type DeliveryIneligibleReason =
   | "export_checksum_mismatch"
   | "render_qc_missing"
   | "render_qc_failed"
+  | "source_region_forbidden"
+  | "source_region_check_unavailable"
   // Judgement.
   | "editorial_review_missing"
   | "editorial_review_identity_mismatch"
@@ -103,6 +105,8 @@ export type DeliveryFacts = {
     qcStatus: RenderQcStatus | null;
     qcChecksum: string | null;
     outputFile: { checksum: string } | null;
+    usesRangeInput?: boolean;
+    sourceRegionStatus?: "clear" | "blocked" | "unavailable";
   } | null;
   /**
    * The decision that currently stands about **this exact rendered file**, or null when no
@@ -210,6 +214,11 @@ export function assessDeliveryEligibility(facts: DeliveryFacts): DeliveryEligibi
     return { eligible: false, reason: "render_qc_failed" };
   }
 
+  if (job.sourceRegionStatus !== "clear") {
+    return { eligible: false, reason: job.sourceRegionStatus === "blocked"
+      ? "source_region_forbidden" : "source_region_check_unavailable" };
+  }
+
   // 7. Judgement. Editorial ACCEPT always; the church's approval only when the workspace asks
   //    for one (Decision D).
   if (!facts.review) return { eligible: false, reason: "editorial_review_missing" };
@@ -279,6 +288,10 @@ export function describeDeliveryIneligibility(reason: DeliveryIneligibleReason):
       return "The bound export has no QC checksum.";
     case "export_checksum_mismatch":
       return "The output file is not the file QC measured.";
+    case "source_region_forbidden":
+      return "The exported interval overlaps restricted source content.";
+    case "source_region_check_unavailable":
+      return "The source region check is unavailable for this export.";
     case "render_qc_missing":
       return "The bound export has never been QC checked.";
     case "render_qc_failed":

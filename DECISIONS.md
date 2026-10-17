@@ -4058,3 +4058,28 @@ and report the previous day — turning a chosen Monday into a refused Sunday.
 second convention.
 
 Status: Active. Never call `rescheduleMissedSlot` from a sweep, poller, or allocator.
+
+## 2026-10-16 - Sermon Clipper And Pulpit Engine Share One Cloudflare Stream Account
+
+Decision: Jake decided to combine Pulpit Engine and Sermon Clipper "as one, depending on what we
+need", and to build in the Cloudflare account "Jake@jakegandara.com's Account". Cloudflare Stream
+work for Sermon Clipper, starting with the P4 item 20 PERC experiment, uses that account. This
+supersedes, for Cloudflare Stream, the 2026-07-23 entry's instruction that Sermon Clipper use its
+own Cloudflare Stream account. It does not by itself merge repositories, databases, or other
+credentials; each further combination step needs its own decision.
+
+Also on 2026-10-16, at Jake's instruction ("delete all the 19 videos ... they are old"), the
+account's 19 Stream videos were deleted through the API. All were Pulpit Engine PERC test
+recordings named "PECR - Sunnylane - Test ...", created 2026-05-27 through 2026-08-16, all in state
+`ready`, 1,050.1 minutes in total. Each returned HTTP 404 afterward, and Stream reported 0 videos.
+The account's one live input, "PECR - Sunnylane - Test", was not deleted.
+
+Why: The account was over its 1,000-minute Stream storage quota (1,050 minutes), which is the most
+likely reason Cloudflare refused the first PERC experiment's RTMPS push. One shared account is
+simpler while one person runs both products.
+
+Consequences: Sermon Clipper's Stream token can change Pulpit Engine Stream resources in the same
+account, so experiment code must touch only resources it created. Shared storage minutes are now
+one budget. Deleted recordings cannot be restored.
+
+Status: Active.

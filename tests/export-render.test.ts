@@ -70,7 +70,7 @@ describe("buildExportFfmpegArgs", () => {
     expect(args[args.indexOf("-vf") + 1]).toBe(
       buildExportFilterGraph(params.cropPixels, 1080, 1920, params.assFilePath),
     );
-    expect(args[args.indexOf("-af") + 1]).toBe(buildExportAudioFilter(undefined));
+    expect(args[args.indexOf("-af") + 1]).toBe(buildExportAudioFilter(undefined, 6250));
     expect(args.slice(args.indexOf("-c:v"))).toEqual([
       "-c:v", "libx264", "-preset", "medium", "-crf", "18",
       "-c:a", "aac", "-b:a", "192k",
@@ -83,6 +83,6 @@ describe("buildExportFfmpegArgs", () => {
 
   it("carries the document's volume into the audio chain", () => {
     const args = buildExportFfmpegArgs({ ...params, originalVolume: 0.5 });
-    expect(args[args.indexOf("-af") + 1]).toBe(buildExportAudioFilter(0.5));
+    expect(args[args.indexOf("-af") + 1]).toBe(buildExportAudioFilter(0.5, 6250));
   });
 });

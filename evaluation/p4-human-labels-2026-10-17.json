@@ -1,0 +1,4640 @@
+{
+ "schemaVersion": "p4-human-labels-v1",
+ "createdDate": "2026-10-17",
+ "builtFrom": {
+  "branch": "codex/p4-sermon-understanding",
+  "commit": "7d7191a141c4707050b5dac04fad9ae7df292809",
+  "directory": "docs/",
+  "recordCount": 65,
+  "pushStatus": "The source branch is local only. Files under tmp/ are cited by checksum and are not committed."
+ },
+ "privacy": "Built for a public repository. It omits local file paths, recording titles, preview files, and quoted sermon speech. Jake's verdict statements are kept verbatim.",
+ "processingRestriction": "Both recordings are approved for local, offline processing only. Do not upload them or send them to a paid service.",
+ "resolutionRule": "A later decision overrides an earlier one only within the same scope. Superseded values stay in each label's supersedes list. A proposal stays a proposal until a record applies it.",
+ "intervalConvention": "Times are integer microseconds of source presentation time. Intervals are half-open [start, end).",
+ "timeProvenanceValues": {
+  "jake_supplied": "Jake typed the time.",
+  "jake_supplied_visible_timestamps": "Jake read the time from a timestamped preview.",
+  "jake_supplied_whole_second_cue": "Jake gave a whole-second time.",
+  "derived_from_jake_times": "Arithmetic between two Jake times.",
+  "assistant_frame_evidence_jake_approved": "The assistant found exact decoded frames. Jake approved the interval.",
+  "assistant_observed_frame_jake_approved_event": "The assistant read a frame time in a browser. Jake approved the event, not the number.",
+  "assistant_estimate_jake_approved_rendered_preview": "Jake approved a rendered preview that ends or starts at the time.",
+  "detector_candidate_jake_classified_window": "An earlier detector proposed the time. Jake confirmed the event inside a window.",
+  "review_window_chosen_by_assistant": "The window edges are review limits, not events.",
+  "measured_by_assistant_jake_accepted": "The assistant measured the value. Jake accepted it.",
+  "jake_decision_on_assistant_candidate": "Jake accepted an assistant candidate.",
+  "assistant_draft_from_subtitles_and_sparse_frames": "Draft. Diagnostic use only."
+ },
+ "recordings": [
+  {
+   "id": "recording-1",
+   "sourceSha256": "72a348eff1424d6b759205d846a1e481d5b9ad95764d4e14aa78f6db6be642a0",
+   "durationUs": 2820458005,
+   "video": "h264 854x480, 24000/1001 fps, time base 1/24000",
+   "segments": [
+    "V1",
+    "V2",
+    "V3",
+    "V4"
+   ],
+   "sourceChecksumVerified": "2026-10-17"
+  },
+  {
+   "id": "recording-2",
+   "sourceSha256": "975a85c0b63d88cb2e7a43f7e881cb26957a97a960af2dd7ca96ae49a2ba41bf",
+   "durationUs": 4178942000,
+   "video": "h264 640x360, 30 fps, time base 1/15360",
+   "segments": [
+    "C1",
+    "C2",
+    "C3"
+   ],
+   "sourceChecksumVerified": "2026-10-17"
+  }
+ ],
+ "counts": {
+  "records": 65,
+  "topLevelDirectJakeDecisionRecords": 46,
+  "aggregateRecordsWithNestedJakeDecisions": 3,
+  "labels": 69,
+  "sampledFrameLabels": 192,
+  "sceneChangeLabels": 6
+ },
+ "records": [
+  {
+   "file": "docs/P4_C1_FINAL_APPROVAL.json",
+   "sha256": "3a2ff7c75fc507afa27d6990a28f16e222d0a083e0631c258dd390c4497af0a7",
+   "date": "2026-10-11",
+   "directJakeDecision": false,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_C2_MANUAL_FINAL_APPROVAL.json",
+   "sha256": "4a08016e46f123db9d1e56c21c9a5696e1e6342ff21a2888ac326b6c89dd2deb",
+   "date": "2026-10-11",
+   "directJakeDecision": false,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_C2_MANUAL_PROPOSAL_FEEDBACK.json",
+   "sha256": "a0ccf393c31593d23c19041bffe332d9a078d1c6c4d7da4cabd69f65cbb83d46",
+   "date": "2026-10-11",
+   "directJakeDecision": false,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_C2_RECOVERY_PROPOSAL_FEEDBACK.json",
+   "sha256": "a9a1840af93bff00b87253aaf41906090899b46cd2158ce7b489967fcdbce758",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_C3_MANUAL_FINAL_APPROVAL.json",
+   "sha256": "cfb6ab7b01906797e6024e0743308ef1e7b8b69beac94e3f3dc326543580e1d9",
+   "date": "2026-10-12",
+   "directJakeDecision": false,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_C3_RECOVERY_PROPOSAL_FEEDBACK.json",
+   "sha256": "5192173d977bdb156376d5b6f16216fed23883b59e1f87c31d093f47ae32db4b",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_CAPTION_REVIEW_STATE.json",
+   "sha256": "2d9fa441e1efc39f3794b805221b7e6cf09e4822a3f9c66e9d04f15fe9331eee",
+   "date": "2026-09-29",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "caption timing review; not a region or scene label"
+   ],
+   "dateSource": "file modification time; the record has no date field"
+  },
+  {
+   "file": "docs/P4_DATABASE_ADMINISTRATOR_SELECTION_JAKE.json",
+   "sha256": "63926a8b1ceb2af5ebcd3cccb3a368bc4223b0d80e2188eece4b8a5efeb39916",
+   "date": "2026-10-14",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "database authorization; not a media label"
+   ],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_DATABASE_ROLE_APPLICATION_AUTHORIZATION_JAKE.json",
+   "sha256": "a584e9488bd62ebd03139715ee1a0b0170cc1c99ae5af3e399527620e50ca4d4",
+   "date": "2026-10-14",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "database authorization; not a media label"
+   ],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_EXCLUSION_APPLICATION_INTEGRATION_RECORDS.json",
+   "sha256": "83ebfc04e913a7fe39b1e7749b36719ea7d3d8f9eeb2f106c3393ec491260205",
+   "date": "2026-10-12",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "assistant planning snapshot; repeats V1-V3 records"
+   ],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_HISTORICAL_OUTLINE_RULE_ACCEPTANCE.json",
+   "sha256": "2d020a985e87611c0453374f8145705eea5aec15c6cd7af6b1b7d920cf78ac47",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+   "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+   "date": "2026-10-09",
+   "directJakeDecision": false,
+   "role": "label_source",
+   "notes": [
+    "Aggregate file. It holds many nested Jake decisions.",
+    "Top-level status: draft_requires_listening_review. Its five service-structure labels are assistant drafts; its nested reviews carry Jake decisions."
+   ],
+   "dateSource": "file modification time; the record has no date field"
+  },
+  {
+   "file": "docs/P4_LOCAL_TRANSCRIPTION_SETUP.json",
+   "sha256": "f68e707fc34f58e2516494e39dee2300adfaa7b21a397bd448387dd3abd4173b",
+   "date": "2026-09-27",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "tool setup; not a media label"
+   ],
+   "dateSource": "file modification time; the record has no date field"
+  },
+  {
+   "file": "docs/P4_METADATA_APPLICATION_AUTHORIZATION_JAKE.json",
+   "sha256": "bc841cbb2ea64a1002a632c5221fcdadcedcbc4f58eaa0e899da07b1c1fbbef7",
+   "date": "2026-10-14",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "database authorization; not a media label"
+   ],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_METADATA_DURATION_PRECISION_VERDICT.json",
+   "sha256": "c14328fc7ccc10c6420b767aacdf73845682fbd07a94f4448ec08da6ab43ca9d",
+   "date": "2026-10-14",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_OPERATOR_GRANT_AUTHORIZATION_JAKE.json",
+   "sha256": "6ea1786d7fe8c6d124acd237948fb4eec8f62937faa5df72312ce0017cdfbdca",
+   "date": "2026-10-14",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "operator grant; not a media label"
+   ],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_SCHEMA_APPLICATION_AUTHORIZATION_JAKE.json",
+   "sha256": "cd71c9f46d2f9de32b499688158e7d7f8a747eb6c04e3d6e64938b6ef92b5a66",
+   "date": "2026-10-13",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "schema authorization; not a media label"
+   ],
+   "dateSource": "file modification time; the record has no date field"
+  },
+  {
+   "file": "docs/P4_SECOND_CAPTION_REVIEW_STATE.json",
+   "sha256": "08fd5f108857877a6ddefc64d81ddc8bca60f69cd742352732ac4bf0595d5d89",
+   "date": "2026-10-05",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "caption timing review; not a region or scene label"
+   ],
+   "dateSource": "file modification time; the record has no date field"
+  },
+  {
+   "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+   "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+   "date": "2026-10-09",
+   "directJakeDecision": false,
+   "role": "label_source",
+   "notes": [
+    "Aggregate file. It holds many nested Jake decisions."
+   ],
+   "dateSource": "file modification time; the record has no date field"
+  },
+  {
+   "file": "docs/P4_SYNTHETIC_PLAYBACK_APPROVAL.json",
+   "sha256": "1febe88759e58631c29901af7c19b9739b478280d6685cc80690007689d1e069",
+   "date": "2026-10-10",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "synthetic playback approval; no real recording time"
+   ],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V1_BOUNDARY_REVIEW_FEEDBACK.json",
+   "sha256": "8a5cc827f40346cc56c11710bd0061812a90af53a2c265793aea937bc9e4eb4b",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V1_SOURCE_REVIEW_FEEDBACK.json",
+   "sha256": "1d9acfd9e10414f6b20073f89b3297ddc7625834fd6e5ee6d78990aed243ace6",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "superseded",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V1_SOURCE_REVIEW_REVISION_2.json",
+   "sha256": "bab784e67af0211beefbd14ef57bc1ba895b5e714620760e9f26ad306ed6f655",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_ADDITIONAL_EXCLUSION_PROPOSAL.json",
+   "sha256": "ab935447bd5acea1cf16668a2ac266aff4cf1d1e4b90d9d04027489c6a892812",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_AFTER_INSTALLED_CAMERA_CUT_VERDICT.json",
+   "sha256": "ea87ce0299f3b1e2aa57c08148c6f509d25982dd02dce3f065d8311f380fa2bd",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_AFTER_INSTALLED_IDENTITY_VERDICT.json",
+   "sha256": "1d2df81c9d30857cc40ab88e7615e6d36722b37d974be6ab3714c794cd231ff0",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_AFTER_INSTALLED_MOVEMENT_VERDICT.json",
+   "sha256": "bd2edc359697483d5a68fb590888a12129e6ebbb3195f16eb830c7a293466701",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_AFTER_INSTALLED_PICTURE_VERDICT.json",
+   "sha256": "044f81ccc1009e6d7dd50a4a4eea5aaed88aa088252aba5bd2dbbba33e0774e2",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_AFTER_INSTALLED_SOUND_VERDICT.json",
+   "sha256": "1d01ddbf518bcfd324805bd88c492e78880aca1e9ae8999cb7715a5ec143c476",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_AFTER_INSTALLED_SOURCE_TEXT_VERDICT.json",
+   "sha256": "02d95d4397e0ad6adcd8e9aad642b2759e7526b30976f6ea604f8448b885b286",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_AFTER_LATE_PROBLEM_CONTENT_VERDICT.json",
+   "sha256": "35c18d45d132821e549cca437818ee3e938932841b6c3e5db6a7f1f0af4bd00d",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_BOUNDARY_REVIEW_FEEDBACK.json",
+   "sha256": "503903a577ccc7609f9da96290bde89eec3ed876c196dfa4164a9b9a548ac674",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_CONSOLIDATED_COMPARISON.json",
+   "sha256": "fdcb7445389c55248ffb92e92c4809e2be3c593e4cc21e7ad9cdd00d084a3e41",
+   "date": "2026-10-13",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "assistant arithmetic consolidation; repeats V2 records"
+   ],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_EARLIER_WIDE_SHOT_EXCLUSION_PROPOSAL.json",
+   "sha256": "68a004c55fd617da7fac3e58ea5b201875dca67f593e0fb43483b2fb7b92082f",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_EXACT_END_VERDICT.json",
+   "sha256": "1edd9e66e151e20fbcc76d1b55048bc790c3cbbfd5d335c248323eb462d9380c",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_FULL_STAGE_EXACT_TIME_VERDICT.json",
+   "sha256": "f850acfab188b0065bf45368ed452406beadad15212bc004cabb6b599d6613d3",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_INSTALLED_FIRST_CAMERA_CUT_VERDICT.json",
+   "sha256": "c4c9260e0f10e4667694588fad31a0f451df42476b3a349a7021b6b1dc7adf7f",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_INSTALLED_FIRST_IDENTITY_VERDICT.json",
+   "sha256": "fb12f4f4eadd50a6afa98cff7f280a88e26f1504d8b3b5207c9a03b1589468f1",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_INSTALLED_FIRST_MOVEMENT_VERDICT.json",
+   "sha256": "42be7f3ca47cde8613e896a9dc47ac08f3f9be5990f5227c74e6758bd144770c",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_INSTALLED_FIRST_PICTURE_VERDICT.json",
+   "sha256": "a493f6ac03663b23dd7aff77ecae1681820112f5d9168e18c6926c8ae576770e",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_INSTALLED_FIRST_SOUND_VERDICT.json",
+   "sha256": "e0db5227ae50b807563c259d30aba9a8bb31cb7b1e26bc9fcfc0caa4bb921bcd",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_INSTALLED_FIRST_SOURCE_TEXT_VERDICT.json",
+   "sha256": "5fb703135cb8d17d186e13c223f7e01bd2316225d287a510449a4db19fb68c1a",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_LATE_EXCLUSION_PROPOSAL.json",
+   "sha256": "e54d9d789630ade1097ea6be277b34b44f20821735fddde0c79c5701b5a07bb4",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_LATE_PROBLEM_END_VERDICT.json",
+   "sha256": "6ca53a318206172027c4c6a1b7c68d4d6b9e646d85464db2b431f08a560f3e51",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_LATE_PROBLEM_START_VERDICT.json",
+   "sha256": "ac4cad3fa11c2a9fe7886e16b0ed05bab4f6bb4b5d8db66b4deea7bf3b9ac016",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_MILLISECOND_ROUNDING_VERDICT.json",
+   "sha256": "775e5ab5eb2a68e0810aeacb8f51e32c0f3fe9fce6b68f3b45267cad35649044",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_REMAINING_CONTENT_FEEDBACK_2026_10_13.json",
+   "sha256": "b14779ea7fc56c9a2079c905ae4ef739eb49820ef0a48d728858219c80495fcc",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "partly_superseded",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_RETAINED_CAMERA_CUT_VERDICT.json",
+   "sha256": "6ba65b8ea255648270232ecb011bf2717055223961c76d0521a92a53e132d6b6",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_RETAINED_IDENTITY_VERDICT.json",
+   "sha256": "2eea1327ea0dee6a7c64a26e6453c0c266d8084798d0fbd669e822475df2d495",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_RETAINED_MOVEMENT_VERDICT.json",
+   "sha256": "dac6f2a07b48a068d576557e05e6e72ac92ce2b5cdc82ec9662508944b2aed57",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_RETAINED_PICTURE_VERDICT.json",
+   "sha256": "eef711667ac26757dcfe3731b02b1e8343504131c4e9d53015d0e2466f8fdc04",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_RETAINED_SOUND_VERDICT.json",
+   "sha256": "6d7d6ba83204201ca0d88d7fc86ee2af908e10b5a5ae0edf1e7c44edfb84a146",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_SHORT_GAP_EXCLUSION_PROPOSAL.json",
+   "sha256": "6e104abd9bc8a24587dd02bd5de61c62acccd74f66543b3ceeee2faf3693ab54",
+   "date": "2026-10-13",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_SOURCE_REVIEW_FEEDBACK.json",
+   "sha256": "87014a69f030cf027d1b86bb4d5122d8d685bfc713179770ceefccccbd835b92",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "partly_superseded",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V2_V3_OVERLAP_COMPARISON.json",
+   "sha256": "562abbd2a3bdadf7efd6b0d90975474da509b7f554f49a013ab680bf04d829b6",
+   "date": "2026-10-12",
+   "directJakeDecision": false,
+   "role": "context_only",
+   "notes": [
+    "assistant arithmetic comparison; repeats V2 and V3 records"
+   ],
+   "dateSource": "file modification time; the record has no date field"
+  },
+  {
+   "file": "docs/P4_V3_EXCEPTION_TO_V2_VERDICT.json",
+   "sha256": "a236322a08b06159eb7b321ba9e7ce8a2bc9267e6ef625f04350c062643845a5",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V3_INSTALLED_CAMERA_CUT_VERDICT.json",
+   "sha256": "ab76c0b9ad9781ed721ada4126fe3ce7cff5d0ae3e108dae0197b866b910352c",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V3_INSTALLED_IDENTITY_VERDICT.json",
+   "sha256": "e8f3cfc92fdba1ff2009428d4ff9dc7a68d5a55c53f0fc3fb8a545cfceca77ff",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V3_INSTALLED_MOVEMENT_VERDICT.json",
+   "sha256": "140dcae511783c2f1136c96d01654fb4f4f8c11ce35c58e42e82ecb1f0a5106e",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V3_INSTALLED_PICTURE_VERDICT.json",
+   "sha256": "d7224a36dd760a01fb69aa9ee6e77fd10a3b6b9ebf861fb27b1534de2d6f8111",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V3_INSTALLED_SOUND_VERDICT.json",
+   "sha256": "88888c4caa3ba39f13e97beec0713fc150e23cb3f199c00b426551c9a48b42c2",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V3_INSTALLED_SOURCE_TEXT_VERDICT.json",
+   "sha256": "4f1ad0573432b0b56e765107466fe190b5c5973c609972f79bdb223de693ff5c",
+   "date": "2026-10-15",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V3_SOURCE_REVIEW_FEEDBACK.json",
+   "sha256": "f02c263fdd82a99eaacfc8af7c4f710b9a3cdfa0810fcf4f2d4e1b007a1ce94e",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_V4_SOURCE_REVIEW_FEEDBACK.json",
+   "sha256": "a1168224f665634f4064e58bfc222aa07e2e91b180ae272f4dd5b65f22e2003c",
+   "date": "2026-10-12",
+   "directJakeDecision": true,
+   "role": "label_source",
+   "notes": [],
+   "dateSource": "record field"
+  },
+  {
+   "file": "docs/P4_VISUAL_FRAME_REVIEW.json",
+   "sha256": "db00c329f32e06e23bf2ebaa83dec1028c3b56180b34f0e92cb2142b8ecb0914",
+   "date": "2026-10-08",
+   "directJakeDecision": false,
+   "role": "label_source",
+   "notes": [
+    "Aggregate file. It holds many nested Jake decisions.",
+    "Saved sampling timestamps. Do not infer exact visual event boundaries. Images represent sampled instants only. Gaps stay unverified. Prior clip reviews retain their original scope."
+   ],
+   "dateSource": "record field"
+  }
+ ],
+ "labels": [
+  {
+   "id": "R1-DRAFT-1",
+   "recording": "recording-1",
+   "category": "service_structure",
+   "kind": "UNREVIEWED",
+   "interval": {
+    "startUs": 0,
+    "endUs": 320000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": null,
+   "timeProvenance": "assistant_draft_from_subtitles_and_sparse_frames",
+   "status": "draft",
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "labels[0]"
+    }
+   ],
+   "limits": [
+    "Diagnostic comparison only. Do not use these labels for activation, verified recall, automatic approval, or paid transcription.",
+    "Annotator: assistant. Full subtitle text and 95 sparse video frames. No listening review.",
+    "Unverified: Exact audible boundaries; Speech before 320 ms; Music intervals; Events between sparse frames; Subtitle synchronization; Completeness of the ending",
+    "Status draft_requires_listening_review."
+   ],
+   "supersedes": []
+  },
+  {
+   "id": "R1-DRAFT-2",
+   "recording": "recording-1",
+   "category": "service_structure",
+   "kind": "SERMON",
+   "interval": {
+    "startUs": 320000,
+    "endUs": 2469240000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": null,
+   "timeProvenance": "assistant_draft_from_subtitles_and_sparse_frames",
+   "status": "draft",
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "labels[1]"
+    }
+   ],
+   "limits": [
+    "Diagnostic comparison only. Do not use these labels for activation, verified recall, automatic approval, or paid transcription.",
+    "Annotator: assistant. Full subtitle text and 95 sparse video frames. No listening review.",
+    "Unverified: Exact audible boundaries; Speech before 320 ms; Music intervals; Events between sparse frames; Subtitle synchronization; Completeness of the ending",
+    "Status draft_requires_listening_review."
+   ],
+   "supersedes": []
+  },
+  {
+   "id": "R1-DRAFT-3",
+   "recording": "recording-1",
+   "category": "service_structure",
+   "kind": "RESPONSE_INVITATION",
+   "interval": {
+    "startUs": 2469240000,
+    "endUs": 2739599000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "exclude_pending_review",
+   "timeProvenance": "assistant_draft_from_subtitles_and_sparse_frames",
+   "status": "draft",
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "labels[2]"
+    }
+   ],
+   "limits": [
+    "Diagnostic comparison only. Do not use these labels for activation, verified recall, automatic approval, or paid transcription.",
+    "Annotator: assistant. Full subtitle text and 95 sparse video frames. No listening review.",
+    "Unverified: Exact audible boundaries; Speech before 320 ms; Music intervals; Events between sparse frames; Subtitle synchronization; Completeness of the ending",
+    "Status draft_requires_listening_review."
+   ],
+   "supersedes": []
+  },
+  {
+   "id": "R1-DRAFT-4",
+   "recording": "recording-1",
+   "category": "service_structure",
+   "kind": "PRAYER",
+   "interval": {
+    "startUs": 2629200000,
+    "endUs": 2635880000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": null,
+   "timeProvenance": "assistant_draft_from_subtitles_and_sparse_frames",
+   "status": "draft",
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "labels[3]"
+    }
+   ],
+   "limits": [
+    "Diagnostic comparison only. Do not use these labels for activation, verified recall, automatic approval, or paid transcription.",
+    "Annotator: assistant. Full subtitle text and 95 sparse video frames. No listening review.",
+    "Unverified: Exact audible boundaries; Speech before 320 ms; Music intervals; Events between sparse frames; Subtitle synchronization; Completeness of the ending",
+    "Status draft_requires_listening_review."
+   ],
+   "supersedes": []
+  },
+  {
+   "id": "R1-DRAFT-5",
+   "recording": "recording-1",
+   "category": "service_structure",
+   "kind": "PRAYER",
+   "interval": {
+    "startUs": 2739599000,
+    "endUs": 2820458000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": null,
+   "timeProvenance": "assistant_draft_from_subtitles_and_sparse_frames",
+   "status": "draft",
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "labels[4]"
+    }
+   ],
+   "limits": [
+    "Diagnostic comparison only. Do not use these labels for activation, verified recall, automatic approval, or paid transcription.",
+    "Annotator: assistant. Full subtitle text and 95 sparse video frames. No listening review.",
+    "Unverified: Exact audible boundaries; Speech before 320 ms; Music intervals; Events between sparse frames; Subtitle synchronization; Completeness of the ending",
+    "Status draft_requires_listening_review."
+   ],
+   "supersedes": []
+  },
+  {
+   "id": "R1-TEACHING-START",
+   "recording": "recording-1",
+   "category": "service_structure",
+   "kind": "TEACHING_START",
+   "timeUs": 19800000,
+   "decision": "exclude [0, start) from highlights as OTHER_SERVICE_CONTENT",
+   "timeProvenance": "jake_supplied",
+   "jakeStatementSummary": "User supplied 00:00:19.80 while reviewing the timestamped opening preview.",
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "openingReview"
+    }
+   ],
+   "limits": [
+    "Human approval applies to this recording and reviewed preview. Do not import a live application decision automatically.",
+    "Playback approval only. No new approval of portrait crop, title layout, or live policies."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-SERMON-END",
+   "recording": "recording-1",
+   "category": "service_structure",
+   "kind": "SERMON_END_CUT",
+   "timeUs": 2469240000,
+   "decision": "Sermon clips must stop before the request to bow heads.",
+   "timeProvenance": "assistant_estimate_jake_approved_rendered_preview",
+   "supersedes": [
+    {
+     "timeUs": 2470093000,
+     "reason": "earlier selected cut"
+    }
+   ],
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "userReview"
+    }
+   ],
+   "limits": [
+    "The user approved the rendered preview ending at the selected source cut, 00:41:09.240. Other labels remain unverified.",
+    "exactTimeVerified is false."
+   ],
+   "status": "current"
+  },
+  {
+   "id": "R1-OVERLAY-475025",
+   "recording": "recording-1",
+   "category": "visual_view",
+   "kind": "PROMOTIONAL_OVERLAY",
+   "interval": {
+    "startUs": 468176000,
+    "endUs": 481148000,
+    "convention": "half-open [start, end)"
+   },
+   "frameEdgesUs": {
+    "firstFrameOfView": 468176042,
+    "firstFrameAfterView": 481147333
+   },
+   "decision": "exclude_from_highlights",
+   "timeProvenance": "assistant_frame_evidence_jake_approved",
+   "sceneEvidenceUsedToPropose": false,
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "visualReviews[0]"
+    },
+    {
+     "file": "tmp/p4-overlay-boundaries-sihlcdn0/boundary-evidence.json",
+     "sha256": "89f0c271c7bd55897f3307907e235ec34375b42c313584ace6c92579b6575d34",
+     "location": "worktree tmp/ evidence; not committed"
+    }
+   ],
+   "limits": [
+    "This promotional overlay occurrence, including both fades. Other occurrences remain unreviewed.",
+    "This reviewed promotional overlay occurrence only. Other occurrences require review.",
+    "Interval ends were rounded outward to whole milliseconds with Jake's approval.",
+    "The overlay fades in and out. It is a gradual change, not a camera cut."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-OVERLAY-1068805",
+   "recording": "recording-1",
+   "category": "visual_view",
+   "kind": "PROMOTIONAL_OVERLAY",
+   "interval": {
+    "startUs": 1060809000,
+    "endUs": 1073823000,
+    "convention": "half-open [start, end)"
+   },
+   "frameEdgesUs": {
+    "firstFrameOfView": 1060809750,
+    "firstFrameAfterView": 1073822750
+   },
+   "decision": "exclude_from_highlights",
+   "timeProvenance": "assistant_frame_evidence_jake_approved",
+   "sceneEvidenceUsedToPropose": false,
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "visualReviews[1]"
+    },
+    {
+     "file": "tmp/p4-second-overlay-boundaries-cy7cqekg/boundary-evidence.json",
+     "sha256": "b14786eaa49be5d7d164c2c0dd966fc9d39a583d61c52b22e0adce45864ebd44",
+     "location": "worktree tmp/ evidence; not committed"
+    }
+   ],
+   "limits": [
+    "This second promotional overlay occurrence, including both fades and the faint final remnant. Other occurrences remain unreviewed.",
+    "This second reviewed promotional overlay occurrence only. Other occurrences require review.",
+    "Interval ends were rounded outward to whole milliseconds with Jake's approval.",
+    "The overlay fades in and out. It is a gradual change, not a camera cut."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-OVERLAY-29689",
+   "recording": "recording-1",
+   "category": "visual_view",
+   "kind": "PROMOTIONAL_OVERLAY",
+   "interval": {
+    "startUs": 27861000,
+    "endUs": 31907000,
+    "convention": "half-open [start, end)"
+   },
+   "frameEdgesUs": {
+    "firstFrameOfView": 27861167,
+    "firstFrameAfterView": 31906875
+   },
+   "decision": "exclude_from_highlights",
+   "timeProvenance": "assistant_frame_evidence_jake_approved",
+   "sceneEvidenceUsedToPropose": false,
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "visualReviews[2]"
+    },
+    {
+     "file": "tmp/p4-subscribe-boundaries-8ce5aavn/boundary-evidence.json",
+     "sha256": "d677742d8ea3022388923805e300eee9eaf2c2031effb2e8e1d066a39cbe55ca",
+     "location": "worktree tmp/ evidence; not committed"
+    }
+   ],
+   "limits": [
+    "This SUBSCRIBE overlay occurrence, including the complete entry and exit animation.",
+    "This reviewed SUBSCRIBE overlay occurrence only. Other occurrences require review.",
+    "Interval ends were rounded outward to whole milliseconds with Jake's approval.",
+    "The overlay fades in and out. It is a gradual change, not a camera cut."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-STAGE-VIEW-sheet02",
+   "recording": "recording-1",
+   "category": "visual_view",
+   "kind": "STAGE_AND_AUDIENCE_VIEW",
+   "interval": {
+    "startUs": 323865000,
+    "endUs": 406573000,
+    "convention": "half-open [start, end)"
+   },
+   "frameEdgesUs": {
+    "firstFrameOfView": 323865208,
+    "firstFrameAfterView": 406572833
+   },
+   "decision": "exclude_from_highlights",
+   "timeProvenance": "assistant_frame_evidence_jake_approved",
+   "sceneEvidenceUsedToPropose": true,
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "visualReviews[3]"
+    },
+    {
+     "file": "tmp/p4-stage-boundaries-2c5hg17a/boundary-evidence.json",
+     "sha256": "20c9b69f12618f6bd76307dc4f6802e1a2b960b09ba306e23b970d0e1fae02b5",
+     "location": "worktree tmp/ evidence; not committed"
+    }
+   ],
+   "limits": [
+    "All wide-view frames within this approved interval, including outward millisecond rounding.",
+    "This continuous stage-and-audience view only. No global rule for other stage-and-audience views.",
+    "Interval ends were rounded outward to whole milliseconds with Jake's approval.",
+    "The assistant found these edges with ffmpeg scene scores on the original. Agreement with a scene detector is partly circular."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-STAGE-VIEW-sheet05",
+   "recording": "recording-1",
+   "category": "visual_view",
+   "kind": "STAGE_AND_AUDIENCE_VIEW",
+   "interval": {
+    "startUs": 752501000,
+    "endUs": 798298000,
+    "convention": "half-open [start, end)"
+   },
+   "frameEdgesUs": {
+    "firstFrameOfView": 752501750,
+    "firstFrameAfterView": 798297500
+   },
+   "decision": "exclude_from_highlights",
+   "timeProvenance": "assistant_frame_evidence_jake_approved",
+   "sceneEvidenceUsedToPropose": true,
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "visualReviews[4]"
+    },
+    {
+     "file": "tmp/p4-stage-sheet05-05cn5hfc/boundary-evidence.json",
+     "sha256": "b908701a857914c492eddc205a144943860efed3fd96b411229f865bf84c4e8d",
+     "location": "worktree tmp/ evidence; not committed"
+    }
+   ],
+   "limits": [
+    "This wide-view interval, including outward millisecond rounding.",
+    "This continuous stage-and-audience occurrence only. Keep adjacent speaker views. No global exclusion rule.",
+    "Interval ends were rounded outward to whole milliseconds with Jake's approval.",
+    "The assistant found these edges with ffmpeg scene scores on the original. Agreement with a scene detector is partly circular."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-STAGE-VIEW-sheet13-A",
+   "recording": "recording-1",
+   "category": "visual_view",
+   "kind": "STAGE_AND_AUDIENCE_VIEW",
+   "interval": {
+    "startUs": 2158489000,
+    "endUs": 2173046000,
+    "convention": "half-open [start, end)"
+   },
+   "frameEdgesUs": {
+    "firstFrameOfView": 2158489667,
+    "firstFrameAfterView": 2173045875
+   },
+   "decision": "exclude_from_highlights",
+   "timeProvenance": "assistant_frame_evidence_jake_approved",
+   "sceneEvidenceUsedToPropose": true,
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "visualReviews[5]"
+    },
+    {
+     "file": "tmp/p4-stage-sheet13-l1x19usj/boundary-evidence.json",
+     "sha256": "5d9998465272518ceed843543ea8658391f492c7a0ae4a8a6b4af4a9acea1a5c",
+     "location": "worktree tmp/ evidence; not committed"
+    }
+   ],
+   "limits": [
+    "Interval A only. Interval B remains unapproved.",
+    "These reviewed occurrences only. Accepted speaker Images 2, 3, and 6 remain available. Do not merge excluded samples across accepted content. Exact boundaries and continuity require source review.",
+    "Interval ends were rounded outward to whole milliseconds with Jake's approval.",
+    "The assistant found these edges with ffmpeg scene scores on the original. Agreement with a scene detector is partly circular."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-STAGE-VIEW-sheet13-B",
+   "recording": "recording-1",
+   "category": "visual_view",
+   "kind": "STAGE_AND_AUDIENCE_VIEW",
+   "interval": {
+    "startUs": 2241197000,
+    "endUs": 2304636000,
+    "convention": "half-open [start, end)"
+   },
+   "frameEdgesUs": {
+    "firstFrameOfView": 2241197292,
+    "firstFrameAfterView": 2304635667
+   },
+   "decision": "exclude_from_highlights",
+   "timeProvenance": "assistant_frame_evidence_jake_approved",
+   "sceneEvidenceUsedToPropose": true,
+   "sources": [
+    {
+     "file": "docs/P4_LOCAL_BOUNDARY_LABELS.json",
+     "sha256": "e836bdb512db4caecd9d25ab0a7abc24a7d314f4810413d3e1f4d2bc5707b60c",
+     "date": null,
+     "field": "visualReviews[5]"
+    },
+    {
+     "file": "tmp/p4-stage-sheet13-l1x19usj/boundary-evidence.json",
+     "sha256": "5d9998465272518ceed843543ea8658391f492c7a0ae4a8a6b4af4a9acea1a5c",
+     "location": "worktree tmp/ evidence; not committed"
+    }
+   ],
+   "limits": [
+    "Interval B only. Adjacent speaker views remain outside the exclusion.",
+    "These reviewed occurrences only. Accepted speaker Images 2, 3, and 6 remain available. Do not merge excluded samples across accepted content. Exact boundaries and continuity require source review.",
+    "Interval ends were rounded outward to whole milliseconds with Jake's approval.",
+    "The assistant found these edges with ffmpeg scene scores on the original. Agreement with a scene detector is partly circular."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V1-WINDOW",
+   "recording": "recording-1",
+   "category": "review_window",
+   "kind": "SOURCE_REVIEW_WINDOW",
+   "segment": "V1",
+   "interval": {
+    "startUs": 47000000,
+    "endUs": 67000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "keep in highlights except R1-V1-EXCLUSION; picture otherwise acceptable; sound acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "V1 picture changes or problems: 00:00:58.980 - 00:01:03.830 (this segment should be excluded\n\nEverything else was fine except that part.",
+   "supersedes": [
+    {
+     "record": {
+      "file": "docs/P4_V1_SOURCE_REVIEW_FEEDBACK.json",
+      "sha256": "1d9acfd9e10414f6b20073f89b3297ddc7625834fd6e5ee6d78990aed243ace6",
+      "date": "2026-10-12"
+     },
+     "reason": "Replaces the earlier whole-window V1 acceptance."
+    }
+   ],
+   "sources": [
+    {
+     "file": "docs/P4_V1_SOURCE_REVIEW_REVISION_2.json",
+     "sha256": "bab784e67af0211beefbd14ef57bc1ba895b5e714620760e9f26ad306ed6f655",
+     "date": "2026-10-12"
+    }
+   ],
+   "limits": [
+    "This record does not change existing exclusion data.",
+    "This verdict does not approve a crop or worker output.",
+    "This verdict does not approve a crop or complete worker output.",
+    "This verdict does not establish recording-wide visual coverage."
+   ],
+   "status": "current"
+  },
+  {
+   "id": "R1-V1-EXCLUSION",
+   "recording": "recording-1",
+   "category": "human_exclusion",
+   "kind": "PICTURE_PROBLEM",
+   "segment": "V1",
+   "interval": {
+    "startUs": 58980000,
+    "endUs": 63830000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "exclude from highlights",
+   "timeProvenance": "jake_supplied",
+   "jakeStatement": "V1 picture changes or problems: 00:00:58.980 - 00:01:03.830 (this segment should be excluded\n\nEverything else was fine except that part.\n---\nV1 start: keep 00:00:58.980\nV1 end: keep 00:01:03.830",
+   "sources": [
+    {
+     "file": "docs/P4_V1_SOURCE_REVIEW_REVISION_2.json",
+     "sha256": "bab784e67af0211beefbd14ef57bc1ba895b5e714620760e9f26ad306ed6f655",
+     "date": "2026-10-12"
+    },
+    {
+     "file": "docs/P4_V1_BOUNDARY_REVIEW_FEEDBACK.json",
+     "sha256": "8a5cc827f40346cc56c11710bd0061812a90af53a2c265793aea937bc9e4eb4b",
+     "date": "2026-10-12"
+    }
+   ],
+   "limits": [
+    "Evidence shows a wide frame before the recorded start. The user keeps the recorded start. No wider interval is approved.",
+    "The cause is a picture change or problem. Jake did not state that either edge is a camera cut."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2-WINDOW",
+   "recording": "recording-1",
+   "category": "review_window",
+   "kind": "SOURCE_REVIEW_WINDOW",
+   "segment": "V2",
+   "interval": {
+    "startUs": 633000000,
+    "endUs": 643000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "see V2 labels",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "sources": [
+    {
+     "file": "docs/P4_V2_SOURCE_REVIEW_FEEDBACK.json",
+     "sha256": "87014a69f030cf027d1b86bb4d5122d8d685bfc713179770ceefccccbd835b92",
+     "date": "2026-10-12"
+    }
+   ],
+   "limits": [
+    "No separate verdict given."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2-EXCLUSION",
+   "recording": "recording-1",
+   "category": "human_exclusion",
+   "kind": "PICTURE_PROBLEM",
+   "segment": "V2",
+   "interval": {
+    "startUs": 639721091,
+    "endUs": 717019510,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "exclude from highlights, except R1-V3-EXCEPTION",
+   "timeProvenance": "jake_supplied",
+   "jakeStatement": "V2 start: revise to  00:10:39.721091\nV2 end: Speaker walks out of the frame at around 00:11:57.029510\n---\nV2 exact exclusion end: 00:1157.019510",
+   "supersedes": [
+    {
+     "record": {
+      "file": "docs/P4_V2_SOURCE_REVIEW_FEEDBACK.json",
+      "sha256": "87014a69f030cf027d1b86bb4d5122d8d685bfc713179770ceefccccbd835b92",
+      "date": "2026-10-12"
+     },
+     "intervalUs": [
+      637096000,
+      639800000
+     ],
+     "reason": "first request; start revised"
+    },
+    {
+     "record": {
+      "file": "docs/P4_V2_BOUNDARY_REVIEW_FEEDBACK.json",
+      "sha256": "503903a577ccc7609f9da96290bde89eec3ed876c196dfa4164a9b9a548ac674",
+      "date": "2026-10-12",
+      "field": "verdicts.end"
+     },
+     "timeUs": 717029510,
+     "reason": "approximate end observation; replaced by the exact end"
+    }
+   ],
+   "sources": [
+    {
+     "file": "docs/P4_V2_BOUNDARY_REVIEW_FEEDBACK.json",
+     "sha256": "503903a577ccc7609f9da96290bde89eec3ed876c196dfa4164a9b9a548ac674",
+     "date": "2026-10-12",
+     "field": "verdicts.start"
+    },
+    {
+     "file": "docs/P4_V2_EXACT_END_VERDICT.json",
+     "sha256": "1edd9e66e151e20fbcc76d1b55048bc790c3cbbfd5d335c248323eb462d9380c",
+     "date": "2026-10-12"
+    }
+   ],
+   "limits": [
+    "Missing colon between minutes and seconds, interpreted from the prior V2 end context. No digits changed.",
+    "Microseconds retained. No millisecond rounding applied.",
+    "Jake gave no cause for the start. The end follows the speaker walking out of frame."
+   ],
+   "status": "current"
+  },
+  {
+   "id": "R1-V3-EXCEPTION",
+   "recording": "recording-1",
+   "category": "human_keep",
+   "kind": "EXCEPTION_TO_EXCLUSION",
+   "segment": "V3",
+   "interval": {
+    "startUs": 687000000,
+    "endUs": 694000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "Keep V3 as an exception to the revised V2 exclusion. Content, picture, and sound accepted.",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "All accepted\n---\nRecord V3, 00:11:27.000\u201300:11:34.000, as an exception to the V2 exclusion.\nKeep the exact V2 start and end times unchanged.\nKeep other V2 decisions pending.\nDo not apply exclusions or change accepted outputs.",
+   "sources": [
+    {
+     "file": "docs/P4_V3_SOURCE_REVIEW_FEEDBACK.json",
+     "sha256": "f02c263fdd82a99eaacfc8af7c4f710b9a3cdfa0810fcf4f2d4e1b007a1ce94e",
+     "date": "2026-10-12"
+    },
+    {
+     "file": "docs/P4_V3_EXCEPTION_TO_V2_VERDICT.json",
+     "sha256": "a236322a08b06159eb7b321ba9e7ce8a2bc9267e6ef625f04350c062643845a5",
+     "date": "2026-10-12"
+    }
+   ],
+   "limits": [
+    "This exception applies only to the identified revised V2 exclusion.",
+    "Other exclusions and review requirements still apply.",
+    "This record does not approve a crop, worker output, automatic identity claim, or policy activation.",
+    "The existing single-interval option A adapter does not implement this exception.",
+    "Existing boundaries and exclusions still apply.",
+    "This verdict does not approve a crop or worker output.",
+    "V1 and V2 exclusion requests remain unchanged."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V4-WINDOW",
+   "recording": "recording-1",
+   "category": "human_keep",
+   "kind": "SOURCE_REVIEW_WINDOW",
+   "segment": "V4",
+   "interval": {
+    "startUs": 2203000000,
+    "endUs": 2210000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "keep in highlights; picture and sound acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "All accepted.",
+   "sources": [
+    {
+     "file": "docs/P4_V4_SOURCE_REVIEW_FEEDBACK.json",
+     "sha256": "a1168224f665634f4064e58bfc222aa07e2e91b180ae272f4dd5b65f22e2003c",
+     "date": "2026-10-12"
+    }
+   ],
+   "limits": [
+    "Existing boundaries and exclusions still apply.",
+    "This verdict does not approve a crop or worker output.",
+    "V1 and V2 exclusion requests remain unchanged.",
+    "This verdict does not resolve unspecified V2 verdicts."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2-FULL-STAGE-SHOT",
+   "recording": "recording-1",
+   "category": "scene_change",
+   "kind": "SHOT_CHANGE",
+   "segment": "V2",
+   "timeUs": 636937339,
+   "decision": "The picture changes to the full-stage shot.",
+   "timeProvenance": "jake_supplied",
+   "jakeStatement": "00:10:36.937339 is the exact time it goes full stage screen",
+   "supersedes": [
+    {
+     "record": {
+      "file": "docs/P4_V2_REMAINING_CONTENT_FEEDBACK_2026_10_13.json",
+      "sha256": "b14779ea7fc56c9a2079c905ae4ef739eb49820ef0a48d728858219c80495fcc",
+      "date": "2026-10-13",
+      "field": "verdicts.firstWindow"
+     },
+     "reportedTime": "10:37",
+     "reason": "Resolves the previously unspecified precision of the reported 10:37 shot change."
+    }
+   ],
+   "sources": [
+    {
+     "file": "docs/P4_V2_FULL_STAGE_EXACT_TIME_VERDICT.json",
+     "sha256": "f850acfab188b0065bf45368ed452406beadad15212bc004cabb6b599d6613d3",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "Jake read this time from the browser review page. It can fall between two decoded frames."
+   ],
+   "status": "current"
+  },
+  {
+   "id": "R1-V2-WIDE-SHOT-START",
+   "recording": "recording-1",
+   "category": "scene_change",
+   "kind": "SHOT_CHANGE",
+   "segment": "V2",
+   "timeUs": 636427458,
+   "decision": "Exclude the wide camera shot from its observed start.",
+   "timeProvenance": "assistant_observed_frame_jake_approved_event",
+   "jakeStatement": "Yes, propose excluding it when the wide shot starts.",
+   "sources": [
+    {
+     "file": "docs/P4_V2_EARLIER_WIDE_SHOT_EXCLUSION_PROPOSAL.json",
+     "sha256": "68a004c55fd617da7fac3e58ea5b201875dca67f593e0fb43483b2fb7b92082f",
+     "date": "2026-10-15"
+    },
+    {
+     "file": "tmp/p4-v2-manual-comparison/cut-frames.json",
+     "sha256": "2e1f938b87830f6eb3531d22d66316d6e4f50a0d2ae7e6acabb4047db5bba18e",
+     "location": "worktree tmp/ evidence; not committed"
+    }
+   ],
+   "limits": [
+    "Browser displayed-frame observation, interpreted by the assistant. The user approved proposing exclusion from the wide-shot start; the user did not supply a new numeric timestamp."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2-P1-FULL-STAGE",
+   "recording": "recording-1",
+   "category": "proposed_exclusion",
+   "kind": "PICTURE_PROBLEM",
+   "segment": "V2",
+   "interval": {
+    "startUs": 636937339,
+    "endUs": 639721091,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "proposed exclusion; ms rounding accepted",
+   "timeProvenance": "jake_supplied",
+   "jakeStatement": "`Yes, propose that exclusion`",
+   "sources": [
+    {
+     "file": "docs/P4_V2_ADDITIONAL_EXCLUSION_PROPOSAL.json",
+     "sha256": "ab935447bd5acea1cf16668a2ac266aff4cf1d1e4b90d9d04027489c6a892812",
+     "date": "2026-10-13"
+    },
+    {
+     "file": "docs/P4_V2_MILLISECOND_ROUNDING_VERDICT.json",
+     "sha256": "775e5ab5eb2a68e0810aeacb8f51e32c0f3fe9fce6b68f3b45267cad35649044",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "Proposal only. Not applied in the application.",
+    "Later local installation work exists in the worktree tmp/ directory. This label set does not evaluate it."
+   ],
+   "status": "current_proposal",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2-P0-EARLIER-WIDE",
+   "recording": "recording-1",
+   "category": "proposed_exclusion",
+   "kind": "PICTURE_PROBLEM",
+   "segment": "V2",
+   "interval": {
+    "startUs": 636427458,
+    "endUs": 636937339,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "proposed exclusion that extends P1 to the wide-shot start",
+   "timeProvenance": "assistant_observed_frame_jake_approved_event",
+   "jakeStatement": "Yes, propose excluding it when the wide shot starts.",
+   "sources": [
+    {
+     "file": "docs/P4_V2_EARLIER_WIDE_SHOT_EXCLUSION_PROPOSAL.json",
+     "sha256": "68a004c55fd617da7fac3e58ea5b201875dca67f593e0fb43483b2fb7b92082f",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "The installed immutable set remains unchanged. Do not repeat the initial installer or bypass its guards.",
+    "Any application change needs a separate superseding-operation design, tests, exact comparison, and permission.",
+    "Keep all other V2 proposals, unrelated exclusions, original approvals, boundaries, settings, policies, and exports unchanged.",
+    "Crop, movement, camera-cut, sound, and identity review remain separate.",
+    "Later local installation work exists in the worktree tmp/ directory. This label set does not evaluate it."
+   ],
+   "status": "current_proposal",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2-P3-LATE-FRAMING",
+   "recording": "recording-1",
+   "category": "proposed_exclusion",
+   "kind": "SPEAKER_CUT_OFF",
+   "segment": "V2",
+   "interval": {
+    "startUs": 717070367,
+    "endUs": 718565768,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "proposed exclusion; ms rounding accepted",
+   "timeProvenance": "jake_supplied",
+   "jakeStatement": "`The problem starts at `00:11:57.070367\n---\n`he problem ends at [exact source time]` 00:11:58.565768.\n\nnote: both of these are really tight thought.\n---\n`Yes, propose that exclusion`",
+   "sources": [
+    {
+     "file": "docs/P4_V2_LATE_PROBLEM_START_VERDICT.json",
+     "sha256": "ac4cad3fa11c2a9fe7886e16b0ed05bab4f6bb4b5d8db66b4deea7bf3b9ac016",
+     "date": "2026-10-13"
+    },
+    {
+     "file": "docs/P4_V2_LATE_PROBLEM_END_VERDICT.json",
+     "sha256": "6ca53a318206172027c4c6a1b7c68d4d6b9e646d85464db2b431f08a560f3e51",
+     "date": "2026-10-13"
+    },
+    {
+     "file": "docs/P4_V2_LATE_EXCLUSION_PROPOSAL.json",
+     "sha256": "e54d9d789630ade1097ea6be277b34b44f20821735fddde0c79c5701b5a07bb4",
+     "date": "2026-10-13"
+    },
+    {
+     "file": "docs/P4_V2_MILLISECOND_ROUNDING_VERDICT.json",
+     "sha256": "775e5ab5eb2a68e0810aeacb8f51e32c0f3fe9fce6b68f3b45267cad35649044",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "Jake said both edges are very tight. No padding is authorized.",
+    "Framing problem. Not a camera cut.",
+    "Later local installation work exists in the worktree tmp/ directory. This label set does not evaluate it."
+   ],
+   "status": "current_proposal",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2-P2-SHORT-GAP",
+   "recording": "recording-1",
+   "category": "proposed_exclusion",
+   "kind": "GAP_BETWEEN_EXCLUSIONS",
+   "segment": "V2",
+   "interval": {
+    "startUs": 717019510,
+    "endUs": 717070367,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "proposed exclusion; ms rounding accepted",
+   "timeProvenance": "derived_from_jake_times",
+   "jakeStatement": "`Propose excluding it.`",
+   "sources": [
+    {
+     "file": "docs/P4_V2_SHORT_GAP_EXCLUSION_PROPOSAL.json",
+     "sha256": "6e104abd9bc8a24587dd02bd5de61c62acccd74f66543b3ceeee2faf3693ab54",
+     "date": "2026-10-13"
+    },
+    {
+     "file": "docs/P4_V2_MILLISECOND_ROUNDING_VERDICT.json",
+     "sha256": "775e5ab5eb2a68e0810aeacb8f51e32c0f3fe9fce6b68f3b45267cad35649044",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "Proposal only. Not applied in the application.",
+    "Later local installation work exists in the worktree tmp/ directory. This label set does not evaluate it."
+   ],
+   "status": "current_proposal",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2-LATE-KEEP",
+   "recording": "recording-1",
+   "category": "human_keep",
+   "kind": "KEEP_CONTENT",
+   "segment": "V2",
+   "interval": {
+    "startUs": 718565768,
+    "endUs": 720000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "Keep this content in highlights.",
+   "timeProvenance": "jake_supplied",
+   "jakeStatement": "`Keep that content`",
+   "supersedes": [
+    {
+     "record": {
+      "file": "docs/P4_V2_REMAINING_CONTENT_FEEDBACK_2026_10_13.json",
+      "sha256": "b14779ea7fc56c9a2079c905ae4ef739eb49820ef0a48d728858219c80495fcc",
+      "date": "2026-10-13",
+      "field": "verdicts.secondWindow"
+     },
+     "reason": "The whole 00:11:57.019510-00:12:00.000 window was first rejected. Later exact verdicts narrowed the problem."
+    }
+   ],
+   "sources": [
+    {
+     "file": "docs/P4_V2_AFTER_LATE_PROBLEM_CONTENT_VERDICT.json",
+     "sha256": "35c18d45d132821e549cca437818ee3e938932841b6c3e5db6a7f1f0af4bd00d",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "Content only. No separate picture, movement, camera-cut, sound, identity, or output approval. Existing unrelated exclusions still apply."
+   ],
+   "status": "current"
+  },
+  {
+   "id": "R1-V2-ROUNDING",
+   "recording": "recording-1",
+   "category": "policy_decision",
+   "kind": "MILLISECOND_ROUNDING",
+   "segment": "V2",
+   "decision": "accepted candidate ms enforcement [[636937, 687000], [694000, 718566]]",
+   "timeProvenance": "jake_decision_on_assistant_candidate",
+   "jakeStatement": "Accept the proposed millisecond rounding only.\nKeep application data, crop paths, settings, policies, and real exports unchanged.",
+   "sources": [
+    {
+     "file": "docs/P4_V2_MILLISECOND_ROUNDING_VERDICT.json",
+     "sha256": "775e5ab5eb2a68e0810aeacb8f51e32c0f3fe9fce6b68f3b45267cad35649044",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "Further proposal preparation only. No installation or output acceptance.",
+    "Rendered boundary behavior is unverified."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_AFTER_INSTALLED_CAMERA_CUT",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "cameraCuts",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 718566000,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "cameraCuts: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Picture: acceptable\nmovement: acceptable \nCamera cut: acceptable\nSounds: acceptable\nIdentity: same person",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_AFTER_INSTALLED_CAMERA_CUT_VERDICT.json",
+     "sha256": "ea87ce0299f3b1e2aa57c08148c6f509d25982dd02dce3f065d8311f380fa2bd",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Final V2-after proposed crop comparison only.",
+    "cutAbsenceConfirmed is false."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_AFTER_INSTALLED_IDENTITY",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "humanIdentityContinuity",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 718566000,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "humanIdentityContinuity: same person",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Picture: acceptable\nmovement: acceptable \nCamera cut: acceptable\nSounds: acceptable\nIdentity: same person",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_AFTER_INSTALLED_IDENTITY_VERDICT.json",
+     "sha256": "1d2df81c9d30857cc40ab88e7615e6d36722b37d974be6ab3714c794cd231ff0",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Final V2-after proposed crop comparison only."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_AFTER_INSTALLED_MOVEMENT",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "movement",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 718566000,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "movement: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Picture: acceptable\nmovement: acceptable \nCamera cut: acceptable\nSounds: acceptable\nIdentity: same person",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_AFTER_INSTALLED_MOVEMENT_VERDICT.json",
+     "sha256": "bd2edc359697483d5a68fb590888a12129e6ebbb3195f16eb830c7a293466701",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Final V2-after proposed crop comparison only."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_AFTER_INSTALLED_PICTURE",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "pictureAndFraming",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 718566000,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "pictureAndFraming: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Picture: acceptable\nmovement: acceptable \nCamera cut: acceptable\nSounds: acceptable\nIdentity: same person",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_AFTER_INSTALLED_PICTURE_VERDICT.json",
+     "sha256": "044f81ccc1009e6d7dd50a4a4eea5aaed88aa088252aba5bd2dbbba33e0774e2",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Final V2-after proposed crop comparison only."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_AFTER_INSTALLED_SOUND",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "sourceSound",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 718566000,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "sourceSound: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Picture: acceptable\nmovement: acceptable \nCamera cut: acceptable\nSounds: acceptable\nIdentity: same person",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_AFTER_INSTALLED_SOUND_VERDICT.json",
+     "sha256": "1d01ddbf518bcfd324805bd88c492e78880aca1e9ae8999cb7715a5ec143c476",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Final V2-after proposed crop comparison only."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_AFTER_INSTALLED_SOURCE_TEXT",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "sourceText",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 718566000,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "sourceText: none needs preserving",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Final V2 text: none needs preserving",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_AFTER_INSTALLED_SOURCE_TEXT_VERDICT.json",
+     "sha256": "02d95d4397e0ad6adcd8e9aad642b2759e7526b30976f6ea604f8448b885b286",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Importance of text already visible in the original recording during the installed-context final V2-after comparison only. Does not concern new captions."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_INSTALLED_FIRST_CAMERA_CUT",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "cameraCuts",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636427000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "cameraCuts: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Camera cuts: acceptable",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_INSTALLED_FIRST_CAMERA_CUT_VERDICT.json",
+     "sha256": "c4c9260e0f10e4667694588fad31a0f451df42476b3a349a7021b6b1dc7adf7f",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Camera cuts within the proposed first installed-context V2 comparison only, before its ending.",
+    "cutAbsenceConfirmed is false."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_INSTALLED_FIRST_IDENTITY",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "humanIdentityContinuity",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636427000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "humanIdentityContinuity: same person",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Identity: same person",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_INSTALLED_FIRST_IDENTITY_VERDICT.json",
+     "sha256": "fb12f4f4eadd50a6afa98cff7f280a88e26f1504d8b3b5207c9a03b1589468f1",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Human visual continuity judgment for the proposed crop in the first installed-context V2 comparison only."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_INSTALLED_FIRST_MOVEMENT",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "movement",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636427000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "movement: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Movement: acceptable",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_INSTALLED_FIRST_MOVEMENT_VERDICT.json",
+     "sha256": "42be7f3ca47cde8613e896a9dc47ac08f3f9be5990f5227c74e6758bd144770c",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Proposed right-hand crop movement in the first installed-context V2 comparison only."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_INSTALLED_FIRST_PICTURE",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "pictureAndFraming",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636427000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "pictureAndFraming: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Picture: acceptable",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_INSTALLED_FIRST_PICTURE_VERDICT.json",
+     "sha256": "a493f6ac03663b23dd7aff77ecae1681820112f5d9168e18c6926c8ae576770e",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Proposed right-hand crop picture framing in the first installed-context V2 comparison only."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_INSTALLED_FIRST_SOUND",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "sourceSound",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636427000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "sourceSound: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Sound: acceptable",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_INSTALLED_FIRST_SOUND_VERDICT.json",
+     "sha256": "e0db5227ae50b807563c259d30aba9a8bb31cb7b1e26bc9fcfc0caa4bb921bcd",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Original source sound within the first installed-context V2 comparison only. No joined output exists."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_INSTALLED_FIRST_SOURCE_TEXT",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "sourceText",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636427000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "sourceText: none needs preserving",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "First V2 text: none needs preserving",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_INSTALLED_FIRST_SOURCE_TEXT_VERDICT.json",
+     "sha256": "5fb703135cb8d17d186e13c223f7e01bd2316225d287a510449a4db19fb68c1a",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Importance of text already visible in the original recording during the first installed-context V2 comparison only. Does not concern new captions."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_RETAINED_CAMERA_CUT",
+   "recording": "recording-1",
+   "category": "source_quality_verdict",
+   "kind": "cameraCuts",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636937339,
+     "convention": "half-open [start, end)"
+    },
+    {
+     "startUs": 718565768,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "cameraCuts: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "`uts acceptable.`",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_RETAINED_CAMERA_CUT_VERDICT.json",
+     "sha256": "6ba65b8ea255648270232ecb011bf2717055223961c76d0521a92a53e132d6b6",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "Original source cuts only. No future join, crop-path, worker-output, sound, or identity approval follows.",
+    "cutAbsenceConfirmed is false."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_RETAINED_IDENTITY",
+   "recording": "recording-1",
+   "category": "source_quality_verdict",
+   "kind": "identity",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636937339,
+     "convention": "half-open [start, end)"
+    },
+    {
+     "startUs": 718565768,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "identity: same person",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "`Same person.`",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_RETAINED_IDENTITY_VERDICT.json",
+     "sha256": "2eea1327ea0dee6a7c64a26e6453c0c266d8084798d0fbd669e822475df2d495",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "No automatic identity, continuous tracking through excluded intervals, crop-path, future join, or worker-output approval follows."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_RETAINED_MOVEMENT",
+   "recording": "recording-1",
+   "category": "source_quality_verdict",
+   "kind": "movement",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636937339,
+     "convention": "half-open [start, end)"
+    },
+    {
+     "startUs": 718565768,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "movement: acceptable (Movement is touchy, but ultimately acceptable.)",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "`Movement is touchy, but ultimately acceptable.`",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_RETAINED_MOVEMENT_VERDICT.json",
+     "sha256": "dac6f2a07b48a068d576557e05e6e72ac92ce2b5cdc82ec9662508944b2aed57",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "Source movement only. No crop-path, worker-output, camera-cut, sound, or identity approval follows."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_RETAINED_PICTURE",
+   "recording": "recording-1",
+   "category": "source_quality_verdict",
+   "kind": "pictureAndFraming",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636937339,
+     "convention": "half-open [start, end)"
+    },
+    {
+     "startUs": 718565768,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "pictureAndFraming: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "`Both acceptable`",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_RETAINED_PICTURE_VERDICT.json",
+     "sha256": "eef711667ac26757dcfe3731b02b1e8343504131c4e9d53015d0e2466f8fdc04",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "No crop, worker output, movement, camera-cut, sound, or identity approval follows."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V2_RETAINED_SOUND",
+   "recording": "recording-1",
+   "category": "source_quality_verdict",
+   "kind": "sourceSound",
+   "segment": "V2",
+   "intervals": [
+    {
+     "startUs": 633000000,
+     "endUs": 636937339,
+     "convention": "half-open [start, end)"
+    },
+    {
+     "startUs": 718565768,
+     "endUs": 720000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "sourceSound: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "`Sound acceptable.`",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V2_RETAINED_SOUND_VERDICT.json",
+     "sha256": "6d7d6ba83204201ca0d88d7fc86ee2af908e10b5a5ae0edf1e7c44edfb84a146",
+     "date": "2026-10-13"
+    }
+   ],
+   "limits": [
+    "Original source sound only. No future edit, sound continuity across a join, worker-output, or identity approval follows."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V3_INSTALLED_CAMERA_CUT",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "cameraCut",
+   "segment": "V3",
+   "intervals": [
+    {
+     "startUs": 687000000,
+     "endUs": 694000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "cameraCut: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Camera cut: acceptable",
+   "observedCameraChangeUs": 690398042,
+   "sources": [
+    {
+     "file": "docs/P4_V3_INSTALLED_CAMERA_CUT_VERDICT.json",
+     "sha256": "ab76c0b9ad9781ed721ada4126fe3ce7cff5d0ae3e108dae0197b866b910352c",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "The camera change near 00:11:30.398042 in the proposed right-hand crop within the installed-context V3 exception comparison only.",
+    "cutAbsenceConfirmed is false."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V3_INSTALLED_IDENTITY",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "humanIdentityContinuity",
+   "segment": "V3",
+   "intervals": [
+    {
+     "startUs": 687000000,
+     "endUs": 694000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "humanIdentityContinuity: same person",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Identity: same person ",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V3_INSTALLED_IDENTITY_VERDICT.json",
+     "sha256": "e8f3cfc92fdba1ff2009428d4ff9dc7a68d5a55c53f0fc3fb8a545cfceca77ff",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Human visual continuity judgment for the proposed crop in the installed-context V3 exception comparison, including across the camera change."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V3_INSTALLED_MOVEMENT",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "movement",
+   "segment": "V3",
+   "intervals": [
+    {
+     "startUs": 687000000,
+     "endUs": 694000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "movement: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Movement: acceptable",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V3_INSTALLED_MOVEMENT_VERDICT.json",
+     "sha256": "140dcae511783c2f1136c96d01654fb4f4f8c11ce35c58e42e82ecb1f0a5106e",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Proposed right-hand crop movement within each camera shot in the installed-context V3 exception comparison only."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V3_INSTALLED_PICTURE",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "pictureAndFraming",
+   "segment": "V3",
+   "intervals": [
+    {
+     "startUs": 687000000,
+     "endUs": 694000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "pictureAndFraming: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Picture: acceptable",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V3_INSTALLED_PICTURE_VERDICT.json",
+     "sha256": "d7224a36dd760a01fb69aa9ee6e77fd10a3b6b9ebf861fb27b1534de2d6f8111",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Proposed right-hand crop picture framing in the installed-context V3 exception comparison only."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V3_INSTALLED_SOUND",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "sourceSound",
+   "segment": "V3",
+   "intervals": [
+    {
+     "startUs": 687000000,
+     "endUs": 694000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "sourceSound: acceptable",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "Sound: acceptable",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V3_INSTALLED_SOUND_VERDICT.json",
+     "sha256": "88888c4caa3ba39f13e97beec0713fc150e23cb3f199c00b426551c9a48b42c2",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Original source sound within the installed-context V3 exception comparison only. No joined output exists."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V3_INSTALLED_SOURCE_TEXT",
+   "recording": "recording-1",
+   "category": "crop_proposal_verdict",
+   "kind": "sourceText",
+   "segment": "V3",
+   "intervals": [
+    {
+     "startUs": 687000000,
+     "endUs": 694000000,
+     "convention": "half-open [start, end)"
+    }
+   ],
+   "decision": "sourceText: none needs preserving",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "V3 text: none needs preserving",
+   "observedCameraChangeUs": null,
+   "sources": [
+    {
+     "file": "docs/P4_V3_INSTALLED_SOURCE_TEXT_VERDICT.json",
+     "sha256": "4f1ad0573432b0b56e765107466fe190b5c5973c609972f79bdb223de693ff5c",
+     "date": "2026-10-15"
+    }
+   ],
+   "limits": [
+    "Importance of text already visible in the original recording during the installed-context V3 comparison only. Does not concern new captions."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-V3-CAMERA-CHANGE",
+   "recording": "recording-1",
+   "category": "scene_change",
+   "kind": "SHOT_CHANGE",
+   "segment": "V3",
+   "timeUs": 690398042,
+   "decision": "camera change; Jake judged it acceptable",
+   "timeProvenance": "assistant_observed_frame_jake_approved_event",
+   "sources": [
+    {
+     "file": "docs/P4_V3_INSTALLED_CAMERA_CUT_VERDICT.json",
+     "sha256": "ab76c0b9ad9781ed721ada4126fe3ce7cff5d0ae3e108dae0197b866b910352c",
+     "date": "2026-10-15"
+    },
+    {
+     "file": "tmp/p4-v2-manual-comparison/cut-frames.json",
+     "sha256": "2e1f938b87830f6eb3531d22d66316d6e4f50a0d2ae7e6acabb4047db5bba18e",
+     "location": "worktree tmp/ evidence; not committed"
+    }
+   ],
+   "limits": [
+    "Existing browser frame observation; not a new exact timestamp supplied by Jake."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R1-SOURCE-END",
+   "recording": "recording-1",
+   "category": "source_fact",
+   "kind": "EXACT_SOURCE_END",
+   "timeUs": 2820458005,
+   "decision": "derived final ending for local preparation; stored duration 2820.46 s",
+   "timeProvenance": "measured_by_assistant_jake_accepted",
+   "jakeStatement": "Accept the proposed historical outline enforcement rule for local preparation only.\nPreserve original records. Use 00:47:00.458005 as the derived final ending.\nKeep application data, settings, policies, exclusions, crop paths, and exports unchanged.\n---\nAccept 2820.46 seconds as the proposed stored metadata duration only.\nPreserve the exact 2820.458005-second source measurement separately.\nPrepare the final metadata application procedure. Do not change application data.",
+   "sources": [
+    {
+     "file": "docs/P4_HISTORICAL_OUTLINE_RULE_ACCEPTANCE.json",
+     "sha256": "2d020a985e87611c0453374f8145705eea5aec15c6cd7af6b1b7d920cf78ac47",
+     "date": "2026-10-15"
+    },
+    {
+     "file": "docs/P4_METADATA_DURATION_PRECISION_VERDICT.json",
+     "sha256": "c14328fc7ccc10c6420b767aacdf73845682fbd07a94f4448ec08da6ab43ca9d",
+     "date": "2026-10-14"
+    }
+   ],
+   "limits": [
+    "Local preparation only.",
+    "Integer conversion is not approved."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-ANNOUNCEMENT",
+   "recording": "recording-2",
+   "category": "service_structure",
+   "kind": "ANNOUNCEMENT",
+   "interval": {
+    "startUs": 0,
+    "endUs": 80000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "exclude from highlights",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "openingReview"
+    }
+   ],
+   "limits": [
+    "All reviewed content from 00:00 through 01:20 is announcement or pre-sermon content. The announcement end and teaching start remain unknown."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-SERIES-INTRODUCTION",
+   "recording": "recording-2",
+   "category": "service_structure",
+   "kind": "SERIES_INTRODUCTION",
+   "interval": {
+    "startUs": 225000000,
+    "endUs": 540000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "exclude from highlights",
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "seriesIntroductionReview"
+    }
+   ],
+   "limits": [
+    "Reviewed 03:45\u201309:00 excerpts only. No classification is inferred for 01:20\u201303:45 or after 09:00."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-INTRODUCTION",
+   "recording": "recording-2",
+   "category": "service_structure",
+   "kind": "INTRODUCTION",
+   "interval": {
+    "startUs": 0,
+    "endUs": 546000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "exclude from highlights",
+   "timeProvenance": "jake_supplied_whole_second_cue",
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "openingPrayerReview.precedingContent"
+    }
+   ],
+   "limits": [
+    "Approximate cue; not an approved frame-accurate boundary.",
+    "A bowed-head request during the introduction is not the final sermon ending. Interpret the cue using its surrounding context."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-OPENING-PRAYER",
+   "recording": "recording-2",
+   "category": "service_structure",
+   "kind": "PRAYER",
+   "interval": {
+    "startUs": 546000000,
+    "endUs": 607360000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "keep out of highlight candidates",
+   "timeProvenance": "jake_supplied_visible_timestamps",
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "openingPrayerReview"
+    }
+   ],
+   "limits": [
+    "The start is a whole-second cue. The end is the final word of the prayer."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-TEACHING-START",
+   "recording": "recording-2",
+   "category": "service_structure",
+   "kind": "TEACHING_START",
+   "timeUs": 607667000,
+   "decision": "approved rendered teaching start",
+   "timeProvenance": "jake_supplied_visible_timestamps",
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "openingPrayerReview.teachingStartApproval"
+    }
+   ],
+   "limits": [
+    "This recording and reviewed preview only. No automatic detector accuracy or live policy activation is inferred."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-SERMON-END",
+   "recording": "recording-2",
+   "category": "service_structure",
+   "kind": "SERMON_END_CUT",
+   "timeUs": 3863282000,
+   "decision": "End before the bowed-head request. Later teaching does not cancel the exclusion.",
+   "timeProvenance": "assistant_estimate_jake_approved_rendered_preview",
+   "supersedes": [
+    {
+     "timeUs": 4168833000,
+     "reason": "earlier accepted ending; replaced on 2026-09-27"
+    },
+    {
+     "timeUs": 3864282000,
+     "reason": "rejected preview; the bowed-head request was audible"
+    }
+   ],
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "boundaryReview"
+    }
+   ],
+   "limits": [
+    "The approval covers the rendered ending for this recording only.",
+    "Background guitar alone does not establish the sermon ending.",
+    "The counselor phrase is a source-specific late ending cue, not a universal stop phrase.",
+    "No independent word alignment or automatic boundary accuracy was verified."
+   ],
+   "status": "current"
+  },
+  {
+   "id": "R2-CAMERA-CHANGE-C1",
+   "recording": "recording-2",
+   "category": "scene_change",
+   "kind": "CAMERA_CHANGE_IN_WINDOW",
+   "segment": "C1",
+   "interval": {
+    "startUs": 775000000,
+    "endUs": 795000000,
+    "convention": "half-open [start, end)"
+   },
+   "detectorCandidateUs": 785833000,
+   "decision": "camera_change_speaker_remains_visible",
+   "timeProvenance": "detector_candidate_jake_classified_window",
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "visualReviews[0]"
+    }
+   ],
+   "limits": [
+    "Jake confirmed a camera change inside this 20-second window. Jake did not supply its time.",
+    "The candidate time came from an earlier scene detector. A match to it is circular.",
+    "Check speaker visibility separately before accepting a portrait crop. Do not infer crop approval from this landscape review."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-CAMERA-CHANGE-C2",
+   "recording": "recording-2",
+   "category": "scene_change",
+   "kind": "CAMERA_CHANGE_IN_WINDOW",
+   "segment": "C2",
+   "interval": {
+    "startUs": 920000000,
+    "endUs": 940000000,
+    "convention": "half-open [start, end)"
+   },
+   "detectorCandidateUs": 930867000,
+   "decision": "camera_change_speaker_remains_visible",
+   "timeProvenance": "detector_candidate_jake_classified_window",
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "visualReviews[1]"
+    }
+   ],
+   "limits": [
+    "Jake confirmed a camera change inside this 20-second window. Jake did not supply its time.",
+    "The candidate time came from an earlier scene detector. A match to it is circular.",
+    "Check speaker visibility separately before accepting a portrait crop. This landscape classification does not approve a portrait crop."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-CAMERA-CHANGE-C3",
+   "recording": "recording-2",
+   "category": "scene_change",
+   "kind": "CAMERA_CHANGE_IN_WINDOW",
+   "segment": "C3",
+   "interval": {
+    "startUs": 3235000000,
+    "endUs": 3255000000,
+    "convention": "half-open [start, end)"
+   },
+   "detectorCandidateUs": 3245570000,
+   "decision": "camera_change_speaker_remains_visible",
+   "timeProvenance": "detector_candidate_jake_classified_window",
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "visualReviews[2]"
+    }
+   ],
+   "limits": [
+    "Jake confirmed a camera change inside this 20-second window. Jake did not supply its time.",
+    "The candidate time came from an earlier scene detector. A match to it is circular.",
+    "Check speaker visibility on both sides before accepting a portrait crop."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-DEFOCUS-EXCLUSION",
+   "recording": "recording-2",
+   "category": "human_exclusion",
+   "kind": "DEFOCUSED_SPEAKER_VIEW",
+   "interval": {
+    "startUs": 1014800000,
+    "endUs": 1015100000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": "exclude from highlights",
+   "timeProvenance": "assistant_frame_evidence_jake_approved",
+   "sources": [
+    {
+     "file": "docs/P4_SECOND_RECORDING_REVIEW.json",
+     "sha256": "536d3581c1d6966f00fb5198e77f4e51bbc1122f7c942d2d74b523ec31a5cdfa",
+     "date": null,
+     "field": "visualReviews[3]"
+    }
+   ],
+   "limits": [
+    "Rejected Image 2 blur only. Image 5 blur remains accepted. No general blur policy or portrait crop approval."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-C1_FINAL_APPROVAL",
+   "recording": "recording-2",
+   "category": "crop_proposal_verdict",
+   "kind": "CROP_OUTPUT_REVIEW",
+   "segment": "C1",
+   "interval": {
+    "startUs": 775000000,
+    "endUs": 795000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": {
+    "pictureAndFraming": "accept",
+    "movementAndCameraCut": "accept",
+    "sound": "accept"
+   },
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": null,
+   "sources": [
+    {
+     "file": "docs/P4_C1_FINAL_APPROVAL.json",
+     "sha256": "3a2ff7c75fc507afa27d6990a28f16e222d0a083e0631c258dd390c4497af0a7",
+     "date": "2026-10-11"
+    }
+   ],
+   "limits": [
+    "Approves a crop output or proposal, not source labels.",
+    "User supplied accept for each verdict. No specific change request was supplied."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-C2_MANUAL_PROPOSAL_FEEDBACK",
+   "recording": "recording-2",
+   "category": "crop_proposal_verdict",
+   "kind": "CROP_OUTPUT_REVIEW",
+   "segment": "C2",
+   "interval": {
+    "startUs": 920000000,
+    "endUs": 940000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": {
+    "framing": "acceptable",
+    "movement": "acceptable",
+    "cameraCut": "acceptable",
+    "soundVerdict": "not supplied"
+   },
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": null,
+   "sources": [
+    {
+     "file": "docs/P4_C2_MANUAL_PROPOSAL_FEEDBACK.json",
+     "sha256": "a0ccf393c31593d23c19041bffe332d9a078d1c6c4d7da4cabd69f65cbb83d46",
+     "date": "2026-10-11"
+    }
+   ],
+   "limits": [
+    "Approves a crop output or proposal, not source labels."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-C2_MANUAL_FINAL_APPROVAL",
+   "recording": "recording-2",
+   "category": "crop_proposal_verdict",
+   "kind": "CROP_OUTPUT_REVIEW",
+   "segment": "C2",
+   "interval": {
+    "startUs": 920000000,
+    "endUs": 940000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": {
+    "pictureAndFraming": "accept",
+    "movementAndCameraCut": "accept",
+    "sound": "accept"
+   },
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": null,
+   "sources": [
+    {
+     "file": "docs/P4_C2_MANUAL_FINAL_APPROVAL.json",
+     "sha256": "4a08016e46f123db9d1e56c21c9a5696e1e6342ff21a2888ac326b6c89dd2deb",
+     "date": "2026-10-11"
+    }
+   ],
+   "limits": [
+    "Automatic tracking is not approved.",
+    "Approves a crop output or proposal, not source labels."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-C3_MANUAL_FINAL_APPROVAL",
+   "recording": "recording-2",
+   "category": "crop_proposal_verdict",
+   "kind": "CROP_OUTPUT_REVIEW",
+   "segment": "C3",
+   "interval": {
+    "startUs": 3235000000,
+    "endUs": 3255000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": {
+    "pictureAndFraming": "accept",
+    "movementAndCameraCut": "accept",
+    "sound": "accept"
+   },
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": null,
+   "sources": [
+    {
+     "file": "docs/P4_C3_MANUAL_FINAL_APPROVAL.json",
+     "sha256": "cfb6ab7b01906797e6024e0743308ef1e7b8b69beac94e3f3dc326543580e1d9",
+     "date": "2026-10-12"
+    }
+   ],
+   "limits": [
+    "Automatic tracking is not approved.",
+    "Approves a crop output or proposal, not source labels."
+   ],
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-C2_RECOVERY_PROPOSAL_FEEDBACK",
+   "recording": "recording-2",
+   "category": "crop_proposal_verdict",
+   "kind": "CROP_OUTPUT_REVIEW",
+   "segment": "C2",
+   "interval": {
+    "startUs": 920000000,
+    "endUs": 940000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": {
+    "pictureAndFraming": "failed",
+    "movement": "pending",
+    "cameraCut": "pending",
+    "sourceSound": "pending",
+    "identity": "pending"
+   },
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "C2 problems start and end at 00:15:25.133333 - 00:15:30.800000.\nThe speaker goes half off the screen in this segment.",
+   "sources": [
+    {
+     "file": "docs/P4_C2_RECOVERY_PROPOSAL_FEEDBACK.json",
+     "sha256": "a9a1840af93bff00b87253aaf41906090899b46cd2158ce7b489967fcdbce758",
+     "date": "2026-10-12"
+    }
+   ],
+   "limits": [
+    "Approves a crop output or proposal, not source labels."
+   ],
+   "problemInterval": {
+    "startUs": 925133333,
+    "endUs": 930800000,
+    "convention": "half-open [start, end)"
+   },
+   "status": "current",
+   "supersedes": []
+  },
+  {
+   "id": "R2-C3_RECOVERY_PROPOSAL_FEEDBACK",
+   "recording": "recording-2",
+   "category": "crop_proposal_verdict",
+   "kind": "CROP_OUTPUT_REVIEW",
+   "segment": "C3",
+   "interval": {
+    "startUs": 3235000000,
+    "endUs": 3255000000,
+    "convention": "half-open [start, end)"
+   },
+   "decision": {
+    "pictureAndFraming": "acceptable",
+    "movement": "acceptable",
+    "cameraCut": "acceptable",
+    "sourceSound": "acceptable",
+    "identity": "same person"
+   },
+   "timeProvenance": "review_window_chosen_by_assistant",
+   "jakeStatement": "C3 picture and framing: acceptable\nC3 movement: acceptable\nC3 camera cut: acceptable\nC3 source sound: acceptable\nC3 identity across the gap: same person",
+   "sources": [
+    {
+     "file": "docs/P4_C3_RECOVERY_PROPOSAL_FEEDBACK.json",
+     "sha256": "5192173d977bdb156376d5b6f16216fed23883b59e1f87c31d093f47ae32db4b",
+     "date": "2026-10-12"
+    }
+   ],
+   "limits": [
+    "Approves a crop output or proposal, not source labels."
+   ],
+   "assistantTrackingContextUs": {
+    "lastReliable": 3238433333,
+    "missingStart": 3238683333,
+    "candidateStart": 3238866667,
+    "movementResumed": 3239066667,
+    "shotEnd": 3245566667
+   },
+   "status": "current",
+   "supersedes": []
+  }
+ ],
+ "sampledFrameLabels": {
+  "limits": [
+   "Saved sampling timestamps. Do not infer exact visual event boundaries.",
+   "Images represent sampled instants only. Gaps stay unverified. Prior clip reviews retain their original scope."
+  ],
+  "source": {
+   "file": "docs/P4_VISUAL_FRAME_REVIEW.json",
+   "sha256": "db00c329f32e06e23bf2ebaa83dec1028c3b56180b34f0e92cb2142b8ecb0914",
+   "date": "2026-10-08"
+  },
+  "frames": [
+   {
+    "id": "first-F001",
+    "recording": "recording-1",
+    "timeUs": 29689000,
+    "classification": "promotional_subscribe_overlay",
+    "decision": "exclude_occurrence_exact_interval_approved",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F002",
+    "recording": "recording-1",
+    "timeUs": 59378000,
+    "classification": "stage_and_audience_view",
+    "decision": "classification_confirmed",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F003",
+    "recording": "recording-1",
+    "timeUs": 89067000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F004",
+    "recording": "recording-1",
+    "timeUs": 118756000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F005",
+    "recording": "recording-1",
+    "timeUs": 148445000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F006",
+    "recording": "recording-1",
+    "timeUs": 178134000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F007",
+    "recording": "recording-1",
+    "timeUs": 207823000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F008",
+    "recording": "recording-1",
+    "timeUs": 237512000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F009",
+    "recording": "recording-1",
+    "timeUs": 267201000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F010",
+    "recording": "recording-1",
+    "timeUs": 296890000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F011",
+    "recording": "recording-1",
+    "timeUs": 326579000,
+    "classification": "stage_and_audience_view",
+    "decision": "exclude_occurrence_exact_interval_approved",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F012",
+    "recording": "recording-1",
+    "timeUs": 356268000,
+    "classification": "stage_and_audience_view",
+    "decision": "exclude_occurrence_exact_interval_approved",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F013",
+    "recording": "recording-1",
+    "timeUs": 385957000,
+    "classification": "stage_and_audience_view",
+    "decision": "existing_exclusion_confirmed",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F014",
+    "recording": "recording-1",
+    "timeUs": 415646000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F015",
+    "recording": "recording-1",
+    "timeUs": 445335000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F016",
+    "recording": "recording-1",
+    "timeUs": 475025000,
+    "classification": "promotional_overlay",
+    "decision": "existing_exclusion_confirmed",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F017",
+    "recording": "recording-1",
+    "timeUs": 504714000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F018",
+    "recording": "recording-1",
+    "timeUs": 534403000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F019",
+    "recording": "recording-1",
+    "timeUs": 564092000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F020",
+    "recording": "recording-1",
+    "timeUs": 593781000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F021",
+    "recording": "recording-1",
+    "timeUs": 623470000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F022",
+    "recording": "recording-1",
+    "timeUs": 653159000,
+    "classification": "speaker_with_stage_screens",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F023",
+    "recording": "recording-1",
+    "timeUs": 682848000,
+    "classification": "speaker_with_stage_screens",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F024",
+    "recording": "recording-1",
+    "timeUs": 712537000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F025",
+    "recording": "recording-1",
+    "timeUs": 742226000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F026",
+    "recording": "recording-1",
+    "timeUs": 771915000,
+    "classification": "stage_and_audience_view",
+    "decision": "exclude_occurrence_exact_interval_approved",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F027",
+    "recording": "recording-1",
+    "timeUs": 801604000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F028",
+    "recording": "recording-1",
+    "timeUs": 831293000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F029",
+    "recording": "recording-1",
+    "timeUs": 860982000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F030",
+    "recording": "recording-1",
+    "timeUs": 890671000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F031",
+    "recording": "recording-1",
+    "timeUs": 920360000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F032",
+    "recording": "recording-1",
+    "timeUs": 950049000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F033",
+    "recording": "recording-1",
+    "timeUs": 979738000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F034",
+    "recording": "recording-1",
+    "timeUs": 1009427000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F035",
+    "recording": "recording-1",
+    "timeUs": 1039116000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F036",
+    "recording": "recording-1",
+    "timeUs": 1068805000,
+    "classification": "promotional_overlay",
+    "decision": "existing_exclusion_confirmed",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F037",
+    "recording": "recording-1",
+    "timeUs": 1098494000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F038",
+    "recording": "recording-1",
+    "timeUs": 1128183000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F039",
+    "recording": "recording-1",
+    "timeUs": 1157872000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F040",
+    "recording": "recording-1",
+    "timeUs": 1187561000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F041",
+    "recording": "recording-1",
+    "timeUs": 1217250000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F042",
+    "recording": "recording-1",
+    "timeUs": 1246939000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F043",
+    "recording": "recording-1",
+    "timeUs": 1276628000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F044",
+    "recording": "recording-1",
+    "timeUs": 1306317000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F045",
+    "recording": "recording-1",
+    "timeUs": 1336006000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F046",
+    "recording": "recording-1",
+    "timeUs": 1365695000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F047",
+    "recording": "recording-1",
+    "timeUs": 1395384000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F048",
+    "recording": "recording-1",
+    "timeUs": 1425074000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F049",
+    "recording": "recording-1",
+    "timeUs": 1454763000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F050",
+    "recording": "recording-1",
+    "timeUs": 1484452000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F051",
+    "recording": "recording-1",
+    "timeUs": 1514141000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F052",
+    "recording": "recording-1",
+    "timeUs": 1543830000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F053",
+    "recording": "recording-1",
+    "timeUs": 1573519000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F054",
+    "recording": "recording-1",
+    "timeUs": 1603208000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F055",
+    "recording": "recording-1",
+    "timeUs": 1632897000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F056",
+    "recording": "recording-1",
+    "timeUs": 1662586000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F057",
+    "recording": "recording-1",
+    "timeUs": 1692275000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F058",
+    "recording": "recording-1",
+    "timeUs": 1721964000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F059",
+    "recording": "recording-1",
+    "timeUs": 1751653000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F060",
+    "recording": "recording-1",
+    "timeUs": 1781342000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F061",
+    "recording": "recording-1",
+    "timeUs": 1811031000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F062",
+    "recording": "recording-1",
+    "timeUs": 1840720000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F063",
+    "recording": "recording-1",
+    "timeUs": 1870409000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F064",
+    "recording": "recording-1",
+    "timeUs": 1900098000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F065",
+    "recording": "recording-1",
+    "timeUs": 1929787000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F066",
+    "recording": "recording-1",
+    "timeUs": 1959476000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F067",
+    "recording": "recording-1",
+    "timeUs": 1989165000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F068",
+    "recording": "recording-1",
+    "timeUs": 2018854000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F069",
+    "recording": "recording-1",
+    "timeUs": 2048543000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F070",
+    "recording": "recording-1",
+    "timeUs": 2078232000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F071",
+    "recording": "recording-1",
+    "timeUs": 2107921000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F072",
+    "recording": "recording-1",
+    "timeUs": 2137610000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F073",
+    "recording": "recording-1",
+    "timeUs": 2167299000,
+    "classification": "stage_and_audience_view",
+    "decision": "exclude_occurrence_exact_interval_approved",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F074",
+    "recording": "recording-1",
+    "timeUs": 2196988000,
+    "classification": "speaker_with_stage_screens",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F075",
+    "recording": "recording-1",
+    "timeUs": 2226677000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F076",
+    "recording": "recording-1",
+    "timeUs": 2256366000,
+    "classification": "stage_and_audience_view",
+    "decision": "exclude_occurrence_exact_interval_approved",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F077",
+    "recording": "recording-1",
+    "timeUs": 2286055000,
+    "classification": "stage_and_audience_view",
+    "decision": "exclude_occurrence_exact_interval_approved",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F078",
+    "recording": "recording-1",
+    "timeUs": 2315744000,
+    "classification": "speaker_view",
+    "decision": "sampled_image_accepted",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-08"
+   },
+   {
+    "id": "first-F079",
+    "recording": "recording-1",
+    "timeUs": 2345433000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "first-F080",
+    "recording": "recording-1",
+    "timeUs": 2375123000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "first-F081",
+    "recording": "recording-1",
+    "timeUs": 2404812000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "first-F082",
+    "recording": "recording-1",
+    "timeUs": 2434501000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "first-F083",
+    "recording": "recording-1",
+    "timeUs": 2464190000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F001",
+    "recording": "recording-2",
+    "timeUs": 626841000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F002",
+    "recording": "recording-2",
+    "timeUs": 656691000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F003",
+    "recording": "recording-2",
+    "timeUs": 686540000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F004",
+    "recording": "recording-2",
+    "timeUs": 716390000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F005",
+    "recording": "recording-2",
+    "timeUs": 746240000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F006",
+    "recording": "recording-2",
+    "timeUs": 776089000,
+    "classification": "wide_speaker_and_stage_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F007",
+    "recording": "recording-2",
+    "timeUs": 805939000,
+    "classification": "wide_speaker_and_stage_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F008",
+    "recording": "recording-2",
+    "timeUs": 835788000,
+    "classification": "wide_speaker_and_stage_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F009",
+    "recording": "recording-2",
+    "timeUs": 865638000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F010",
+    "recording": "recording-2",
+    "timeUs": 895488000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F011",
+    "recording": "recording-2",
+    "timeUs": 925337000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F012",
+    "recording": "recording-2",
+    "timeUs": 955187000,
+    "classification": "wide_speaker_and_stage_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F013",
+    "recording": "recording-2",
+    "timeUs": 985036000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F014",
+    "recording": "recording-2",
+    "timeUs": 1014886000,
+    "classification": "blurred_speaker_view",
+    "decision": "exclude_occurrence_exact_interval_approved",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F015",
+    "recording": "recording-2",
+    "timeUs": 1044736000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F016",
+    "recording": "recording-2",
+    "timeUs": 1074585000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F017",
+    "recording": "recording-2",
+    "timeUs": 1104435000,
+    "classification": "blurred_speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F018",
+    "recording": "recording-2",
+    "timeUs": 1134284000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F019",
+    "recording": "recording-2",
+    "timeUs": 1164134000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F020",
+    "recording": "recording-2",
+    "timeUs": 1193983000,
+    "classification": "wide_speaker_and_stage_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F021",
+    "recording": "recording-2",
+    "timeUs": 1223833000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F022",
+    "recording": "recording-2",
+    "timeUs": 1253683000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F023",
+    "recording": "recording-2",
+    "timeUs": 1283532000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F024",
+    "recording": "recording-2",
+    "timeUs": 1313382000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F025",
+    "recording": "recording-2",
+    "timeUs": 1343231000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F026",
+    "recording": "recording-2",
+    "timeUs": 1373081000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F027",
+    "recording": "recording-2",
+    "timeUs": 1402931000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F028",
+    "recording": "recording-2",
+    "timeUs": 1432780000,
+    "classification": "wide_speaker_and_stage_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F029",
+    "recording": "recording-2",
+    "timeUs": 1462630000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F030",
+    "recording": "recording-2",
+    "timeUs": 1492479000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F031",
+    "recording": "recording-2",
+    "timeUs": 1522329000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F032",
+    "recording": "recording-2",
+    "timeUs": 1552178000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F033",
+    "recording": "recording-2",
+    "timeUs": 1582028000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F034",
+    "recording": "recording-2",
+    "timeUs": 1611878000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F035",
+    "recording": "recording-2",
+    "timeUs": 1641727000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F036",
+    "recording": "recording-2",
+    "timeUs": 1671577000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F037",
+    "recording": "recording-2",
+    "timeUs": 1701426000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F038",
+    "recording": "recording-2",
+    "timeUs": 1731276000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F039",
+    "recording": "recording-2",
+    "timeUs": 1761126000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F040",
+    "recording": "recording-2",
+    "timeUs": 1790975000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F041",
+    "recording": "recording-2",
+    "timeUs": 1820825000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F042",
+    "recording": "recording-2",
+    "timeUs": 1850674000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F043",
+    "recording": "recording-2",
+    "timeUs": 1880524000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F044",
+    "recording": "recording-2",
+    "timeUs": 1910373000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F045",
+    "recording": "recording-2",
+    "timeUs": 1940223000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F046",
+    "recording": "recording-2",
+    "timeUs": 1970073000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F047",
+    "recording": "recording-2",
+    "timeUs": 1999922000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F048",
+    "recording": "recording-2",
+    "timeUs": 2029772000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F049",
+    "recording": "recording-2",
+    "timeUs": 2059621000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F050",
+    "recording": "recording-2",
+    "timeUs": 2089471000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F051",
+    "recording": "recording-2",
+    "timeUs": 2119321000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F052",
+    "recording": "recording-2",
+    "timeUs": 2149170000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F053",
+    "recording": "recording-2",
+    "timeUs": 2179020000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F054",
+    "recording": "recording-2",
+    "timeUs": 2208869000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F055",
+    "recording": "recording-2",
+    "timeUs": 2238719000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F056",
+    "recording": "recording-2",
+    "timeUs": 2268569000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F057",
+    "recording": "recording-2",
+    "timeUs": 2298418000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F058",
+    "recording": "recording-2",
+    "timeUs": 2328268000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F059",
+    "recording": "recording-2",
+    "timeUs": 2358117000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F060",
+    "recording": "recording-2",
+    "timeUs": 2387967000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F061",
+    "recording": "recording-2",
+    "timeUs": 2417816000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F062",
+    "recording": "recording-2",
+    "timeUs": 2447666000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F063",
+    "recording": "recording-2",
+    "timeUs": 2477516000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F064",
+    "recording": "recording-2",
+    "timeUs": 2507365000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F065",
+    "recording": "recording-2",
+    "timeUs": 2537215000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F066",
+    "recording": "recording-2",
+    "timeUs": 2567064000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F067",
+    "recording": "recording-2",
+    "timeUs": 2596914000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F068",
+    "recording": "recording-2",
+    "timeUs": 2626764000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F069",
+    "recording": "recording-2",
+    "timeUs": 2656613000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F070",
+    "recording": "recording-2",
+    "timeUs": 2686463000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F071",
+    "recording": "recording-2",
+    "timeUs": 2716312000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F072",
+    "recording": "recording-2",
+    "timeUs": 2746162000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F073",
+    "recording": "recording-2",
+    "timeUs": 2776011000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F074",
+    "recording": "recording-2",
+    "timeUs": 2805861000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F075",
+    "recording": "recording-2",
+    "timeUs": 2835711000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F076",
+    "recording": "recording-2",
+    "timeUs": 2865560000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F077",
+    "recording": "recording-2",
+    "timeUs": 2895410000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F078",
+    "recording": "recording-2",
+    "timeUs": 2925259000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F079",
+    "recording": "recording-2",
+    "timeUs": 2955109000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F080",
+    "recording": "recording-2",
+    "timeUs": 2984959000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F081",
+    "recording": "recording-2",
+    "timeUs": 3014808000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F082",
+    "recording": "recording-2",
+    "timeUs": 3044658000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F083",
+    "recording": "recording-2",
+    "timeUs": 3074507000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F084",
+    "recording": "recording-2",
+    "timeUs": 3104357000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-09"
+   },
+   {
+    "id": "second-F085",
+    "recording": "recording-2",
+    "timeUs": 3134207000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F086",
+    "recording": "recording-2",
+    "timeUs": 3164056000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F087",
+    "recording": "recording-2",
+    "timeUs": 3193906000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F088",
+    "recording": "recording-2",
+    "timeUs": 3223755000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F089",
+    "recording": "recording-2",
+    "timeUs": 3253605000,
+    "classification": "wide_speaker_and_stage_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F090",
+    "recording": "recording-2",
+    "timeUs": 3283454000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F091",
+    "recording": "recording-2",
+    "timeUs": 3313304000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F092",
+    "recording": "recording-2",
+    "timeUs": 3343154000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F093",
+    "recording": "recording-2",
+    "timeUs": 3373003000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F094",
+    "recording": "recording-2",
+    "timeUs": 3402853000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F095",
+    "recording": "recording-2",
+    "timeUs": 3432702000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F096",
+    "recording": "recording-2",
+    "timeUs": 3462552000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F097",
+    "recording": "recording-2",
+    "timeUs": 3492402000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F098",
+    "recording": "recording-2",
+    "timeUs": 3522251000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F099",
+    "recording": "recording-2",
+    "timeUs": 3552101000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F100",
+    "recording": "recording-2",
+    "timeUs": 3581950000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F101",
+    "recording": "recording-2",
+    "timeUs": 3611800000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F102",
+    "recording": "recording-2",
+    "timeUs": 3641649000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F103",
+    "recording": "recording-2",
+    "timeUs": 3671499000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F104",
+    "recording": "recording-2",
+    "timeUs": 3701349000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F105",
+    "recording": "recording-2",
+    "timeUs": 3731198000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F106",
+    "recording": "recording-2",
+    "timeUs": 3761048000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F107",
+    "recording": "recording-2",
+    "timeUs": 3790897000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F108",
+    "recording": "recording-2",
+    "timeUs": 3820747000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   },
+   {
+    "id": "second-F109",
+    "recording": "recording-2",
+    "timeUs": 3850597000,
+    "classification": "speaker_view",
+    "decision": "accept",
+    "reviewer": "Jake",
+    "reviewDate": "2026-10-10"
+   }
+  ]
+ }
+}

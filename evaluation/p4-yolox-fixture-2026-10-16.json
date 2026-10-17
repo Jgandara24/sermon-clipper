@@ -1,0 +1,208 @@
+{
+  "version": "p4-yolox-public-fixture-v1",
+  "scope": "ONE_PUBLIC_PORTRAIT_AT_THREE_SCALES_AND_BLANK_CONTROL",
+  "model": {
+    "modelId": "yolox-s-2022nov",
+    "version": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+    "roles": [
+      "PERSON_DETECTION"
+    ],
+    "sha256": "c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063",
+    "byteCount": 35858002,
+    "upstreamRevision": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+    "licenseSpdx": "Apache-2.0",
+    "licenseReviewReference": "evaluation/p4-model-candidates-2026-10-16.json#yolox-s-2022nov",
+    "usage": "evaluation"
+  },
+  "helperEvidence": {
+    "helperUrl": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_detection_yolox/yolox.py",
+    "helperSha256": "c99d8f103d93d27d0fb1807c7b91cb32d2d6c4959326cb88c801f17d00468f84",
+    "preprocessingReferenceUrl": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/object_detection_yolox/demo.py",
+    "preprocessingReferenceSha256": "44295a9a9616fd1d8dcb7ebf337f655d85db8e8e9413ca1d2e8a9891549c68d6"
+  },
+  "licenseEvidence": {
+    "licenseFileSha256": "0ec3668d3274bcf29e8a29e9576d5a2cd96fc78d3c5bec4387355a796e5d9088",
+    "readmeSha256": "389c9198224f76b1b662902efcd5d563cb748baf2b22b304670dc12eb75fab9d"
+  },
+  "pointerSha256": "ba443925c68c35c6a148579c1921b21bafbadf7c87c030e4e816052e90880adf",
+  "fixtureEvidence": {
+    "imageUrl": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/astronaut.png",
+    "imageSha256": "88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5",
+    "licenseEvidenceUrl": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+    "licenseEvidenceSha256": "7f429eaa2284e18df7b170b19f675488347ff90dfee2eb101fbced2c072f4bde",
+    "licenseStatus": "UPSTREAM_DOCUMENTS_PUBLIC_DOMAIN",
+    "representativeSermonFootage": false
+  },
+  "runtime": {
+    "python": "3.13.7",
+    "platform": "macOS-26.6.2-x86_64-i386-64bit-Mach-O",
+    "machine": "x86_64",
+    "cpu": "Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz",
+    "packages": [
+      {
+        "name": "opencv-python-headless",
+        "version": "4.11.0.86",
+        "download": {
+          "url": "https://files.pythonhosted.org/packages/3b/43/68555327df94bb9b59a1fd645f63fafb0762515344d2046698762fc19d58/opencv_python_headless-4.11.0.86-cp37-abi3-macosx_13_0_x86_64.whl",
+          "archive_info": {
+            "hash": "sha256=a66c1b286a9de872c343ee7c3553b084244299714ebb50fbdcd76f07ebbe6c81",
+            "hashes": {
+              "sha256": "a66c1b286a9de872c343ee7c3553b084244299714ebb50fbdcd76f07ebbe6c81"
+            }
+          }
+        }
+      },
+      {
+        "name": "numpy",
+        "version": "2.2.6",
+        "download": {
+          "url": "https://files.pythonhosted.org/packages/73/ed/63d920c23b4289fdac96ddbdd6132e9427790977d5457cd132f18e76eae0/numpy-2.2.6-cp313-cp313-macosx_14_0_x86_64.whl",
+          "archive_info": {
+            "hash": "sha256=55a4d33fa519660d69614a9fad433be87e5252f4b03850642f88993f7b2ca566",
+            "hashes": {
+              "sha256": "55a4d33fa519660d69614a9fad433be87e5252f4b03850642f88993f7b2ca566"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "processMeasurement": {
+    "scope": "PYTHON_IMPORT_MODEL_LOAD_FOUR_INFERENCES_AND_PNG_OUTPUT",
+    "wallMs": 42482.302612042986,
+    "nativeRealSeconds": 42.47,
+    "userCpuSeconds": 4.22,
+    "systemCpuSeconds": 0.43,
+    "peakResidentBytes": 363274240
+  },
+  "inference": {
+    "opencvVersion": "4.11.0",
+    "numpyVersion": "2.2.6",
+    "threads": 12,
+    "backend": "DNN_BACKEND_OPENCV",
+    "target": "DNN_TARGET_CPU",
+    "opencl": false,
+    "settings": {
+      "scoreThreshold": 0.5,
+      "nmsThreshold": 0.5,
+      "inputSize": [
+        640,
+        640
+      ],
+      "personClassId": 0,
+      "objectThresholdArgument": 0.5,
+      "objectThresholdAppliedSeparately": false,
+      "note": "The pinned helper multiplies objectness and class score; it does not use objThreshold separately."
+    },
+    "detectorKind": "person",
+    "nativeObjectColumns": [
+      "x",
+      "y",
+      "width",
+      "height",
+      "objectnessTimesClassScore",
+      "classId"
+    ],
+    "modelLoadWallMs": 109.59578899201006,
+    "results": [
+      {
+        "fixture": "portrait-480.png",
+        "sha256": "73b553c22667fc539fdba1d2e92c62f8cbd635a7e31f6b44bb3cb0b9e037ebea",
+        "width": 854,
+        "height": 480,
+        "portraitSidePx": 480,
+        "nativeDetections": [
+          [
+            150.58547973632812,
+            11.885711669921875,
+            244.9812469482422,
+            345.1507568359375,
+            0.9428168535232544,
+            0.0
+          ]
+        ],
+        "sourceDetections": [
+          [
+            200.9374995231628,
+            15.859996509552001,
+            326.89685139656063,
+            460.56054115295404,
+            0.9428168535232544,
+            0.0
+          ]
+        ],
+        "letterboxScale": 0.7494145199063232,
+        "expectedPersonCount": 1,
+        "observedPersonCount": 1,
+        "wallMs": 1238.8045620173216
+      },
+      {
+        "fixture": "portrait-128.png",
+        "sha256": "c4c6f501d7d81dca4e730b96403cb29aacb68d9b93a3a1ab48f617f1a23b19c6",
+        "width": 854,
+        "height": 480,
+        "portraitSidePx": 128,
+        "nativeDetections": [
+          [
+            274.607421875,
+            134.6959228515625,
+            66.19025421142578,
+            93.02620697021484,
+            0.8114191889762878,
+            0.0
+          ]
+        ],
+        "sourceDetections": [
+          [
+            366.4292785644531,
+            179.7348720550537,
+            88.32262046337127,
+            124.13184492588043,
+            0.8114191889762878,
+            0.0
+          ]
+        ],
+        "letterboxScale": 0.7494145199063232,
+        "expectedPersonCount": 1,
+        "observedPersonCount": 1,
+        "wallMs": 925.5556900752708
+      },
+      {
+        "fixture": "portrait-64.png",
+        "sha256": "fb7264aa228ca3a477cec842e4f6dc3013a95d697e7882395948faf53a910126",
+        "width": 854,
+        "height": 480,
+        "portraitSidePx": 64,
+        "nativeDetections": [],
+        "sourceDetections": [],
+        "letterboxScale": 0.7494145199063232,
+        "expectedPersonCount": 1,
+        "observedPersonCount": 0,
+        "wallMs": 920.3395129879937
+      },
+      {
+        "fixture": "portrait-0.png",
+        "sha256": "6c5b55a2468900c107d251b9aba5d0b51a9a08cc01140247c02662b4a754f159",
+        "width": 854,
+        "height": 480,
+        "portraitSidePx": 0,
+        "nativeDetections": [],
+        "sourceDetections": [],
+        "letterboxScale": 0.7494145199063232,
+        "expectedPersonCount": 0,
+        "observedPersonCount": 0,
+        "wallMs": 948.4506560256705
+      }
+    ],
+    "nativeFaceColumns": null
+  },
+  "productionApproved": false,
+  "qualityEvidence": null,
+  "limitations": [
+    "One portrait does not establish representative accuracy or false-positive rates.",
+    "Scores are native model estimates, not calibrated confidence.",
+    "A detection does not prove a pastor or live camera footage.",
+    "Printed faces and presentation slides remain unresolved.",
+    "Settings describe this experiment and are not production defaults."
+  ]
+}

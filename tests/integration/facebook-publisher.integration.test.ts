@@ -99,8 +99,9 @@ async function createDueScheduledPost(
 ) {
   const withExport = options.withExport ?? true;
 
+  const source = await prisma.sourceVideo.create({ data: { workspaceId, origin: "UPLOAD", filename: "fixture.mp4" } });
   const project = await prisma.project.create({
-    data: { workspaceId, name: `Facebook Publish ${label}` },
+    data: { workspaceId, sourceVideoId: source.id, name: `Facebook Publish ${label}` },
   });
 
   const clip = await prisma.generatedClip.create({
@@ -147,6 +148,8 @@ async function createDueScheduledPost(
         qcStatus: RenderQcStatus.PASSED,
         // QC measured this exact file; delivery refuses if the two ever diverge.
         qcChecksum: checksum,
+        qcDetails: { mediaInput: { kind: "ORIGINAL", sourceVideoId: source.id, editVersion: 1,
+          sourceInterval: { startMs: clip.startMs, endMs: clip.endMs } } },
         finishedAt: new Date(),
       },
     });
@@ -458,6 +461,8 @@ describe("delivery eligibility against a real database", () => {
 describe("exact editorial acceptance", () => {
   /** Another clip of the same sermon with a QC-passed render of its own, bound to no slot. */
   async function createDeliverableClip(workspaceId: string, projectId: string, label: string) {
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+    const source = { id: project.sourceVideoId! };
     const clip = await prisma.generatedClip.create({
       data: {
         workspaceId,
@@ -496,6 +501,8 @@ describe("exact editorial acceptance", () => {
         editVersion: 1,
         qcStatus: RenderQcStatus.PASSED,
         qcChecksum: checksum,
+        qcDetails: { mediaInput: { kind: "ORIGINAL", sourceVideoId: source.id, editVersion: 1,
+          sourceInterval: { startMs: clip.startMs, endMs: clip.endMs } } },
         finishedAt: new Date(),
       },
     });

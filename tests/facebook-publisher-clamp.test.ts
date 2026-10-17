@@ -40,13 +40,22 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
   const events: Array<Record<string, unknown>> = [];
   const attempts: Array<Record<string, unknown>> = [];
   const client = {
+    async $transaction<T>(work: (tx: unknown) => Promise<T>): Promise<T> { return work(this); },
+    $queryRaw: async () => [],
+    exportRangeInput: { findUnique: async () => null },
+    exportJob: { findUnique: async () => ({ id: EXPORT_ID, clipId: CLIP_ID,
+      workspaceId: "44444444-4444-4444-8444-444444444444", state: "SUCCEEDED", editVersion: 1,
+      qcDetails: { mediaInput: { kind: "ORIGINAL", sourceVideoId: "55555555-5555-4555-8555-555555555555",
+        sourceInterval: { startMs: 0, endMs: 1000 }, editVersion: 1 } } }) },
+    sourceVideo: { findFirst: async () => ({ id: "55555555-5555-4555-8555-555555555555" }) },
+    mediaRegion: { findMany: async () => [] },
     scheduledPost: {
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
         findManyWheres.push(where);
         return [
           {
             id: "post-1",
-            workspaceId: "ws-1",
+            workspaceId: "44444444-4444-4444-8444-444444444444",
             // Prisma returns the scalars alongside the relations; the exact claim and the intent
             // row are both built from these.
             clipId: CLIP_ID,
@@ -66,7 +75,7 @@ function makeFakeClient(scheduledDate: Date, options: { attemptCount?: number } 
             },
             // The slot's own binding. The publisher no longer looks for the clip's newest
             // successful export, so this is the only route to a file.
-            exportJob: { outputFile: { storageKey: "exports/ws-1/clip.mp4" } },
+            exportJob: { outputFile: { storageKey: "exports/44444444-4444-4444-8444-444444444444/clip.mp4" } },
           },
         ];
       },
@@ -377,7 +386,7 @@ describe("publishDueScheduledPosts delivery gate", () => {
           ...client.scheduledPost,
           // The real loader reads the slot back before deciding.
           findUnique: async () => ({
-            workspaceId: "ws-1",
+            workspaceId: "44444444-4444-4444-8444-444444444444",
             projectId: PROJECT_ID,
             clipId: CLIP_ID,
             exportJobId: EXPORT_ID,
@@ -385,7 +394,7 @@ describe("publishDueScheduledPosts delivery gate", () => {
             workspace: { settings: eligibleSettings },
             clip: {
               id: CLIP_ID,
-              workspaceId: "ws-1",
+              workspaceId: "44444444-4444-4444-8444-444444444444",
               projectId: PROJECT_ID,
               supersededAt: null,
               edits: [{ version: 2 }],
@@ -393,12 +402,14 @@ describe("publishDueScheduledPosts delivery gate", () => {
             },
             exportJob: {
               id: EXPORT_ID,
-              workspaceId: "ws-1",
+              workspaceId: "44444444-4444-4444-8444-444444444444",
               clipId: CLIP_ID,
               state: "SUCCEEDED",
               editVersion: 2,
               qcStatus: "PASSED",
               qcChecksum: "sha256:fixture",
+              qcDetails: { mediaInput: { kind: "ORIGINAL", sourceVideoId: "55555555-5555-4555-8555-555555555555",
+                sourceInterval: { startMs: 0, endMs: 1000 }, editVersion: 2 } },
               outputFile: { checksum: "sha256:fixture" },
             },
           }),
@@ -424,9 +435,8 @@ describe("publishDueScheduledPosts delivery gate", () => {
     // Nothing was claimed, so the slot stays available for whenever it is reviewed.
     expect(claimed).toBe(false);
     expect(updates).toHaveLength(0);
-    expect(
-      events.some((event) => event.eventType === "facebook_publish_ineligible"),
-    ).toBe(true);
+    expect(events).toContainEqual(expect.objectContaining({ eventType: "facebook_publish_ineligible",
+      metadata: expect.objectContaining({ reason: "editorial_review_missing" }) }));
   });
 
   it("reads the file from the slot's bound export, never from the clip's newest one", async () => {
@@ -446,6 +456,6 @@ describe("publishDueScheduledPosts delivery gate", () => {
     // The fixture's only export is the bound one; the clip carries no exportJobs list at all,
     // so a reintroduced "latest successful export" lookup would find nothing and fail this.
     expect(captured).toHaveLength(1);
-    expect(captured[0]).toContain("exports%2Fws-1%2Fclip.mp4");
+    expect(captured[0]).toContain("exports%2F44444444-4444-4444-8444-444444444444%2Fclip.mp4");
   });
 });

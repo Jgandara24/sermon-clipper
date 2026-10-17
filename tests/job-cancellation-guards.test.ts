@@ -50,7 +50,15 @@ function makeProcessingClient(row: FakeJobRow) {
 }
 
 function makeExportClient(row: FakeJobRow) {
-  return { exportJob: makeFakeTable(row) } as never;
+  const workspaceId = "11111111-1111-4111-8111-111111111111";
+  const sourceVideoId = "22222222-2222-4222-8222-222222222222";
+  const tx = { exportJob: { ...makeFakeTable(row), findUniqueOrThrow: async () => ({ ...row, workspaceId, editVersion: 0,
+    qcDetails: { mediaInput: { kind: "ORIGINAL", sourceVideoId, sourceInterval: { startMs: 0, endMs: 1000 }, editVersion: 0 } },
+    clip: { workspaceId, startMs: 0, endMs: 1000, project: { workspaceId, sourceVideoId } } }) },
+    $queryRaw: async () => [], sourceVideo: { findFirst: async () => ({ id: sourceVideoId }) },
+    mediaRegion: { findMany: async () => [] } };
+  return { ...tx, exportRangeInput: { findUnique: async () => null },
+    $transaction: async (work: (client: typeof tx) => Promise<unknown>) => work(tx) } as never;
 }
 
 describe("terminal job transitions never overwrite a concurrent cancel/recovery", () => {

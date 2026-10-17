@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Prisma, ProcessingJobType, ProjectStatus, SourceOrigin, type SourceVideo } from "@prisma/client";
@@ -20,7 +20,7 @@ import {
   YtDlpFileTooLargeError,
   type YtDlpTransferTelemetry,
 } from "@/lib/media/ytdlp";
-import { getStorageProvider, type StorageProvider } from "@/lib/storage";
+import { getStorageProvider, storageProviderKind, storageTransferCostFact, type StorageProvider } from "@/lib/storage";
 
 /**
  * yt-dlp is the true external boundary of the URL-import branch; tests inject fakes here the
@@ -230,7 +230,16 @@ export function createFinalizeJobHandler(deps: UrlImportDeps = defaultUrlImportD
 
       const filePath = path.join(workDir, "source-video");
       try {
-        await storage.downloadToFile(storageKey, filePath);
+        const startedAt = Date.now();
+        const download = await storage.downloadToFile(storageKey, filePath);
+        await recordProcessingCostFactSafely(prisma, {
+          ...storageTransferCostFact({
+            direction: "download", bytes: download?.transferredBytes ?? (await stat(filePath)).size,
+            provider: storageProviderKind(), configuredPricePerGbUsd: env.STORAGE_DOWNLOAD_PRICE_PER_GB_USD ?? null,
+            wallTimeMs: Date.now() - startedAt, attempt: Math.max(1, job.attempt), outcome: "succeeded", download,
+          }),
+          workspaceId: project.workspaceId, projectId: project.id, jobId: job.id,
+        });
         probeResult = await probeVideoFile(filePath);
       } catch (error) {
         throw new JobFailureError("INVALID_FILE_TYPE", "That file isn't a video we can read.", {

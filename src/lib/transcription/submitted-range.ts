@@ -69,6 +69,8 @@ export function offsetTranscriptionResult(
   if (offsetMs === 0) return result;
   return {
     ...result,
+    ...(result.providerEvidence ? { providerEvidence: { ...result.providerEvidence,
+      sourceOffsetMs: result.providerEvidence.sourceOffsetMs + offsetMs } } : {}),
     segments: result.segments.map((segment) => ({
       ...segment,
       startMs: segment.startMs + offsetMs,
