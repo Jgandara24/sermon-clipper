@@ -46,29 +46,39 @@ The church pays a small monthly fee. Thousands of churches use it.
 
 ## 2. Phase 1 goal (agreed 2026-10-17)
 
-One real church gets one full week of clips, every week, for 4 weeks in a row.
-The system pulls the sermon from YouTube. It makes the clips and plans the days.
-Jake checks the clips. They post to the church's Facebook page.
+We count sermons, not weeks. (Changed from "4 weeks in a row" on 2026-10-17, at Jake's request.)
+For each sermon, the system pulls it from YouTube, makes 6 clips, and plans the days.
+Jake reviews the 6 clips. He approves all 6, or rejects the bad one.
 Jake accepts 6 of every 6 clips. Not 5. Every posted clip must be worthy of the church members and the public.
+
+Phase 1 has three stages. Each stage counts sermons:
+
+| Stage | Sermons | Where the clips go | Done when |
+|---|---|---|---|
+| 1. Lab | 3 | Nowhere. Jake watches them. | 18 of 18 clips pass. |
+| 2. Sandbox | 1 | The sandbox page, on the real schedule. | All 6 clips post. Jake approved each one first. |
+| 3. Live | 2 | Sunnylane's real Facebook page. | All 12 clips post. Jake approved each one first. No reject, no swap. |
+
+Phase 1 ends when the 12th live clip has posted.
 
 ### How we count (agreed 2026-10-17)
 
 We count the system's first picks, not the posted clips.
 Jake may swap a bad clip for a reserve, so the church still gets its 6 clips.
-But a week with a swap or a reject does not count.
-Phase 1 ends after 4 weeks in a row with no swap and no reject.
-If a week fails, the count of 4 starts again.
+But a sermon with a swap or a reject does not count.
+If a sermon fails in a stage, we fix the picker, and that stage starts its count again.
+A failure in the live stage does not send us back to the lab, unless the fix is large.
 
 ### The Phase 1 church (agreed 2026-10-17)
 
 The Phase 1 church is **Sunnylane Baptist Church**. Jake's dad is the pastor. Jake is a member.
 All test sermons come from Sunnylane: its livestream and its YouTube channel.
 Test clips post first to the **sandbox page**, the Facebook page named "First Baptist Sandbox". No church member sees it.
-Clips post to the sandbox page until one full week has no swap and no reject. Then they post to Sunnylane's real Facebook page.
-Sandbox weeks count toward the 4 clean weeks. The sandbox week is week 1 of 4. The real page gets weeks 2, 3, and 4.
-If a week fails after the switch, clips stay on the real page. Jake swaps the bad clip, and the count starts again.
+One sermon's 6 clips post to the sandbox page first, on the real schedule, one clip a day. This proves the posting path.
+Then two sermons' clips, 12 in all, post to Sunnylane's real Facebook page. Jake approves each clip before it posts.
+If a clip fails on the real page stage, Jake swaps it. The church still gets 6 clips. The live count of 2 sermons starts again.
 
-Note: the code already has a 30-day period where only Jake checks clips. That period is a minimum. Time alone never ends it. Jake ends it by hand. So "4 clean weeks in a row" is the proof Jake uses to end it. There is no conflict.
+Note: the code already has a 30-day period where only Jake checks clips. That period is a minimum. Time alone never ends it. Jake ends it by hand. Phase 1 may end before day 30. In that case Jake keeps checking clips until day 30, then ends the period by hand. There is no conflict.
 
 ### What "a good clip" means (agreed 2026-10-17)
 
@@ -111,13 +121,13 @@ If any clip fails, we fix the picker and run all 3 sermons again.
 
 **Parked until Phase 1 ends:** P4-B, the "cheap at scale" parts of P4: early deletion of originals, caches, storage leases, big-file upload, PERC. The code is saved on its branch. Nothing is lost.
 
-### Priority 2 — switch on sandbox posting
+### Priority 2 — the sandbox sermon
 
-Jake runs the Facebook sandbox test by hand, with step-by-step guidance. Clips post to the sandbox page. The weekly loop starts: Sunday sermon in, Monday check.
+Jake runs the Facebook sandbox test by hand, with step-by-step guidance. One sermon's 6 clips post to the sandbox page, one a day. Jake approves each clip before it posts.
 
-### Priority 3 — 4 clean weeks
+### Priority 3 — the two live sermons
 
-Week 1 on the sandbox page. Weeks 2 to 4 on Sunnylane's real page. Phase 1 ends when 4 weeks in a row have no swap and no reject.
+Two sermons' clips, 12 in all, post to Sunnylane's real page. Jake approves each clip before it posts. Phase 1 ends when the 12th clip has posted with no reject and no swap.
 
 ## 4. Open questions
 
@@ -132,6 +142,6 @@ We write the real Phase 2 goal when Phase 1 ends, with what we learned. The dire
 3. **P4-B, cheap at scale.** Early deletion of originals, caches, PERC for Sunnylane.
 4. **Churches 2 to 5.** Pastors Jake knows. Each gets the church check on from day one.
 5. **Instagram and TikTok.** After 5 churches post to Facebook every week.
-6. **Hands-off posting.** A church may turn off the check after 4 clean weeks of its own.
+6. **Hands-off posting.** A church may turn off the check after 4 clean sermons of its own.
 
 Pricing stays as it is today, $0, $15, and $29 a month, until church 2 signs up.

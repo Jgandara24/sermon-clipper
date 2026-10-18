@@ -4059,7 +4059,7 @@ second convention.
 
 Status: Active. Never call `rescheduleMissedSlot` from a sweep, poller, or allocator.
 
-## 2026-10-17 - The Product Is Pulpit Engine, And Phase 1 Is Four Clean Weeks At Sunnylane
+## 2026-10-17 - The Product Is Pulpit Engine, And Phase 1 Is Six Clean Sermons At Sunnylane
 
 Jake and Claude Code ran a `/grill-with-docs` session on 2026-10-17 to restate the desired outcome,
 the next goal, and the order of work in plain words. The results live in three new places and this
@@ -4073,9 +4073,10 @@ entry only points at them:
 
 **The decisions, in one line each.** The final product name is Pulpit Engine; "Sermon Clipper" was
 the working name of this rebuild and is to be renamed in everything the church sees. The Phase 1
-church is Sunnylane Baptist Church. The goal is 6 of 6 clips accepted, 4 weeks in a row, counting
-the system's first picks; a swap is allowed so the church gets its clips, but a week with a swap
-does not count. A clip passes only if it starts and ends on time, the preacher is preaching, the
+church is Sunnylane Baptist Church. The goal counts sermons, not weeks: 3 lab sermons with 18 of 18
+clips passing, then 1 sermon posted to the sandbox page, then 2 sermons (12 clips) posted to the real
+page, every clip approved by Jake first. We count the system's first picks; a swap is allowed so the
+church gets its clips, but a sermon with a swap does not count. A clip passes only if it starts and ends on time, the preacher is preaching, the
 video shows the preacher the whole time, and it is engaging. Clips post to the sandbox page until
 the first clean week, then to Sunnylane's real page. Priority 1 is quality in the lab: three named
 Sunnylane sermons, 18 of 18 clips pass. From P4, only the parts that let the system see the video
@@ -4089,5 +4090,5 @@ sandbox test — but P4 no longer runs to completion before Phase 1. The 2026-10
 account decision stands; the wider "combine the products" intent is now the sharing table in the
 brief, not a code or database merge.
 
-Status: Active. The 30-day human-only program is a minimum, ended by Jake's hand when the four
-clean weeks are in; it is not a conflict with this entry.
+Status: Active. The 30-day human-only program is a minimum, ended by Jake's hand after Phase 1
+and after day 30; it is not a conflict with this entry.
