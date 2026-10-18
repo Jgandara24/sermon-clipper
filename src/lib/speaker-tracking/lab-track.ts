@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { applyBodyFill, type PeopleObservations } from "./body-fill";
 import { buildFaceTracking, type FaceObservations } from "./faces";
 import { applyLabRules, CODEX_TUNED_WIDTH } from "./lab-rules";
 import { trackingCropAt } from "./path";
@@ -13,6 +14,8 @@ export type ObservationFile = {
   end: number;
   modelSha256: string;
   computeSeconds: number;
+  /** Person boxes every few frames, when the observer ran the person detector. */
+  people?: PeopleObservations;
 };
 
 export type LabTrack = {
@@ -28,6 +31,8 @@ export type LabTrack = {
   shots: { start: number; end: number; tracked: boolean }[];
   addedCuts: number;
   filledFrames: number;
+  /** Frames without a lone face whose position came from the preacher's person box. */
+  bodyFilledFrames: number;
   /** Codex's tracking record; only the "codex" motion builds one. */
   record?: TrackingRecord;
 };
@@ -37,14 +42,52 @@ const sha256 = (text: string) => createHash("sha256").update(text).digest("hex")
 
 /** Light, lag-free smoothing: removes detector jitter without letting the crop fall behind. */
 const CENTER_LOCK_SIGMA_S = 0.2;
+/** Where no detector sees him, the crop holds, then glides to his next position over this long. */
+const GLIDE_S = 0.5;
+
+/**
+ * Fills unknown positions in one shot. Before his first sighting the crop waits where he appears;
+ * after his last it holds. Between two sightings it holds, then eases to the next sighting over
+ * `glideFrames` frames, so the crop never jumps inside a shot. The glide ends `leadFrames` before
+ * he appears, so after smoothing the crop is already on him when he does.
+ */
+function holdAndGlide(shot: (number | null)[], glideFrames: number, leadFrames: number, fallback: number): number[] {
+  const out: number[] = new Array(shot.length);
+  let last: number | null = null;
+  for (let i = 0; i < shot.length; ) {
+    const known = shot[i];
+    if (known !== null) {
+      out[i] = last = known;
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j < shot.length && shot[j] === null) j += 1;
+    const next = j < shot.length ? shot[j] : null;
+    const lead = Math.min(leadFrames, Math.floor((j - i) / 3));
+    const end = j - lead;
+    const g = Math.min(end - i, glideFrames);
+    for (let k = i; k < j; k += 1) {
+      if (last === null || next === null) out[k] = last ?? next ?? fallback;
+      else if (k < end - g) out[k] = last;
+      else if (k >= end) out[k] = next;
+      else {
+        const u = (k - (end - g) + 1) / (g + 1);
+        out[k] = last + (next - last) * u * u * (3 - 2 * u);
+      }
+    }
+    i = j;
+  }
+  return out;
+}
 
 /**
  * Center lock (Jake, lab sermon 1c: "it must track him and keep him center at all times").
  * Offline, the face position is known for every frame, so the crop centers the lone face in every
  * frame. A zero-phase Gaussian, with point-reflected padding at shot edges so a steady walk is
  * followed exactly, takes out jitter. There is no speed limit. Smoothing never crosses a camera
- * cut, so at a cut the crop jumps straight to him. Frames without a lone face hold the nearest
- * known position in the shot; a shot with none holds the frame's center.
+ * cut, so at a cut the crop jumps straight to him. Frames without a lone face hold and glide
+ * (holdAndGlide); a shot with no position at all holds the frame's center.
  */
 function centerLockXs(frames: FaceObservations["frames"], width: number, cropW: number) {
   const centers = frames.map((f) => (f.faces.length === 1 ? f.faces[0].box.x + f.faces[0].box.w / 2 : null));
@@ -52,14 +95,11 @@ function centerLockXs(frames: FaceObservations["frames"], width: number, cropW: 
   const shotStarts = frames.map((f, i) => (i === 0 || f.cut ? i : -1)).filter((i) => i >= 0);
   shotStarts.forEach((start, s) => {
     const end = s + 1 < shotStarts.length ? shotStarts[s + 1] : frames.length;
-    const shot = centers.slice(start, end);
-    const firstKnown = shot.find((c) => c !== null);
-    let held = firstKnown ?? width / 2;
-    const filled = shot.map((c) => (c === null ? held : (held = c)));
-    const n = filled.length;
     const dts = frames.slice(start + 1, end).map((f, i) => f.t - frames[start + i].t).sort((a, b) => a - b);
     const dt = dts.length ? dts[Math.floor(dts.length / 2)] : 1 / 30;
     const sigma = CENTER_LOCK_SIGMA_S / dt;
+    const filled = holdAndGlide(centers.slice(start, end), Math.round(GLIDE_S / dt), Math.round(sigma), width / 2);
+    const n = filled.length;
     const radius = Math.ceil(3 * sigma);
     const at = (j: number) =>
       j < 0 ? 2 * filled[0] - filled[Math.min(n - 1, -j)] : j >= n ? 2 * filled[n - 1] - filled[Math.max(0, 2 * (n - 1) - j)] : filled[j];
@@ -89,7 +129,10 @@ export function buildLabTrack(
   options: { seekSeconds: number; rules: "codex" | "lab-v1"; motion?: "center" | "codex" },
 ): LabTrack {
   const scale = options.rules === "lab-v1" ? file.geometry.width / CODEX_TUNED_WIDTH : 1;
-  const prepared = options.rules === "lab-v1" ? applyLabRules(file.observations, scale) : undefined;
+  // Body fill runs first, in source pixels, so the lab rules see the filled turns as sightings.
+  const bodyFilled =
+    options.rules === "lab-v1" && file.people ? applyBodyFill(file.observations, file.people, file.geometry.width) : undefined;
+  const prepared = options.rules === "lab-v1" ? applyLabRules(bodyFilled?.observations ?? file.observations, scale) : undefined;
   const observations = prepared?.observations ?? file.observations;
   const motion = options.motion ?? (options.rules === "lab-v1" ? "center" : "codex");
   const geometry = {
@@ -130,6 +173,7 @@ export function buildLabTrack(
       shots: shotStarts.map((s, i) => ({ start: s, end: shotStarts[i + 1] ?? file.end - start, tracked: true })),
       addedCuts: prepared?.addedCuts ?? 0,
       filledFrames: prepared?.filledFrames ?? 0,
+      bodyFilledFrames: bodyFilled?.bodyFilledFrames ?? 0,
     };
   }
 
@@ -193,6 +237,7 @@ export function buildLabTrack(
     shots: record.shots.map((s) => ({ start: s.start - record.start, end: s.end - record.start, tracked: Boolean(s.selectedSubject) })),
     addedCuts: prepared?.addedCuts ?? 0,
     filledFrames: prepared?.filledFrames ?? 0,
+    bodyFilledFrames: bodyFilled?.bodyFilledFrames ?? 0,
     record,
   };
 }
