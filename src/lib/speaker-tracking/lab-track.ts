@@ -28,11 +28,55 @@ export type LabTrack = {
   shots: { start: number; end: number; tracked: boolean }[];
   addedCuts: number;
   filledFrames: number;
-  record: TrackingRecord;
+  /** Codex's tracking record; only the "codex" motion builds one. */
+  record?: TrackingRecord;
 };
 
 const even = (n: number) => Math.floor(n / 2) * 2;
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
+
+/** Light, lag-free smoothing: removes detector jitter without letting the crop fall behind. */
+const CENTER_LOCK_SIGMA_S = 0.2;
+
+/**
+ * Center lock (Jake, lab sermon 1c: "it must track him and keep him center at all times").
+ * Offline, the face position is known for every frame, so the crop centers the lone face in every
+ * frame. A zero-phase Gaussian, with point-reflected padding at shot edges so a steady walk is
+ * followed exactly, takes out jitter. There is no speed limit. Smoothing never crosses a camera
+ * cut, so at a cut the crop jumps straight to him. Frames without a lone face hold the nearest
+ * known position in the shot; a shot with none holds the frame's center.
+ */
+function centerLockXs(frames: FaceObservations["frames"], width: number, cropW: number) {
+  const centers = frames.map((f) => (f.faces.length === 1 ? f.faces[0].box.x + f.faces[0].box.w / 2 : null));
+  const xs: number[] = new Array(frames.length);
+  const shotStarts = frames.map((f, i) => (i === 0 || f.cut ? i : -1)).filter((i) => i >= 0);
+  shotStarts.forEach((start, s) => {
+    const end = s + 1 < shotStarts.length ? shotStarts[s + 1] : frames.length;
+    const shot = centers.slice(start, end);
+    const firstKnown = shot.find((c) => c !== null);
+    let held = firstKnown ?? width / 2;
+    const filled = shot.map((c) => (c === null ? held : (held = c)));
+    const n = filled.length;
+    const dts = frames.slice(start + 1, end).map((f, i) => f.t - frames[start + i].t).sort((a, b) => a - b);
+    const dt = dts.length ? dts[Math.floor(dts.length / 2)] : 1 / 30;
+    const sigma = CENTER_LOCK_SIGMA_S / dt;
+    const radius = Math.ceil(3 * sigma);
+    const at = (j: number) =>
+      j < 0 ? 2 * filled[0] - filled[Math.min(n - 1, -j)] : j >= n ? 2 * filled[n - 1] - filled[Math.max(0, 2 * (n - 1) - j)] : filled[j];
+    for (let i = 0; i < n; i += 1) {
+      let sum = 0;
+      let weight = 0;
+      for (let k = -radius; k <= radius; k += 1) {
+        const w = Math.exp(-(k * k) / (2 * sigma * sigma));
+        sum += w * at(i + k);
+        weight += w;
+      }
+      const center = n > 1 ? sum / weight : filled[i];
+      xs[start + i] = Math.max(0, Math.min(width - cropW, center - cropW / 2));
+    }
+  });
+  return { xs, known: centers.map((c) => c !== null) };
+}
 
 /**
  * Builds Codex's speaker-tracking path ("face-follow-smooth-v2", unchanged) from face
@@ -42,11 +86,12 @@ const sha256 = (text: string) => createHash("sha256").update(text).digest("hex")
  */
 export function buildLabTrack(
   file: ObservationFile,
-  options: { seekSeconds: number; rules: "codex" | "lab-v1" },
+  options: { seekSeconds: number; rules: "codex" | "lab-v1"; motion?: "center" | "codex" },
 ): LabTrack {
   const scale = options.rules === "lab-v1" ? file.geometry.width / CODEX_TUNED_WIDTH : 1;
   const prepared = options.rules === "lab-v1" ? applyLabRules(file.observations, scale) : undefined;
   const observations = prepared?.observations ?? file.observations;
+  const motion = options.motion ?? (options.rules === "lab-v1" ? "center" : "codex");
   const geometry = {
     ...file.geometry,
     width: Math.round(file.geometry.width / scale),
@@ -57,6 +102,36 @@ export function buildLabTrack(
     h: even(Math.min(geometry.height, (geometry.width * 16) / 9)),
   };
   const renderCrop = { w: even(crop.w * scale), h: even(crop.h * scale) };
+  const toSource = (x: number) => Math.min(file.geometry.width - renderCrop.w, Math.max(0, even(x * scale)));
+  const commandAt = (t: number, x: number, y: number) => {
+    const at = Math.max(0, Math.floor((t - options.seekSeconds) * 1e6 + 1e-5) / 1e6);
+    return `${at.toFixed(6)} speaker x ${x}, speaker y ${y};`;
+  };
+
+  if (motion === "center") {
+    const { xs, known } = centerLockXs(observations.frames, geometry.width, crop.w);
+    const y = Math.max(0, even((file.geometry.height - renderCrop.h) / 2));
+    const start = observations.frames[0].t;
+    const holds: { start: number; end: number }[] = [];
+    observations.frames.forEach((f, i) => {
+      if (known[i]) return;
+      const next = observations.frames[i + 1]?.t ?? file.end;
+      const last = holds.at(-1);
+      if (last && f.t - start - last.end <= 0.05) last.end = next - start;
+      else holds.push({ start: f.t - start, end: next - start });
+    });
+    const shotStarts = observations.frames.map((f, i) => (i === 0 || f.cut ? f.t - start : -1)).filter((t) => t >= 0);
+    return {
+      commands: observations.frames.map((f, i) => commandAt(f.t, toSource(xs[i]), y)).join("\n"),
+      crop: renderCrop,
+      first: { x: toSource(xs[0]), y },
+      followingPercent: Number(((100 * known.filter(Boolean).length) / known.length).toFixed(1)),
+      holds,
+      shots: shotStarts.map((s, i) => ({ start: s, end: shotStarts[i + 1] ?? file.end - start, tracked: true })),
+      addedCuts: prepared?.addedCuts ?? 0,
+      filledFrames: prepared?.filledFrames ?? 0,
+    };
+  }
 
   const { record } = buildFaceTracking(
     {
@@ -83,15 +158,14 @@ export function buildLabTrack(
   const cropAt = (t: number) => {
     const p = trackingCropAt(record, t);
     return {
-      x: Math.min(file.geometry.width - renderCrop.w, Math.max(0, even(p.x * scale))),
+      x: toSource(p.x),
       y: Math.min(file.geometry.height - renderCrop.h, Math.max(0, even(p.y * scale))),
     };
   };
   const commands = observations.frames
     .map((frame) => {
       const p = cropAt(frame.t);
-      const at = Math.max(0, Math.floor((frame.t - options.seekSeconds) * 1e6 + 1e-5) / 1e6);
-      return `${at.toFixed(6)} speaker x ${p.x}, speaker y ${p.y};`;
+      return commandAt(frame.t, p.x, p.y);
     })
     .join("\n");
 

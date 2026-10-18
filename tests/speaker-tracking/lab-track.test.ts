@@ -77,6 +77,47 @@ describe("applyLabRules", () => {
   });
 });
 
+/** Crop x per frame, from sendcmd lines. */
+const cropXs = (commands: string) => commands.trim().split("\n").map((line) => Number(/speaker x (\d+)/.exec(line)![1]));
+
+describe("buildLabTrack center lock", () => {
+  // Jake, lab sermon 1c clips 1 and 3: "it must track him and keep him center at all times."
+  it("keeps the face at the center of the frame while he walks across the stage", () => {
+    const file = clip(6, (i) => ({ x: 200 + (800 * i) / (6 * FPS), w: 60 }));
+    const track = buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" });
+    const xs = cropXs(track.commands);
+    xs.forEach((x, i) => {
+      const faceCenter = 200 + (800 * i) / (6 * FPS) + 30;
+      expect(Math.abs(x + track.crop.w / 2 - faceCenter), `frame ${i}`).toBeLessThanOrEqual(6);
+    });
+  });
+
+  it("does not shake when the detector's box jitters", () => {
+    // He stands still; the face box wobbles ±6 px from frame to frame.
+    const file = clip(4, (i) => ({ x: 600 + (i % 2 ? 6 : -6), w: 60 }));
+    const xs = cropXs(buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" }).commands);
+    const steps = xs.slice(1).map((x, i) => Math.abs(x - xs[i]));
+    expect(Math.max(...steps)).toBeLessThanOrEqual(2);
+  });
+
+  it("jumps straight to him at a camera cut instead of sliding across", () => {
+    // Close shot centered at 630, then a wide shot where his face is at 300 and much smaller.
+    const file = clip(2, (i) => (i < 30 ? { x: 560, w: 140 } : { x: 300, w: 50 }));
+    const xs = cropXs(buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" }).commands);
+    expect(Math.abs(xs[29] + 202 - 630)).toBeLessThanOrEqual(6);
+    expect(Math.abs(xs[30] + 202 - 325)).toBeLessThanOrEqual(6);
+  });
+
+  it("holds still where no face is known and never leaves the source frame", () => {
+    const file = clip(10, (i) => (i < 30 ? { x: 1200, w: 60 } : null));
+    const track = buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" });
+    const xs = cropXs(track.commands);
+    expect(new Set(xs.slice(30 + 2 * FPS)).size).toBe(1);
+    expect(xs.every((x) => x >= 0 && x <= 1280 - track.crop.w)).toBe(true);
+    expect(track.followingPercent).toBeLessThan(40);
+  });
+});
+
 describe("buildLabTrack", () => {
   it("follows a preacher who walks across the stage and returns source-pixel commands", () => {
     // He walks from x=200 to x=1000 over 6 seconds in a wide shot.
