@@ -7,6 +7,8 @@ import { approvalStateAfterEditorSave, publishApprovalBlockMessage } from "@/lib
 import { buildDefaultEditorState, editorStateSchema } from "@/lib/editor/types";
 import { prisma } from "@/lib/prisma";
 import { assertWorkspaceScope } from "@/lib/project-service";
+import { readCompleteMessagePolicy, CompleteMessageFailure } from "@/lib/analysis/complete-message/integration";
+import { editorSourceProblem } from "@/lib/analysis/complete-message/editor-validation";
 
 async function loadClipWithAccess(clipId: string, workspaceId: string) {
   const clip = await prisma.generatedClip.findUnique({
@@ -84,6 +86,20 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const parsed = putBodySchema.safeParse(json);
   if (!parsed.success) {
     return apiError("INVALID_REQUEST", "That edit couldn't be saved.");
+  }
+
+  // The disabled path keeps its existing save behavior. Never rewrite an older saved document.
+  try {
+    if (readCompleteMessagePolicy(access.clip.project.processingConfig)) {
+      const source = access.clip.project.sourceVideo;
+      const problem = editorSourceProblem(parsed.data.state, source ? {
+        id: source.id, durationMs: source.durationS ? Math.round(source.durationS.toNumber() * 1000) : null,
+      } : null);
+      if (problem) return apiError("INVALID_REQUEST", "The edit must stay within its source video.");
+    }
+  } catch (error) {
+    if (!(error instanceof CompleteMessageFailure)) throw error;
+    return apiError("INVALID_REQUEST", "The complete-message policy is invalid.");
   }
 
   const latest = await prisma.clipEdit.findFirst({

@@ -5,6 +5,7 @@ import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { applySourceCopy, planSourceCopy, copyPlanHash, type CopyStorage, type CopyInput } from "@/lib/operations/source-copy";
+import { applySandboxService, planSandboxService } from "@/lib/operations/sandbox-service";
 
 const prisma = new PrismaClient();
 const workspaceIds: string[] = [], operationIds: string[] = [];
@@ -15,7 +16,8 @@ beforeAll(async () => {
   const url = new URL(process.env.DATABASE_URL ?? "");
   const ciDatabase = process.env.GITHUB_ACTIONS === "true" && url.pathname === "/sermon_clipper";
   if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
-    !(url.pathname.includes("test") || url.pathname.includes("p2_day") || ciDatabase)) {
+    !(url.pathname.includes("test") || url.pathname.includes("p2_day") ||
+      url.pathname.startsWith("/p2_rehearsal_") || ciDatabase)) {
     throw new Error("Use a disposable local test database.");
   }
   directory = await mkdtemp(path.join(os.tmpdir(), "source-copy-test-"));
@@ -160,6 +162,90 @@ describe("separate source copy with disposable disk and database fixtures", () =
     expect(await apply(f, p)).toMatchObject({ reused: true });
     expect(f.copies()).toBe(1);
     expect(await readFile(f.sourceFile, "utf8")).toContain("Disposable source bytes");
+  });
+  it("plans the copied-source service without writes, then creates one queued FINALIZE job", async () => {
+    const f = await fixture(), p = await f.plan();
+    const copied = await apply(f, p);
+    const input = {
+      operatorId, importUserId: importerId, workspaceId: f.target.id,
+      name: "P2 copied-source fixture",
+      sourceVideoId: copied.sourceVideoId,
+      sermonDate: "2026-05-20", occurrence: "UNMATCHED" as const,
+      apply: false as const, queueFinalize: false as const,
+    };
+    const before = await counts(f.target.id);
+    const servicePlan = await planSandboxService(prisma, input, options);
+    expect(await counts(f.target.id)).toEqual(before);
+    const result = await applySandboxService(prisma, servicePlan.plan, servicePlan.confirmation, f.target.id, options);
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: result.projectId } });
+    expect(project).toMatchObject({
+      workspaceId: f.target.id,
+      sourceVideoId: copied.sourceVideoId,
+      status: "QUEUED",
+      sermonDate: new Date("2026-05-20T00:00:00.000Z"),
+      serviceSlot: "UNMATCHED",
+    });
+    expect(await prisma.processingJob.findMany({ where: { projectId: project.id },
+      select: { type: true, state: true, idempotencyKey: true } })).toEqual([{
+        type: "FINALIZE", state: "QUEUED", idempotencyKey: `finalize:${project.id}`,
+      }]);
+    expect(await prisma.transcript.count({ where: { sourceVideoId: copied.sourceVideoId } })).toBe(0);
+    expect(await counts(f.target.id)).toEqual({ sources: 1, projects: 1, jobs: 1, exports: 0, transcripts: 0 });
+    // This test does not call the runner. The queued fixture cannot start itself.
+    expect((await prisma.processingJob.findFirstOrThrow({ where: { projectId: project.id } })).startedAt).toBeNull();
+    expect(await prisma.operationalEvent.findFirst({ where: { projectId: project.id } })).toMatchObject({
+      workspaceId: null, eventType: "sandbox_copied_source_handoff",
+    });
+    await expect(applySandboxService(prisma, servicePlan.plan, servicePlan.confirmation, f.target.id, options))
+      .resolves.toMatchObject({ reused: true });
+  });
+  it("refuses bad handoff confirmation, unsafe runtime, and a changed copied source", async () => {
+    const f = await fixture(), p = await f.plan();
+    const copied = await apply(f, p);
+    const input = { operatorId, importUserId: importerId, workspaceId: f.target.id,
+      name: "P2 copied-source fixture", sourceVideoId: copied.sourceVideoId,
+      sermonDate: "2026-05-20", occurrence: "UNMATCHED" as const,
+      apply: false as const, queueFinalize: false as const };
+    const servicePlan = await planSandboxService(prisma, input, options);
+    await expect(applySandboxService(prisma, servicePlan.plan, "bad", f.target.id, options)).rejects.toThrow("CONFIRMATION");
+    await expect(planSandboxService(prisma, input, { ...options,
+      runtime: { AUTOMATIC_PUBLISHING_ENABLED: "true" } })).rejects.toThrow("AUTOMATION");
+    await prisma.sourceVideo.update({ where: { id: copied.sourceVideoId }, data: { language: "es" } });
+    await expect(applySandboxService(prisma, servicePlan.plan, servicePlan.confirmation, f.target.id, options)).rejects.toThrow("PLAN_CHANGED");
+    expect(await counts(f.target.id)).toMatchObject({ projects: 0, jobs: 0 });
+  });
+  it("serializes competing handoff plans for one copied source", async () => {
+    const f = await fixture(), p = await f.plan();
+    const copied = await apply(f, p);
+    const input = { operatorId, importUserId: importerId, workspaceId: f.target.id,
+      name: "P2 copied-source fixture", sourceVideoId: copied.sourceVideoId,
+      sermonDate: "2026-05-20", occurrence: "UNMATCHED" as const,
+      apply: false as const, queueFinalize: false as const };
+    const [a, b] = await Promise.all([planSandboxService(prisma, input, options),
+      planSandboxService(prisma, { ...input, name: "Competing service" }, options)]);
+    const results = await Promise.allSettled([
+      applySandboxService(prisma, a.plan, a.confirmation, f.target.id, options),
+      applySandboxService(prisma, b.plan, b.confirmation, f.target.id, options),
+    ]);
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    expect(await counts(f.target.id)).toMatchObject({ projects: 1, jobs: 1 });
+  });
+  it("makes a confirmed handoff safe to retry after concurrent calls", async () => {
+    const f = await fixture(), p = await f.plan();
+    const copied = await apply(f, p);
+    const input = { operatorId, importUserId: importerId, workspaceId: f.target.id,
+      name: "P2 copied-source retry fixture", sourceVideoId: copied.sourceVideoId,
+      sermonDate: "2026-05-20", occurrence: "UNMATCHED" as const,
+      apply: false as const, queueFinalize: false as const };
+    const planned = await planSandboxService(prisma, input, options);
+    const results = await Promise.allSettled([
+      applySandboxService(prisma, planned.plan, planned.confirmation, f.target.id, options),
+      applySandboxService(prisma, planned.plan, planned.confirmation, f.target.id, options),
+    ]);
+    expect(results.some(result => result.status === "fulfilled")).toBe(true);
+    await expect(applySandboxService(prisma, planned.plan, planned.confirmation, f.target.id, options))
+      .resolves.toMatchObject({ reused: true });
+    expect(await counts(f.target.id)).toMatchObject({ projects: 1, jobs: 1 });
   });
   it("recovers after copy succeeds but response is lost", async () => {
     const f = await fixture(), p = await f.plan(); f.failCopy();

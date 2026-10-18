@@ -23,6 +23,7 @@
     "measure:local-media": "tsx scripts/measure-local-media.ts",
     "prepare": "git config core.hooksPath .githooks || true",
     "prepare:sandbox-slot": "tsx scripts/prepare-sandbox-slot.ts",
+    "prepare:sandbox-service": "tsx scripts/prepare-sandbox-service.ts",
     "program:evidence": "tsx scripts/start-editorial-program.ts --evidence",
     "program:pause": "tsx scripts/start-editorial-program.ts --pause",
     "program:resume": "tsx scripts/start-editorial-program.ts --resume",

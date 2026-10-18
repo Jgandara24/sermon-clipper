@@ -61,6 +61,12 @@ review, or hold is copied. The date and occurrence remain in the private manifes
 until a separately reviewed service-creation action uses them. The command does
 not supply a processing-start action.
 
+A separate staff command now hands a completed disposable copy to one sandbox
+service. It preserves the requested date and occurrence and queues one `FINALIZE`
+job without running a worker. It is read-only by default and needs an exact saved
+plan confirmation before apply. See
+[P2_SANDBOX_SERVICE_HANDOFF.md](P2_SANDBOX_SERVICE_HANDOFF.md).
+
 ## Storage support and bounds
 
 - Amazon S3 default endpoint: destination `If-None-Match: *`.
@@ -101,8 +107,9 @@ This command has no delete/move method and cannot remove old or referenced media
 
 ## Release checks still open
 
-1. Review this command and the additional journal migration
-   `20260910030000_source_copy_operations`. Review required CI on the final head.
+1. Review this command, its local 24-test source-copy/handoff result, and the
+   journal migration `20260910030000_source_copy_operations`. Review required CI
+   on the final head.
 2. Resolve the Wednesday service occurrence, sandbox member consent/session,
    target entitlement, transfer price/budget, and 24-hour recovery/cleanup owner.
 3. Test the exact storage provider conditions and timeout behavior in a separate
