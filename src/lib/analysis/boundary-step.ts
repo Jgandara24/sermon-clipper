@@ -51,6 +51,43 @@ export function looksLikeScriptureReadingStart(text: string): boolean {
 
 const quoteBalance = (text: string) => (text.match(/["“”]/g) ?? []).length % 2;
 
+const SPEAKERS = "he|she|they|it|jesus|paul|peter|god|the lord|the bible|scripture|the word";
+const QUOTATION_LEADS = [
+  // 'He says, "Your adversary the devil".' / "And Jesus said this to Peter."
+  new RegExp(`^\\W*((and|so|then|now|well)\\W+)*(${SPEAKERS})\\s+(says|said|writes|wrote|tells us)\\b`, "i"),
+  // "... 'cause notice what he says there."
+  /\b(says|said|writes|wrote)\b(\s+\w+){0,2}[\s.,:"”']*$/i,
+];
+
+/**
+ * True when a sentence only leads into a quotation — announcing it, or opening a quote that the
+ * next sentence finishes — so a clip ending there stops before the words it promised. Lab sermon
+ * 1c clip 5 ended on two such lines after Jake's chosen end, "Secondly, you need to resist him."
+ */
+export function endsOnQuotationStart(text: string): boolean {
+  if (QUOTATION_LEADS.some((pattern) => pattern.test(text))) return true;
+  if (looksLikeScriptureReadingStart(text)) return true;
+  // An opening quote mark with no closing one: the quotation runs on into the next sentence.
+  return quoteBalance(text) === 1 && !/["”]\W*$/.test(text.trim());
+}
+
+/**
+ * Jake's corrections of lab sermon 1c (2026-10-18), shown to the model as worked examples. They
+ * come from sermon 1 only, so the step is judged on sermons 2 and 3.
+ */
+const WORKED_EXAMPLES =
+  "Worked examples from the founder's review of an earlier sermon:\n" +
+  "1. A clip started on \"I mean, here's this big tough guy fisherman, right?\" (background to a story) and ended on " +
+  "\"because he's setting you up.\" Correct: start on \"See, I, I'm speaking to somebody today, and you say, 'Preacher, " +
+  "man, things are going pretty good for me today.'\" (he turns to the listener) and end on \"Be sober. Be vigilant.\" " +
+  "(the short charge that lands it). 42 seconds.\n" +
+  "2. A clip started on \"Now, think about this.\" and ended on 'He says, \"Your adversary the devil\".' Correct: same " +
+  "start, end on \"Secondly, you need to resist him.\" (the last item of his two-point list). The lines after it only " +
+  "lead into the next verse. 58 seconds.\n" +
+  "3. A clip ended on Peter's objection, '\"Oh, no, you're not gonna wash my feet, Jesus.\"' The founder said it stopped " +
+  "too early: the preacher had not finished his point. Jesus's reply and the meaning came after. Never end in the middle " +
+  "of a dialogue; if the whole story and its point will not fit under 60 seconds, start later in the story.\n\n";
+
 /** Whole sentences from `contextMs` before the clip to `contextMs` after it. */
 export function boundaryContext(
   segments: BoundaryUnit[],
@@ -81,16 +118,22 @@ export function boundaryPrompt(context: BoundaryContext): string {
     "Rules:\n" +
     "- Start where the thought starts: the first sentence a viewer with no context needs to follow this idea. " +
     "Prefer an opening line that catches attention.\n" +
+    "- Start on a line that speaks directly to the listener or states the point. Do not start on background " +
+    "or set-up that only leads into a story.\n" +
     "- Never start on the Scripture reading: not the preacher reading the passage aloud, and not him announcing " +
     "the book, chapter or verse, or asking people to turn there. Start where he begins to explain or apply it. " +
     "A short verse he quotes inside his point is fine, but not as the first line.\n" +
     "- End where the point lands: after the payoff, the sentence that drives the point home or applies it to the " +
     "listener. Never stop in the middle of a story, a list, an argument, or a quoted verse, and never stop right " +
     "after a verse before the preacher says what it means. Do not run on into the next point.\n" +
+    "- End on the punch line: the short line that sums up the point or charges the listener, often the last item " +
+    "of a list or a command. Never end in the middle of a dialogue or a story, and never on a line that only " +
+    "leads into a quotation (\"He says,\", \"notice what he says there\").\n" +
     "- The clip must be between 15 and 59 seconds long: always under 60 seconds. Most strong sermon clips run 30 to 55 seconds: the setup, " +
     "the explanation or story, and the payoff. Do not cut a clip short to make it tidy; a viewer must feel the point land.\n" +
     "- Never include worship singing, announcements, prayer, or the altar call or invitation.\n" +
     "- Stay on the current clip's idea. You may move the start earlier or later and the end earlier or later.\n\n" +
+    WORKED_EXAMPLES +
     "Return startUnit and endUnit (both included) and a one-sentence reason.\n\n" +
     lines.join("\n")
   );
@@ -99,16 +142,16 @@ export function boundaryPrompt(context: BoundaryContext): string {
 /**
  * Turns a model choice into a range, or null when it breaks a rule (the caller keeps the old
  * range). A start on a Scripture reading moves past the reading — through the closing quote mark
- * when the reading is quoted — and the clip must still be long enough after that.
+ * when the reading is quoted. An end on a line that only leads into a quotation moves back to the
+ * line before. The clip must still be long enough after both.
  */
 export function applyBoundaryChoice(
   context: BoundaryContext,
   choice: BoundaryChoice,
   limits: { minMs: number; maxMs: number } = { minMs: BOUNDARY_MIN_MS, maxMs: BOUNDARY_MAX_MS },
-): { startMs: number; endMs: number; adjustedForScripture: boolean } | null {
+): { startMs: number; endMs: number; adjustedForScripture: boolean; adjustedEnd: boolean } | null {
   const { units } = context;
-  const { endUnit } = choice;
-  let { startUnit } = choice;
+  let { startUnit, endUnit } = choice;
   if (!Number.isInteger(startUnit) || !Number.isInteger(endUnit)) return null;
   if (startUnit < 0 || endUnit >= units.length || startUnit > endUnit) return null;
 
@@ -125,9 +168,15 @@ export function applyBoundaryChoice(
   }
   if (startUnit > endUnit) return null;
 
+  let adjustedEnd = false;
+  while (endUnit > startUnit && endsOnQuotationStart(units[endUnit].text)) {
+    adjustedEnd = true;
+    endUnit -= 1;
+  }
+
   const startMs = units[startUnit].startMs;
   const endMs = units[endUnit].endMs;
   const duration = endMs - startMs;
   if (duration < limits.minMs || duration > limits.maxMs) return null;
-  return { startMs, endMs, adjustedForScripture };
+  return { startMs, endMs, adjustedForScripture, adjustedEnd };
 }

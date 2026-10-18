@@ -42,7 +42,7 @@ export async function runLabSelection<T extends LabClip>(params: {
   const startedAt = Date.now();
   const workDir = await mkdtemp(path.join(os.tmpdir(), "lab-selection-"));
   const usage = { boundaryInput: 0, boundaryOutput: 0, cameraInput: 0, cameraOutput: 0, cameraFrames: 0 };
-  const boundaryLog: { title: string; from: [number, number]; to: [number, number] | null; adjustedForScripture?: boolean; reason?: string; error?: string }[] = [];
+  const boundaryLog: { title: string; from: [number, number]; to: [number, number] | null; adjustedForScripture?: boolean; adjustedEnd?: boolean; reason?: string; error?: string }[] = [];
   const cameraLog: { title: string; result: string; at?: number; error?: string }[] = [];
 
   try {
@@ -75,6 +75,7 @@ export async function runLabSelection<T extends LabClip>(params: {
               from: [clip.startMs, clip.endMs],
               to: range ? [range.startMs, range.endMs] : null,
               adjustedForScripture: range?.adjustedForScripture,
+              adjustedEnd: range?.adjustedEnd,
               reason: choice.reason,
             });
             return range && { startMs: range.startMs, endMs: range.endMs };
