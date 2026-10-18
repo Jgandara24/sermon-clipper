@@ -70,7 +70,7 @@ export async function sendWorkspaceInvitationEmail(input: {
   const result = await sendViaResend({
     apiKey,
     to: input.email,
-    subject: `Join ${input.workspaceName} on Sermon Clipper`,
+    subject: `Join ${input.workspaceName} on Pulpit Engine`,
     text: [
       `${input.inviterEmail} invited you to join ${input.workspaceName} as ${input.role.toLowerCase()}.`,
       "",
