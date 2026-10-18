@@ -7,12 +7,7 @@ import type { PrismaClient } from "@prisma/client";
 import { labStepEnabled } from "@/lib/lab-flags";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { getStorageProvider } from "@/lib/storage";
-import {
-  applyBoundaryChoice,
-  boundaryContext,
-  BoundaryChoiceSchema,
-  boundaryPrompt,
-} from "./boundary-step";
+import { boundaryContext, BoundaryChoiceSchema, chooseBoundary } from "./boundary-step";
 import { checkClipCamera } from "./camera-check-run";
 import { scoringModel } from "./claude-provider";
 import { applyLabSelectionSteps } from "./lab-selection";
@@ -42,7 +37,16 @@ export async function runLabSelection<T extends LabClip>(params: {
   const startedAt = Date.now();
   const workDir = await mkdtemp(path.join(os.tmpdir(), "lab-selection-"));
   const usage = { boundaryInput: 0, boundaryOutput: 0, cameraInput: 0, cameraOutput: 0, cameraFrames: 0 };
-  const boundaryLog: { title: string; from: [number, number]; to: [number, number] | null; adjustedForScripture?: boolean; adjustedEnd?: boolean; reason?: string; error?: string }[] = [];
+  const boundaryLog: {
+    title: string;
+    from: [number, number];
+    to: [number, number] | null;
+    adjustedForScripture?: boolean;
+    adjustedEnd?: boolean;
+    reason?: string;
+    attempts?: { startUnit: number; endUnit: number; refused: string | null }[];
+    error?: string;
+  }[] = [];
   const cameraLog: { title: string; result: string; at?: number; error?: string }[] = [];
 
   try {
@@ -56,27 +60,29 @@ export async function runLabSelection<T extends LabClip>(params: {
       ? async (clip: T) => {
           const context = boundaryContext(params.segments, clip);
           try {
-            // Thinking off, as Stage B does: on a long prompt the model otherwise spends the whole
-            // token budget thinking and returns no answer.
-            const message = await new Anthropic().messages.create({
-              model: scoringModel(),
-              max_tokens: 1000,
-              thinking: { type: "disabled" },
-              messages: [{ role: "user", content: boundaryPrompt(context) }],
-              output_config: { format: zodOutputFormat(BoundaryChoiceSchema) },
+            const { range, attempts } = await chooseBoundary(context, async (turns) => {
+              // Thinking off, as Stage B does: on a long prompt the model otherwise spends the
+              // whole token budget thinking and returns no answer.
+              const message = await new Anthropic().messages.create({
+                model: scoringModel(),
+                max_tokens: 1000,
+                thinking: { type: "disabled" },
+                messages: turns,
+                output_config: { format: zodOutputFormat(BoundaryChoiceSchema) },
+              });
+              usage.boundaryInput += message.usage.input_tokens;
+              usage.boundaryOutput += message.usage.output_tokens;
+              const block = message.content.find((b) => b.type === "text");
+              return BoundaryChoiceSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
             });
-            usage.boundaryInput += message.usage.input_tokens;
-            usage.boundaryOutput += message.usage.output_tokens;
-            const block = message.content.find((b) => b.type === "text");
-            const choice = BoundaryChoiceSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
-            const range = applyBoundaryChoice(context, choice);
             boundaryLog.push({
               title: clip.title,
               from: [clip.startMs, clip.endMs],
               to: range ? [range.startMs, range.endMs] : null,
               adjustedForScripture: range?.adjustedForScripture,
               adjustedEnd: range?.adjustedEnd,
-              reason: choice.reason,
+              reason: attempts.at(-1)?.reason,
+              attempts: attempts.map(({ startUnit, endUnit, refused }) => ({ startUnit, endUnit, refused })),
             });
             return range && { startMs: range.startMs, endMs: range.endMs };
           } catch (error) {

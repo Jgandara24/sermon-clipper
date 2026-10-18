@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   applyBoundaryChoice,
   BOUNDARY_MAX_MS,
+  boundaryRefusal,
+  chooseBoundary,
   endsOnQuotationStart,
   boundaryContext,
   boundaryPrompt,
@@ -178,5 +180,98 @@ describe("boundaryPrompt teaches Jake's corrections", () => {
     expect(prompt).toContain("Be vigilant.");
     expect(prompt).toContain("Secondly, you need to resist him.");
     expect(prompt).toContain("you're not gonna wash my feet, Jesus.");
+  });
+});
+
+describe("boundaryPrompt aims for 30 to 55 seconds and teaches Jake's sermon 3 notes", () => {
+  const prompt = boundaryPrompt(boundaryContext(CLIP5, { startMs: 3455184, endMs: 3522400 }, 90_000));
+
+  it("aims for 30 to 55 seconds and goes shorter only when the lines around it are a different idea", () => {
+    // Lab sermon 3 clip 6 (17 s): "This could pass by itself, but I feel like it could be a longer clip."
+    expect(prompt).toMatch(/aim for 30 to 55 seconds/i);
+    expect(prompt).toMatch(/under 30 seconds only when/i);
+    expect(prompt).toMatch(/15 and 59 seconds/);
+  });
+
+  it("includes his two sermon 3 corrections as worked examples 4 and 5", () => {
+    expect(prompt).toContain("4. ");
+    expect(prompt).toContain("Now let me ask you something.");
+    expect(prompt).toContain("it keeps us from getting saved or selling out to the Lord Jesus Christ.");
+    expect(prompt).toContain("5. ");
+    expect(prompt).toContain("We just stay up weeks at a time.");
+    expect(prompt).toContain("Amen?");
+    expect(prompt).toContain("And guys");
+  });
+});
+
+// Units of 2.9 s every 3 s: unit i runs i*3000 to i*3000+2900.
+const EVEN = boundaryContext(
+  Array.from({ length: 40 }, (_, i) => ({ idx: i, startMs: i * 3_000, endMs: i * 3_000 + 2_900, text: `Point ${i}.` })),
+  { startMs: 30_000, endMs: 60_000 },
+  90_000,
+);
+
+describe("boundaryRefusal", () => {
+  it("returns null for a choice the code accepts", () => {
+    expect(boundaryRefusal(EVEN, { startUnit: 5, endUnit: 20 })).toBeNull();
+  });
+
+  it("explains a choice that runs 60 seconds or more", () => {
+    const reason = boundaryRefusal(EVEN, { startUnit: 0, endUnit: 20 });
+    expect(reason).toMatch(/62\.9 seconds/);
+    expect(reason).toMatch(/under 60 seconds/);
+  });
+
+  it("explains a choice that is too short after the end steps back past a quotation lead-in", () => {
+    const context = boundaryContext(CLIP5, { startMs: 3455184, endMs: 3522400 }, 90_000);
+    const at = (idx: number) => context.units.findIndex((u) => u.idx === idx);
+    const reason = boundaryRefusal(context, { startUnit: at(912), endUnit: at(915) });
+    expect(reason).toMatch(/4\.4 seconds/);
+    expect(reason).toMatch(/at least 15 seconds/);
+    expect(reason).toMatch(/quotation/);
+  });
+
+  it("explains a reversed or unlisted range", () => {
+    expect(boundaryRefusal(EVEN, { startUnit: 9, endUnit: 3 })).toMatch(/not a valid range/);
+    expect(boundaryRefusal(EVEN, { startUnit: 0, endUnit: 99 })).toMatch(/not a valid range/);
+  });
+});
+
+describe("chooseBoundary", () => {
+  it("uses a good first answer with one model call", async () => {
+    const ask = vi.fn().mockResolvedValue({ startUnit: 5, endUnit: 20, reason: "whole point" });
+    const result = await chooseBoundary(EVEN, ask);
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(result.range).toMatchObject({ startMs: 15_000, endMs: 62_900 });
+    expect(result.attempts).toEqual([{ startUnit: 5, endUnit: 20, reason: "whole point", refused: null }]);
+  });
+
+  it("asks once more with the reason when the first answer is refused, and uses the second", async () => {
+    // Lab sermon 3 clip 5: the only answer was too long, so the clip kept its raw window.
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: 25, reason: "the whole story" })
+      .mockResolvedValueOnce({ startUnit: 5, endUnit: 20, reason: "shorter" });
+    const result = await chooseBoundary(EVEN, ask);
+
+    expect(ask).toHaveBeenCalledTimes(2);
+    const turns = ask.mock.calls[1][0];
+    expect(turns).toHaveLength(3);
+    expect(turns[0]).toEqual({ role: "user", content: boundaryPrompt(EVEN) });
+    expect(turns[1].role).toBe("assistant");
+    expect(JSON.parse(turns[1].content)).toMatchObject({ startUnit: 0, endUnit: 25 });
+    expect(turns[2].role).toBe("user");
+    expect(turns[2].content).toMatch(/77\.9 seconds/);
+    expect(turns[2].content).toMatch(/choose again/i);
+    expect(result.range).toMatchObject({ startMs: 15_000, endMs: 62_900 });
+    expect(result.attempts.map((a) => a.refused === null)).toEqual([false, true]);
+  });
+
+  it("gives up after the second refused answer", async () => {
+    const ask = vi.fn().mockResolvedValue({ startUnit: 0, endUnit: 30, reason: "everything" });
+    const result = await chooseBoundary(EVEN, ask);
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(result.range).toBeNull();
+    expect(result.attempts).toHaveLength(2);
   });
 });
