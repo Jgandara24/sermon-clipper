@@ -4058,3 +4058,36 @@ and report the previous day — turning a chosen Monday into a refused Sunday.
 second convention.
 
 Status: Active. Never call `rescheduleMissedSlot` from a sweep, poller, or allocator.
+
+## 2026-10-17 - The Product Is Pulpit Engine, And Phase 1 Is Four Clean Weeks At Sunnylane
+
+Jake and Claude Code ran a `/grill-with-docs` session on 2026-10-17 to restate the desired outcome,
+the next goal, and the order of work in plain words. The results live in three new places and this
+entry only points at them:
+
+- `docs/FOUNDER_BRIEF.md` — the desired outcome, the Phase 1 goal, the quality bar, how weeks are
+  counted, the priorities, what is parked, and a Phase 2 sketch.
+- `CONTEXT.md` — the glossary. One word per idea; the words to avoid are listed.
+- `docs/adr/0001-the-product-is-named-pulpit-engine.md` and
+  `docs/adr/0002-one-product-database-on-railway.md`.
+
+**The decisions, in one line each.** The final product name is Pulpit Engine; "Sermon Clipper" was
+the working name of this rebuild and is to be renamed in everything the church sees. The Phase 1
+church is Sunnylane Baptist Church. The goal is 6 of 6 clips accepted, 4 weeks in a row, counting
+the system's first picks; a swap is allowed so the church gets its clips, but a week with a swap
+does not count. A clip passes only if it starts and ends on time, the preacher is preaching, the
+video shows the preacher the whole time, and it is engaging. Clips post to the sandbox page until
+the first clean week, then to Sunnylane's real page. Priority 1 is quality in the lab: three named
+Sunnylane sermons, 18 of 18 clips pass. From P4, only the parts that let the system see the video
+and find exact edges ("P4-A") are built now; the cost-at-scale parts ("P4-B") are parked until
+Phase 1 ends, as is the Pulpit Engine combination beyond the visible rename. The product database
+stays on Railway; the first build's Supabase is a lead list only.
+
+**What this supersedes.** "Build The Whole Plan In Order; No Customer Until Publishing Works"
+(2026-09-05) still holds on its second half — nothing posts for a real church before the Facebook
+sandbox test — but P4 no longer runs to completion before Phase 1. The 2026-10-16 Cloudflare
+account decision stands; the wider "combine the products" intent is now the sharing table in the
+brief, not a code or database merge.
+
+Status: Active. The 30-day human-only program is a minimum, ended by Jake's hand when the four
+clean weeks are in; it is not a conflict with this entry.
