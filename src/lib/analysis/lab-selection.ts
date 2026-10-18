@@ -4,6 +4,8 @@ import type { CameraCheckResult } from "./camera-check";
 /**
  * Phase 1 lab steps that run after scoring, before ANALYZE writes clips:
  * 1. The boundary step moves each top clip to whole sentences where its thought starts and lands.
+ *    A clip it cannot fix keeps its raw window and goes behind every other clip (Jake, lab sermon
+ *    3 clip 5: a raw window ran past the punch line).
  * 2. The camera check walks the clips in rank order and rejects any that show a slide, until the
  *    target number of first picks has passed. Later clips stay as unchecked reserves.
  * Both are dependencies, so this ordering is tested without a model, ffmpeg or a database.
@@ -46,19 +48,25 @@ export async function applyLabSelectionSteps<T extends LabClip>(
   if (deps.boundary) {
     const boundary = deps.boundary;
     const topN = deps.boundaryTopN ?? 12;
-    const ranges = await inBatches(clips.slice(0, topN), deps.concurrency ?? 4, (clip) => boundary(clip));
-    const moved = clips.map((clip, i) => {
+    const top = clips.slice(0, topN);
+    const ranges = await inBatches(top, deps.concurrency ?? 4, (clip) => boundary(clip));
+    const fixed: T[] = [];
+    const unfixed: T[] = [];
+    top.forEach((clip, i) => {
       const range = ranges[i];
-      if (!range || (range.startMs === clip.startMs && range.endMs === clip.endMs)) return clip;
+      if (!range) return unfixed.push(clip);
+      if (range.startMs === clip.startMs && range.endMs === clip.endMs) return fixed.push(clip);
       boundaryChanged += 1;
       const text = deps.segments
         .filter((s) => s.endMs > range.startMs && s.startMs < range.endMs)
         .map((s) => s.text)
         .join(" ");
-      return { ...clip, startMs: range.startMs, endMs: range.endMs, text };
+      fixed.push({ ...clip, startMs: range.startMs, endMs: range.endMs, text });
     });
-    // Moved clips can now cover the same words; the higher score keeps them.
-    const ordered = [...moved].sort((a, b) => b.total - a.total);
+    // Fixed clips first, then the deep reserves, then the clips the step could not fix. Moved
+    // clips can now cover the same words; the clip ahead in that order keeps them.
+    const byScore = (list: T[]) => [...list].sort((a, b) => b.total - a.total);
+    const ordered = [...byScore(fixed), ...byScore(clips.slice(topN)), ...byScore(unfixed)];
     clips = ordered.filter((clip, i) => !ordered.slice(0, i).some((other) => computeIoU(clip, other) > 0.5));
   }
 

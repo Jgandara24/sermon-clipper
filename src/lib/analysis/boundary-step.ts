@@ -72,8 +72,8 @@ export function endsOnQuotationStart(text: string): boolean {
 }
 
 /**
- * Jake's corrections of lab sermon 1c (2026-10-18), shown to the model as worked examples. They
- * come from sermon 1 only, so the step is judged on sermons 2 and 3.
+ * Jake's corrections of lab sermons 1c and 3 (2026-10-18), shown to the model as worked examples.
+ * They come from sermons 1 and 3, so sermon 2, and any new sermon, is the fair test of the step.
  */
 const WORKED_EXAMPLES =
   "Worked examples from the founder's review of an earlier sermon:\n" +
@@ -86,7 +86,16 @@ const WORKED_EXAMPLES =
   "lead into the next verse. 58 seconds.\n" +
   "3. A clip ended on Peter's objection, '\"Oh, no, you're not gonna wash my feet, Jesus.\"' The founder said it stopped " +
   "too early: the preacher had not finished his point. Jesus's reply and the meaning came after. Never end in the middle " +
-  "of a dialogue; if the whole story and its point will not fit under 60 seconds, start later in the story.\n\n";
+  "of a dialogue; if the whole story and its point will not fit under 60 seconds, start later in the story.\n" +
+  "4. A clip started on \"Now let me ask you something.\" and ended on \"That's right.\" right after '...are now the " +
+  "people calling me saying, \"Bill, help me, I'm in trouble.\"' (17 seconds), because the next lines looked like a " +
+  "tangent. The founder said it could be a longer clip. Correct: same start, end on \"And we're so concerned about " +
+  "what our peers have to say about us that it keeps us from getting saved or selling out to the Lord Jesus Christ.\" " +
+  "The preacher asks the same question again and lands it. 51 seconds.\n" +
+  "5. A clip started on \"And boys, let me tell you something.\" and ran on through the laughter after the joke into " +
+  "\"And guys, you get your girlfriend pregnant...\". The founder said it went slightly too long. Correct: end right " +
+  "after the punch line and his \"Amen?\": \"We just stay up weeks at a time.\" \"Amen?\" 38 seconds. Never run on " +
+  "into the laughter or the next sentence.\n\n";
 
 /** Whole sentences from `contextMs` before the clip to `contextMs` after it. */
 export function boundaryContext(
@@ -129,8 +138,11 @@ export function boundaryPrompt(context: BoundaryContext): string {
     "- End on the punch line: the short line that sums up the point or charges the listener, often the last item " +
     "of a list or a command. Never end in the middle of a dialogue or a story, and never on a line that only " +
     "leads into a quotation (\"He says,\", \"notice what he says there\").\n" +
-    "- The clip must be between 15 and 59 seconds long: always under 60 seconds. Most strong sermon clips run 30 to 55 seconds: the setup, " +
-    "the explanation or story, and the payoff. Do not cut a clip short to make it tidy; a viewer must feel the point land.\n" +
+    "- The clip must be between 15 and 59 seconds long: always under 60 seconds. Aim for 30 to 55 seconds: the setup, " +
+    "the explanation or story, and the payoff. Go under 30 seconds only when the lines just before and just after " +
+    "belong to a different idea. When the preacher comes back to the same question or point, keep going until he " +
+    "lands it; a story or aside inside the point is not a new idea. Do not cut a clip short to make it tidy; a viewer " +
+    "must feel the point land.\n" +
     "- Never include worship singing, announcements, prayer, or the altar call or invitation.\n" +
     "- Stay on the current clip's idea. You may move the start earlier or later and the end earlier or later.\n\n" +
     WORKED_EXAMPLES +
@@ -139,21 +151,48 @@ export function boundaryPrompt(context: BoundaryContext): string {
   );
 }
 
+type BoundaryLimits = { minMs: number; maxMs: number };
+type BoundaryRange = { startMs: number; endMs: number; adjustedForScripture: boolean; adjustedEnd: boolean };
+const DEFAULT_LIMITS: BoundaryLimits = { minMs: BOUNDARY_MIN_MS, maxMs: BOUNDARY_MAX_MS };
+
 /**
- * Turns a model choice into a range, or null when it breaks a rule (the caller keeps the old
- * range). A start on a Scripture reading moves past the reading — through the closing quote mark
- * when the reading is quoted. An end on a line that only leads into a quotation moves back to the
- * line before. The clip must still be long enough after both.
+ * Turns a model choice into a range, or null when it breaks a rule. A start on a Scripture
+ * reading moves past the reading — through the closing quote mark when the reading is quoted. An
+ * end on a line that only leads into a quotation moves back to the line before. The clip must
+ * still be long enough after both.
  */
 export function applyBoundaryChoice(
   context: BoundaryContext,
   choice: BoundaryChoice,
-  limits: { minMs: number; maxMs: number } = { minMs: BOUNDARY_MIN_MS, maxMs: BOUNDARY_MAX_MS },
-): { startMs: number; endMs: number; adjustedForScripture: boolean; adjustedEnd: boolean } | null {
+  limits: BoundaryLimits = DEFAULT_LIMITS,
+): BoundaryRange | null {
+  const result = evaluateBoundaryChoice(context, choice, limits);
+  return "range" in result ? result.range : null;
+}
+
+/** Why the code refuses a choice, in a sentence the model can act on; null when it is accepted. */
+export function boundaryRefusal(context: BoundaryContext, choice: BoundaryChoice, limits: BoundaryLimits = DEFAULT_LIMITS) {
+  const result = evaluateBoundaryChoice(context, choice, limits);
+  return "refused" in result ? result.refused : null;
+}
+
+function evaluateBoundaryChoice(
+  context: BoundaryContext,
+  choice: BoundaryChoice,
+  limits: BoundaryLimits,
+): { range: BoundaryRange } | { refused: string } {
   const { units } = context;
   let { startUnit, endUnit } = choice;
-  if (!Number.isInteger(startUnit) || !Number.isInteger(endUnit)) return null;
-  if (startUnit < 0 || endUnit >= units.length || startUnit > endUnit) return null;
+  const asked = `Units [${startUnit}] to [${endUnit}]`;
+  if (
+    !Number.isInteger(startUnit) ||
+    !Number.isInteger(endUnit) ||
+    startUnit < 0 ||
+    endUnit >= units.length ||
+    startUnit > endUnit
+  ) {
+    return { refused: `${asked} are not a valid range: both must be listed unit numbers, and the start must not come after the end.` };
+  }
 
   let adjustedForScripture = false;
   while (startUnit <= endUnit && looksLikeScriptureReadingStart(units[startUnit].text)) {
@@ -166,7 +205,9 @@ export function applyBoundaryChoice(
       startUnit += 1;
     }
   }
-  if (startUnit > endUnit) return null;
+  if (startUnit > endUnit) {
+    return { refused: `${asked} are all the Scripture reading. Start where the preacher explains or applies it.` };
+  }
 
   let adjustedEnd = false;
   while (endUnit > startUnit && endsOnQuotationStart(units[endUnit].text)) {
@@ -177,6 +218,52 @@ export function applyBoundaryChoice(
   const startMs = units[startUnit].startMs;
   const endMs = units[endUnit].endMs;
   const duration = endMs - startMs;
-  if (duration < limits.minMs || duration > limits.maxMs) return null;
-  return { startMs, endMs, adjustedForScripture, adjustedEnd };
+  if (duration >= limits.minMs && duration <= limits.maxMs) {
+    return { range: { startMs, endMs, adjustedForScripture, adjustedEnd } };
+  }
+  const steps =
+    (adjustedForScripture ? " The start moved past the Scripture reading." : "") +
+    (adjustedEnd ? " The end moved back because the last lines only lead into a quotation." : "");
+  const limit =
+    duration < limits.minMs
+      ? ` A clip must be at least ${limits.minMs / 1000} seconds.`
+      : ` A clip must be under 60 seconds (${Math.floor(limits.maxMs / 1000)} at most). Start later or end sooner, and keep the point whole.`;
+  const seconds = `${(duration / 1000).toFixed(1)} seconds`;
+  const span =
+    startUnit === choice.startUnit && endUnit === choice.endUnit
+      ? `${asked} run ${seconds}.`
+      : `${asked} become units [${startUnit}] to [${endUnit}] after the checks, ${seconds}.`;
+  return { refused: `${span}${steps}${limit}` };
+}
+
+export type BoundaryTurn = { role: "user" | "assistant"; content: string };
+type BoundaryAnswer = z.infer<typeof BoundaryChoiceSchema>;
+
+/**
+ * Asks for a boundary and checks it. A refused answer gets one more try with the reason (lab
+ * sermon 3 clip 5: the only answer ran over 60 seconds, so the clip kept its raw window and ran
+ * past the punch line). After two refusals the range is null and the clip has no fixed boundary.
+ */
+export async function chooseBoundary(
+  context: BoundaryContext,
+  ask: (turns: BoundaryTurn[]) => Promise<BoundaryAnswer>,
+  limits: BoundaryLimits = DEFAULT_LIMITS,
+): Promise<{ range: BoundaryRange | null; attempts: (BoundaryAnswer & { refused: string | null })[] }> {
+  const turns: BoundaryTurn[] = [{ role: "user", content: boundaryPrompt(context) }];
+  const attempts: (BoundaryAnswer & { refused: string | null })[] = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const answer = await ask([...turns]);
+    const result = evaluateBoundaryChoice(context, answer, limits);
+    const refused = "refused" in result ? result.refused : null;
+    attempts.push({ startUnit: answer.startUnit, endUnit: answer.endUnit, reason: answer.reason, refused });
+    if ("range" in result) return { range: result.range, attempts };
+    turns.push(
+      { role: "assistant", content: JSON.stringify(answer) },
+      {
+        role: "user",
+        content: `Your answer was refused: ${refused} Choose again from the same numbered sentences, following every rule. Return startUnit, endUnit and a one-sentence reason.`,
+      },
+    );
+  }
+  return { range: null, attempts };
 }

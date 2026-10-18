@@ -48,6 +48,24 @@ describe("applyLabSelectionSteps", () => {
     expect(result.clips[0]).toMatchObject({ startMs: 100_000, endMs: 155_000 });
   });
 
+  it("moves a clip with no valid boundary answer behind every clip the step fixed (lab sermon 3 clip 5)", async () => {
+    const kept = [clipAt(100, 90), clipAt(300, 85), clipAt(500, 80)];
+    const boundary = vi
+      .fn()
+      .mockImplementation(async (clip: Clip) => (clip.startMs === 100_000 ? null : { startMs: clip.startMs, endMs: clip.endMs - 10_000 }));
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 6, boundary, cameraCheck: null });
+    expect(result.clips.map((c) => c.title)).toEqual(["clip at 300", "clip at 500", "clip at 100"]);
+    expect(result.clips[2]).toMatchObject({ startMs: 100_000, endMs: 155_000 });
+  });
+
+  it("puts deep reserves the step never saw ahead of clips it could not fix", async () => {
+    const kept = [clipAt(100, 90), clipAt(300, 85), clipAt(500, 80)];
+    const boundary = vi.fn().mockImplementation(async (clip: Clip) => (clip.startMs === 100_000 ? null : { startMs: clip.startMs, endMs: clip.endMs }));
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 6, boundary, cameraCheck: null, boundaryTopN: 2 });
+    expect(boundary).toHaveBeenCalledTimes(2);
+    expect(result.clips.map((c) => c.title)).toEqual(["clip at 300", "clip at 500", "clip at 100"]);
+  });
+
   it("drops the lower-scored clip when two clips now overlap heavily", async () => {
     const kept = [clipAt(100, 90), clipAt(140, 80)];
     const boundary = vi.fn().mockResolvedValue({ startMs: 100_000, endMs: 170_000 });
