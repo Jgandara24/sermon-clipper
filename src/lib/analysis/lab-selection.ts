@@ -1,0 +1,80 @@
+import { computeIoU } from "./chunking";
+import type { CameraCheckResult } from "./camera-check";
+
+/**
+ * Phase 1 lab steps that run after scoring, before ANALYZE writes clips:
+ * 1. The boundary step moves each top clip to whole sentences where its thought starts and lands.
+ * 2. The camera check walks the clips in rank order and rejects any that show a slide, until the
+ *    target number of first picks has passed. Later clips stay as unchecked reserves.
+ * Both are dependencies, so this ordering is tested without a model, ffmpeg or a database.
+ */
+
+type LabClip = { startMs: number; endMs: number; text: string; total: number; title: string };
+type Segment = { idx: number; startMs: number; endMs: number; text: string };
+
+export type LabSelectionDependencies<T extends LabClip> = {
+  segments: Segment[];
+  /** How many clips must pass the camera check: the first picks. */
+  targetCount: number;
+  boundary: ((clip: T) => Promise<{ startMs: number; endMs: number } | null>) | null;
+  cameraCheck: ((clip: T) => Promise<CameraCheckResult>) | null;
+  /** Only the top clips get a boundary call; the rest are deep reserves. */
+  boundaryTopN?: number;
+  concurrency?: number;
+};
+
+export type LabSelectionResult<T> = {
+  clips: T[];
+  rejected: { title: string; reason: string; at: number }[];
+  boundaryChanged: number;
+};
+
+async function inBatches<A, B>(items: A[], size: number, run: (item: A) => Promise<B>): Promise<B[]> {
+  const out: B[] = [];
+  for (let i = 0; i < items.length; i += size) out.push(...(await Promise.all(items.slice(i, i + size).map(run))));
+  return out;
+}
+
+export async function applyLabSelectionSteps<T extends LabClip>(
+  kept: T[],
+  deps: LabSelectionDependencies<T>,
+): Promise<LabSelectionResult<T>> {
+  if (!deps.boundary && !deps.cameraCheck) return { clips: kept, rejected: [], boundaryChanged: 0 };
+  let clips = kept;
+  let boundaryChanged = 0;
+
+  if (deps.boundary) {
+    const boundary = deps.boundary;
+    const topN = deps.boundaryTopN ?? 12;
+    const ranges = await inBatches(clips.slice(0, topN), deps.concurrency ?? 4, (clip) => boundary(clip));
+    const moved = clips.map((clip, i) => {
+      const range = ranges[i];
+      if (!range || (range.startMs === clip.startMs && range.endMs === clip.endMs)) return clip;
+      boundaryChanged += 1;
+      const text = deps.segments
+        .filter((s) => s.endMs > range.startMs && s.startMs < range.endMs)
+        .map((s) => s.text)
+        .join(" ");
+      return { ...clip, startMs: range.startMs, endMs: range.endMs, text };
+    });
+    // Moved clips can now cover the same words; the higher score keeps them.
+    const ordered = [...moved].sort((a, b) => b.total - a.total);
+    clips = ordered.filter((clip, i) => !ordered.slice(0, i).some((other) => computeIoU(clip, other) > 0.5));
+  }
+
+  const rejected: LabSelectionResult<T>["rejected"] = [];
+  if (deps.cameraCheck) {
+    const passed: T[] = [];
+    let next = 0;
+    while (next < clips.length && passed.length < deps.targetCount) {
+      const clip = clips[next];
+      const result = await deps.cameraCheck(clip);
+      if (result.pass) passed.push(clip);
+      else rejected.push({ title: clip.title, reason: result.reason, at: result.at });
+      next += 1;
+    }
+    clips = [...passed, ...clips.slice(next)];
+  }
+
+  return { clips, rejected, boundaryChanged };
+}
