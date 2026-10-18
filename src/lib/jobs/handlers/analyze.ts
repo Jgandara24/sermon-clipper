@@ -39,6 +39,8 @@ import {
 } from "@/lib/retention";
 import { settleTranscriptionFallbackHold } from "@/lib/transcription/fallback-hold";
 import { resolveTranscriptionProviderPolicy } from "@/lib/transcription/policy";
+import { CompleteMessageFailure, prepareCompleteMessageTranscript, readCompleteMessagePolicy } from "@/lib/analysis/complete-message/integration";
+import { CompleteMessageProvider } from "@/lib/analysis/complete-message/provider";
 
 const MIN_CANDIDATE_MS = 20_000;
 const MAX_CANDIDATE_MS = 90_000;
@@ -144,6 +146,13 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
   }));
 
   const genre = readGenre(project.processingConfig);
+  let messagePolicy;
+  try { messagePolicy = readCompleteMessagePolicy(project.processingConfig); }
+  catch (error) {
+    throw new JobFailureError("COMPLETE_MESSAGE_ANALYSIS_INCOMPLETE", "Clip selection stopped. Existing clips remain unchanged.", {
+      cause: error, retryable: false, preservesProject: true,
+    });
+  }
   const targetClipCount = readTargetClipCount(project.processingConfig);
   const candidateLimit = readCandidateLimit(project.processingConfig, {
     masterDefault: env.CANDIDATE_LIMIT_DEFAULT,
@@ -154,7 +163,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     maxMs: MAX_CANDIDATE_MS,
   });
 
-  if (candidates.length === 0) {
+  if (candidates.length === 0 && !messagePolicy) {
     throw new JobFailureError(
       "NO_CLIPS_FOUND",
       "We didn't find strong standalone moments. Try a narrower timeframe or a prompt.",
@@ -170,6 +179,11 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     const routing = await resolveRouting(prisma, project.id);
     selection = await selectProvider(routing);
   } catch (error) {
+    if (messagePolicy) {
+      throw new JobFailureError("COMPLETE_MESSAGE_ANALYSIS_INCOMPLETE", "Clip selection stopped. Existing clips remain unchanged.", {
+        cause: error, retryable: false, preservesProject: true,
+      });
+    }
     if (error instanceof AnalysisProviderUnavailableError) {
       await recordOperationalEventSafely(prisma, {
         workspaceId: project.workspaceId,
@@ -192,6 +206,25 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     }
     throw error;
   }
+  let completeProvider: CompleteMessageProvider | undefined;
+  if (messagePolicy) {
+    try {
+      if (!selection.provider.completeMessageAdapter || selection.emergencyOverride) {
+        throw new CompleteMessageFailure("complete_message_adapter_unavailable");
+      }
+      const source = project.sourceVideo!;
+      const prepared = prepareCompleteMessageTranscript({
+        durationMs: source.durationS ? Math.round(source.durationS.toNumber() * 1000) : null,
+        transcriptRevision: source.transcriptRevision, transcript,
+      }, messagePolicy);
+      completeProvider = new CompleteMessageProvider(selection.provider, prepared, selection.provider.completeMessageAdapter);
+      selection = { ...selection, provider: completeProvider };
+    } catch (error) {
+      throw new JobFailureError("COMPLETE_MESSAGE_ANALYSIS_INCOMPLETE", "Clip selection stopped. Existing clips remain unchanged.", {
+        cause: error, retryable: false, preservesProject: true,
+      });
+    }
+  }
   const { provider } = selection;
   if (selection.emergencyOverride) {
     await recordOperationalEventSafely(prisma, {
@@ -211,7 +244,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
   }
 
   const scoreableCandidates =
-    genre.toLowerCase() === "sermon"
+    !messagePolicy && genre.toLowerCase() === "sermon"
       ? filterSermonCandidates(candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text })))
       : candidates.map((c) => ({ startMs: c.startMs, endMs: c.endMs, text: c.text }));
   const analysisRuntime = startRuntimeMeasurement();
@@ -259,6 +292,11 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
 
   if (scoreFailure) {
     const error = scoreFailure.error;
+    if (messagePolicy) {
+      throw new JobFailureError("COMPLETE_MESSAGE_ANALYSIS_INCOMPLETE", "Clip selection stopped. Existing clips remain unchanged.", {
+        cause: error, retryable: false, preservesProject: true,
+      });
+    }
     if (error instanceof AnalysisProviderUnavailableError) {
       await recordOperationalEventSafely(prisma, {
         workspaceId: project.workspaceId,
@@ -302,13 +340,19 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
   }
 
   if (!scored || scored.length === 0) {
+    if (messagePolicy) {
+      throw new JobFailureError("COMPLETE_MESSAGE_NO_CLIPS", "No complete messages passed selection. Existing clips remain unchanged.", {
+        retryable: false, preservesProject: true,
+      });
+    }
     throw new JobFailureError(
       "NO_CLIPS_FOUND",
       "We didn't find strong standalone moments. Try a narrower timeframe or a prompt.",
     );
   }
 
-  const refined = scored.map((clip) => refineBoundaries(clip, sourceDurationMs));
+  // Complete-message selection already validated and padded these exact ranges.
+  const refined = messagePolicy ? scored : scored.map((clip) => refineBoundaries(clip, sourceDurationMs));
   const deduped = dedupByOverlap(
     refined.map((clip) => ({ ...clip, score: clip.total })),
     0.5,
@@ -333,6 +377,16 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       throw transcriptChangedError();
     }
     await assertReanalysisAllowed(tx, { projectId: project.id });
+
+    if (messagePolicy) {
+      let currentPolicy;
+      try { currentPolicy = readCompleteMessagePolicy(current.processingConfig); } catch { /* A malformed replacement also refuses the write. */ }
+      if (JSON.stringify(currentPolicy) !== JSON.stringify(messagePolicy)) {
+        throw new JobFailureError("COMPLETE_MESSAGE_POLICY_CHANGED", "Clip selection settings changed. Existing clips remain unchanged.", {
+          retryable: false, preservesProject: true,
+        });
+      }
+    }
 
     await tx.scriptureReference.deleteMany({ where: { projectId: project.id } });
     // Unfired calendar slots are re-derived below. Rows in any other state block the rebuild
@@ -676,6 +730,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       targetClipCount,
       genre,
       scheduledRendersEnqueued: scheduledRenders?.slotsBound ?? 0,
+      ...(completeProvider?.evidence ? { completeMessage: completeProvider.evidence } : {}),
     },
   };
   };

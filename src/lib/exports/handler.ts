@@ -204,6 +204,8 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     outputWidth: OUTPUT_WIDTH,
     outputHeight: OUTPUT_HEIGHT,
     brandTemplate,
+    processingConfig: clip.project.processingConfig,
+    source: { id: sourceVideo.id, durationMs: sourceVideo.durationS ? Math.round(sourceVideo.durationS.toNumber() * 1000) : null },
   });
   const { range, cropPixels, assContent } = plan;
   if (rangeInput && (rangeInput.sourceVideoId !== sourceVideo.id || rangeInput.editVersion !== job.editVersion ||
@@ -365,6 +367,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         durationS: outputDurationS,
         durationToleranceS: renderQcDurationToleranceS(outputDurationS),
         captionLines: plan.captionLineCount,
+        completeMessageTiming: plan.completeMessageTiming,
       },
     );
 

@@ -22,6 +22,7 @@ export type RenderQcProbeFacts = {
   width: number | null;
   height: number | null;
   hasAudio: boolean;
+  fps?: number | null;
 };
 
 export type RenderQcFacts = {
@@ -42,6 +43,7 @@ export type RenderQcExpectation = {
   durationToleranceS: number;
   /** Caption lines the render was given. Zero means this clip has no captions to burn. */
   captionLines: number;
+  completeMessageTiming?: { finalWordEndS: number };
 };
 
 export type RenderQcCheckName =
@@ -49,6 +51,7 @@ export type RenderQcCheckName =
   | "dimensions"
   | "hasAudio"
   | "duration"
+  | "completeMessageTiming"
   | "bytes"
   | "checksum"
   | "captionEvents";
@@ -122,6 +125,23 @@ export function evaluateRenderOutputQc(
         ? `${probe.durationS.toFixed(3)}s, within ${expectation.durationToleranceS.toFixed(3)}s of the expected ${expectation.durationS.toFixed(3)}s.`
         : `expected ${expectation.durationS.toFixed(3)}s within ${expectation.durationToleranceS.toFixed(3)}s, got ${probe.durationS.toFixed(3)}s (off by ${drift.toFixed(3)}s).`,
     });
+
+    if (expectation.completeMessageTiming) {
+      const { finalWordEndS } = expectation.completeMessageTiming;
+      const fps = probe.fps;
+      // At most one measured frame, capped at 100 ms. One millisecond covers timestamp precision.
+      // No shortfall is allowed before the final selected word ends, even within that tolerance.
+      const tolerance = typeof fps === "number" && Number.isFinite(fps) && fps > 0
+        ? Math.min(1 / fps, 0.1) + 0.001 : NaN;
+      const valid = Number.isFinite(expectation.durationS) && expectation.durationS > 0 &&
+        Number.isFinite(finalWordEndS) && finalWordEndS > 0 && finalWordEndS <= expectation.durationS;
+      const passed = valid && Number.isFinite(probe.durationS) &&
+        drift <= tolerance && probe.durationS >= finalWordEndS;
+      checks.push({
+        name: "completeMessageTiming", passed,
+        detail: `Expected ${expectation.durationS}s; measured ${probe.durationS}s; final word ends at ${finalWordEndS}s; frame tolerance ${tolerance}s.`,
+      });
+    }
   }
 
   checks.push({

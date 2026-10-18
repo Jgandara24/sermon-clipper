@@ -1,4 +1,5 @@
 import type { AnalysisUsage } from "./usage";
+import type { CompleteMessageAdapter } from "./complete-message/adapter";
 
 export type Subscore = {
   score: number;
@@ -42,6 +43,8 @@ export type AnalysisContext = {
 
 export interface AnalysisProvider {
   readonly name: string;
+  /** Optional capability. Legacy adapters do not advertise this contract. */
+  readonly completeMessageAdapter?: CompleteMessageAdapter;
   isAvailable(): Promise<boolean>;
   scoreCandidates(
     candidates: AnalysisCandidate[],

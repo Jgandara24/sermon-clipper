@@ -15,6 +15,9 @@ import {
   type TimeRange,
 } from "@/lib/export/output-timeline";
 import { assertContinuousRange } from "./continuous-range";
+import { readCompleteMessagePolicy } from "@/lib/analysis/complete-message/integration";
+import { editorSourceProblem, finalSelectedWordEndS, type EditorSource } from "@/lib/analysis/complete-message/editor-validation";
+import { ExportFailureError } from "./errors";
 
 /**
  * Everything a render is derived from, and nothing that has to be fetched.
@@ -63,6 +66,8 @@ export type ExportRenderPlanInput = {
   outputWidth: number;
   outputHeight: number;
   brandTemplate: ExportRenderBrandTemplate | null;
+  processingConfig?: unknown;
+  source?: EditorSource;
 };
 
 export type ExportRenderPlan = {
@@ -78,6 +83,8 @@ export type ExportRenderPlan = {
   /** The gain the export applies after loudness normalisation, and the preview applies to the
    * video element. One number, read once, so the two cannot drift. */
   originalVolume: number;
+  /** Present only for the explicit complete-message policy. */
+  completeMessageTiming?: { finalWordEndS: number };
 };
 
 export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRenderPlan {
@@ -86,6 +93,18 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
   // A deliverable is one unbroken span of the source. A document that would render as anything
   // else is refused here with the gate's own code, so nothing below has to reason about cuts.
   assertContinuousRange(state, segments);
+  let completeMessageTiming: ExportRenderPlan["completeMessageTiming"];
+  try {
+    if (readCompleteMessagePolicy(input.processingConfig)) {
+      const problem = editorSourceProblem(state, input.source);
+      if (problem) throw new Error(problem);
+      completeMessageTiming = { finalWordEndS: finalSelectedWordEndS(state, segments) };
+    }
+  } catch (error) {
+    throw new ExportFailureError("COMPLETE_MESSAGE_TIMING_INVALID", "The clip needs a source timing review before export.", {
+      terminal: true, cause: error,
+    });
+  }
   const range: TimeRange = { startMs: state.source.startMs, endMs: state.source.endMs };
 
   // Corrections are applied here too, so the caption the member approved in the preview is the
@@ -195,5 +214,6 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
     captionLineCount: captionLines.length,
     outputDurationS: rangeDurationMs(range) / 1_000,
     originalVolume: state.audio.originalVolume,
+    ...(completeMessageTiming ? { completeMessageTiming } : {}),
   };
 }
