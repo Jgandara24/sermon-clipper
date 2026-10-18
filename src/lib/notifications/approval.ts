@@ -57,7 +57,7 @@ async function sendApprovalEmail(
       .filter(Boolean)
       .join("\n"),
     fromEmail,
-    fromName: env.NOTIFICATIONS_FROM_NAME ?? "Sermon Clipper",
+    fromName: env.NOTIFICATIONS_FROM_NAME ?? "Pulpit Engine",
   });
 
   return { provider: "resend", ...result };

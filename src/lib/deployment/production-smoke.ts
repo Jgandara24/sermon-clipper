@@ -213,7 +213,7 @@ export async function runProductionSmoke(options: ProductionSmokeOptions): Promi
       if (!response.ok) {
         return { name: "login", status: "fail", message: `/login returned HTTP ${response.status}.` };
       }
-      if (!html.includes("Sermon Clipper") || !html.includes("Email me a sign-in code")) {
+      if (!html.includes("Pulpit Engine") || !html.includes("Email me a sign-in code")) {
         return { name: "login", status: "fail", message: "/login did not render the email OTP form." };
       }
       if (expectProduction && html.includes("Use development login")) {

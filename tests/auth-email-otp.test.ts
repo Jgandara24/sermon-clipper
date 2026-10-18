@@ -86,7 +86,7 @@ describe("email OTP delivery", () => {
     vi.stubEnv("NODE_ENV", "production");
     process.env.RESEND_API_KEY = "resend-key";
     process.env.AUTH_EMAIL_FROM = "auth@example.com";
-    process.env.AUTH_EMAIL_FROM_NAME = "Sermon Clipper Auth";
+    process.env.AUTH_EMAIL_FROM_NAME = "Pulpit Engine Auth";
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 202 }));
 
     const result = await sendEmailOtp({

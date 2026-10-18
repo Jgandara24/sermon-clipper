@@ -163,7 +163,7 @@ describe("fallback chains", () => {
   });
 
   it("notification sender name falls back through AUTH_EMAIL_FROM_NAME to the app default", () => {
-    expect(notificationsFromName()).toBe("Sermon Clipper");
+    expect(notificationsFromName()).toBe("Pulpit Engine");
 
     process.env.AUTH_EMAIL_FROM_NAME = "Auth Sender";
     expect(notificationsFromName()).toBe("Auth Sender");

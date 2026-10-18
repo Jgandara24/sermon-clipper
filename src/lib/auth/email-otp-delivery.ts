@@ -39,9 +39,9 @@ export async function sendEmailOtp(input: EmailOtpDeliveryInput): Promise<EmailO
   const result = await sendViaResend({
     apiKey,
     to: input.email,
-    subject: "Your Sermon Clipper sign-in code",
+    subject: "Your Pulpit Engine sign-in code",
     text: [
-      "Use this code to sign in to Sermon Clipper:",
+      "Use this code to sign in to Pulpit Engine:",
       "",
       input.code,
       "",

@@ -57,7 +57,7 @@ describe("production smoke checks", () => {
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
         "/api/health": response(healthPayload(), { status: 200 }),
-        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
@@ -84,7 +84,7 @@ describe("production smoke checks", () => {
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
         "/api/health": response(shallowHealth, { status: 200 }),
-        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
@@ -110,7 +110,7 @@ describe("production smoke checks", () => {
           healthPayload({ deployment: { commitSha: "abc1234def5678" } }),
           { status: 200 },
         ),
-        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
@@ -133,7 +133,7 @@ describe("production smoke checks", () => {
           healthPayload({ deployment: { commitSha: "fffffff" } }),
           { status: 200 },
         ),
-        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
@@ -161,7 +161,7 @@ describe("production smoke checks", () => {
           },
           { status: 200 },
         ),
-        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
@@ -190,7 +190,7 @@ describe("production smoke checks", () => {
         baseUrl: "https://clips.example.com",
         fetchImpl: fetchFor({
           "/api/health": response({ status: "degraded", checks: [routingCheck] }, { status: 200 }),
-          "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+          "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
           "/app": response("", { status: 307, headers: { location: "/login" } }),
         }),
       });
@@ -213,7 +213,7 @@ describe("production smoke checks", () => {
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
         "/api/health": response(healthPayload(), { status: 200 }),
-        "/login": response("Sermon Clipper Email me a sign-in code Use development login", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code Use development login", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
@@ -235,7 +235,7 @@ describe("production smoke checks", () => {
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
         "/api/health": response(healthPayload(), { status: 200 }),
-        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("not found", { status: 404 }),
@@ -257,7 +257,7 @@ describe("production smoke checks", () => {
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
         "/api/health": response(healthPayload(), { status: 200 }),
-        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
@@ -278,7 +278,7 @@ describe("production smoke checks", () => {
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
         "/api/health": response(healthPayload(), { status: 200 }),
-        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),
@@ -302,7 +302,7 @@ describe("production smoke checks", () => {
       baseUrl: "https://clips.example.com",
       fetchImpl: fetchFor({
         "/api/health": response(healthPayload(), { status: 200 }),
-        "/login": response("Sermon Clipper Email me a sign-in code", { status: 200 }),
+        "/login": response("Pulpit Engine Email me a sign-in code", { status: 200 }),
         "/app": response("", { status: 307, headers: { location: "/login" } }),
         "/join/smoke-invalid-token": response("Invitation unavailable", { status: 200 }),
         "/review/smoke-invalid-token": response("Review link unavailable", { status: 200 }),

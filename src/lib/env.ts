@@ -260,7 +260,7 @@ export function notificationsFromEmail(): string | undefined {
 
 /** Sender display name for notification emails. */
 export function notificationsFromName(): string {
-  return env.NOTIFICATIONS_FROM_NAME ?? env.AUTH_EMAIL_FROM_NAME ?? "Sermon Clipper";
+  return env.NOTIFICATIONS_FROM_NAME ?? env.AUTH_EMAIL_FROM_NAME ?? "Pulpit Engine";
 }
 
 /** Sender for auth (OTP) emails — the reverse preference: AUTH_EMAIL_FROM ?? NOTIFICATIONS_FROM_EMAIL. */
@@ -270,7 +270,7 @@ export function authEmailFrom(): string | undefined {
 
 /** Sender display name for auth (OTP) emails. */
 export function authEmailFromName(): string {
-  return env.AUTH_EMAIL_FROM_NAME ?? env.NOTIFICATIONS_FROM_NAME ?? "Sermon Clipper";
+  return env.AUTH_EMAIL_FROM_NAME ?? env.NOTIFICATIONS_FROM_NAME ?? "Pulpit Engine";
 }
 
 /**

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sermon Clipper",
-  description: "Standalone sermon clipping foundation.",
+  title: "Pulpit Engine",
+  description: "Pulpit Engine turns each sermon into short clips for your church's social pages.",
 };
 
 export default function RootLayout({

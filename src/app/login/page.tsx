@@ -45,7 +45,7 @@ export default async function LoginPage({
               <Clapperboard size={22} aria-hidden="true" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold">Sermon Clipper</h1>
+              <h1 className="text-xl font-semibold">Pulpit Engine</h1>
               <p className="text-sm text-stone-500">Church video clips, ready for review</p>
             </div>
           </div>

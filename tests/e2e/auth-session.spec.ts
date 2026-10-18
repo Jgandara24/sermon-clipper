@@ -42,7 +42,7 @@ async function destroyFixture(fixture: Fixture | undefined) {
 }
 
 const dashboardHeading = "Sermon projects";
-const loginHeading = "Sermon Clipper";
+const loginHeading = "Pulpit Engine";
 
 test.describe("End-to-end sign-in", () => {
   let fixture: Fixture;

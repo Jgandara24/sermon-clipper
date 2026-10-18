@@ -75,7 +75,7 @@ export function AppShell({ children, workspace, user, role, isPlatformOperator =
               <FolderOpen size={20} aria-hidden="true" />
             </div>
             <div>
-              <p className="text-sm font-semibold tracking-wide">Sermon Clipper</p>
+              <p className="text-sm font-semibold tracking-wide">Pulpit Engine</p>
               <p className="text-xs text-stone-500">Phase 1 foundation</p>
             </div>
           </div>
