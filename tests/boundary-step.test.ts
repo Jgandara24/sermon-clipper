@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyBoundaryChoice,
+  BOUNDARY_MAX_MS,
   boundaryContext,
   boundaryPrompt,
   looksLikeScriptureReadingStart,
@@ -62,7 +63,8 @@ describe("boundaryContext and boundaryPrompt", () => {
     expect(prompt).toMatch(/where the thought starts/i);
     expect(prompt).toMatch(/where the point lands/i);
     expect(prompt).toMatch(/never start on the scripture reading/i);
-    expect(prompt).toMatch(/15 and 90 seconds/);
+    expect(prompt).toMatch(/15 and 59 seconds/);
+    expect(prompt).toMatch(/under 60 seconds/i);
   });
 
   it("numbers every unit and marks the current clip", () => {
@@ -98,5 +100,13 @@ describe("applyBoundaryChoice", () => {
       90_000,
     );
     expect(applyBoundaryChoice(long, { startUnit: 0, endUnit: 59 })).toBeNull();
+  });
+
+  it("refuses any clip of 60 seconds or more (Jake, 2026-10-18: keep clips under 60 seconds)", () => {
+    const units = Array.from({ length: 40 }, (_, i) => ({ idx: i, startMs: i * 3_000, endMs: i * 3_000 + 2_900, text: "Point." }));
+    const context = boundaryContext(units, { startMs: 30_000, endMs: 60_000 }, 90_000);
+    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 19 })).toEqual({ startMs: 0, endMs: 59_900, adjustedForScripture: false });
+    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 20 })).toBeNull();
+    expect(BOUNDARY_MAX_MS).toBeLessThan(60_000);
   });
 });

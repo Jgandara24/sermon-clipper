@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { applyLabSelectionSteps } from "@/lib/analysis/lab-selection";
+import { MAX_CANDIDATE_MS } from "@/lib/jobs/handlers/analyze";
 
 type Clip = { startMs: number; endMs: number; text: string; total: number; title: string };
 
@@ -13,6 +14,12 @@ const SEGMENTS = Array.from({ length: 400 }, (_, i) => ({
 function clipAt(startS: number, total: number): Clip {
   return { startMs: startS * 1000, endMs: (startS + 55) * 1000, text: "old text", total, title: `clip at ${startS}` };
 }
+
+describe("clip length", () => {
+  it("never builds a candidate window of 60 seconds or more (Jake, 2026-10-18)", () => {
+    expect(MAX_CANDIDATE_MS).toBeLessThan(60_000);
+  });
+});
 
 describe("applyLabSelectionSteps", () => {
   it("returns the clips untouched when both lab steps are off", async () => {
