@@ -8,7 +8,7 @@ import type { AnalysisCandidate, AnalysisContext, ScoredCandidate, Subscore } fr
 
 export const MAX_STAGE_B_CANDIDATES = 25;
 
-const MomentTypeSchema = z.enum([
+const MOMENT_TYPES = [
   "hook",
   "complete_thought",
   "story",
@@ -17,7 +17,18 @@ const MomentTypeSchema = z.enum([
   "teachable",
   "call_to_action",
   "reject",
-]);
+] as const;
+
+/**
+ * zodOutputFormat sends this list to the model as a description, not an enforced enum, so the
+ * model can write any word. Lab sermon 3b (2026-10-18) failed three ANALYZE attempts on one
+ * unknown word. A known type in another case or spacing still counts; any other word is "reject",
+ * the safe reading, since only preaching may become a clip.
+ */
+const MomentTypeSchema = z.preprocess(
+  (input) => (typeof input === "string" ? input.trim().toLowerCase().replace(/[\s-]+/g, "_") : input),
+  z.enum(MOMENT_TYPES).catch("reject"),
+);
 
 export const StageAResultSchema = z.object({
   classifications: z.array(
