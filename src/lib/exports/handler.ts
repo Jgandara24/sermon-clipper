@@ -8,6 +8,9 @@ import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
+import { labStepEnabled } from "@/lib/lab-flags";
+import { computeLabSpeakerTrack } from "@/lib/speaker-tracking/lab-observe";
+import type { LabTrack } from "@/lib/speaker-tracking/lab-track";
 import type { EditorState } from "@/lib/editor/types";
 import { countCaptionDialogueEvents } from "@/lib/export/ass-generator";
 import { renderClipExport } from "@/lib/export/render";
@@ -220,6 +223,40 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       outcome: "succeeded",
     });
 
+    // Phase 1 lab: follow the preacher instead of the fixed center crop. A person's manual
+    // crop always wins. If tracking fails, the clip still renders with the fixed crop.
+    let speakerTrack: LabTrack | undefined;
+    if (labStepEnabled("speakerTracking") && state.layout.mode !== "manual") {
+      try {
+        speakerTrack = await computeLabSpeakerTrack({ sourceFilePath, range, workDir });
+        await recordOperationalEventSafely(prisma, {
+          workspaceId: job.workspaceId,
+          category: "export",
+          eventType: "lab_speaker_tracking",
+          severity: "info",
+          message: `Lab speaker tracking follows the preacher ${speakerTrack.followingPercent}% of the clip.`,
+          metadata: {
+            exportJobId: job.id,
+            clipId: clip.id,
+            followingPercent: speakerTrack.followingPercent,
+            holds: speakerTrack.holds,
+            shots: speakerTrack.shots,
+            addedCuts: speakerTrack.addedCuts,
+            filledFrames: speakerTrack.filledFrames,
+          },
+        });
+      } catch (error) {
+        await recordOperationalEventSafely(prisma, {
+          workspaceId: job.workspaceId,
+          category: "export",
+          eventType: "lab_speaker_tracking_failed",
+          severity: "warning",
+          message: "Lab speaker tracking failed; the clip renders with the fixed crop.",
+          metadata: { exportJobId: job.id, clipId: clip.id, detail: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    }
+
     const renderStartedAt = startRuntimeMeasurement();
     try {
       await renderClipExport({
@@ -231,6 +268,11 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         outputWidth: OUTPUT_WIDTH,
         outputHeight: OUTPUT_HEIGHT,
         originalVolume: plan.originalVolume,
+        speakerTrack: speakerTrack && {
+          commands: speakerTrack.commands,
+          crop: speakerTrack.crop,
+          first: speakerTrack.first,
+        },
       });
     } catch (error) {
       await recordRenderFact({
