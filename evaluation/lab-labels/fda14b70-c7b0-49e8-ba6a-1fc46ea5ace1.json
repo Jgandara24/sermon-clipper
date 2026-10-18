@@ -1,0 +1,62 @@
+{
+  "projectId": "fda14b70-c7b0-49e8-ba6a-1fc46ea5ace1",
+  "projectName": "Lab 3 - Revival - Faith Comes by Hearing (Bill Britt)",
+  "sourceUrl": "https://www.youtube.com/watch?v=JIIo4_gc_44",
+  "judge": "jake",
+  "clips": {
+    "45f8ba18-4a5a-40bd-9388-a94cffc114b1": {
+      "rank": 1,
+      "startMs": 1924522,
+      "endMs": 1940202,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "The speaker turns to the side. You can see that the camera doesn't track him until he turns back, at which point it snaps quickly to the center, which makes it fail. ",
+      "labeledAt": "2026-10-18T17:40:11.008Z"
+    },
+    "dba34254-33ba-438e-8b43-1d76adb9b1c9": {
+      "rank": 2,
+      "startMs": 3338110,
+      "endMs": 3353250,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T17:40:38.746Z"
+    },
+    "dc8ba90e-ff23-4f59-8683-2b4e129576d5": {
+      "rank": 3,
+      "startMs": 3693946,
+      "endMs": 3744386,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T17:41:36.966Z"
+    },
+    "5bdf839c-e3b6-4e5f-9f03-9bba0c8d287a": {
+      "rank": 4,
+      "startMs": 2842390,
+      "endMs": 2865870,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T17:42:08.651Z"
+    },
+    "7debfeb2-4df1-4cf6-b912-42934127d2a6": {
+      "rank": 5,
+      "startMs": 2951696,
+      "endMs": 2999156,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "Two things: he turns to the side, and the camera loses track of him and then snaps back once he turns back to the camera too quickly. And also, it ends at the wrong time. It goes slightly too long. When it says \"and guys,\" it should have just ended after he said \"amen?\" ",
+      "labeledAt": "2026-10-18T17:43:43.469Z"
+    },
+    "b64007d1-91d7-42bc-9bfa-3d8a422b26a2": {
+      "rank": 6,
+      "startMs": 2355126,
+      "endMs": 2372446,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "This could pass by itself, but I feel like it could be a longer clip. ",
+      "labeledAt": "2026-10-18T17:44:20.917Z"
+    }
+  }
+}
