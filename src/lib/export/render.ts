@@ -7,6 +7,13 @@ import { rangeDurationMs, type TimeRange } from "./output-timeline";
 
 export class RenderError extends Error {}
 
+/** A moving crop (src/lib/speaker-tracking/lab-track.ts). Lab only until it is reviewed. */
+export type SpeakerTrackInput = {
+  commandFilePath: string;
+  crop: { w: number; h: number };
+  first: { x: number; y: number };
+};
+
 /** Escapes a filesystem path for use inside an ffmpeg filtergraph option value. */
 function escapeForFilterGraph(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/:/g, "\\:");
@@ -22,11 +29,17 @@ export function buildExportFilterGraph(
   outputWidth: number,
   outputHeight: number,
   assFilePath: string,
+  speakerTrack?: SpeakerTrackInput,
 ): string {
   const { x, y, w, h } = cropPixels;
   const assOption = escapeForFilterGraph(assFilePath);
+  // A speaker track moves the crop every frame: sendcmd feeds the named crop its x and y.
+  const cropStage = speakerTrack
+    ? `sendcmd=f='${escapeForFilterGraph(speakerTrack.commandFilePath)}',` +
+      `crop@speaker=w=${speakerTrack.crop.w}:h=${speakerTrack.crop.h}:x=${speakerTrack.first.x}:y=${speakerTrack.first.y},`
+    : `crop=${w}:${h}:${x}:${y},`;
   return (
-    `crop=${w}:${h}:${x}:${y},` +
+    cropStage +
     `scale=${outputWidth}:${outputHeight}:force_original_aspect_ratio=increase,` +
     `crop=${outputWidth}:${outputHeight},` +
     `subtitles=filename='${assOption}'`
@@ -68,6 +81,8 @@ export type ExportFfmpegArgsParams = {
   originalVolume?: number;
   /** Use verified absolute media timestamps instead of offsets from container start. */
   absoluteInputTimestamps?: boolean;
+  /** Follow the speaker instead of the fixed crop. Command times count from `range.startMs`. */
+  speakerTrack?: SpeakerTrackInput;
 };
 
 /**
@@ -97,6 +112,7 @@ export function buildExportFfmpegArgs(params: ExportFfmpegArgsParams): string[] 
       params.outputWidth,
       params.outputHeight,
       params.assFilePath,
+      params.speakerTrack,
     ),
     "-af",
     buildExportAudioFilter(params.originalVolume, rangeDurationMs(params.range)),
@@ -129,8 +145,10 @@ async function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
   }
 }
 
-export type RenderClipExportParams = Omit<ExportFfmpegArgsParams, "assFilePath"> & {
+export type RenderClipExportParams = Omit<ExportFfmpegArgsParams, "assFilePath" | "speakerTrack"> & {
   assFileContent: string;
+  /** sendcmd script content; written next to the captions, like them. */
+  speakerTrack?: Omit<SpeakerTrackInput, "commandFilePath"> & { commands: string };
 };
 
 /**
@@ -154,8 +172,14 @@ export async function renderClipExport(params: RenderClipExportParams): Promise<
   try {
     const assFilePath = path.join(workDir, "captions.ass");
     await writeFile(assFilePath, params.assFileContent, "utf8");
+    let speakerTrack: SpeakerTrackInput | undefined;
+    if (params.speakerTrack) {
+      const commandFilePath = path.join(workDir, "speaker.cmd");
+      await writeFile(commandFilePath, params.speakerTrack.commands + "\n", "utf8");
+      speakerTrack = { commandFilePath, crop: params.speakerTrack.crop, first: params.speakerTrack.first };
+    }
     await mkdir(path.dirname(params.outputPath), { recursive: true });
-    await runFfmpeg(ffmpegPath, buildExportFfmpegArgs({ ...params, assFilePath }));
+    await runFfmpeg(ffmpegPath, buildExportFfmpegArgs({ ...params, assFilePath, speakerTrack }));
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
