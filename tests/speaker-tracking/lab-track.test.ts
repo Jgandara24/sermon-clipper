@@ -37,12 +37,31 @@ describe("applyLabRules", () => {
     expect(observations.frames.every((f) => f.faces.length === 1)).toBe(true);
   });
 
-  it("does not bridge a gap longer than 4 seconds; it starts a new shot instead", () => {
+  it("does not bridge a gap longer than 4 seconds, and does not call it a camera cut", () => {
+    // Jake, lab sermons 2 and 3: a made-up cut makes the crop jump. The center lock glides instead.
     const file = clip(8, (i) => (i >= 30 && i < 30 + 5 * FPS ? null : { x: 600, w: 60 }));
     const { observations, filledFrames, addedCuts } = applyLabRules(file.observations, 2);
     expect(filledFrames).toBe(0);
+    expect(addedCuts).toBe(0);
+    expect(observations.frames[30 + 5 * FPS].cut).toBe(false);
+  });
+
+  it("bridges a turn of up to 4 seconds even when he ends up across the stage", () => {
+    // He turns away at 300 and his face comes back two seconds later at 900, the same size.
+    const file = clip(4, (i) => (i < 30 ? { x: 300, w: 60 } : i < 90 ? null : { x: 900, w: 60 }));
+    const { observations, filledFrames, addedCuts } = applyLabRules(file.observations, 2);
+    expect(addedCuts).toBe(0);
+    expect(filledFrames).toBe(60);
+    expect(observations.frames[90].cut).toBe(false);
+  });
+
+  it("treats a gap whose two ends differ in face size as a missed camera cut", () => {
+    // Close shot (face 130 px), one second without a face, then a wide shot (face 55 px).
+    const file = clip(3, (i) => (i < 30 ? { x: 560, w: 130 } : i < 60 ? null : { x: 300, w: 55 }));
+    const { observations, filledFrames, addedCuts } = applyLabRules(file.observations, 2);
     expect(addedCuts).toBe(1);
-    expect(observations.frames[30 + 5 * FPS].cut).toBe(true);
+    expect(filledFrames).toBe(0);
+    expect(observations.frames[60].cut).toBe(true);
   });
 
   it("marks a sudden jump in face size as a missed camera cut", () => {
@@ -106,6 +125,40 @@ describe("buildLabTrack center lock", () => {
     const xs = cropXs(buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" }).commands);
     expect(Math.abs(xs[29] + 202 - 630)).toBeLessThanOrEqual(6);
     expect(Math.abs(xs[30] + 202 - 325)).toBeLessThanOrEqual(6);
+  });
+
+  it("glides to him over half a second when both detectors lost him, instead of jumping", () => {
+    // Jake, lab sermons 2 and 3: "when it re-tracks him, it snaps back too quickly."
+    // Face at 330, six seconds with no face and no person box, then his face at 930.
+    const file = clip(9, (i) => (i < 30 ? { x: 300, w: 60 } : i < 210 ? null : { x: 900, w: 60 }));
+    const track = buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" });
+    const centers = cropXs(track.commands).map((x) => x + track.crop.w / 2);
+    const steps = centers.slice(1).map((c, i) => Math.abs(c - centers[i]));
+
+    expect(Math.max(...steps)).toBeLessThanOrEqual(60);
+    expect(Math.abs(centers[150] - 330)).toBeLessThanOrEqual(6);
+    expect(Math.abs(centers[170] - 330)).toBeLessThanOrEqual(6);
+    expect(Math.abs(centers[210] - 930)).toBeLessThanOrEqual(30);
+    expect(Math.abs(centers[225] - 930)).toBeLessThanOrEqual(6);
+  });
+
+  it("follows his body through a turn when the observations carry person boxes", () => {
+    // He turns away at 600 and walks to 900 over two seconds; the person detector sees him.
+    const walk = (i: number) => (i < 30 ? 600 : i < 90 ? 600 + (300 * (i - 30)) / 60 : 900);
+    const file = clip(4, (i) => (i >= 30 && i < 90 ? null : { x: walk(i) - 30, w: 60 }));
+    file.people = {
+      frames: Array.from({ length: 40 }, (_, k) => ({
+        t: 100 + (3 * k) / FPS,
+        people: [{ score: 0.92, box: { x: walk(3 * k) - 140, y: 60, w: 280, h: 640 } }],
+      })),
+    };
+    const track = buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" });
+    const centers = cropXs(track.commands).map((x) => x + track.crop.w / 2);
+
+    expect(track.bodyFilledFrames).toBe(60);
+    expect(track.followingPercent).toBe(100);
+    // 12 px: the smoothing rounds the corner where he starts to walk (150 px/s); 3% of the crop.
+    centers.forEach((c, i) => expect(Math.abs(c - walk(i)), `frame ${i}`).toBeLessThanOrEqual(12));
   });
 
   it("holds still where no face is known and never leaves the source frame", () => {

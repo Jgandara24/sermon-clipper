@@ -329,6 +329,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
               shots: speakerTrack.shots,
               addedCuts: speakerTrack.addedCuts,
               filledFrames: speakerTrack.filledFrames,
+              bodyFilledFrames: speakerTrack.bodyFilledFrames,
             },
           });
         } catch (error) {

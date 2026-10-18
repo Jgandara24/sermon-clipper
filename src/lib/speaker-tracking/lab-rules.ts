@@ -14,18 +14,23 @@ const MAX_EDGE_FILL_S = 2;
 type Frame = FaceObservations["frames"][number];
 type Box = Frame["faces"][number]["box"];
 
+const sizeJump = (a: Box, b: Box) => Math.max(a.w, b.w) / Math.min(a.w, b.w) > 1.6;
+
+/** Between two frames a thirtieth of a second apart, only a camera cut moves a face this much. */
 function faceJump(a: Box, b: Box) {
-  const sizeRatio = Math.max(a.w, b.w) / Math.min(a.w, b.w);
   const centerMove = Math.abs(a.x + a.w / 2 - (b.x + b.w / 2));
-  return sizeRatio > 1.6 || centerMove > 2 * Math.max(a.w, b.w);
+  return sizeJump(a, b) || centerMove > 2 * Math.max(a.w, b.w);
 }
 
 /**
- * 1. A sudden jump in a lone face's size or position is a camera cut the frame-difference
- *    detector missed (Sunnylane's close and wide shots share one blue background).
+ * 1. A sudden jump in a lone face's size or position from one frame to the next, or in its size
+ *    across frames without a face, is a camera cut the frame-difference detector missed
+ *    (Sunnylane's close and wide shots share one blue background).
  * 2. A lone face hidden for up to MAX_BRIDGE_S (looking down, turning) is bridged by linear
  *    interpolation between the last and next sighting. Offline processing knows both ends.
- *    A gap whose two ends differ like a cut, or that runs longer, becomes a cut instead.
+ *    A gap whose two ends differ in face size is a missed cut. A longer gap is left alone: it is
+ *    not a cut, so the center lock glides across it instead of jumping (Jake, lab sermons 2 and
+ *    3: "it snaps back too quickly"). A move across the stage alone is a walk, not a cut.
  * 3. A clip that starts or ends without a face takes the nearest sighting within MAX_EDGE_FILL_S.
  * Frames with two or more faces are never filled or bridged, so no other person is substituted.
  * Boxes are divided by `scale` so the tracker runs at Codex's tuned width.
@@ -44,18 +49,22 @@ export function applyLabRules(input: FaceObservations, scale: number) {
 
   // Rule 1: missed cuts between consecutive single-face frames.
   let last: Box | undefined;
-  for (const f of frames) {
+  let lastIndex = -1;
+  frames.forEach((f, i) => {
     if (f.cut) last = undefined;
     if (f.faces.length === 1) {
-      if (last && faceJump(last, f.faces[0].box) && !f.cut) {
+      const box = f.faces[0].box;
+      const jump = last && (lastIndex === i - 1 ? faceJump(last, box) : sizeJump(last, box));
+      if (jump && !f.cut) {
         f.cut = true;
         addedCuts += 1;
       }
-      last = f.faces[0].box;
+      last = box;
+      lastIndex = i;
     } else if (f.faces.length > 1) {
       last = undefined;
     }
-  }
+  });
 
   // Rule 2: bridge gaps between lone-face sightings inside one shot.
   const single = (f: Frame) => f.faces.length === 1 && f.faces[0].score >= 0.9;
@@ -67,13 +76,14 @@ export function applyLabRules(input: FaceObservations, scale: number) {
     if (!single(frames[j])) continue;
     const a = frames[i].faces[0].box;
     const b = frames[j].faces[0].box;
-    if (frames[j].t - frames[i].t > MAX_BRIDGE_S || faceJump(a, b)) {
+    if (sizeJump(a, b)) {
       if (!frames[j].cut) {
         frames[j].cut = true;
         addedCuts += 1;
       }
       continue;
     }
+    if (frames[j].t - frames[i].t > MAX_BRIDGE_S) continue;
     for (let k = i + 1; k < j; k += 1) {
       const u = (frames[k].t - frames[i].t) / (frames[j].t - frames[i].t);
       const mix = (p: number, q: number) => p + (q - p) * u;
