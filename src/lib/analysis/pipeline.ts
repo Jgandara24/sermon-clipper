@@ -61,6 +61,15 @@ export function stageAPrompt(candidates: AnalysisCandidate[]): string {
     `(announcements, greetings, mic checks). An excerpt with slightly rough edges that ` +
     `still carries a complete, compelling idea should be classified by that idea, not ` +
     `rejected — a later pass scores and trims the survivors.\n\n` +
+    // Lab sermon 1 (2026-10-17): with only "housekeeping" named, Stage A kept song lyrics,
+    // baptisms and announcements, and all six clips came from them. The product only posts the
+    // preacher preaching (docs/FOUNDER_BRIEF.md, quality test 2).
+    `These excerpts may come from a full church service. Also "reject" every part of the ` +
+    `service where the preacher is not preaching: worship and song lyrics being sung, ` +
+    `baptisms, announcements, the offering, welcomes, prayer led as part of the service ` +
+    `(praying aloud to God rather than teaching), and the altar call or invitation at the ` +
+    `close. A preacher who quotes a song line, reads Scripture aloud, or tells a story about ` +
+    `a baptism inside the message is still preaching — classify that by its idea.\n\n` +
     candidates.map((candidate, index) => `[${index}] ${candidate.text}`).join("\n\n")
   );
 }
@@ -82,22 +91,55 @@ export function stageBPrompt(
   );
 }
 
+/**
+ * Chooses which Stage A survivors Stage B scores: at most MAX_STAGE_B_CANDIDATES windows that do
+ * not overlap heavily, spread across the whole recording, returned in time order.
+ *
+ * It used to keep the first 25 survivors in time order. On an 85-minute service that meant the
+ * opening 12 minutes and never the sermon (lab sermon 1, 2026-10-17). Now the recording's span
+ * is cut into one equal slot per pick, and each slot takes the unused survivor nearest its
+ * centre. Spreading by time, not by count, matters because sung lyrics make short transcript
+ * segments and so more windows per minute than preaching does.
+ */
 export function thinStageASurvivors(
   candidates: AnalysisCandidate[],
   classifications: StageAResult["classifications"],
 ): number[] {
-  const survivors = classifications
-    .filter((classification) => classification.momentType !== "reject")
-    .map((classification) => classification.index)
-    .filter((index) => index >= 0 && index < candidates.length);
-  const kept: number[] = [];
+  const survivors = [
+    ...new Set(
+      classifications
+        .filter((classification) => classification.momentType !== "reject")
+        .map((classification) => classification.index)
+        .filter((index) => index >= 0 && index < candidates.length),
+    ),
+  ].sort((a, b) => candidates[a].startMs - candidates[b].startMs || a - b);
+
+  const pool: number[] = [];
   for (const index of survivors) {
-    if (kept.length >= MAX_STAGE_B_CANDIDATES) break;
-    if (!kept.some((other) => computeIoU(candidates[other], candidates[index]) > 0.5)) {
-      kept.push(index);
+    if (!pool.some((other) => computeIoU(candidates[other], candidates[index]) > 0.5)) {
+      pool.push(index);
     }
   }
-  return kept;
+  if (pool.length <= MAX_STAGE_B_CANDIDATES) return pool;
+
+  const midpoint = (index: number) => (candidates[index].startMs + candidates[index].endMs) / 2;
+  const spanStart = candidates[pool[0]].startMs;
+  const spanEnd = Math.max(...pool.map((index) => candidates[index].endMs));
+  const slotMs = (spanEnd - spanStart) / MAX_STAGE_B_CANDIDATES;
+  const chosen = new Set<number>();
+  for (let slot = 0; slot < MAX_STAGE_B_CANDIDATES; slot += 1) {
+    const target = spanStart + (slot + 0.5) * slotMs;
+    let best = -1;
+    for (const index of pool) {
+      if (chosen.has(index)) continue;
+      // Ties go to the earlier window, so the choice is deterministic.
+      if (best === -1 || Math.abs(midpoint(index) - target) < Math.abs(midpoint(best) - target)) {
+        best = index;
+      }
+    }
+    chosen.add(best);
+  }
+  return pool.filter((index) => chosen.has(index));
 }
 
 function toSubscore(llm: { score: number; note: string }): Subscore {
