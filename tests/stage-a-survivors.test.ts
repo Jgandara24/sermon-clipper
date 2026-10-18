@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeIoU } from "@/lib/analysis/chunking";
-import { MAX_STAGE_B_CANDIDATES, stageAPrompt, thinStageASurvivors } from "@/lib/analysis/pipeline";
+import { MAX_STAGE_B_CANDIDATES, StageAResultSchema, stageAPrompt, thinStageASurvivors } from "@/lib/analysis/pipeline";
 import type { AnalysisCandidate } from "@/lib/analysis/types";
 
 const MINUTE = 60_000;
@@ -113,5 +113,30 @@ describe("stageAPrompt rejects church-service content that is not preaching", ()
   it("still lists every excerpt with its number", () => {
     expect(prompt).toContain("[0] You called my name and I ran out of that grave.");
     expect(prompt).toContain("[1] Notice with me from the Word of God.");
+  });
+});
+
+describe("StageAResultSchema", () => {
+  // Lab sermon 3b, 2026-10-18: ANALYZE failed three times with "Failed to parse structured
+  // output". The SDK sends the moment types as a description, not an enforced list, so the
+  // model can write any word, and one unknown word failed the whole sermon.
+  it("reads an unknown moment type as reject instead of failing the sermon", () => {
+    const result = StageAResultSchema.parse({
+      classifications: [
+        { index: 0, momentType: "worship" },
+        { index: 1, momentType: "complete_thought" },
+      ],
+    });
+    expect(result.classifications.map((c) => c.momentType)).toEqual(["reject", "complete_thought"]);
+  });
+
+  it("reads a known moment type written in another case or with spaces", () => {
+    const result = StageAResultSchema.parse({
+      classifications: [
+        { index: 0, momentType: " Hook " },
+        { index: 1, momentType: "Call to action" },
+      ],
+    });
+    expect(result.classifications.map((c) => c.momentType)).toEqual(["hook", "call_to_action"]);
   });
 });
