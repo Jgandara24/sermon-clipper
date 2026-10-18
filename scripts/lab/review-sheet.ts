@@ -444,7 +444,10 @@ ${cards}
     const res = await fetch('/label', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ clipId, verdict, failedTests, note }) });
     const ok = res.ok;
-    card.querySelector('.saved').textContent = ok ? 'Saved ' + new Date().toLocaleTimeString() : 'Not saved — try again';
+    card.querySelector('.saved').textContent = ok
+      ? 'Saved ' + new Date().toLocaleTimeString()
+      : (res.status === 400 ? 'Not saved: this page is out of date. Reload the page (Cmd+R), then mark again.' : 'Not saved — try again');
+    if (!ok) return;
     const v = card.querySelector('.verdict'); v.className = 'verdict ' + verdict; v.textContent = verdict.toUpperCase();
     const cards = [...document.querySelectorAll('.card')];
     const pass = cards.filter(c => c.querySelector('.verdict').classList.contains('pass')).length;
