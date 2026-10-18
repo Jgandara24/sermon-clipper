@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyBoundaryChoice,
   BOUNDARY_MAX_MS,
+  endsOnQuotationStart,
   boundaryContext,
   boundaryPrompt,
   looksLikeScriptureReadingStart,
@@ -80,13 +81,13 @@ describe("applyBoundaryChoice", () => {
 
   it("moves the clip to the chosen sentences", () => {
     const result = applyBoundaryChoice(context, { startUnit: at(1176), endUnit: at(1184) });
-    expect(result).toEqual({ startMs: 4308684, endMs: 4342000, adjustedForScripture: false });
+    expect(result).toEqual({ startMs: 4308684, endMs: 4342000, adjustedForScripture: false, adjustedEnd: false });
   });
 
   it("steps past a Scripture reading at the start, through the end of the quoted passage", () => {
     // 1179 opens the quote of Ephesians 2:8-9 and 1180 closes it; the preacher resumes at 1181.
     const result = applyBoundaryChoice(context, { startUnit: at(1179), endUnit: at(1184) });
-    expect(result).toEqual({ startMs: 4324684, endMs: 4342000, adjustedForScripture: true });
+    expect(result).toEqual({ startMs: 4324684, endMs: 4342000, adjustedForScripture: true, adjustedEnd: false });
   });
 
   it("refuses a choice that is too short, too long, reversed or out of range", () => {
@@ -105,8 +106,77 @@ describe("applyBoundaryChoice", () => {
   it("refuses any clip of 60 seconds or more (Jake, 2026-10-18: keep clips under 60 seconds)", () => {
     const units = Array.from({ length: 40 }, (_, i) => ({ idx: i, startMs: i * 3_000, endMs: i * 3_000 + 2_900, text: "Point." }));
     const context = boundaryContext(units, { startMs: 30_000, endMs: 60_000 }, 90_000);
-    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 19 })).toEqual({ startMs: 0, endMs: 59_900, adjustedForScripture: false });
+    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 19 })).toEqual({ startMs: 0, endMs: 59_900, adjustedForScripture: false, adjustedEnd: false });
     expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 20 })).toBeNull();
     expect(BOUNDARY_MAX_MS).toBeLessThan(60_000);
+  });
+});
+
+// Lab sermon 1c clip 5 (57:35), real lines. Jake: "Should have ended with ... Secondly, you need
+// to resist him." The model ended two lines later, on the lead-in to a verse.
+const CLIP5 = [
+  { idx: 898, startMs: 3455184, endMs: 3456200, text: "Now, think about this." },
+  { idx: 899, startMs: 3456300, endMs: 3461000, text: "Peter in verse seven has told them that they're to be carefree." },
+  { idx: 900, startMs: 3462000, endMs: 3466000, text: "But then in verse eight, he reminds them not to be careless." },
+  { idx: 911, startMs: 3505000, endMs: 3508000, text: "First of all, very first thing you need to do is you need to recognize him." },
+  { idx: 912, startMs: 3509000, endMs: 3510500, text: "You need to recognize the devil." },
+  { idx: 913, startMs: 3511000, endMs: 3513400, text: "Secondly, you need to resist him." },
+  { idx: 914, startMs: 3515000, endMs: 3518400, text: "Now, fellas, you got, you gotta recognize him, 'cause, 'cause notice what he says there." },
+  { idx: 915, startMs: 3519000, endMs: 3522400, text: 'He says, "Your adversary the devil".' },
+];
+
+describe("endsOnQuotationStart", () => {
+  it.each([
+    'He says, "Your adversary the devil".',
+    "Now, fellas, you got, you gotta recognize him, 'cause, 'cause notice what he says there.",
+    "And Jesus said this to Peter.",
+    'He said, "Now, Peter, if I don\'t wash your feet, you\'ll have no part in me.',
+    'And he says in verse eight, "Be sober, be vigilant; because your adversary',
+  ])("flags a line that only leads into a quotation: %s", (text) => {
+    expect(endsOnQuotationStart(text)).toBe(true);
+  });
+
+  it.each([
+    "Secondly, you need to resist him.",
+    "Be vigilant.",
+    "he's setting you up.",
+    "Grace is a gift. You cannot earn it, and you will never deserve it.",
+  ])("does not flag a line that lands a point: %s", (text) => {
+    expect(endsOnQuotationStart(text)).toBe(false);
+  });
+});
+
+describe("applyBoundaryChoice never ends on the start of a quotation", () => {
+  const context = boundaryContext(CLIP5, { startMs: 3455184, endMs: 3522400 }, 90_000);
+  const at = (idx: number) => context.units.findIndex((u) => u.idx === idx);
+
+  it("steps the end back past every lead-in line, onto Jake's chosen end", () => {
+    expect(applyBoundaryChoice(context, { startUnit: at(898), endUnit: at(915) })).toEqual({
+      startMs: 3455184,
+      endMs: 3513400,
+      adjustedForScripture: false,
+      adjustedEnd: true,
+    });
+  });
+
+  it("refuses the choice when stepping back leaves the clip too short", () => {
+    expect(applyBoundaryChoice(context, { startUnit: at(912), endUnit: at(915) })).toBeNull();
+  });
+});
+
+describe("boundaryPrompt teaches Jake's corrections", () => {
+  const prompt = boundaryPrompt(boundaryContext(CLIP5, { startMs: 3455184, endMs: 3522400 }, 90_000));
+
+  it("states the start and end rules", () => {
+    expect(prompt).toMatch(/speaks (directly )?to the listener/i);
+    expect(prompt).toMatch(/punch line/i);
+    expect(prompt).toMatch(/never end in the middle of a dialogue/i);
+  });
+
+  it("includes his three worked examples from lab sermon 1c", () => {
+    expect(prompt).toContain("I'm speaking to somebody today");
+    expect(prompt).toContain("Be vigilant.");
+    expect(prompt).toContain("Secondly, you need to resist him.");
+    expect(prompt).toContain("you're not gonna wash my feet, Jesus.");
   });
 });
