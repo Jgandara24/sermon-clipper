@@ -44,7 +44,8 @@ import { CompleteMessageFailure, prepareCompleteMessageTranscript, readCompleteM
 import { CompleteMessageProvider } from "@/lib/analysis/complete-message/provider";
 
 const MIN_CANDIDATE_MS = 20_000;
-const MAX_CANDIDATE_MS = 90_000;
+// Jake, 2026-10-18: "keep the clips under 60 seconds." Was 90_000; refineBoundaries adds 0.3 s.
+export const MAX_CANDIDATE_MS = 59_000;
 
 function readGenre(processingConfig: unknown): string {
   if (processingConfig && typeof processingConfig === "object" && "genre" in processingConfig) {

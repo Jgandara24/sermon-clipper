@@ -7,12 +7,13 @@ import { z } from "zod";
  * ("should have kept going", "stops at the wrong time", "shouldn't start by reading a verse").
  *
  * The model reads whole transcript sentences around a clip and picks where the thought starts
- * and where the point lands. Code then enforces what can be checked: whole sentences, 15–90
- * seconds, and no start on a Scripture reading.
+ * and where the point lands. Code then enforces what can be checked: whole sentences, 15 seconds
+ * to under 60, and no start on a Scripture reading.
  */
 
 export const BOUNDARY_MIN_MS = 15_000;
-export const BOUNDARY_MAX_MS = 90_000;
+// Jake, 2026-10-18: "keep the clips under 60 seconds."
+export const BOUNDARY_MAX_MS = 59_900;
 export const BOUNDARY_CONTEXT_MS = 90_000;
 
 export type BoundaryUnit = { idx: number; startMs: number; endMs: number; text: string };
@@ -86,7 +87,7 @@ export function boundaryPrompt(context: BoundaryContext): string {
     "- End where the point lands: after the payoff, the sentence that drives the point home or applies it to the " +
     "listener. Never stop in the middle of a story, a list, an argument, or a quoted verse, and never stop right " +
     "after a verse before the preacher says what it means. Do not run on into the next point.\n" +
-    "- The clip must be between 15 and 90 seconds long. Most strong sermon clips run 30 to 75 seconds: the setup, " +
+    "- The clip must be between 15 and 59 seconds long: always under 60 seconds. Most strong sermon clips run 30 to 55 seconds: the setup, " +
     "the explanation or story, and the payoff. Do not cut a clip short to make it tidy; a viewer must feel the point land.\n" +
     "- Never include worship singing, announcements, prayer, or the altar call or invitation.\n" +
     "- Stay on the current clip's idea. You may move the start earlier or later and the end earlier or later.\n\n" +
