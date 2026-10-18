@@ -48,6 +48,15 @@
       "failedTests": [],
       "note": "When he turns to this side around the 8- to 12-second mark, the camera doesn't track him until it catches his face, at which point it snaps back too quickly, making for a bad clip, but the content is good. ",
       "labeledAt": "2026-10-18T17:48:52.634Z"
+    },
+    "264a194c-73e3-4c3f-8909-59b4682e02d0": {
+      "rank": 1,
+      "startMs": 680892,
+      "endMs": 723572,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "The content is great, but when the pastor turns to the side, the camera loses him. We need to be able to track his body and shoulders, probably too. ",
+      "labeledAt": "2026-10-18T21:08:38.212Z"
     }
   }
 }
