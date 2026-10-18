@@ -86,8 +86,10 @@ A clip passes only when all of these are true:
 
 1. **It starts on time and ends on time.** The start and end do not feel odd. It looks like a person reviewed and edited it.
 2. **The preacher is preaching.** It is not announcements, baptisms, an altar call, worship, prayer, or similar.
-3. **The video shows the preacher the whole time.** If the church's video cuts to a verse slide, song words, or a logo for any part of the clip, the clip fails. Our own captions are fine. The preacher reading a verse out loud is fine.
+3. **The video shows the preacher the whole time.** If the church's video cuts to a verse slide, song words, or a logo for any part of the clip, the clip fails. Our own captions are fine. The preacher reading a verse out loud is fine. The preacher must also stay inside the vertical frame. If he walks out of the frame for more than a moment, the clip fails. (Added 2026-10-17 from Jake's marks on lab sermon 1b, clips 5 and 6.)
 4. **It is engaging.** It holds attention on social media.
+
+Jake's marks on lab sermon 1b add two details to test 1: a clip must not start with the preacher reading the Scripture passage, and it must not stop before the thought finishes.
 
 Instagram, TikTok, and YouTube Shorts come after Phase 1.
 
