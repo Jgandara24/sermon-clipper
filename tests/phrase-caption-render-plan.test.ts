@@ -48,3 +48,22 @@ describe("buildExportRenderPlan with phrase captions (lab only)", () => {
     expect(plan.captionLineCount).toBe(7);
   });
 });
+
+describe("buildExportRenderPlan cleans phrase captions (fix G)", () => {
+  it("drops a quiet congregation response and shows a stammer once", () => {
+    const base = input();
+    const [startMs] = first.sourceRangeMs;
+    base.segments = [{ id: "s", startMs, endMs: startMs + 4_000, words: [
+      { word: "I,", startMs: startMs, endMs: startMs + 200, confidence: 1, isFiller: false, deleted: false },
+      { word: "I", startMs: startMs + 250, endMs: startMs + 400, confidence: 1, isFiller: false, deleted: false },
+      { word: "married", startMs: startMs + 450, endMs: startMs + 900, confidence: 1, isFiller: false, deleted: false },
+      { word: "her.", startMs: startMs + 950, endMs: startMs + 1_300, confidence: 1, isFiller: false, deleted: false },
+      { word: "Amen.", startMs: startMs + 1_500, endMs: startMs + 1_800, confidence: 1, isFiller: false, deleted: false },
+    ] }];
+    const levels = new Map([["s:0", -28], ["s:1", -27], ["s:2", -28], ["s:3", -29], ["s:4", -60]]);
+    buildExportRenderPlan({ ...base, captionGrouping: "phrases", captionWordLevels: levels });
+    const [lines] = vi.mocked(generateAssSubtitles).mock.lastCall!;
+    expect(lines.map((line) => line.text)).toEqual(["I married her"]);
+    expect(lines[0].startMs).toBe(0);
+  });
+});
