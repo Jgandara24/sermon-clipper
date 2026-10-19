@@ -44,7 +44,7 @@ export async function runLabSelection<T extends LabClip>(params: {
     adjustedForScripture?: boolean;
     adjustedEnd?: boolean;
     reason?: string;
-    attempts?: { startUnit: number; endUnit: number; refused: string | null }[];
+    attempts?: { startUnit: number; endUnit: number; refused: string | null; question?: string }[];
     error?: string;
   }[] = [];
   const cameraLog: { title: string; result: string; at?: number; error?: string }[] = [];
@@ -82,7 +82,7 @@ export async function runLabSelection<T extends LabClip>(params: {
               adjustedForScripture: range?.adjustedForScripture,
               adjustedEnd: range?.adjustedEnd,
               reason: attempts.at(-1)?.reason,
-              attempts: attempts.map(({ startUnit, endUnit, refused }) => ({ startUnit, endUnit, refused })),
+              attempts: attempts.map(({ startUnit, endUnit, refused, question }) => ({ startUnit, endUnit, refused, question })),
             });
             return range && { startMs: range.startMs, endMs: range.endMs };
           } catch (error) {

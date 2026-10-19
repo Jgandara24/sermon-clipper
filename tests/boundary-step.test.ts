@@ -8,6 +8,7 @@ import {
   boundaryContext,
   boundaryPrompt,
   looksLikeScriptureReadingStart,
+  wholeSentences,
 } from "@/lib/analysis/boundary-step";
 
 // Real lines from lab sermon 1b around clip 2 (1:11:45–1:12:09), which Jake failed:
@@ -273,5 +274,144 @@ describe("chooseBoundary", () => {
     expect(ask).toHaveBeenCalledTimes(2);
     expect(result.range).toBeNull();
     expect(result.attempts).toHaveLength(2);
+  });
+});
+
+// Lab sermon 1d (2026-10-18), real Scribe segments. Clip 1 ended on segment 568, so it stopped on
+// "because that bath referred" and cut off "to salvation." Jake: "It either stopped too early and
+// didn't finish the point". About 8 in 100 segments stop in the middle of a sentence.
+const SPLIT_SENTENCES = [
+  { idx: 566, startMs: 2401888, endMs: 2403028, text: "And this is what Jesus said." },
+  { idx: 567, startMs: 2403068, endMs: 2409248, text: 'He said, "Peter, he that had a bath doesn\'t need to be washed except his feet."' },
+  { idx: 568, startMs: 2410228, endMs: 2419048, text: "Now, folks, Jesus makes it very clear here that he's doing this as a symbolic act because that bath referred" },
+  { idx: 569, startMs: 2419108, endMs: 2420088, text: "to salvation." },
+  { idx: 570, startMs: 2421348, endMs: 2429668, text: "The washing, therefore, of Peter's feet was symbolic of the fact that, that even though we've been saved, we're walking" },
+  { idx: 571, startMs: 2429728, endMs: 2430728, text: "in a dirty world." },
+  { idx: 572, startMs: 2431868, endMs: 2431988, text: "Yeah." },
+];
+
+describe("wholeSentences (fix C)", () => {
+  it("joins a segment that stops mid-sentence to the segments that finish the sentence", () => {
+    expect(wholeSentences(SPLIT_SENTENCES)).toEqual([
+      SPLIT_SENTENCES[0],
+      SPLIT_SENTENCES[1],
+      {
+        idx: 568,
+        startMs: 2410228,
+        endMs: 2420088,
+        text: "Now, folks, Jesus makes it very clear here that he's doing this as a symbolic act because that bath referred to salvation.",
+      },
+      {
+        idx: 570,
+        startMs: 2421348,
+        endMs: 2430728,
+        text: "The washing, therefore, of Peter's feet was symbolic of the fact that, that even though we've been saved, we're walking in a dirty world.",
+      },
+      SPLIT_SENTENCES[6],
+    ]);
+  });
+
+  it("keeps a sentence that closes with a quote mark, and a trailing unfinished segment", () => {
+    const units = wholeSentences([
+      { idx: 1, startMs: 0, endMs: 1_000, text: 'He said, "Go."' },
+      { idx: 2, startMs: 1_000, endMs: 2_000, text: "And then he" },
+    ]);
+    expect(units.map((u) => u.text)).toEqual(['He said, "Go."', "And then he"]);
+  });
+
+  it("gives the boundary step whole sentences, so no clip can end on half of one", () => {
+    const context = boundaryContext(SPLIT_SENTENCES, { startMs: 2401888, endMs: 2419048 }, 90_000);
+    expect(context.units.map((u) => u.idx)).toEqual([566, 567, 568, 570, 572]);
+    expect(context.units[context.currentEnd].text).toMatch(/referred to salvation\.$/);
+    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 2 })).toMatchObject({ endMs: 2420088 });
+    expect(boundaryPrompt(context)).not.toMatch(/referred\n/);
+  });
+});
+
+// Lab sermon 1d clip 3 (2026-10-18), real lines. The clip ended on the question; Jake: "probably
+// should end with 'A- and you know what Jesus wants to do today? He wants to wash your feet.'"
+const QUESTION = boundaryContext(
+  [
+    ...Array.from({ length: 10 }, (_, i) => ({ idx: 570 + i, startMs: 2440000 + i * 3_000, endMs: 2440000 + i * 3_000 + 2_900, text: `Point ${i}.` })),
+    { idx: 586, startMs: 2472428, endMs: 2472848, text: "Yeah." },
+    { idx: 587, startMs: 2472888, endMs: 2477228, text: "What we are to put on that towel gird about us at all times." },
+    { idx: 588, startMs: 2477928, endMs: 2479928, text: "A- and you know what Jesus wants to do today?" },
+    { idx: 589, startMs: 2481108, endMs: 2482428, text: "He wants to wash your feet." },
+    { idx: 590, startMs: 2482888, endMs: 2483528, text: "Amen?" },
+    { idx: 591, startMs: 2483588, endMs: 2484868, text: "He wants to restore you." },
+  ],
+  { startMs: 2440000, endMs: 2479928 },
+  90_000,
+);
+const atQ = (idx: number) => QUESTION.units.findIndex((u) => u.idx === idx);
+
+describe("boundaryPrompt: a question needs its answer (fix D)", () => {
+  const prompt = boundaryPrompt(QUESTION);
+
+  it("tells the model to end after the answer, and to end on a question only before a new idea", () => {
+    expect(prompt).toMatch(/asks a question and then answers it, or asks the same question again/);
+    expect(prompt).toMatch(/end after his answer/);
+    expect(prompt).toMatch(/End on a question only when the next line starts a new idea/);
+  });
+
+  it("no longer tells the model never to run on into the next sentence", () => {
+    expect(prompt).not.toMatch(/the next sentence/);
+    expect(prompt).toContain("Never run on into the laughter or the next idea.");
+  });
+});
+
+describe("chooseBoundary checks an end on a question once (fix D)", () => {
+  it("asks once more when the end is a question, quoting it, and uses the answer that ends after it", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: atQ(588), reason: "ends on the question" })
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: atQ(589), reason: "ends on his answer" });
+    const result = await chooseBoundary(QUESTION, ask);
+
+    expect(ask).toHaveBeenCalledTimes(2);
+    const turns = ask.mock.calls[1][0];
+    expect(turns).toHaveLength(3);
+    expect(turns[1].role).toBe("assistant");
+    expect(turns[2].role).toBe("user");
+    expect(turns[2].content).toContain(`Unit [${atQ(588)}] ends on a question: "A- and you know what Jesus wants to do today?"`);
+    expect(turns[2].content).toMatch(/answers it or asks it again, end after his answer/);
+    expect(turns[2].content).toMatch(/starts a new idea, return the same end/);
+    expect(result.range).toMatchObject({ startMs: 2440000, endMs: 2482428 });
+    expect(result.attempts).toHaveLength(2);
+    expect(result.attempts[0]).toMatchObject({ refused: null, question: "A- and you know what Jesus wants to do today?" });
+    expect(result.attempts[1]).toMatchObject({ refused: null });
+  });
+
+  it("keeps the same end when the model says a new idea starts next", async () => {
+    const ask = vi.fn().mockResolvedValue({ startUnit: 0, endUnit: atQ(588), reason: "a new idea starts next" });
+    const result = await chooseBoundary(QUESTION, ask);
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(result.range).toMatchObject({ endMs: 2479928 });
+  });
+
+  it("keeps the first answer when the second one is refused", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: atQ(588), reason: "ends on the question" })
+      .mockResolvedValueOnce({ startUnit: atQ(591), endUnit: atQ(591), reason: "too short" });
+    const result = await chooseBoundary(QUESTION, ask);
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(result.range).toMatchObject({ startMs: 2440000, endMs: 2479928 });
+    expect(result.attempts[1].refused).toMatch(/at least 15 seconds/);
+  });
+
+  it("does not check a short call-out such as \"Amen?\"", async () => {
+    const ask = vi.fn().mockResolvedValue({ startUnit: 0, endUnit: atQ(590), reason: "ends on Amen" });
+    const result = await chooseBoundary(QUESTION, ask);
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(result.attempts[0].question).toBeUndefined();
+  });
+
+  it("does not check a question with no lines after it", async () => {
+    const last = QUESTION.units.length - 1;
+    const context = { ...QUESTION, units: [...QUESTION.units.slice(0, last), { ...QUESTION.units[last], text: "Will you let him wash your feet?" }] };
+    const ask = vi.fn().mockResolvedValue({ startUnit: 0, endUnit: last, reason: "last line" });
+    await chooseBoundary(context, ask);
+    expect(ask).toHaveBeenCalledTimes(1);
   });
 });
