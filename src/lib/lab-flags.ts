@@ -3,15 +3,16 @@
  * production. Kept out of env.ts on purpose: many tests replace that module wholesale, and a lab
  * switch must read as off there rather than throw.
  */
-export function labStepEnabled(step: "speakerTracking" | "cameraCheck" | "boundaryStep"): boolean {
+const LAB_SWITCHES = {
+  speakerTracking: "LAB_SPEAKER_TRACKING_ENABLED",
+  cameraCheck: "LAB_CAMERA_CHECK_ENABLED",
+  boundaryStep: "LAB_BOUNDARY_STEP_ENABLED",
+  phraseCaptions: "LAB_PHRASE_CAPTIONS_ENABLED",
+} as const;
+
+export function labStepEnabled(step: keyof typeof LAB_SWITCHES): boolean {
   if (process.env.NODE_ENV === "production") return false;
-  const name =
-    step === "speakerTracking"
-      ? "LAB_SPEAKER_TRACKING_ENABLED"
-      : step === "cameraCheck"
-        ? "LAB_CAMERA_CHECK_ENABLED"
-        : "LAB_BOUNDARY_STEP_ENABLED";
-  return process.env[name] === "true";
+  return process.env[LAB_SWITCHES[step]] === "true";
 }
 
 /** The Python that has OpenCV and YuNet for the lab detectors (Codex's tracking venv). */

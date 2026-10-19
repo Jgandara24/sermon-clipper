@@ -178,6 +178,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     outputWidth: OUTPUT_WIDTH,
     outputHeight: OUTPUT_HEIGHT,
     brandTemplate,
+    captionGrouping: labStepEnabled("phraseCaptions") ? "phrases" : undefined,
   });
   const { range, cropPixels, assContent } = plan;
 
