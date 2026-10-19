@@ -21,6 +21,12 @@ export type PeopleObservations = { frames: { t: number; people: { box: Box; scor
 const MIN_FOLLOW_IOU = 0.3;
 /** A body sample this close to a frame stands in for it at the clip's edges. */
 const EDGE_SAMPLE_S = 0.15;
+/**
+ * Fix H (lab sermon 2c clip 5, 2026-10-18): a box this much wider than his usual box in the shot
+ * holds his outstretched arms, and its center swings toward them. Measured: 390 px wide standing,
+ * 642 px with his arms out, 60 px of swing. Such a box keeps the chain going but gives no position.
+ */
+const ARMS_OUT_RATIO = 1.3;
 
 const centerX = (b: Box) => b.x + b.w / 2;
 
@@ -75,7 +81,13 @@ export function applyBodyFill(input: FaceObservations, people: PeopleObservation
   const order = samples.map((_, k) => k);
   const forward = follow(order);
   const backward = follow([...order].reverse());
-  const body = samples.map((s, k) => ({ t: s.t, shot: shotOf(s.t), box: forward[k] ?? backward[k] }));
+  const chosen = samples.map((s, k) => ({ t: s.t, shot: shotOf(s.t), box: forward[k] ?? backward[k] }));
+  const usualWidth = new Map<number, number>();
+  for (const shot of new Set(chosen.map((b) => b.shot))) {
+    const widths = chosen.filter((b) => b.shot === shot && b.box).map((b) => b.box!.w).sort((a, b) => a - b);
+    if (widths.length) usualWidth.set(shot, widths[Math.floor(widths.length / 2)]);
+  }
+  const body = chosen.map((b) => ({ ...b, box: b.box && b.box.w > ARMS_OUT_RATIO * usualWidth.get(b.shot)! ? null : b.box }));
 
   // His body center at a frame time: between the two samples around it, both his and in its shot.
   const bodyAt = (t: number): number | null => {
