@@ -12,6 +12,8 @@ import { labStepEnabled } from "@/lib/lab-flags";
 import { computeLabSpeakerTrack } from "@/lib/speaker-tracking/lab-observe";
 import type { LabTrack } from "@/lib/speaker-tracking/lab-track";
 import type { EditorState } from "@/lib/editor/types";
+import { flattenWords, wordsInRange } from "@/lib/editor/words";
+import { measureWordLevels } from "@/lib/export/word-levels";
 import { countCaptionDialogueEvents } from "@/lib/export/ass-generator";
 import { renderClipExport } from "@/lib/export/render";
 import { probeVideoFile } from "@/lib/media/probe";
@@ -170,7 +172,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
 
   // Every render decision the document implies, derived in one pure place. The parity gate drives
   // the same function with the same document, so what it checks is what this job renders.
-  const plan = buildExportRenderPlan({
+  const planInput = {
     state,
     segments,
     sourceWidth: sourceVideo.width,
@@ -178,9 +180,12 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     outputWidth: OUTPUT_WIDTH,
     outputHeight: OUTPUT_HEIGHT,
     brandTemplate,
-    captionGrouping: labStepEnabled("phraseCaptions") ? "phrases" : undefined,
-  });
+    captionGrouping: labStepEnabled("phraseCaptions") ? ("phrases" as const) : undefined,
+  };
+  const plan = buildExportRenderPlan(planInput);
   const { range, cropPixels, assContent } = plan;
+  // Lab phrase captions are rebuilt once the source is on disk, without quiet congregation responses.
+  let captionPlan = plan;
 
   const storage = getStorageProvider();
   const exportsKey = `exports/${job.workspaceId}/${job.id}.mp4`;
@@ -259,13 +264,40 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       }
     }
 
+    // Phase 1 lab, fix G1: leave the congregation's quiet "Amen." out of the captions. If the
+    // measurement fails, the clip renders with every word, as before.
+    if (planInput.captionGrouping === "phrases") {
+      try {
+        const words = wordsInRange(flattenWords(segments), range.startMs, range.endMs);
+        const captionWordLevels = await measureWordLevels({ sourceFilePath, range, words, workDir });
+        captionPlan = buildExportRenderPlan({ ...planInput, captionWordLevels });
+        await recordOperationalEventSafely(prisma, {
+          workspaceId: job.workspaceId,
+          category: "export",
+          eventType: "lab_caption_cleanup",
+          severity: "info",
+          message: `Lab captions: ${plan.captionLineCount} lines before the congregation check, ${captionPlan.captionLineCount} after.`,
+          metadata: { exportJobId: job.id, clipId: clip.id, measuredWords: captionWordLevels.size, linesBefore: plan.captionLineCount, linesAfter: captionPlan.captionLineCount },
+        });
+      } catch (error) {
+        await recordOperationalEventSafely(prisma, {
+          workspaceId: job.workspaceId,
+          category: "export",
+          eventType: "lab_caption_cleanup_failed",
+          severity: "warning",
+          message: "Lab caption loudness check failed; the clip renders with every word.",
+          metadata: { exportJobId: job.id, clipId: clip.id, detail: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    }
+
     const renderStartedAt = startRuntimeMeasurement();
     try {
       await renderClipExport({
         sourceFilePath,
         range,
         cropPixels,
-        assFileContent: assContent,
+        assFileContent: captionPlan.assContent,
         outputPath,
         outputWidth: OUTPUT_WIDTH,
         outputHeight: OUTPUT_HEIGHT,
@@ -313,14 +345,14 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         probeError,
         bytes: outputBytes,
         checksum: outputChecksum,
-        captionEvents: countCaptionDialogueEvents(assContent),
+        captionEvents: countCaptionDialogueEvents(captionPlan.assContent),
       },
       {
         width: OUTPUT_WIDTH,
         height: OUTPUT_HEIGHT,
         durationS: outputDurationS,
         durationToleranceS: renderQcDurationToleranceS(outputDurationS),
-        captionLines: plan.captionLineCount,
+        captionLines: captionPlan.captionLineCount,
       },
     );
 

@@ -1,5 +1,6 @@
 import { parseLowerThird } from "@/lib/brand-template";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
+import { collapseStutters, dropCongregationResponses } from "@/lib/editor/caption-cleanup";
 import { buildPhraseCaptionLines } from "@/lib/editor/phrase-caption-lines";
 import { resolveCaptionFace } from "@/lib/editor/caption-face";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
@@ -66,6 +67,8 @@ export type ExportRenderPlanInput = {
   brandTemplate: ExportRenderBrandTemplate | null;
   /** Lab only (LAB_PHRASE_CAPTIONS_ENABLED): one whole phrase per line, in the transcript's own case. */
   captionGrouping?: "phrases";
+  /** Lab only, with phrases: each word's loudness in dB, so a quiet congregation response is left out. */
+  captionWordLevels?: ReadonlyMap<string, number>;
 };
 
 export type ExportRenderPlan = {
@@ -109,7 +112,12 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
   }));
   const phrases = input.captionGrouping === "phrases";
   const captionLines = applyCaptionTextOverrides(
-    phrases ? buildPhraseCaptionLines(captionWords, { endLimitMs: range.endMs }) : buildCaptionLines(captionWords),
+    phrases
+      ? buildPhraseCaptionLines(
+          collapseStutters(dropCongregationResponses(captionWords, input.captionWordLevels ?? new Map()).words),
+          { endLimitMs: range.endMs },
+        )
+      : buildCaptionLines(captionWords),
     state.captions.textOverrides,
   ).map((line) => ({
     ...line,
