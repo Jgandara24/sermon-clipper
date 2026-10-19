@@ -165,7 +165,9 @@ export function boundaryPrompt(context: BoundaryContext): string {
     "of a list or a command. Never end in the middle of a dialogue or a story, and never on a line that only " +
     "leads into a quotation (\"He says,\", \"notice what he says there\").\n" +
     "- A question needs its answer. When the preacher asks a question and then answers it, or asks the same question " +
-    "again in other words, end after his answer. End on a question only when the next line starts a new idea.\n" +
+    "again in other words, keep going and end after his answer: \"You know what God wants to do today? He wants to " +
+    "heal you.\" ends on \"He wants to heal you.\" Never end the clip early to leave a question out. End on a question " +
+    "only when the next line starts a new idea.\n" +
     "- The clip must be between 15 and 59 seconds long: always under 60 seconds. Aim for 30 to 55 seconds: the setup, " +
     "the explanation or story, and the payoff. Go under 30 seconds only when the lines just before and just after " +
     "belong to a different idea. When the preacher comes back to the same question or point, keep going until he " +
@@ -283,7 +285,7 @@ function endingQuestion(context: BoundaryContext, endUnit: number): string | nul
 }
 
 /**
- * Asks for a boundary and checks it, with at most two model calls.
+ * Asks for a boundary and checks it.
  *
  * A refused answer gets one more try with the reason (lab sermon 3 clip 5: the only answer ran over
  * 60 seconds, so the clip kept its raw window and ran past the punch line). After two refusals the
@@ -291,8 +293,10 @@ function endingQuestion(context: BoundaryContext, endUnit: number): string | nul
  *
  * An accepted first answer that ends on a question gets one more look (lab sermon 1d clips 3 and 5,
  * 2b clip 6: each ended on a question the preacher answered or asked again in the next lines). The
- * model may keep the same end when a new idea starts next; a second answer the code refuses leaves
- * the first one in place.
+ * model may keep the same end when a new idea starts next. An answer to that look which the code
+ * refuses gets one more try with the reason, as above (dry run, 2b clip 6: it kept going to the
+ * answer but ran over 60 seconds); if that is refused too, the first answer stands. Three model
+ * calls at most, and three only on that path.
  */
 export async function chooseBoundary(
   context: BoundaryContext,
@@ -301,39 +305,42 @@ export async function chooseBoundary(
 ): Promise<{ range: BoundaryRange | null; attempts: BoundaryAttempt[] }> {
   const turns: BoundaryTurn[] = [{ role: "user", content: boundaryPrompt(context) }];
   const attempts: BoundaryAttempt[] = [];
-  let accepted: BoundaryRange | null = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const answerOnce = async () => {
     const answer = await ask([...turns]);
     const result = evaluateBoundaryChoice(context, answer, limits);
-    const refused = "refused" in result ? result.refused : null;
-    const record: BoundaryAttempt = { startUnit: answer.startUnit, endUnit: answer.endUnit, reason: answer.reason, refused };
+    const record: BoundaryAttempt = {
+      startUnit: answer.startUnit,
+      endUnit: answer.endUnit,
+      reason: answer.reason,
+      refused: "refused" in result ? result.refused : null,
+    };
     attempts.push(record);
-    if ("range" in result) {
-      if (accepted) return { range: result.range, attempts };
-      const question = attempt === 0 ? endingQuestion(context, result.endUnit) : null;
-      if (!question) return { range: result.range, attempts };
-      record.question = question;
-      accepted = result.range;
-      turns.push(
-        { role: "assistant", content: JSON.stringify(answer) },
-        {
-          role: "user",
-          content:
-            `Unit [${result.endUnit}] ends on a question: "${question}" Read the lines after it. If the preacher answers it ` +
-            "or asks it again, end after his answer, and keep the clip under 60 seconds. If the next line starts a new " +
-            "idea, return the same end. Return startUnit, endUnit and a one-sentence reason.",
-        },
-      );
-      continue;
-    }
-    if (accepted) return { range: accepted, attempts };
-    turns.push(
-      { role: "assistant", content: JSON.stringify(answer) },
-      {
-        role: "user",
-        content: `Your answer was refused: ${refused} Choose again from the same numbered sentences, following every rule. Return startUnit, endUnit and a one-sentence reason.`,
-      },
-    );
+    return { answer, result, record };
+  };
+  const reply = (answer: BoundaryAnswer, content: string) =>
+    turns.push({ role: "assistant", content: JSON.stringify(answer) }, { role: "user", content });
+  const refusal = (refused: string) =>
+    `Your answer was refused: ${refused} Choose again from the same numbered sentences, following every rule. Return startUnit, endUnit and a one-sentence reason.`;
+
+  const first = await answerOnce();
+  if ("refused" in first.result) {
+    reply(first.answer, refusal(first.result.refused));
+    const second = await answerOnce();
+    return { range: "range" in second.result ? second.result.range : null, attempts };
   }
-  return { range: accepted, attempts };
+  const question = endingQuestion(context, first.result.endUnit);
+  if (!question) return { range: first.result.range, attempts };
+  first.record.question = question;
+  reply(
+    first.answer,
+    `Unit [${first.result.endUnit}] ends on a question: "${question}" Read the lines after it. If the preacher answers it ` +
+      "or asks it again, end after his answer, and keep the clip under 60 seconds; start later if you must, but do " +
+      "not end before the question. If the next line starts a new idea, return the same end. Return startUnit, " +
+      "endUnit and a one-sentence reason.",
+  );
+  const second = await answerOnce();
+  if ("range" in second.result) return { range: second.result.range, attempts };
+  reply(second.answer, refusal(second.result.refused));
+  const third = await answerOnce();
+  return { range: "range" in third.result ? third.result.range : first.result.range, attempts };
 }
