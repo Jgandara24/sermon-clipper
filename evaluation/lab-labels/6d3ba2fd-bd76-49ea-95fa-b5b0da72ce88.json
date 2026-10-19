@@ -1,0 +1,68 @@
+{
+  "projectId": "6d3ba2fd-bd76-49ea-95fa-b5b0da72ce88",
+  "projectName": "Lab 4 - Sunday 10-11-26 Divine Certainties - fair test (never used)",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "287cb320-4781-460e-a5f1-bec09cc5697f": {
+      "rank": 1,
+      "startMs": 3088058,
+      "endMs": 3144278,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "It seemed like he wasn't finished yet and was getting close to make his final power closing statement.",
+      "labeledAt": "2026-10-19T04:04:38.408Z"
+    },
+    "1884219b-e7b4-41ea-8fcd-f94989db920a": {
+      "rank": 2,
+      "startMs": 2133709,
+      "endMs": 2187990,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "It was great, but cut too soon, It seemed like he wasn't finished yet and was getting close to make his final power closing statement.",
+      "labeledAt": "2026-10-19T04:06:09.055Z"
+    },
+    "09a607b8-0d2f-47ad-ba78-6f30ca049a3e": {
+      "rank": 3,
+      "startMs": 2428090,
+      "endMs": 2471190,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T04:06:57.664Z"
+    },
+    "d9aab987-71cc-4c0f-bbe5-1747b95e7bf4": {
+      "rank": 4,
+      "startMs": 2818706,
+      "endMs": 2866906,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should have ended at \"It's his death, his burial, and his resurrection. \"",
+      "labeledAt": "2026-10-19T04:08:12.432Z"
+    },
+    "27bd8686-e2ca-4cde-abee-5def5c09f05b": {
+      "rank": 5,
+      "startMs": 2982398,
+      "endMs": 3033738,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T04:09:05.454Z"
+    },
+    "65dfa52d-08b6-42c6-8645-fc2dc5da43a6": {
+      "rank": 6,
+      "startMs": 2753266,
+      "endMs": 2769026,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "Way too short.",
+      "labeledAt": "2026-10-19T04:09:56.738Z"
+    }
+  }
+}

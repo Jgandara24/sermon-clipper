@@ -1,0 +1,62 @@
+{
+  "projectId": "3b98c368-6700-4329-b187-ade989bb8a76",
+  "projectName": "Lab 2c - Wednesday Night - whole sentences + questions + phrase captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "3090191c-0e58-4d5a-bb9f-338f3de2fc7b": {
+      "rank": 1,
+      "startMs": 1747884,
+      "endMs": 1789104,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:25:51.241Z"
+    },
+    "f4478413-50d4-4a88-8739-8123f090ecc7": {
+      "rank": 4,
+      "startMs": 2618248,
+      "endMs": 2662828,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "The content is good. but the tracking and relocating the speaker in the first two seconds the stabilization/focus is shaky/jittery",
+      "labeledAt": "2026-10-19T03:31:47.829Z"
+    },
+    "84e66128-0183-41a4-b543-fa70baae9476": {
+      "rank": 5,
+      "startMs": 684332,
+      "endMs": 723992,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "Content was great and on time, but when the speaker moved side to side the stabilization/focus seems shaky/jittery",
+      "labeledAt": "2026-10-19T03:31:50.577Z"
+    },
+    "61f7a331-6919-4abc-b085-98185553f82b": {
+      "rank": 6,
+      "startMs": 1960432,
+      "endMs": 2000832,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "Should end with ,\"Don't resist where God has you.\"\nAlso but when the speaker moved side to side the stabilization/focus seems shaky/jittery",
+      "labeledAt": "2026-10-19T03:33:03.473Z"
+    },
+    "e405c689-26c1-47d1-b364-eaba9071a714": {
+      "rank": 2,
+      "startMs": 1320072,
+      "endMs": 1376092,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T04:11:14.438Z"
+    },
+    "2b05b42e-b498-4514-a705-c02def81c53a": {
+      "rank": 3,
+      "startMs": 378011,
+      "endMs": 433472,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T04:11:29.342Z"
+    }
+  }
+}
