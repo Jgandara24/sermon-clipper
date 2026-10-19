@@ -354,6 +354,12 @@ describe("boundaryPrompt: a question needs its answer (fix D)", () => {
     expect(prompt).toMatch(/End on a question only when the next line starts a new idea/);
   });
 
+  it("tells the model to keep going to the answer, not to cut the question out (dry run, 2026-10-18)", () => {
+    // On the first dry run the model ended 1d clip 3 and 2b clip 6 before the question instead.
+    expect(prompt).toMatch(/keep going and end after his answer/);
+    expect(prompt).toMatch(/Never end the clip early to leave a question out/);
+  });
+
   it("no longer tells the model never to run on into the next sentence", () => {
     expect(prompt).not.toMatch(/the next sentence/);
     expect(prompt).toContain("Never run on into the laughter or the next idea.");
@@ -376,6 +382,7 @@ describe("chooseBoundary checks an end on a question once (fix D)", () => {
     expect(turns[2].content).toContain(`Unit [${atQ(588)}] ends on a question: "A- and you know what Jesus wants to do today?"`);
     expect(turns[2].content).toMatch(/answers it or asks it again, end after his answer/);
     expect(turns[2].content).toMatch(/starts a new idea, return the same end/);
+    expect(turns[2].content).toMatch(/do not end before the question/);
     expect(result.range).toMatchObject({ startMs: 2440000, endMs: 2482428 });
     expect(result.attempts).toHaveLength(2);
     expect(result.attempts[0]).toMatchObject({ refused: null, question: "A- and you know what Jesus wants to do today?" });
@@ -389,13 +396,30 @@ describe("chooseBoundary checks an end on a question once (fix D)", () => {
     expect(result.range).toMatchObject({ endMs: 2479928 });
   });
 
-  it("keeps the first answer when the second one is refused", async () => {
+  it("gives a refused answer to the question check one more try, and uses it", async () => {
+    // Dry run, 2b clip 6: the model kept going to the answer but ran over 60 seconds, so the clip
+    // fell back to its first, shorter end.
     const ask = vi
       .fn()
       .mockResolvedValueOnce({ startUnit: 0, endUnit: atQ(588), reason: "ends on the question" })
-      .mockResolvedValueOnce({ startUnit: atQ(591), endUnit: atQ(591), reason: "too short" });
+      .mockResolvedValueOnce({ startUnit: atQ(591), endUnit: atQ(591), reason: "too short" })
+      .mockResolvedValueOnce({ startUnit: 1, endUnit: atQ(589), reason: "ends on his answer" });
     const result = await chooseBoundary(QUESTION, ask);
-    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask).toHaveBeenCalledTimes(3);
+    const turns = ask.mock.calls[2][0];
+    expect(turns).toHaveLength(5);
+    expect(turns[4].content).toMatch(/Your answer was refused: .*at least 15 seconds/);
+    expect(result.range).toMatchObject({ startMs: 2443000, endMs: 2482428 });
+    expect(result.attempts.map((a) => a.refused === null)).toEqual([true, false, true]);
+  });
+
+  it("keeps the first answer when the question check's answers are refused twice", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: atQ(588), reason: "ends on the question" })
+      .mockResolvedValue({ startUnit: atQ(591), endUnit: atQ(591), reason: "too short" });
+    const result = await chooseBoundary(QUESTION, ask);
+    expect(ask).toHaveBeenCalledTimes(3);
     expect(result.range).toMatchObject({ startMs: 2440000, endMs: 2479928 });
     expect(result.attempts[1].refused).toMatch(/at least 15 seconds/);
   });
