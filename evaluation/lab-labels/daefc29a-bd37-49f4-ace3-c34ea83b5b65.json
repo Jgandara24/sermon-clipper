@@ -1,0 +1,71 @@
+{
+  "projectId": "daefc29a-bd37-49f4-ace3-c34ea83b5b65",
+  "projectName": "Lab 1d - Normal Sunday - body fill + boundary retry",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "409fa284-0d08-45dd-b60f-c0e1e91c36d1": {
+      "rank": 1,
+      "startMs": 2367808,
+      "endMs": 2419048,
+      "verdict": "fail",
+      "failedTests": [
+        1,
+        4
+      ],
+      "note": "It either stopped too early and didn't finish the point, or if that's it, then it wasn't very engaging. ",
+      "labeledAt": "2026-10-18T23:32:08.445Z"
+    },
+    "d79d786c-89ad-496c-8ce4-4cdbdc0c3152": {
+      "rank": 2,
+      "startMs": 4104024,
+      "endMs": 4143664,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "\"Jesus can heal you today. Hallelujah.\" Should have been the ending. ",
+      "labeledAt": "2026-10-18T23:34:09.620Z"
+    },
+    "b7e68c38-b593-402b-bf6f-1ba0437d8d6e": {
+      "rank": 3,
+      "startMs": 2432048,
+      "endMs": 2479928,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "probablby should end with \"A- and you know what Jesus wants to do today? He wants to wash your feet. \"",
+      "labeledAt": "2026-10-18T23:35:28.372Z"
+    },
+    "7dce47e7-7ef0-4a0b-9cf5-acd13b30cbff": {
+      "rank": 4,
+      "startMs": 4759844,
+      "endMs": 4804744,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T23:36:03.896Z"
+    },
+    "4caab404-8a41-4328-82d6-cdabeb4daefd": {
+      "rank": 5,
+      "startMs": 3206260,
+      "endMs": 3245920,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should end with \"Amen. Hmm? Hello? Oh, no, sir. He cares\"",
+      "labeledAt": "2026-10-18T23:37:03.318Z"
+    },
+    "21752aef-914c-4020-bd09-e41590265fec": {
+      "rank": 6,
+      "startMs": 4386464,
+      "endMs": 4439784,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T23:37:41.951Z"
+    }
+  }
+}
