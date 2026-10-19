@@ -131,3 +131,44 @@ describe("applyBodyFill", () => {
     expect(JSON.stringify(faces)).toBe(before);
   });
 });
+
+describe("applyBodyFill while his arms are out (fix H)", () => {
+  // Lab sermon 2c clip 5 (2026-10-18), measured: with his face turned away he spread his arms, his
+  // person box grew from 390 to 642 px wide in 0.3 s, its center swung 60 px, and the crop followed.
+  // Jake: "when the speaker moved side to side the stabilization/focus seems shaky/jittery".
+  it("does not take his position from a box much wider than his usual box in that shot", () => {
+    const t = (i: number) => 100 + i / FPS;
+    const armsOut = (i: number) => i >= 60 && i < 90;
+    const faces: FaceObservations = {
+      frames: Array.from({ length: 150 }, (_, i) => ({
+        t: t(i),
+        cut: false,
+        faces: i >= 30 && i < 120 ? [] : [{ score: 0.92, box: { x: 600 - FACE_W / 2, y: 100, w: FACE_W, h: 72 } }],
+      })),
+    };
+    // He stays at 600; with an arm out to his left the box reaches 160 px further that way.
+    const bodies: PeopleObservations = {
+      frames: Array.from({ length: 50 }, (_, k) => ({
+        t: t(3 * k),
+        people: [{ score: 0.92, box: armsOut(3 * k) ? { x: 600 - BODY_W / 2, y: 70, w: BODY_W + 160, h: 640 } : { x: 600 - BODY_W / 2, y: 70, w: BODY_W, h: 640 } }],
+      })),
+    };
+    const { observations } = applyBodyFill(faces, bodies);
+    for (let i = 30; i < 120; i += 1) {
+      const center = centerAt(observations, i);
+      // Either filled from a normal box (at 600) or left for the crop to hold; never pulled to 680.
+      if (center !== null) expect(Math.abs(center - 600), `frame ${i}`).toBeLessThanOrEqual(6);
+    }
+    expect(centerAt(observations, 75)).toBeNull();
+    expect(centerAt(observations, 45)).not.toBeNull();
+  });
+
+  it("still follows a box that is wide for the whole shot", () => {
+    // A wide shot from the side: his box is wide throughout, so wide is his usual size there.
+    const walk = (i: number) => (i < 30 ? 600 : i < 90 ? 600 + (300 * (i - 30)) / 60 : 900);
+    const { faces, bodies } = scene({ frames: 120, face: (i) => (i >= 30 && i < 90 ? null : walk(i)), people: (i) => [walk(i)] });
+    bodies.frames.forEach((frame) => frame.people.forEach((p) => ((p.box.w = BODY_W * 2), (p.box.x -= BODY_W / 2))));
+    const { bodyFilledFrames } = applyBodyFill(faces, bodies);
+    expect(bodyFilledFrames).toBe(60);
+  });
+});

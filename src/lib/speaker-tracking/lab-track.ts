@@ -44,6 +44,64 @@ const sha256 = (text: string) => createHash("sha256").update(text).digest("hex")
 const CENTER_LOCK_SIGMA_S = 0.2;
 /** Where no detector sees him, the crop holds, then glides to his next position over this long. */
 const GLIDE_S = 0.5;
+/**
+ * Fix H, the still zone (lab sermons 1e and 2c, 2026-10-18: "the stabilization/focus seems
+ * shaky/jittery" when he moved side to side; on 2c clip 5 the crop moved in 67% of all frames).
+ * The crop rests while his position stays within this share of the crop width of the rest's center
+ * for at least MIN_REST_S; a slow walk (130 px a second) never fits, so walks are followed. Moves
+ * into and out of a rest are blended over REST_BLEND_SIGMA_S, so re-centering is a glide.
+ */
+export const STILL_ZONE = 0.08;
+const MIN_REST_S = 1;
+const REST_BLEND_SIGMA_S = 0.3;
+
+/** Zero-phase Gaussian with point-reflected padding, so a steady walk is followed exactly. */
+function gaussian(values: number[], sigma: number): number[] {
+  const n = values.length;
+  if (n < 2 || sigma <= 0) return [...values];
+  const radius = Math.ceil(3 * sigma);
+  const at = (j: number) =>
+    j < 0 ? 2 * values[0] - values[Math.min(n - 1, -j)] : j >= n ? 2 * values[n - 1] - values[Math.max(0, 2 * (n - 1) - j)] : values[j];
+  return values.map((_, i) => {
+    let sum = 0;
+    let weight = 0;
+    for (let k = -radius; k <= radius; k += 1) {
+      const w = Math.exp(-(k * k) / (2 * sigma * sigma));
+      sum += w * at(i + k);
+      weight += w;
+    }
+    return sum / weight;
+  });
+}
+
+/**
+ * Rests the crop wherever his position stays within `zone` of the stretch's median for `minRest`
+ * frames or more, at that median, so his face stays inside the still zone while the crop rests and
+ * a stand that ends in a step stays centered on the stand. Elsewhere it follows him.
+ */
+function restInStillZone(centers: number[], zone: number, minRest: number): number[] {
+  const out: number[] = new Array(centers.length);
+  for (let i = 0; i < centers.length; ) {
+    const sorted = [centers[i]];
+    let j = i + 1;
+    for (; j < centers.length; j += 1) {
+      const at = sorted.findIndex((v) => v > centers[j]);
+      const next = [...sorted];
+      next.splice(at < 0 ? next.length : at, 0, centers[j]);
+      const median = next[Math.floor(next.length / 2)];
+      if (next[next.length - 1] - median > zone || median - next[0] > zone) break;
+      sorted.splice(0, sorted.length, ...next);
+    }
+    if (j - i >= minRest) {
+      out.fill(sorted[Math.floor(sorted.length / 2)], i, j);
+      i = j;
+    } else {
+      out[i] = centers[i];
+      i += 1;
+    }
+  }
+  return out;
+}
 
 /**
  * Fills unknown positions in one shot. Before his first sighting the crop waits where he appears;
@@ -85,9 +143,11 @@ function holdAndGlide(shot: (number | null)[], glideFrames: number, leadFrames: 
  * Center lock (Jake, lab sermon 1c: "it must track him and keep him center at all times").
  * Offline, the face position is known for every frame, so the crop centers the lone face in every
  * frame. A zero-phase Gaussian, with point-reflected padding at shot edges so a steady walk is
- * followed exactly, takes out jitter. There is no speed limit. Smoothing never crosses a camera
- * cut, so at a cut the crop jumps straight to him. Frames without a lone face hold and glide
- * (holdAndGlide); a shot with no position at all holds the frame's center.
+ * followed exactly, takes out jitter. There is no speed limit. Then the still zone rests the crop
+ * while he stands (restInStillZone), and a second, wider Gaussian blends each rest into the
+ * following around it. Smoothing never crosses a camera cut, so at a cut the crop jumps straight to
+ * him. Frames without a lone face hold and glide (holdAndGlide); a shot with no position at all
+ * holds the frame's center.
  */
 function centerLockXs(frames: FaceObservations["frames"], width: number, cropW: number) {
   const centers = frames.map((f) => (f.faces.length === 1 ? f.faces[0].box.x + f.faces[0].box.w / 2 : null));
@@ -98,22 +158,13 @@ function centerLockXs(frames: FaceObservations["frames"], width: number, cropW: 
     const dts = frames.slice(start + 1, end).map((f, i) => f.t - frames[start + i].t).sort((a, b) => a - b);
     const dt = dts.length ? dts[Math.floor(dts.length / 2)] : 1 / 30;
     const sigma = CENTER_LOCK_SIGMA_S / dt;
-    const filled = holdAndGlide(centers.slice(start, end), Math.round(GLIDE_S / dt), Math.round(sigma), width / 2);
-    const n = filled.length;
-    const radius = Math.ceil(3 * sigma);
-    const at = (j: number) =>
-      j < 0 ? 2 * filled[0] - filled[Math.min(n - 1, -j)] : j >= n ? 2 * filled[n - 1] - filled[Math.max(0, 2 * (n - 1) - j)] : filled[j];
-    for (let i = 0; i < n; i += 1) {
-      let sum = 0;
-      let weight = 0;
-      for (let k = -radius; k <= radius; k += 1) {
-        const w = Math.exp(-(k * k) / (2 * sigma * sigma));
-        sum += w * at(i + k);
-        weight += w;
-      }
-      const center = n > 1 ? sum / weight : filled[i];
+    // The glide ends early enough that, after both smoothings, the crop is on him when he appears.
+    const lead = Math.round(Math.hypot(CENTER_LOCK_SIGMA_S, REST_BLEND_SIGMA_S) / dt);
+    const filled = holdAndGlide(centers.slice(start, end), Math.round(GLIDE_S / dt), lead, width / 2);
+    const rested = restInStillZone(gaussian(filled, sigma), STILL_ZONE * cropW, Math.round(MIN_REST_S / dt));
+    gaussian(rested, REST_BLEND_SIGMA_S / dt).forEach((center, i) => {
       xs[start + i] = Math.max(0, Math.min(width - cropW, center - cropW / 2));
-    }
+    });
   });
   return { xs, known: centers.map((c) => c !== null) };
 }
@@ -145,7 +196,9 @@ export function buildLabTrack(
     h: even(Math.min(geometry.height, (geometry.width * 16) / 9)),
   };
   const renderCrop = { w: even(crop.w * scale), h: even(crop.h * scale) };
-  const toSource = (x: number) => Math.min(file.geometry.width - renderCrop.w, Math.max(0, even(x * scale)));
+  // Rounded to a thousandth first: a smoothed rest is exactly constant, but floating-point sums can
+  // land a hair under an even pixel and make one rest alternate between two crops.
+  const toSource = (x: number) => Math.min(file.geometry.width - renderCrop.w, Math.max(0, even(Math.round(x * scale * 1000) / 1000)));
   const commandAt = (t: number, x: number, y: number) => {
     const at = Math.max(0, Math.floor((t - options.seekSeconds) * 1e6 + 1e-5) / 1e6);
     return `${at.toFixed(6)} speaker x ${x}, speaker y ${y};`;

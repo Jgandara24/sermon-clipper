@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildExportFfmpegArgs, buildExportFilterGraph } from "@/lib/export/render";
 import type { FaceObservations } from "@/lib/speaker-tracking/faces";
 import { applyLabRules } from "@/lib/speaker-tracking/lab-rules";
-import { buildLabTrack, type ObservationFile } from "@/lib/speaker-tracking/lab-track";
+import { buildLabTrack, STILL_ZONE, type ObservationFile } from "@/lib/speaker-tracking/lab-track";
 
 const FPS = 30;
 
@@ -137,7 +137,8 @@ describe("buildLabTrack center lock", () => {
 
     expect(Math.max(...steps)).toBeLessThanOrEqual(60);
     expect(Math.abs(centers[150] - 330)).toBeLessThanOrEqual(6);
-    expect(Math.abs(centers[170] - 330)).toBeLessThanOrEqual(6);
+    // Fix H blends a second time, so the glide starts a little earlier (frame 165, not 175).
+    expect(Math.abs(centers[160] - 330)).toBeLessThanOrEqual(6);
     expect(Math.abs(centers[210] - 930)).toBeLessThanOrEqual(30);
     expect(Math.abs(centers[225] - 930)).toBeLessThanOrEqual(6);
   });
@@ -157,8 +158,9 @@ describe("buildLabTrack center lock", () => {
 
     expect(track.bodyFilledFrames).toBe(60);
     expect(track.followingPercent).toBe(100);
-    // 12 px: the smoothing rounds the corner where he starts to walk (150 px/s); 3% of the crop.
-    centers.forEach((c, i) => expect(Math.abs(c - walk(i)), `frame ${i}`).toBeLessThanOrEqual(12));
+    // 16 px: the smoothing and fix H's blend round the corner where he starts to walk (150 px/s);
+    // 4% of the crop, half the still zone.
+    centers.forEach((c, i) => expect(Math.abs(c - walk(i)), `frame ${i}`).toBeLessThanOrEqual(16));
   });
 
   it("holds still where no face is known and never leaves the source frame", () => {
@@ -168,6 +170,51 @@ describe("buildLabTrack center lock", () => {
     expect(new Set(xs.slice(30 + 2 * FPS)).size).toBe(1);
     expect(xs.every((x) => x >= 0 && x <= 1280 - track.crop.w)).toBe(true);
     expect(track.followingPercent).toBeLessThan(40);
+  });
+});
+
+// Fix H. Lab sermons 1e and 2c (2026-10-18): four of Jake's five failures were "the
+// stabilization/focus seems shaky/jittery" when the preacher moved side to side. Measured on 2c
+// clip 5: the crop moved in 67% of all frames. A still zone keeps the crop at rest while his face
+// stays near the center, then glides to center him again when he leaves it.
+describe("buildLabTrack still zone (fix H)", () => {
+  const centersOf = (track: ReturnType<typeof buildLabTrack>) => cropXs(track.commands).map((x) => x + track.crop.w / 2);
+
+  it("keeps the crop at rest while he sways inside the still zone, and keeps him near the center", () => {
+    // He shifts his weight: his face drifts 20 px each way, once a second.
+    const face = (i: number) => 600 + 20 * Math.sin((2 * Math.PI * i) / FPS);
+    const track = buildLabTrack(clip(4, (i) => ({ x: face(i) - 30, w: 60 })), { seekSeconds: 100, rules: "lab-v1" });
+    const xs = cropXs(track.commands);
+    expect(new Set(xs).size).toBe(1);
+    centersOf(track).forEach((c, i) => expect(Math.abs(c - face(i)), `frame ${i}`).toBeLessThanOrEqual(STILL_ZONE * track.crop.w));
+  });
+
+  it("glides to center him again when he steps out of the still zone, and then rests", () => {
+    // He stands at 600, takes two steps to 750 in half a second, and stands there.
+    const face = (i: number) => (i < 60 ? 600 : i < 75 ? 600 + (150 * (i - 60)) / 15 : 750);
+    const track = buildLabTrack(clip(5, (i) => ({ x: face(i) - 30, w: 60 })), { seekSeconds: 100, rules: "lab-v1" });
+    const centers = centersOf(track);
+    const steps = centers.slice(1).map((c, i) => Math.abs(c - centers[i]));
+
+    expect(new Set(centers.slice(0, 45)).size).toBe(1);
+    expect(Math.abs(centers[30] - 600)).toBeLessThanOrEqual(2);
+    expect(Math.abs(centers[105] - 750)).toBeLessThanOrEqual(4);
+    expect(new Set(centers.slice(110)).size).toBe(1);
+    expect(Math.max(...steps)).toBeLessThanOrEqual(16);
+    centers.forEach((c, i) => expect(Math.abs(c - face(i)), `frame ${i}`).toBeLessThanOrEqual(80));
+  });
+
+  it("holds through a moment when his arms are out and his face is turned away", () => {
+    // Lab sermon 2c clip 5: arms out, face away; the box widens toward his arm and the crop followed.
+    const file = clip(5, (i) => (i >= 30 && i < 120 ? null : { x: 570, w: 60 }));
+    file.people = {
+      frames: Array.from({ length: 50 }, (_, k) => ({
+        t: 100 + (3 * k) / FPS,
+        people: [{ score: 0.92, box: 3 * k >= 60 && 3 * k < 90 ? { x: 460, y: 60, w: 440, h: 640 } : { x: 460, y: 60, w: 280, h: 640 } }],
+      })),
+    };
+    const centers = centersOf(buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" }));
+    centers.forEach((c, i) => expect(Math.abs(c - 600), `frame ${i}`).toBeLessThanOrEqual(4));
   });
 });
 
