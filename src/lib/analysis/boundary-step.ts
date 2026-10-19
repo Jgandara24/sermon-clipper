@@ -95,7 +95,33 @@ const WORKED_EXAMPLES =
   "5. A clip started on \"And boys, let me tell you something.\" and ran on through the laughter after the joke into " +
   "\"And guys, you get your girlfriend pregnant...\". The founder said it went slightly too long. Correct: end right " +
   "after the punch line and his \"Amen?\": \"We just stay up weeks at a time.\" \"Amen?\" 38 seconds. Never run on " +
-  "into the laughter or the next sentence.\n\n";
+  "into the laughter or the next idea.\n\n";
+
+const SENTENCE_END = /[.!?…]["”'’)\]]*\s*$/;
+
+/**
+ * Transcript segments joined into whole sentences. Lab sermon 1d clip 1 (2026-10-18) ended on a
+ * segment that stopped at "because that bath referred" and cut off "to salvation."; about 8 in 100
+ * Scribe segments stop mid-sentence. A segment without closing punctuation runs on into the next.
+ */
+export function wholeSentences(segments: BoundaryUnit[]): BoundaryUnit[] {
+  const units: BoundaryUnit[] = [];
+  let open: BoundaryUnit | null = null;
+  for (const segment of segments) {
+    const text = segment.text.trim();
+    const unit: BoundaryUnit = open
+      ? { ...open, endMs: segment.endMs, text: `${open.text} ${text}` }
+      : { idx: segment.idx, startMs: segment.startMs, endMs: segment.endMs, text };
+    if (SENTENCE_END.test(text)) {
+      units.push(unit);
+      open = null;
+    } else {
+      open = unit;
+    }
+  }
+  if (open) units.push(open);
+  return units;
+}
 
 /** Whole sentences from `contextMs` before the clip to `contextMs` after it. */
 export function boundaryContext(
@@ -103,7 +129,7 @@ export function boundaryContext(
   clip: { startMs: number; endMs: number },
   contextMs = BOUNDARY_CONTEXT_MS,
 ): BoundaryContext {
-  const units = segments.filter((s) => s.endMs > clip.startMs - contextMs && s.startMs < clip.endMs + contextMs);
+  const units = wholeSentences(segments).filter((s) => s.endMs > clip.startMs - contextMs && s.startMs < clip.endMs + contextMs);
   const currentStart = Math.max(0, units.findIndex((u) => u.endMs > clip.startMs));
   let currentEnd = units.length - 1;
   while (currentEnd > currentStart && units[currentEnd].startMs >= clip.endMs) currentEnd -= 1;
@@ -138,6 +164,8 @@ export function boundaryPrompt(context: BoundaryContext): string {
     "- End on the punch line: the short line that sums up the point or charges the listener, often the last item " +
     "of a list or a command. Never end in the middle of a dialogue or a story, and never on a line that only " +
     "leads into a quotation (\"He says,\", \"notice what he says there\").\n" +
+    "- A question needs its answer. When the preacher asks a question and then answers it, or asks the same question " +
+    "again in other words, end after his answer. End on a question only when the next line starts a new idea.\n" +
     "- The clip must be between 15 and 59 seconds long: always under 60 seconds. Aim for 30 to 55 seconds: the setup, " +
     "the explanation or story, and the payoff. Go under 30 seconds only when the lines just before and just after " +
     "belong to a different idea. When the preacher comes back to the same question or point, keep going until he " +
@@ -180,7 +208,7 @@ function evaluateBoundaryChoice(
   context: BoundaryContext,
   choice: BoundaryChoice,
   limits: BoundaryLimits,
-): { range: BoundaryRange } | { refused: string } {
+): { range: BoundaryRange; endUnit: number } | { refused: string } {
   const { units } = context;
   let { startUnit, endUnit } = choice;
   const asked = `Units [${startUnit}] to [${endUnit}]`;
@@ -219,7 +247,7 @@ function evaluateBoundaryChoice(
   const endMs = units[endUnit].endMs;
   const duration = endMs - startMs;
   if (duration >= limits.minMs && duration <= limits.maxMs) {
-    return { range: { startMs, endMs, adjustedForScripture, adjustedEnd } };
+    return { range: { startMs, endMs, adjustedForScripture, adjustedEnd }, endUnit };
   }
   const steps =
     (adjustedForScripture ? " The start moved past the Scripture reading." : "") +
@@ -238,25 +266,67 @@ function evaluateBoundaryChoice(
 
 export type BoundaryTurn = { role: "user" | "assistant"; content: string };
 type BoundaryAnswer = z.infer<typeof BoundaryChoiceSchema>;
+type BoundaryAttempt = BoundaryAnswer & { refused: string | null; question?: string };
+
+const QUESTION_END = /\?["”'’)\]]*$/;
+const QUESTION_MIN_WORDS = 4;
 
 /**
- * Asks for a boundary and checks it. A refused answer gets one more try with the reason (lab
- * sermon 3 clip 5: the only answer ran over 60 seconds, so the clip kept its raw window and ran
- * past the punch line). After two refusals the range is null and the clip has no fixed boundary.
+ * The question a clip would end on, when it is worth a second look: four words or more, so a call-out
+ * like "Amen?" passes, and with lines after it to answer it.
+ */
+function endingQuestion(context: BoundaryContext, endUnit: number): string | null {
+  if (endUnit >= context.units.length - 1) return null;
+  const sentences = context.units[endUnit].text.split(/(?<=[.!?…]["”'’)\]]*)\s+/);
+  const last = sentences[sentences.length - 1].trim();
+  return QUESTION_END.test(last) && last.split(/\s+/).length >= QUESTION_MIN_WORDS ? last : null;
+}
+
+/**
+ * Asks for a boundary and checks it, with at most two model calls.
+ *
+ * A refused answer gets one more try with the reason (lab sermon 3 clip 5: the only answer ran over
+ * 60 seconds, so the clip kept its raw window and ran past the punch line). After two refusals the
+ * range is null and the clip has no fixed boundary.
+ *
+ * An accepted first answer that ends on a question gets one more look (lab sermon 1d clips 3 and 5,
+ * 2b clip 6: each ended on a question the preacher answered or asked again in the next lines). The
+ * model may keep the same end when a new idea starts next; a second answer the code refuses leaves
+ * the first one in place.
  */
 export async function chooseBoundary(
   context: BoundaryContext,
   ask: (turns: BoundaryTurn[]) => Promise<BoundaryAnswer>,
   limits: BoundaryLimits = DEFAULT_LIMITS,
-): Promise<{ range: BoundaryRange | null; attempts: (BoundaryAnswer & { refused: string | null })[] }> {
+): Promise<{ range: BoundaryRange | null; attempts: BoundaryAttempt[] }> {
   const turns: BoundaryTurn[] = [{ role: "user", content: boundaryPrompt(context) }];
-  const attempts: (BoundaryAnswer & { refused: string | null })[] = [];
+  const attempts: BoundaryAttempt[] = [];
+  let accepted: BoundaryRange | null = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const answer = await ask([...turns]);
     const result = evaluateBoundaryChoice(context, answer, limits);
     const refused = "refused" in result ? result.refused : null;
-    attempts.push({ startUnit: answer.startUnit, endUnit: answer.endUnit, reason: answer.reason, refused });
-    if ("range" in result) return { range: result.range, attempts };
+    const record: BoundaryAttempt = { startUnit: answer.startUnit, endUnit: answer.endUnit, reason: answer.reason, refused };
+    attempts.push(record);
+    if ("range" in result) {
+      if (accepted) return { range: result.range, attempts };
+      const question = attempt === 0 ? endingQuestion(context, result.endUnit) : null;
+      if (!question) return { range: result.range, attempts };
+      record.question = question;
+      accepted = result.range;
+      turns.push(
+        { role: "assistant", content: JSON.stringify(answer) },
+        {
+          role: "user",
+          content:
+            `Unit [${result.endUnit}] ends on a question: "${question}" Read the lines after it. If the preacher answers it ` +
+            "or asks it again, end after his answer, and keep the clip under 60 seconds. If the next line starts a new " +
+            "idea, return the same end. Return startUnit, endUnit and a one-sentence reason.",
+        },
+      );
+      continue;
+    }
+    if (accepted) return { range: accepted, attempts };
     turns.push(
       { role: "assistant", content: JSON.stringify(answer) },
       {
@@ -265,5 +335,5 @@ export async function chooseBoundary(
       },
     );
   }
-  return { range: null, attempts };
+  return { range: accepted, attempts };
 }
