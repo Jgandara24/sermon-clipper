@@ -1,0 +1,304 @@
+{
+  "sourceRangeMs": [
+    2453240,
+    2469240
+  ],
+  "segments": [
+    {
+      "startMs": 2453240,
+      "endMs": 2458000,
+      "text": "They're the one that determines the level of your relationship with God, not God.",
+      "words": [
+        {
+          "word": "They're",
+          "startMs": 2453240,
+          "endMs": 2453700,
+          "confidence": 0.7977695169376929,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "the",
+          "startMs": 2453700,
+          "endMs": 2453830,
+          "confidence": 0.998367,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "one",
+          "startMs": 2453900,
+          "endMs": 2454100,
+          "confidence": 0.973864,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "that",
+          "startMs": 2454100,
+          "endMs": 2454360,
+          "confidence": 0.992856,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "determines",
+          "startMs": 2454360,
+          "endMs": 2455020,
+          "confidence": 0.997771,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "the",
+          "startMs": 2455020,
+          "endMs": 2455190,
+          "confidence": 0.991569,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "level",
+          "startMs": 2455220,
+          "endMs": 2455510,
+          "confidence": 0.991213,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "of",
+          "startMs": 2455600,
+          "endMs": 2455670,
+          "confidence": 0.99378,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "your",
+          "startMs": 2455760,
+          "endMs": 2455940,
+          "confidence": 0.977806,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "relationship",
+          "startMs": 2455940,
+          "endMs": 2456740,
+          "confidence": 0.995975,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "with",
+          "startMs": 2456740,
+          "endMs": 2456910,
+          "confidence": 0.991671,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "God,",
+          "startMs": 2457030,
+          "endMs": 2457200,
+          "confidence": 0.9213491633642481,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "not",
+          "startMs": 2457320,
+          "endMs": 2457440,
+          "confidence": 0.989538,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "God.",
+          "startMs": 2457520,
+          "endMs": 2457730,
+          "confidence": 0.9227493403806908,
+          "isFiller": false,
+          "deleted": false
+        }
+      ],
+      "id": "approved-caption-segment-0"
+    },
+    {
+      "startMs": 2458000,
+      "endMs": 2463000,
+      "text": "Therefore, draw near to God and he'll draw near to you.",
+      "words": [
+        {
+          "word": "Therefore,",
+          "startMs": 2458000,
+          "endMs": 2458930,
+          "confidence": 0.8542803905153156,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "draw",
+          "startMs": 2459120,
+          "endMs": 2459530,
+          "confidence": 0.969435,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "near",
+          "startMs": 2459530,
+          "endMs": 2459940,
+          "confidence": 0.959439,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "to",
+          "startMs": 2459950,
+          "endMs": 2460120,
+          "confidence": 0.996289,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "God",
+          "startMs": 2460140,
+          "endMs": 2460420,
+          "confidence": 0.998605,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "and",
+          "startMs": 2460520,
+          "endMs": 2460770,
+          "confidence": 0.485793,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "he'll",
+          "startMs": 2460770,
+          "endMs": 2461260,
+          "confidence": 0.654195034557738,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "draw",
+          "startMs": 2461430,
+          "endMs": 2461690,
+          "confidence": 0.998778,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "near",
+          "startMs": 2461690,
+          "endMs": 2462080,
+          "confidence": 0.993115,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "to",
+          "startMs": 2462080,
+          "endMs": 2462290,
+          "confidence": 0.98192,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "you.",
+          "startMs": 2462300,
+          "endMs": 2462610,
+          "confidence": 0.957391891319328,
+          "isFiller": false,
+          "deleted": false
+        }
+      ],
+      "id": "approved-caption-segment-1"
+    },
+    {
+      "startMs": 2463000,
+      "endMs": 2464600,
+      "text": "Did you get it?",
+      "words": [
+        {
+          "word": "Did",
+          "startMs": 2463000,
+          "endMs": 2463340,
+          "confidence": 0.996512,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "you",
+          "startMs": 2463340,
+          "endMs": 2463680,
+          "confidence": 0.998304,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "get",
+          "startMs": 2463680,
+          "endMs": 2464010,
+          "confidence": 0.999603,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "it?",
+          "startMs": 2464070,
+          "endMs": 2464240,
+          "confidence": 0.9920219594404148,
+          "isFiller": false,
+          "deleted": false
+        }
+      ],
+      "id": "approved-caption-segment-2"
+    },
+    {
+      "startMs": 2464600,
+      "endMs": 2465200,
+      "text": "Did you get it?",
+      "words": [
+        {
+          "word": "Did",
+          "startMs": 2464600,
+          "endMs": 2464710,
+          "confidence": 0.996578,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "you",
+          "startMs": 2464720,
+          "endMs": 2464840,
+          "confidence": 0.99859,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "get",
+          "startMs": 2464840,
+          "endMs": 2464960,
+          "confidence": 0.998723,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "it?",
+          "startMs": 2464960,
+          "endMs": 2465040,
+          "confidence": 0.9639888306920366,
+          "isFiller": false,
+          "deleted": false
+        }
+      ],
+      "id": "approved-caption-segment-3"
+    }
+  ]
+}

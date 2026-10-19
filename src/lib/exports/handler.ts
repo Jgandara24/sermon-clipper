@@ -209,6 +209,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     brandTemplate,
     processingConfig: clip.project.processingConfig,
     source: { id: sourceVideo.id, durationMs: sourceVideo.durationS ? Math.round(sourceVideo.durationS.toNumber() * 1000) : null },
+    captionGrouping: labStepEnabled("phraseCaptions") ? "phrases" : undefined,
   });
   const { range, cropPixels, assContent } = plan;
   if (rangeInput && (rangeInput.sourceVideoId !== sourceVideo.id || rangeInput.editVersion !== job.editVersion ||

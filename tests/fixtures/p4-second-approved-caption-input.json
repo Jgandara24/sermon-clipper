@@ -1,0 +1,385 @@
+{
+  "sourceRangeMs": [
+    3845282,
+    3863282
+  ],
+  "savedTranscriptChecksum": "45ef1caa0e85e7930e909a714a595827854ea266771aab3ee6591f54ba476d38",
+  "segments": [
+    {
+      "startMs": 3845282,
+      "endMs": 3852882,
+      "text": "This is the triune God that invites you into his family, not to guess about him, but to",
+      "words": [
+        {
+          "word": "This",
+          "startMs": 3845352,
+          "endMs": 3845702,
+          "confidence": 0.999472,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "is",
+          "startMs": 3845702,
+          "endMs": 3845842,
+          "confidence": 0.997889,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "the",
+          "startMs": 3845842,
+          "endMs": 3846232,
+          "confidence": 0.998133,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "triune",
+          "startMs": 3846232,
+          "endMs": 3846832,
+          "confidence": 0.9889004305277656,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "God",
+          "startMs": 3846902,
+          "endMs": 3847192,
+          "confidence": 0.988689,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "that",
+          "startMs": 3847192,
+          "endMs": 3847552,
+          "confidence": 0.968749,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "invites",
+          "startMs": 3847602,
+          "endMs": 3848362,
+          "confidence": 0.997651,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "you",
+          "startMs": 3848362,
+          "endMs": 3848372,
+          "confidence": 0.999295,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "into",
+          "startMs": 3848782,
+          "endMs": 3849102,
+          "confidence": 0.972941,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "his",
+          "startMs": 3849102,
+          "endMs": 3849192,
+          "confidence": 0.960175,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "family,",
+          "startMs": 3849562,
+          "endMs": 3849942,
+          "confidence": 0.7465966837784641,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "not",
+          "startMs": 3850422,
+          "endMs": 3850592,
+          "confidence": 0.993621,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "to",
+          "startMs": 3850622,
+          "endMs": 3850802,
+          "confidence": 0.999153,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "guess",
+          "startMs": 3850802,
+          "endMs": 3851332,
+          "confidence": 0.992526,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "about",
+          "startMs": 3851332,
+          "endMs": 3851572,
+          "confidence": 0.995458,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "him,",
+          "startMs": 3851962,
+          "endMs": 3852182,
+          "confidence": 0.8858968841445375,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "but",
+          "startMs": 3852392,
+          "endMs": 3852802,
+          "confidence": 0.993394,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "to",
+          "startMs": 3852802,
+          "endMs": 3852882,
+          "confidence": 0.987182,
+          "isFiller": false,
+          "deleted": false
+        }
+      ],
+      "id": "second-approved-0"
+    },
+    {
+      "startMs": 3852882,
+      "endMs": 3859802,
+      "text": "know him, to know him personally, to not earn his love, but to receive it freely, and to",
+      "words": [
+        {
+          "word": "know",
+          "startMs": 3852952,
+          "endMs": 3853242,
+          "confidence": 0.993182,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "him,",
+          "startMs": 3853242,
+          "endMs": 3853442,
+          "confidence": 0.9123647431668981,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "to",
+          "startMs": 3853692,
+          "endMs": 3853872,
+          "confidence": 0.993227,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "know",
+          "startMs": 3853872,
+          "endMs": 3854062,
+          "confidence": 0.998957,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "him",
+          "startMs": 3854372,
+          "endMs": 3854432,
+          "confidence": 0.997449,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "personally,",
+          "startMs": 3854502,
+          "endMs": 3855382,
+          "confidence": 0.9622915005922063,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "to",
+          "startMs": 3855602,
+          "endMs": 3855782,
+          "confidence": 0.968439,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "not",
+          "startMs": 3855782,
+          "endMs": 3855972,
+          "confidence": 0.999558,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "earn",
+          "startMs": 3856382,
+          "endMs": 3856412,
+          "confidence": 0.995759,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "his",
+          "startMs": 3856412,
+          "endMs": 3856612,
+          "confidence": 0.997305,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "love,",
+          "startMs": 3856662,
+          "endMs": 3856792,
+          "confidence": 0.947797309290863,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "but",
+          "startMs": 3857222,
+          "endMs": 3857482,
+          "confidence": 0.984414,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "to",
+          "startMs": 3857482,
+          "endMs": 3857672,
+          "confidence": 0.999043,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "receive",
+          "startMs": 3858022,
+          "endMs": 3858312,
+          "confidence": 0.99869,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "it",
+          "startMs": 3858312,
+          "endMs": 3858472,
+          "confidence": 0.989668,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "freely,",
+          "startMs": 3858662,
+          "endMs": 3859042,
+          "confidence": 0.8203952307223634,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "and",
+          "startMs": 3859492,
+          "endMs": 3859492,
+          "confidence": 0.990068,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "to",
+          "startMs": 3859562,
+          "endMs": 3859802,
+          "confidence": 0.995279,
+          "isFiller": false,
+          "deleted": false
+        }
+      ],
+      "id": "second-approved-1"
+    },
+    {
+      "startMs": 3859802,
+      "endMs": 3864282,
+      "text": "receive it freely through faith in his Son.",
+      "words": [
+        {
+          "word": "receive",
+          "startMs": 3859872,
+          "endMs": 3860572,
+          "confidence": 0.995042,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "it",
+          "startMs": 3860632,
+          "endMs": 3860852,
+          "confidence": 0.951441,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "freely",
+          "startMs": 3860852,
+          "endMs": 3861482,
+          "confidence": 0.998294,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "through",
+          "startMs": 3861592,
+          "endMs": 3862302,
+          "confidence": 0.54478,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "faith",
+          "startMs": 3862362,
+          "endMs": 3862892,
+          "confidence": 0.996829,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "in",
+          "startMs": 3863062,
+          "endMs": 3863062,
+          "confidence": 0.888464,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "his",
+          "startMs": 3863302,
+          "endMs": 3863532,
+          "confidence": 0.977689,
+          "isFiller": false,
+          "deleted": false
+        },
+        {
+          "word": "Son.",
+          "startMs": 3863532,
+          "endMs": 3863702,
+          "confidence": 0.9871668060819305,
+          "isFiller": false,
+          "deleted": false
+        }
+      ],
+      "id": "second-approved-2"
+    }
+  ]
+}

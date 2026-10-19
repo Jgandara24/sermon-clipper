@@ -26,7 +26,7 @@
     "prepare:sandbox-service": "tsx scripts/prepare-sandbox-service.ts",
     "lab:review": "node --env-file=.env --import tsx scripts/lab/review-sheet.ts",
     "lab:run": "node --env-file=.env --import tsx scripts/lab/run-sermon.ts",
-    "lab:worker": "YTDLP_MAX_HEIGHT=720 LAB_SPEAKER_TRACKING_ENABLED=true LAB_CAMERA_CHECK_ENABLED=true LAB_BOUNDARY_STEP_ENABLED=true node --env-file=.env --import tsx src/worker/run-jobs.ts",
+    "lab:worker": "YTDLP_MAX_HEIGHT=720 LAB_SPEAKER_TRACKING_ENABLED=true LAB_CAMERA_CHECK_ENABLED=true LAB_BOUNDARY_STEP_ENABLED=true LAB_PHRASE_CAPTIONS_ENABLED=true node --env-file=.env --import tsx src/worker/run-jobs.ts",
     "program:evidence": "tsx scripts/start-editorial-program.ts --evidence",
     "program:pause": "tsx scripts/start-editorial-program.ts --pause",
     "program:resume": "tsx scripts/start-editorial-program.ts --resume",

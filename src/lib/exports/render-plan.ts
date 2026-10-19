@@ -1,5 +1,6 @@
 import { parseLowerThird } from "@/lib/brand-template";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
+import { buildPhraseCaptionLines } from "@/lib/editor/phrase-caption-lines";
 import { resolveCaptionFace } from "@/lib/editor/caption-face";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import { readTitleBanner, retimeTitleBanner, type TitleBanner } from "@/lib/editor/title-banner";
@@ -68,6 +69,8 @@ export type ExportRenderPlanInput = {
   brandTemplate: ExportRenderBrandTemplate | null;
   processingConfig?: unknown;
   source?: EditorSource;
+  /** Lab only (LAB_PHRASE_CAPTIONS_ENABLED): one whole phrase per line, in the transcript's own case. */
+  captionGrouping?: "phrases";
 };
 
 export type ExportRenderPlan = {
@@ -117,15 +120,15 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
   const cropRect = resolveCropRect(state.layout, input.sourceWidth, input.sourceHeight);
   const cropPixels = cropRectToPixels(cropRect, input.sourceWidth, input.sourceHeight);
 
+  const captionWords = wordsInClip.map((word) => ({
+    id: word.id,
+    word: word.word,
+    startMs: word.startMs,
+    endMs: word.endMs,
+  }));
+  const phrases = input.captionGrouping === "phrases";
   const captionLines = applyCaptionTextOverrides(
-    buildCaptionLines(
-      wordsInClip.map((word) => ({
-        id: word.id,
-        word: word.word,
-        startMs: word.startMs,
-        endMs: word.endMs,
-      })),
-    ),
+    phrases ? buildPhraseCaptionLines(captionWords, { endLimitMs: range.endMs }) : buildCaptionLines(captionWords),
     state.captions.textOverrides,
   ).map((line) => ({
     ...line,
@@ -142,7 +145,9 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
     endMs: toOutputTimeline(line.endMs, range),
   }));
 
-  const style = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
+  const resolvedStyle = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
+  // Jake's approved Codex captions keep the transcript's capital letters ("And he'll draw near to you").
+  const style = phrases ? { ...resolvedStyle, textCase: "original" as const } : resolvedStyle;
 
   // Per-word positioning needs the same file libass will draw with. A preset whose face this
   // repository does not ship keeps the single run it has always emitted — measuring a face we do
