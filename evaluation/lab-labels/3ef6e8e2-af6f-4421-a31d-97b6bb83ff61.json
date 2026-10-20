@@ -1,0 +1,64 @@
+{
+  "projectId": "3ef6e8e2-af6f-4421-a31d-97b6bb83ff61",
+  "projectName": "Lab 4c - Sunday 10-11-26 Divine Certainties - whole ends + sermon only + caps captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "007ef331-f691-4cc9-ba19-c0b56aa77b9e": {
+      "rank": 1,
+      "startMs": 2881146,
+      "endMs": 2917286,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:19:08.172Z"
+    },
+    "dc2fa718-7519-495a-9621-ac8148cf4af5": {
+      "rank": 2,
+      "startMs": 3448346,
+      "endMs": 3497226,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:20:01.271Z"
+    },
+    "79a1f603-72ae-4657-b63f-3bc645d54d17": {
+      "rank": 3,
+      "startMs": 2133709,
+      "endMs": 2193370,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:20:42.539Z"
+    },
+    "5db70093-db75-4237-926e-aa70c60d5742": {
+      "rank": 4,
+      "startMs": 1691562,
+      "endMs": 1729462,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:21:08.957Z"
+    },
+    "8e68900b-a6df-447e-8a8c-8fdcf34b46fa": {
+      "rank": 5,
+      "startMs": 1909410,
+      "endMs": 1952810,
+      "verdict": "fail",
+      "failedTests": [
+        4
+      ],
+      "note": "It sounds like it's part of the issue and it isn't cleanly making a point, rather starting one. so there's no powerful conclusion",
+      "labeledAt": "2026-10-20T23:22:43.899Z"
+    },
+    "25977d93-4c29-4f05-ae85-86d848dae2cb": {
+      "rank": 6,
+      "startMs": 1892370,
+      "endMs": 1935750,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "The start is really good, but it feels odd that he says here are three things and he only lists one thing. ",
+      "labeledAt": "2026-10-20T23:23:49.774Z"
+    }
+  }
+}
