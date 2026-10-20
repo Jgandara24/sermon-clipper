@@ -106,3 +106,41 @@ export function collapseStutters(words: CaptionWord[]): CaptionWord[] {
   }
   return out;
 }
+
+/**
+ * Jake, 2026-10-19: "make subtitles full caps right now, no punctuation, and slighly larger font."
+ * Drops every punctuation mark except the ones a word or number needs: an apostrophe between letters
+ * ("they're", "God's"), a hyphen inside a word or number ("so-and-so", "8-9"), and a comma, period or
+ * colon between digits ("2,000", "2:8").
+ */
+export function withoutPunctuation(text: string): string {
+  const letter = /\p{L}/u;
+  const digit = /\p{N}/u;
+  const wordChar = /[\p{L}\p{N}]/u;
+  return text
+    .split(/\s+/)
+    .map((token) =>
+      [...token]
+        .filter((char, i, chars) => {
+          if (!/\p{P}/u.test(char)) return true;
+          const before = chars[i - 1] ?? "";
+          const after = chars[i + 1] ?? "";
+          if (/['’]/.test(char)) return letter.test(before) && letter.test(after);
+          if (char === "-") return wordChar.test(before) && wordChar.test(after);
+          if (/[.,:]/.test(char)) return digit.test(before) && digit.test(after);
+          return false;
+        })
+        .join(""),
+    )
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** A caption line, and each of its words, without punctuation (lab phrase captions only). */
+export function withoutLinePunctuation<L extends { text: string; words: { word: string }[] }>(line: L): L {
+  return {
+    ...line,
+    text: withoutPunctuation(line.text),
+    words: line.words.map((word) => ({ ...word, word: withoutPunctuation(word.word) })).filter((word) => word.word),
+  };
+}

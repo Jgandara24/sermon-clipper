@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collapseStutters, CONGREGATION_QUIET_DB, dropCongregationResponses } from "@/lib/editor/caption-cleanup";
+import { collapseStutters, CONGREGATION_QUIET_DB, dropCongregationResponses, withoutPunctuation } from "@/lib/editor/caption-cleanup";
 import type { CaptionWord } from "@/lib/editor/caption-lines";
 
 /** Words 300 ms apart; `levels` gives each word's loudness in dB, by position. */
@@ -90,5 +90,34 @@ describe("collapseStutters (fix G2)", () => {
     const before = JSON.stringify(list);
     collapseStutters(list);
     expect(JSON.stringify(list)).toBe(before);
+  });
+});
+
+// Jake, 2026-10-19: "make subtitles full caps right now, no punctuation, and slighly larger font."
+describe("withoutPunctuation", () => {
+  it.each([
+    ["Therefore, draw near to God.", "Therefore draw near to God"],
+    ["Did you get it?", "Did you get it"],
+    ['"Man, how in the world am I gonna do this?', "Man how in the world am I gonna do this"],
+    ["Amen!", "Amen"],
+    ["God— he is faithful…", "God he is faithful"],
+    ["(Laughter) That's right; amen:", "Laughter That's right amen"],
+    ["Na- Nate turned from his sin.", "Na Nate turned from his sin"],
+  ])("drops the punctuation from %j", (text, expected) => {
+    expect(withoutPunctuation(text)).toBe(expected);
+  });
+
+  it.each([
+    ["They're the one that determines", "They're the one that determines"],
+    ["He’ll draw near to you, God's way.", "He’ll draw near to you God's way"],
+    ["Ephesians 2:8-9, by grace.", "Ephesians 2:8-9 by grace"],
+    ["2,000 years later.", "2,000 years later"],
+    ["so-and-so passed away.", "so-and-so passed away"],
+  ])("keeps the marks inside a word or a number in %j", (text, expected) => {
+    expect(withoutPunctuation(text)).toBe(expected);
+  });
+
+  it("leaves nothing of a word that was only punctuation", () => {
+    expect(withoutPunctuation("—")).toBe("");
   });
 });
