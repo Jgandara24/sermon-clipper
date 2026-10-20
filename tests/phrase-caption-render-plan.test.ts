@@ -13,7 +13,7 @@ function input(): ExportRenderPlanInput {
   const [startMs, endMs] = first.sourceRangeMs;
   return {
     state: buildInitialEditorState({ sourceVideoId: "codex-recording-1", startMs, endMs }),
-    segments: first.segments.map((segment, index) => ({ id: `segment-${index}`, ...segment })),
+    segments: first.segments.map((segment) => ({ ...segment })),
     sourceWidth: 1920,
     sourceHeight: 1080,
     outputWidth: 1080,
@@ -30,22 +30,33 @@ describe("buildExportRenderPlan with phrase captions (lab only)", () => {
     expect(style.textCase).toBe("uppercase");
   });
 
-  it("uses phrase lines, on the file's clock, in the transcript's own capital letters", () => {
+  it("uses phrase lines, on the file's clock, in capital letters with no punctuation and a larger font", () => {
+    // Jake, 2026-10-19: "make subtitles full caps right now, no punctuation, and slighly larger font."
     const plan = buildExportRenderPlan({ ...input(), captionGrouping: "phrases" });
     const [lines, style] = vi.mocked(generateAssSubtitles).mock.lastCall!;
     expect(lines.map((line) => line.text)).toEqual([
       "They're the one that determines",
       "the level of your relationship with God",
       "not God",
-      "Therefore, draw near to God",
+      "Therefore draw near to God",
       "and he'll draw near to you",
-      "Did you get it?",
-      "Did you get it?",
+      "Did you get it",
+      "Did you get it",
     ]);
+    expect(lines[3].words?.map((word) => word.word)).toEqual(["Therefore", "draw", "near", "to", "God"]);
     expect(lines[0].startMs).toBe(0);
     expect(lines.at(-1)!.endMs).toBeLessThanOrEqual(16_000);
-    expect(style.textCase).toBe("original");
+    expect(style.textCase).toBe("uppercase");
+    // The Clean preset's 44 px, one tenth larger. At 48 px, 7 of 8,718 lab caption lines are wider
+    // than the row and wrap; at 50 px, 58 do.
+    expect(style.sizePx).toBe(48);
     expect(plan.captionLineCount).toBe(7);
+  });
+
+  it("keeps the preset's size without phrase captions", () => {
+    buildExportRenderPlan(input());
+    const [, style] = vi.mocked(generateAssSubtitles).mock.lastCall!;
+    expect(style.sizePx).toBe(44);
   });
 });
 

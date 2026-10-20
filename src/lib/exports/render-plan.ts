@@ -1,7 +1,7 @@
 import { parseLowerThird } from "@/lib/brand-template";
 import { applyCaptionTextOverrides, buildCaptionLines } from "@/lib/editor/caption-lines";
-import { collapseStutters, dropCongregationResponses } from "@/lib/editor/caption-cleanup";
-import { buildPhraseCaptionLines } from "@/lib/editor/phrase-caption-lines";
+import { collapseStutters, dropCongregationResponses, withoutLinePunctuation } from "@/lib/editor/caption-cleanup";
+import { buildPhraseCaptionLines, PHRASE_CAPTION_SIZE_SCALE } from "@/lib/editor/phrase-caption-lines";
 import { resolveCaptionFace } from "@/lib/editor/caption-face";
 import { resolveCaptionStyle } from "@/lib/editor/caption-style";
 import { readTitleBanner, retimeTitleBanner, type TitleBanner } from "@/lib/editor/title-banner";
@@ -65,7 +65,7 @@ export type ExportRenderPlanInput = {
   outputWidth: number;
   outputHeight: number;
   brandTemplate: ExportRenderBrandTemplate | null;
-  /** Lab only (LAB_PHRASE_CAPTIONS_ENABLED): one whole phrase per line, in the transcript's own case. */
+  /** Lab only (LAB_PHRASE_CAPTIONS_ENABLED): one whole phrase per line, in capital letters, without punctuation. */
   captionGrouping?: "phrases";
   /** Lab only, with phrases: each word's loudness in dB, so a quiet congregation response is left out. */
   captionWordLevels?: ReadonlyMap<string, number>;
@@ -119,24 +119,29 @@ export function buildExportRenderPlan(input: ExportRenderPlanInput): ExportRende
         )
       : buildCaptionLines(captionWords),
     state.captions.textOverrides,
-  ).map((line) => ({
-    ...line,
-    // The words travel with the line so the burn-in can light the same word the preview does,
-    // moved onto the file's clock by the same function as the line itself — a word left on the
-    // source timeline would highlight at the wrong moment.
-    words: line.words.map((word) => ({
-      ...word,
-      startMs: toOutputTimeline(word.startMs, range),
-      endMs: toOutputTimeline(word.endMs, range),
-    })),
-    // Caption timestamps are on the source timeline; the rendered file starts at zero.
-    startMs: toOutputTimeline(line.startMs, range),
-    endMs: toOutputTimeline(line.endMs, range),
-  }));
+  )
+    .map((line) => (phrases ? withoutLinePunctuation(line) : line))
+    .filter((line) => !phrases || line.text)
+    .map((line) => ({
+      ...line,
+      // The words travel with the line so the burn-in can light the same word the preview does,
+      // moved onto the file's clock by the same function as the line itself — a word left on the
+      // source timeline would highlight at the wrong moment.
+      words: line.words.map((word) => ({
+        ...word,
+        startMs: toOutputTimeline(word.startMs, range),
+        endMs: toOutputTimeline(word.endMs, range),
+      })),
+      // Caption timestamps are on the source timeline; the rendered file starts at zero.
+      startMs: toOutputTimeline(line.startMs, range),
+      endMs: toOutputTimeline(line.endMs, range),
+    }));
 
   const resolvedStyle = resolveCaptionStyle(state.captions.presetId, state.captions.overrides);
-  // Jake's approved Codex captions keep the transcript's capital letters ("And he'll draw near to you").
-  const style = phrases ? { ...resolvedStyle, textCase: "original" as const } : resolvedStyle;
+  // Jake, 2026-10-19: "make subtitles full caps right now, no punctuation, and slighly larger font."
+  const style = phrases
+    ? { ...resolvedStyle, textCase: "uppercase" as const, sizePx: Math.round(resolvedStyle.sizePx * PHRASE_CAPTION_SIZE_SCALE) }
+    : resolvedStyle;
 
   // Per-word positioning needs the same file libass will draw with. A preset whose face this
   // repository does not ship keeps the single run it has always emitted — measuring a face we do

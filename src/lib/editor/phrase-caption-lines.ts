@@ -19,10 +19,15 @@ import { captionLineId, type CaptionLine, type CaptionWord } from "./caption-lin
  *   and never before an object such as "him". The fewest, most even lines win.
  * - A line shows when its first word starts and stays until the next line starts; after a pause of
  *   1 s or more it ends 0.3 s after its last word.
- * - A comma or period that ends a line is dropped; a question mark stays.
+ * - A comma or period that ends a line is dropped; a question mark stays. (Since 2026-10-19 the
+ *   render drops all punctuation and shows capital letters: Jake, "make subtitles full caps right
+ *   now, no punctuation, and slighly larger font.")
  */
 
 export const PHRASE_MAX_WORDS = 7;
+// "Slightly larger": the Clean preset's 44 px becomes 48. On the lab sermons, 7 of 8,718 lines in
+// capital letters are then wider than the row and wrap; at 50 px, 58 do.
+export const PHRASE_CAPTION_SIZE_SCALE = 1.1;
 export const PHRASE_MAX_CHARS = 40;
 const PHRASE_MIN_WORDS = 2;
 const PAUSE_BREAK_MS = 700;
