@@ -55,8 +55,12 @@ const SPEAKERS = "he|she|they|it|jesus|paul|peter|god|the lord|the bible|scriptu
 const QUOTATION_LEADS = [
   // 'He says, "Your adversary the devil".' / "And Jesus said this to Peter."
   new RegExp(`^\\W*((and|so|then|now|well)\\W+)*(${SPEAKERS})\\s+(says|said|writes|wrote|tells us)\\b`, "i"),
-  // "... 'cause notice what he says there."
-  /\b(says|said|writes|wrote)\b(\s+\w+){0,2}[\s.,:"”']*$/i,
+  // "... 'cause notice what he says there." / "And this is what Jesus said." A lead word must come
+  // before "what": "That's what the word of God says." and "the best is yet to come according to
+  // what the word of God says." close a point (fix I1, lab sermon 4b clip 4, 2026-10-19).
+  /\b(notice|listen(\s+to)?|look(\s+at)?|follow|hear|watch|see|read|this\s+is|here's|here\s+is|love|forget)\s+what\b.*\b(says|said|writes|wrote)\b(\s+\w+){0,2}[\s.,:"”']*$/i,
+  // "... shows his glory, God says it again."
+  /\b(says|said)\s+(it\s+)?again[\s.,:"”']*$/i,
 ];
 
 /**
@@ -136,7 +140,58 @@ export function boundaryContext(
   return { units, currentStart, currentEnd };
 }
 
-const clock = (ms: number) => {
+// Fix I2 (lab sermon 4b, 2026-10-19): clips 1 and 4 ended inside a list: the first of six "What
+// God says about … is absolutely true." lines, and "We're gonna live …" before "We're gonna sing …".
+const LIST_MIN_ITEMS = 3;
+// A shorter line is a restatement, not an item: 1f clip 1's "You've got that today." between "You've
+// got that today as a believer." and "You've got the sustaining grace of God."
+const LIST_ITEM_MIN_WORDS = 5;
+// Items may have up to two other lines between them ("God created man …" inside 4b clip 1's list).
+const LIST_MAX_STEP = 3;
+// A line that leads into the list says the opening words within its first six ("Brother, I'm
+// tellin' you, we're gonna stand on a street of gold.").
+const LIST_LEAD_IN_WORDS = 6;
+
+/** Lower-case words without punctuation, a stammered word once ("I, I should've" reads "i shouldve"). */
+function listWords(text: string): string[] {
+  const words = text
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-z0-9]/g, ""))
+    .filter(Boolean);
+  return words.filter((word, i) => word !== words[i - 1]);
+}
+
+/**
+ * The list a clip would end inside: three or more lines of five words or more that open with the
+ * same two words, which goes on after the end line. Null when the end is on the list's last item,
+ * after it, or before it.
+ */
+export function endsInsideList(units: BoundaryUnit[], endUnit: number): { first: number; last: number; opening: string } | null {
+  const words = units.map((unit) => listWords(unit.text));
+  const opening = (i: number) => (words[i].length >= LIST_ITEM_MIN_WORDS ? words[i].slice(0, 2).join(" ") : null);
+  for (let start = Math.max(0, endUnit - LIST_MAX_STEP + 1); start <= Math.min(units.length - 1, endUnit + 1); start += 1) {
+    const key = opening(start);
+    if (!key) continue;
+    const items = [start];
+    for (let i = start - 1; i >= 0 && items[0] - i <= LIST_MAX_STEP; i -= 1) if (opening(i) === key) items.unshift(i);
+    for (let i = start + 1; i < units.length && i - items[items.length - 1] <= LIST_MAX_STEP; i += 1) if (opening(i) === key) items.push(i);
+    if (items.length < LIST_MIN_ITEMS) continue;
+    const before = items[0] - 1;
+    const head = before >= 0 ? words[before].slice(0, LIST_LEAD_IN_WORDS) : [];
+    const leadIn = head.some((word, i) => i > 0 && `${head[i - 1]} ${word}` === key);
+    const first = leadIn ? before : items[0];
+    const last = items[items.length - 1];
+    if (endUnit >= first && endUnit < last) {
+      const opener = units[items[0]].text.trim().split(/\s+/).slice(0, 2).join(" ").replace(/[^\p{L}\p{N}'’]+$/u, "");
+      return { first, last, opening: opener };
+    }
+  }
+  return null;
+}
+
+export const clock = (ms: number) => {
   const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600);
   const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
@@ -245,6 +300,17 @@ function evaluateBoundaryChoice(
     endUnit -= 1;
   }
 
+  const list = endsInsideList(units, endUnit);
+  if (list) {
+    const span = endUnit === choice.endUnit ? "" : `${asked} become units [${startUnit}] to [${endUnit}] after the checks. `;
+    return {
+      refused:
+        `${span}Unit [${endUnit}] is inside a list: units [${list.first}] to [${list.last}] start the same way ("${list.opening}"), ` +
+        `and the list goes on after it. End after its last item, unit [${list.last}], or before the list starts, at unit ` +
+        `[${list.first - 1}] or earlier. Start later if you must to stay under 60 seconds.`,
+    };
+  }
+
   const startMs = units[startUnit].startMs;
   const endMs = units[endUnit].endMs;
   const duration = endMs - startMs;
@@ -284,19 +350,25 @@ function endingQuestion(context: BoundaryContext, endUnit: number): string | nul
   return QUESTION_END.test(last) && last.split(/\s+/).length >= QUESTION_MIN_WORDS ? last : null;
 }
 
+const REFUSED_TRIES = 3;
+
 /**
  * Asks for a boundary and checks it.
  *
- * A refused answer gets one more try with the reason (lab sermon 3 clip 5: the only answer ran over
- * 60 seconds, so the clip kept its raw window and ran past the punch line). After two refusals the
- * range is null and the clip has no fixed boundary.
+ * A refused answer gets up to two more tries with the reason (lab sermon 3 clip 5: the only answer
+ * ran over 60 seconds, so the clip kept its raw window and ran past the punch line; fix I2 refuses
+ * an end inside a list as well). After three refusals the range is null and the clip has no fixed
+ * boundary.
  *
- * An accepted first answer that ends on a question gets one more look (lab sermon 1d clips 3 and 5,
- * 2b clip 6: each ended on a question the preacher answered or asked again in the next lines). The
+ * An accepted answer that ends on a question gets one more look (lab sermon 1d clips 3 and 5, 2b
+ * clip 6: each ended on a question the preacher answered or asked again in the next lines). The
  * model may keep the same end when a new idea starts next. An answer to that look which the code
- * refuses gets one more try with the reason, as above (dry run, 2b clip 6: it kept going to the
- * answer but ran over 60 seconds); if that is refused too, the first answer stands. Three model
- * calls at most, and three only on that path.
+ * refuses gets one more try with the reason (dry run, 2b clip 6: it kept going to the answer but ran
+ * over 60 seconds); if that is refused too, the accepted answer stands. Five model calls at most.
+ *
+ * A second look at every end (fix I3) failed its gate on 2026-10-19: given the 24 clips of lab
+ * sermons 1f, 2d, 3d and 4b as Jake saw them, it moved 11 of the 20 ends he did not fault and did
+ * not fix 1f clip 1. Only the question gets a second look.
  */
 export async function chooseBoundary(
   context: BoundaryContext,
@@ -322,25 +394,28 @@ export async function chooseBoundary(
   const refusal = (refused: string) =>
     `Your answer was refused: ${refused} Choose again from the same numbered sentences, following every rule. Return startUnit, endUnit and a one-sentence reason.`;
 
-  const first = await answerOnce();
-  if ("refused" in first.result) {
-    reply(first.answer, refusal(first.result.refused));
-    const second = await answerOnce();
-    return { range: "range" in second.result ? second.result.range : null, attempts };
+  let accepted = await answerOnce();
+  for (let tries = 1; "refused" in accepted.result && tries < REFUSED_TRIES; tries += 1) {
+    reply(accepted.answer, refusal(accepted.result.refused));
+    accepted = await answerOnce();
   }
-  const question = endingQuestion(context, first.result.endUnit);
-  if (!question) return { range: first.result.range, attempts };
-  first.record.question = question;
+  const result = accepted.result;
+  if ("refused" in result) return { range: null, attempts };
+  const { range, endUnit } = result;
+
+  const question = endingQuestion(context, endUnit);
+  if (!question) return { range, attempts };
+  accepted.record.question = question;
   reply(
-    first.answer,
-    `Unit [${first.result.endUnit}] ends on a question: "${question}" Read the lines after it. If the preacher answers it ` +
+    accepted.answer,
+    `Unit [${endUnit}] ends on a question: "${question}" Read the lines after it. If the preacher answers it ` +
       "or asks it again, end after his answer, and keep the clip under 60 seconds; start later if you must, but do " +
       "not end before the question. If the next line starts a new idea, return the same end. Return startUnit, " +
       "endUnit and a one-sentence reason.",
   );
-  const second = await answerOnce();
-  if ("range" in second.result) return { range: second.result.range, attempts };
-  reply(second.answer, refusal(second.result.refused));
-  const third = await answerOnce();
-  return { range: "range" in third.result ? third.result.range : first.result.range, attempts };
+  const checked = await answerOnce();
+  if ("range" in checked.result) return { range: checked.result.range, attempts };
+  reply(checked.answer, refusal(checked.result.refused));
+  const retry = await answerOnce();
+  return { range: "range" in retry.result ? retry.result.range : range, attempts };
 }
