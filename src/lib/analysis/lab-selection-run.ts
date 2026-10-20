@@ -11,12 +11,13 @@ import { boundaryContext, BoundaryChoiceSchema, chooseBoundary } from "./boundar
 import { checkClipCamera } from "./camera-check-run";
 import { scoringModel } from "./claude-provider";
 import { applyLabSelectionSteps } from "./lab-selection";
+import { findSermonSpan, SermonSpanSchema, type SermonSpan } from "./sermon-span";
 
 type LabClip = { startMs: number; endMs: number; text: string; total: number; title: string };
 type Segment = { idx: number; startMs: number; endMs: number; text: string };
 
 /**
- * Lab only. Runs the boundary step and the camera check (whichever flags are on) on ANALYZE's
+ * Lab only. Runs the sermon span, the boundary step and the camera check (whichever flags are on) on ANALYZE's
  * ranked clips and records what each did as one operational event. Not cost-metered: the lab
  * records token counts in the event instead.
  */
@@ -32,11 +33,12 @@ export async function runLabSelection<T extends LabClip>(params: {
 }): Promise<T[]> {
   const boundaryOn = labStepEnabled("boundaryStep");
   const cameraOn = labStepEnabled("cameraCheck") && Boolean(params.sourceStorageKey);
-  if (!boundaryOn && !cameraOn) return params.ranked;
+  const spanOn = labStepEnabled("sermonSpan");
+  if (!boundaryOn && !cameraOn && !spanOn) return params.ranked;
 
   const startedAt = Date.now();
   const workDir = await mkdtemp(path.join(os.tmpdir(), "lab-selection-"));
-  const usage = { boundaryInput: 0, boundaryOutput: 0, cameraInput: 0, cameraOutput: 0, cameraFrames: 0 };
+  const usage = { spanInput: 0, spanOutput: 0, boundaryInput: 0, boundaryOutput: 0, cameraInput: 0, cameraOutput: 0, cameraFrames: 0 };
   const boundaryLog: {
     title: string;
     from: [number, number];
@@ -48,6 +50,7 @@ export async function runLabSelection<T extends LabClip>(params: {
     error?: string;
   }[] = [];
   const cameraLog: { title: string; result: string; at?: number; error?: string }[] = [];
+  let spanLog: { firstLine?: number; lastLine?: number; reason?: string; lines?: number; span?: SermonSpan | null; error?: string } | null = null;
 
   try {
     let sourceFilePath: string | null = null;
@@ -56,9 +59,35 @@ export async function runLabSelection<T extends LabClip>(params: {
       await getStorageProvider().downloadToFile(params.sourceStorageKey!, sourceFilePath);
     }
 
+    let span: SermonSpan | null = null;
+    if (spanOn) {
+      try {
+        const found = await findSermonSpan(params.segments, async (prompt) => {
+          const message = await new Anthropic().messages.create({
+            model: scoringModel(),
+            max_tokens: 1000,
+            thinking: { type: "disabled" },
+            messages: [{ role: "user", content: prompt }],
+            output_config: { format: zodOutputFormat(SermonSpanSchema) },
+          });
+          usage.spanInput += message.usage.input_tokens;
+          usage.spanOutput += message.usage.output_tokens;
+          const block = message.content.find((b) => b.type === "text");
+          return SermonSpanSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
+        });
+        span = found.span;
+        spanLog = { ...found.answer, lines: found.lines, span };
+      } catch (error) {
+        // Fails open: without a span the lab keeps every clip, as before fix J.
+        spanLog = { error: String(error) };
+      }
+    }
+    // The boundary step reads only sermon sentences, so it cannot move a clip outside the sermon.
+    const sermonSegments = span ? params.segments.filter((s) => s.startMs >= span!.startMs && s.endMs <= span!.endMs) : params.segments;
+
     const boundary = boundaryOn
       ? async (clip: T) => {
-          const context = boundaryContext(params.segments, clip);
+          const context = boundaryContext(sermonSegments, clip);
           try {
             const { range, attempts } = await chooseBoundary(context, async (turns) => {
               // Thinking off, as Stage B does: on a long prompt the model otherwise spends the
@@ -119,6 +148,7 @@ export async function runLabSelection<T extends LabClip>(params: {
       targetCount: params.targetCount,
       boundary,
       cameraCheck,
+      sermonSpan: span,
     });
 
     await recordOperationalEventSafely(params.prisma, {
@@ -126,12 +156,15 @@ export async function runLabSelection<T extends LabClip>(params: {
       category: "analysis",
       eventType: "lab_selection_steps",
       severity: "info",
-      message: `Lab steps: ${result.boundaryChanged} clips moved to sentence boundaries, ${result.rejected.length} rejected by the camera check.`,
+      message: `Lab steps: ${result.outsideSermon} clips outside the sermon, ${result.boundaryChanged} clips moved to sentence boundaries, ${result.rejected.length} rejected by the camera check.`,
       projectId: params.projectId,
       jobId: params.jobId,
       metadata: {
+        spanOn,
         boundaryOn,
         cameraOn,
+        sermonSpan: spanLog,
+        outsideSermon: result.outsideSermon,
         boundaryChanged: result.boundaryChanged,
         rejected: result.rejected,
         boundary: boundaryLog,
