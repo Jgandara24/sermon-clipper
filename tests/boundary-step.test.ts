@@ -4,6 +4,7 @@ import {
   BOUNDARY_MAX_MS,
   boundaryRefusal,
   chooseBoundary,
+  endsInsideList,
   endsOnQuotationStart,
   boundaryContext,
   boundaryPrompt,
@@ -135,6 +136,14 @@ describe("endsOnQuotationStart", () => {
     "And Jesus said this to Peter.",
     'He said, "Now, Peter, if I don\'t wash your feet, you\'ll have no part in me.',
     'And he says in verse eight, "Be sober, be vigilant; because your adversary',
+    // Fix I1, real lines from the lab sermons: a lead word before "what" announces the quotation.
+    "But I want you to notice what he says here.",
+    "And this is what Jesus said.",
+    "Now listen what He says.",
+    "Now, now follow what the Word of God says here.",
+    "And I'll never forget what Brother Bobby said to me.",
+    "And, and I love what he said.",
+    "And then when Jesus, on the mountain of transfiguration, shows his glory, God says it again.",
   ])("flags a line that only leads into a quotation: %s", (text) => {
     expect(endsOnQuotationStart(text)).toBe(true);
   });
@@ -144,6 +153,12 @@ describe("endsOnQuotationStart", () => {
     "Be vigilant.",
     "he's setting you up.",
     "Grace is a gift. You cannot earn it, and you will never deserve it.",
+    // Fix I1: lines that end on "says" but close a point. Lab sermon 4b clip 4 (2026-10-19) lost
+    // its last line to this check twice; Jake: "It cuts him off."
+    "I'm tellin' you, brother, the best is yet to come according to what the word of God says.",
+    "That's what the word of God says.",
+    "That's what Jesus said.",
+    "And what we need today is we need some believers in Jesus Christ who will act like what this book says.",
   ])("does not flag a line that lands a point: %s", (text) => {
     expect(endsOnQuotationStart(text)).toBe(false);
   });
@@ -268,12 +283,13 @@ describe("chooseBoundary", () => {
     expect(result.attempts.map((a) => a.refused === null)).toEqual([false, true]);
   });
 
-  it("gives up after the second refused answer", async () => {
+  it("gives up after the third refused answer", async () => {
+    // Fix I2 refuses more answers (an end inside a list), so a refused answer gets two more tries.
     const ask = vi.fn().mockResolvedValue({ startUnit: 0, endUnit: 30, reason: "everything" });
     const result = await chooseBoundary(EVEN, ask);
-    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask).toHaveBeenCalledTimes(3);
     expect(result.range).toBeNull();
-    expect(result.attempts).toHaveLength(2);
+    expect(result.attempts).toHaveLength(3);
   });
 });
 
@@ -431,11 +447,204 @@ describe("chooseBoundary checks an end on a question once (fix D)", () => {
     expect(result.attempts[0].question).toBeUndefined();
   });
 
+  it("checks the question of an answer accepted after a refusal", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: atQ(591), endUnit: atQ(591), reason: "too short" })
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: atQ(588), reason: "ends on the question" })
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: atQ(589), reason: "ends on his answer" });
+    const result = await chooseBoundary(QUESTION, ask);
+    expect(ask).toHaveBeenCalledTimes(3);
+    expect(ask.mock.calls[2][0][4].content).toContain("ends on a question");
+    expect(result.range).toMatchObject({ endMs: 2482428 });
+  });
+
+  it("makes five model calls at most", async () => {
+    const tooShort = { startUnit: atQ(591), endUnit: atQ(591), reason: "too short" };
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce(tooShort)
+      .mockResolvedValueOnce(tooShort)
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: atQ(588), reason: "ends on the question" })
+      .mockResolvedValue(tooShort);
+    const result = await chooseBoundary(QUESTION, ask);
+    expect(ask).toHaveBeenCalledTimes(5);
+    expect(result.range).toMatchObject({ startMs: 2440000, endMs: 2479928 });
+  });
+
   it("does not check a question with no lines after it", async () => {
     const last = QUESTION.units.length - 1;
     const context = { ...QUESTION, units: [...QUESTION.units.slice(0, last), { ...QUESTION.units[last], text: "Will you let him wash your feet?" }] };
     const ask = vi.fn().mockResolvedValue({ startUnit: 0, endUnit: last, reason: "last line" });
     await chooseBoundary(context, ask);
     expect(ask).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Lab sermon 4b clip 4 (2026-10-19), real lines. Jake: "It cuts him off. and it seems like he wasn't
+// finished making his final point." The clip ended on "We're gonna live …", inside a list; the
+// quotation check had removed the line that lands it, "the best is yet to come".
+const FOUR_B_C4 = boundaryContext(
+  [
+    { idx: 456, startMs: 2133709, endMs: 2137250, text: "So this is what I want you to know concerning the death of a Christian." },
+    { idx: 457, startMs: 2137610, endMs: 2139750, text: "Know this for certain." },
+    { idx: 458, startMs: 2140550, endMs: 2144310, text: "Born again Christians never die." },
+    { idx: 459, startMs: 2144910, endMs: 2146950, text: "Your baby is alive." },
+    { idx: 460, startMs: 2147170, endMs: 2149290, text: "Your mom is alive." },
+    { idx: 461, startMs: 2149570, endMs: 2151670, text: "Your dad is alive." },
+    { idx: 462, startMs: 2151890, endMs: 2156310, text: "Your brother or sister in Jesus Christ is alive." },
+    { idx: 463, startMs: 2156650, endMs: 2158530, text: "They know the Lord." },
+    { idx: 464, startMs: 2158830, endMs: 2161330, text: "They've been washed in the blood." },
+    { idx: 465, startMs: 2161610, endMs: 2165110, text: "I want you to know that there's hope beyond the grave." },
+    { idx: 466, startMs: 2165410, endMs: 2169190, text: "I want you to know that this is not all there is." },
+    { idx: 467, startMs: 2169410, endMs: 2175830, text: "We're not gonna be out there like some mist, like Casper the Friendly Ghost, friendly ghost runnin' around." },
+    { idx: 468, startMs: 2175850, endMs: 2179010, text: "Brother, I'm tellin' you, we're gonna stand on a street of gold." },
+    { idx: 469, startMs: 2179230, endMs: 2183610, text: "We're gonna live in a dwelling place that's been constructed by the Lord Jesus Christ." },
+    { idx: 470, startMs: 2183830, endMs: 2185670, text: "We're gonna sing in a heavenly choir." },
+    { idx: 471, startMs: 2185870, endMs: 2187990, text: "We're gonna breathe celestial air." },
+    { idx: 472, startMs: 2188290, endMs: 2193370, text: "I'm tellin' you, brother, the best is yet to come according to what the word of God says." },
+    { idx: 473, startMs: 2196170, endMs: 2200270, text: "Did you notice how he used that word decease in verse 15?" },
+  ],
+  { startMs: 2133709, endMs: 2183610 },
+  90_000,
+);
+const at4 = (idx: number) => FOUR_B_C4.units.findIndex((u) => u.idx === idx);
+
+// Lab sermon 4b clip 1 (2026-10-19), real lines. Jake: "Should have probably ended at "And
+// everywhere God speaks, it is absolute truth. Amen."" It ended on the first of six "What God says
+// about … is absolutely true." lines.
+const FOUR_B_C1 = boundaryContext(
+  [
+    { idx: 758, startMs: 3363766, endMs: 3370726, text: "So I'm telling you today, my friend, this is the Word of God from beginning to end." },
+    { idx: 759, startMs: 3371366, endMs: 3373486, text: "This doesn't become the Word of God." },
+    { idx: 760, startMs: 3373846, endMs: 3376106, text: "This doesn't contain the Word of God." },
+    { idx: 761, startMs: 3376566, endMs: 3379386, text: "This is the Word of God." },
+    { idx: 762, startMs: 3379826, endMs: 3379846, text: "Amen." },
+    { idx: 763, startMs: 3379866, endMs: 3382066, text: "God has spoken to us." },
+    { idx: 764, startMs: 3382286, endMs: 3383426, text: "It is inspired." },
+    { idx: 765, startMs: 3383666, endMs: 3385466, text: "It is full of the Holy Spirit." },
+    { idx: 766, startMs: 3385966, endMs: 3388105, text: "That's why it ignites faith." },
+    { idx: 767, startMs: 3388426, endMs: 3391766, text: "That's why it changes us from glory to glory." },
+    { idx: 768, startMs: 3392046, endMs: 3396506, text: "And everywhere God speaks, it is absolute truth." },
+    { idx: 769, startMs: 3396806, endMs: 3397886, text: "Amen." },
+    { idx: 770, startMs: 3397946, endMs: 3401986, text: "What God says about creation is absolutely true." },
+    { idx: 771, startMs: 3402686, endMs: 3405926, text: "God created man, uh, from the very dust of the ground." },
+    { idx: 772, startMs: 3406206, endMs: 3410506, text: "God took a rib out of Adam's side, and God made a man and a woman." },
+    { idx: 773, startMs: 3410746, endMs: 3414526, text: "What God says about marriage is absolutely true." },
+    { idx: 774, startMs: 3414766, endMs: 3419206, text: "What God says today about gender is absolutely true." },
+    { idx: 775, startMs: 3419486, endMs: 3424326, text: "What God says today about heaven is absolutely true." },
+    { idx: 776, startMs: 3424546, endMs: 3429146, text: "What God says about hell is absolutely true." },
+    { idx: 777, startMs: 3429346, endMs: 3435726, text: "What God says about the second coming of Jesus Christ is absolutely true." },
+    { idx: 778, startMs: 3437286, endMs: 3437506, text: "Amen." },
+    { idx: 779, startMs: 3437506, endMs: 3446046, text: 'And so in verse 19, he says, "Until the day dawns and the morning star rises."' },
+  ],
+  { startMs: 3363766, endMs: 3401986 },
+  90_000,
+);
+const at1 = (idx: number) => FOUR_B_C1.units.findIndex((u) => u.idx === idx);
+
+// Lab sermon 1f clip 1 (2026-10-19), real lines. Jake: "End on "never forget that" is pretty quick
+// cut off. Could probably end on "You've got that today as a believer. Amen." for an eaiser ending."
+const ONE_F_C1 = boundaryContext(
+  [
+    ...Array.from({ length: 8 }, (_, i) => ({ idx: 1200 + i, startMs: 4454000 + i * 4_000, endMs: 4454000 + i * 4_000 + 3_900, text: `Point ${i}.` })),
+    { idx: 1216, startMs: 4490324, endMs: 4493024, text: 'I mean, there\'s times I\'m thinking, "Man, how in the world am I gonna do this?' },
+    { idx: 1217, startMs: 4493324, endMs: 4494484, text: 'How am I gonna get through this?"' },
+    { idx: 1218, startMs: 4494704, endMs: 4496904, text: "But it's the grace of God that strengthens us." },
+    { idx: 1219, startMs: 4497144, endMs: 4498824, text: "When I am weak, He is strong." },
+    { idx: 1220, startMs: 4498864, endMs: 4499544, text: "Never forget that." },
+    { idx: 1221, startMs: 4499604, endMs: 4501264, text: "You've got that today as a believer." },
+    { idx: 1222, startMs: 4501804, endMs: 4501884, text: "Amen." },
+    { idx: 1223, startMs: 4501884, endMs: 4502744, text: "You've got that today." },
+    { idx: 1224, startMs: 4502824, endMs: 4505384, text: 'Some of you here today, you\'re like, "How am I gonna get through what I\'m gonna get through?"' },
+    { idx: 1225, startMs: 4505600, endMs: 4507300, text: "You've got the sustaining grace of God." },
+  ],
+  { startMs: 4454000, endMs: 4499544 },
+  90_000,
+);
+const at1f = (idx: number) => ONE_F_C1.units.findIndex((u) => u.idx === idx);
+
+describe("fix I1: the quotation check keeps a line that closes the point", () => {
+  it("lets lab sermon 4b clip 4 end on \"the best is yet to come\"", () => {
+    expect(applyBoundaryChoice(FOUR_B_C4, { startUnit: at4(456), endUnit: at4(472) })).toEqual({
+      startMs: 2133709,
+      endMs: 2193370,
+      adjustedForScripture: false,
+      adjustedEnd: false,
+    });
+  });
+});
+
+describe("fix I2: no end inside a list", () => {
+  it("finds the \"We're gonna\" list, with the line that leads into it", () => {
+    expect(endsInsideList(FOUR_B_C4.units, at4(469))).toEqual({ first: at4(468), last: at4(471), opening: "We're gonna" });
+    expect(endsInsideList(FOUR_B_C4.units, at4(468))).toMatchObject({ last: at4(471) });
+    expect(endsInsideList(FOUR_B_C4.units, at4(470))).toMatchObject({ last: at4(471) });
+  });
+
+  it("accepts an end on the last item of a list, after it, or before it", () => {
+    expect(endsInsideList(FOUR_B_C4.units, at4(471))).toBeNull();
+    expect(endsInsideList(FOUR_B_C4.units, at4(472))).toBeNull();
+    expect(endsInsideList(FOUR_B_C4.units, at4(467))).toBeNull();
+  });
+
+  it("finds a list whose items have other lines between them", () => {
+    expect(endsInsideList(FOUR_B_C1.units, at1(770))).toEqual({ first: at1(770), last: at1(777), opening: "What God" });
+    expect(endsInsideList(FOUR_B_C1.units, at1(768))).toBeNull();
+    expect(endsInsideList(FOUR_B_C1.units, at1(769))).toBeNull();
+  });
+
+  it("needs three items, and does not count short call-outs", () => {
+    // "I want you to know that …" twice, and "This doesn't …" twice, are not lists.
+    expect(endsInsideList(FOUR_B_C4.units, at4(465))).toBeNull();
+    expect(endsInsideList(FOUR_B_C1.units, at1(759))).toBeNull();
+    const units = ["That's right.", "Point one is here.", "That's right.", "Point two is here.", "That's right.", "Done now."].map(
+      (text, i) => ({ idx: i, startMs: i * 3_000, endMs: i * 3_000 + 2_900, text }),
+    );
+    expect(endsInsideList(units, 2)).toBeNull();
+  });
+
+  it("reads a stammered first word once", () => {
+    const units = ["I should've read my Bible more.", "I, I should've prayed a lot more.", "I should've given way more money.", "No."].map((text, i) => ({
+      idx: i,
+      startMs: i * 3_000,
+      endMs: i * 3_000 + 2_900,
+      text,
+    }));
+    expect(endsInsideList(units, 1)).toMatchObject({ first: 0, last: 2 });
+  });
+
+  it("does not count a line he restates as a list: lab sermon 1f clip 1, Jake's end after \"Amen.\"", () => {
+    // "You've got that today as a believer." "Amen." "You've got that today." … "You've got the
+    // sustaining grace of God." Items need five words, so the four-word restatement is not one.
+    expect(endsInsideList(ONE_F_C1.units, at1f(1222))).toBeNull();
+  });
+
+  it("refuses an end inside a list, and says where the list ends", () => {
+    const reason = boundaryRefusal(FOUR_B_C1, { startUnit: at1(758), endUnit: at1(770) });
+    expect(reason).toContain(`Unit [${at1(770)}] is inside a list`);
+    expect(reason).toContain(`units [${at1(770)}] to [${at1(777)}] start the same way ("What God")`);
+    expect(reason).toContain(`End after its last item, unit [${at1(777)}], or before the list starts`);
+    expect(reason).toMatch(/Start later if you must/);
+    expect(applyBoundaryChoice(FOUR_B_C1, { startUnit: at1(758), endUnit: at1(770) })).toBeNull();
+    expect(applyBoundaryChoice(FOUR_B_C1, { startUnit: at1(758), endUnit: at1(769) })).toMatchObject({ endMs: 3397886 });
+  });
+
+  it("sends a first answer that ends inside a list back with the reason, and uses the next", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: at1(770), reason: "first application" })
+      .mockResolvedValue({ startUnit: 0, endUnit: at1(769), reason: "absolute truth, Amen" });
+    const result = await chooseBoundary(FOUR_B_C1, ask);
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask.mock.calls[1][0][2].content).toContain("is inside a list");
+    expect(result.range).toMatchObject({ startMs: 3363766, endMs: 3397886 });
+  });
+
+  it("checks the end that is left after the quotation check steps back", () => {
+    // The old quotation check stepped 4b clip 4 back from "the best is yet to come" into the list.
+    const context = { ...FOUR_B_C4, units: FOUR_B_C4.units.map((u) => (u.idx === 472 ? { ...u, text: "And notice what he says." } : u)) };
+    expect(boundaryRefusal(context, { startUnit: at4(456), endUnit: at4(472) })).toBeNull();
+    expect(boundaryRefusal(context, { startUnit: at4(457), endUnit: at4(470) })).toContain("is inside a list");
   });
 });
