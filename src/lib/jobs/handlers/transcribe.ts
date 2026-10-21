@@ -20,6 +20,8 @@ import {
 } from "@/lib/storage";
 import { extractAudioRange } from "@/lib/media/probe";
 import { applyFillerDetection } from "@/lib/transcription/filler-detection";
+import { LabTranscriptReuseError, readLabTranscriptReuse, reusedTranscription } from "@/lib/transcription/lab-transcript-reuse";
+import { writeTranscriptSegments } from "@/lib/transcription/segment-write";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import {
   readScribeKeyterms,
@@ -134,6 +136,8 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
   const transcriptionKeyterms = readScribeKeyterms(project.processingConfig);
   let result: TranscriptionResult;
   let providerName: string;
+  // Phase 1 lab only: null in production and whenever the lab switch is off.
+  const labReuse = sourceVideo.srtOverrideKey ? null : readLabTranscriptReuse(project.processingConfig);
 
   if (sourceVideo.srtOverrideKey) {
     const downloadStartedAt = Date.now();
@@ -201,6 +205,33 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
       runtime: finishRuntimeMeasurement(transcriptionStartedAt),
       outcome: "succeeded",
       source: "srt_override",
+    });
+  } else if (labReuse) {
+    const from = await prisma.sourceVideo.findUnique({
+      where: { id: labReuse.fromSourceVideoId },
+      include: { transcript: { include: { segments: { orderBy: { idx: "asc" } } } } },
+    });
+    try {
+      if (!from) throw new LabTranscriptReuseError("The source to copy from does not exist.");
+      const copied = reusedTranscription(
+        { workspaceId: sourceVideo.workspaceId, originUrl: sourceVideo.originUrl, durationS: sourceVideo.durationS?.toNumber() ?? null },
+        { workspaceId: from.workspaceId, originUrl: from.originUrl, durationS: from.durationS?.toNumber() ?? null, transcript: from.transcript },
+      );
+      result = copied.result;
+      providerName = copied.provider;
+    } catch (error) {
+      if (!(error instanceof LabTranscriptReuseError)) throw error;
+      throw new JobFailureError("TRANSCRIBE_FAILED", `The lab could not copy the transcript. ${error.message}`, { cause: error });
+    }
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: project.workspaceId,
+      category: "transcription",
+      eventType: "lab_transcript_reused",
+      severity: "info",
+      message: "Lab: the transcript was copied from an earlier lab source of the same video. No provider was called.",
+      projectId: project.id,
+      jobId: job.id,
+      metadata: { fromSourceVideoId: labReuse.fromSourceVideoId, segments: result.segments.length, provider: providerName },
     });
   } else {
     if (!sourceVideo.audioKey) {
@@ -402,19 +433,7 @@ export const runTranscribeJob: JobHandler = async ({ job, prisma }) => {
       },
     });
 
-    for (const [idx, segment] of segments.entries()) {
-      await tx.transcriptSegment.create({
-        data: {
-          transcriptId: transcript.id,
-          idx,
-          startMs: segment.startMs,
-          endMs: segment.endMs,
-          text: segment.text,
-          speakerLabel: segment.speakerLabel,
-          words: segment.words,
-        },
-      });
-    }
+    await writeTranscriptSegments(tx, transcript.id, segments);
   });
 
   // Keyed by this TRANSCRIBE job's own id (not just the project) so a re-run — e.g. after an

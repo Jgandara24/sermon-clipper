@@ -4,13 +4,18 @@
  * chose. Needs the lab worker running in another terminal: `npm run lab:worker`.
  *
  *   npm run lab:run -- --url "https://www.youtube.com/watch?v=..." --name "Lab 1 - Normal Sunday" [--date 2026-10-12] [--wait]
+ *     [--reuse-transcript-from <earlier lab project id>]
+ *
+ * --reuse-transcript-from copies the transcript of an earlier lab project of the same video, so
+ * TRANSCRIBE calls no paid provider (src/lib/transcription/lab-transcript-reuse.ts).
  *
  * Creates exactly one project and one FINALIZE job, the same way the app does when a church
  * pastes a link. Publishes nothing. Arms no posting slots (the flags stay off in the lab).
  */
-import { PrismaClient, ProcessingJobState, ProjectStatus } from "@prisma/client";
+import { type Prisma, PrismaClient, ProcessingJobState, ProjectStatus } from "@prisma/client";
 import { RETAINED_CLIP_STATUSES } from "@/lib/analysis/clip-status";
 import { createDraftProjectForWorkspace } from "@/lib/project-service";
+import { LabTranscriptReuseError, withLabTranscriptReuse } from "@/lib/transcription/lab-transcript-reuse";
 import {
   assertLabEnvironment,
   formatClock,
@@ -33,7 +38,7 @@ async function main() {
   const url = args.get("url");
   const name = args.get("name");
   if (typeof url !== "string" || typeof name !== "string") {
-    console.error('Usage: npm run lab:run -- --url "<youtube url>" --name "<project name>" [--date YYYY-MM-DD] [--wait] [--timeout-min 90]');
+    console.error('Usage: npm run lab:run -- --url "<youtube url>" --name "<project name>" [--date YYYY-MM-DD] [--wait] [--timeout-min 90] [--reuse-transcript-from <project id>]');
     process.exit(2);
   }
   const dateArg = args.get("date");
@@ -55,16 +60,45 @@ async function main() {
     const workspace = await prisma.workspace.findFirst({ where: { ownerId: user.id, name: LAB_WORKSPACE_NAME } });
     if (!workspace) throw new LabEnvironmentError(`The lab workspace "${LAB_WORKSPACE_NAME}" is missing. Run: npm run db:seed`);
 
+    const reuseFrom = args.get("reuse-transcript-from");
+    let earlier: Parameters<typeof withLabTranscriptReuse>[2] & { name: string } | null = null;
+    if (typeof reuseFrom === "string") {
+      const found = await prisma.project.findFirst({
+        where: { id: reuseFrom, workspaceId: workspace.id },
+        include: { sourceVideo: { select: { originUrl: true, transcript: { select: { id: true } } } } },
+      });
+      if (!found) throw new LabEnvironmentError(`--reuse-transcript-from: the lab workspace has no project ${reuseFrom}.`);
+      earlier = {
+        projectId: found.id,
+        name: found.name,
+        sourceVideoId: found.sourceVideoId,
+        originUrl: found.sourceVideo?.originUrl ?? null,
+        hasTranscript: Boolean(found.sourceVideo?.transcript),
+      };
+      // Checked before the project exists, so a refused copy creates nothing.
+      withLabTranscriptReuse({}, url, earlier);
+    }
+
     const project = await createDraftProjectForWorkspace(
       prisma,
       workspace.id,
       { name, sourceUrl: url, publishedAt },
       user.id,
     );
+    if (earlier) {
+      // FINALIZE and PROBE run first, so TRANSCRIBE reads this config minutes after it is saved.
+      await prisma.project.update({
+        where: { id: project.id },
+        data: { processingConfig: withLabTranscriptReuse(project.processingConfig, url, earlier) as Prisma.InputJsonValue },
+      });
+    }
     console.log(`Project created: ${project.id}`);
     console.log(`Name: ${project.name}`);
     console.log(`Source: ${url}`);
     console.log("One FINALIZE job is queued. The lab worker picks it up (npm run lab:worker).");
+    if (earlier) {
+      console.log(`TRANSCRIBE copies the transcript of "${earlier.name}", with no paid call (LAB_TRANSCRIPT_REUSE_ENABLED, set by lab:worker).`);
+    }
 
     if (!wait) {
       console.log(`\nTo watch it: npm run lab:run -- --watch ${project.id}`);
@@ -165,7 +199,7 @@ async function printClips(prisma: PrismaClient, projectId: string) {
     if (await watchOnly()) return;
     await main();
   } catch (error) {
-    if (error instanceof LabEnvironmentError) {
+    if (error instanceof LabEnvironmentError || error instanceof LabTranscriptReuseError) {
       console.error(`\nStopped: ${error.message}`);
       process.exit(1);
     }
