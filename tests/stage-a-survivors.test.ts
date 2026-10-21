@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeIoU } from "@/lib/analysis/chunking";
-import { MAX_STAGE_B_CANDIDATES, StageAResultSchema, stageAPrompt, thinStageASurvivors } from "@/lib/analysis/pipeline";
+import { MAX_STAGE_B_CANDIDATES, StageAResultSchema, stageAPrompt, stageBPrompt, thinStageASurvivors } from "@/lib/analysis/pipeline";
 import type { AnalysisCandidate } from "@/lib/analysis/types";
 
 const MINUTE = 60_000;
@@ -138,5 +138,30 @@ describe("StageAResultSchema", () => {
       ],
     });
     expect(result.classifications.map((c) => c.momentType)).toEqual(["hook", "call_to_action"]);
+  });
+});
+
+// Fix N (lab sermons 4e and 1k, 2026-10-20): Stage B received 25 windows but returned only 7 to 11,
+// the ones it liked, so the lab steps had no reserves and sermon 4e ended with 3 clips. On sermon
+// 4's transcript the old prompt scored 10 of 25 twice; asking for one entry per window scored 25.
+describe("stageBPrompt asks for one scored entry per window it sends (fix N)", () => {
+  const candidates = windows(0, 85, 40);
+  const context = { fullText: "full transcript", genre: "sermon" };
+
+  it("names the exact number of windows sent, and that weak ones are scored low, not left out", () => {
+    const kept = [2, 5, 9, 14, 30];
+    const prompt = stageBPrompt(candidates, kept, context);
+    expect(prompt).toContain("Score every numbered excerpt below: return exactly 5 entries in scoredClips, one per number");
+    expect(prompt).toContain("even for weak excerpts. Low scores are how weak excerpts are ranked out.");
+    expect(stageBPrompt(candidates, thinStageASurvivors(candidates, allSurvive(candidates)), context)).toContain(
+      `return exactly ${Math.min(MAX_STAGE_B_CANDIDATES, 40)} entries`,
+    );
+  });
+
+  it("still lists each window sent, by its number, after the instructions", () => {
+    const prompt = stageBPrompt(candidates, [2, 5], context);
+    expect(prompt.indexOf("return exactly 2 entries")).toBeLessThan(prompt.indexOf("[2] Window at"));
+    expect(prompt).toContain("[5] Window at");
+    expect(prompt).not.toContain("[3] Window at");
   });
 });

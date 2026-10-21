@@ -98,6 +98,11 @@ export function stageBPrompt(
     "send this to a friend), and topic relevance (connects to the recording's main ideas). " +
     "Write a short title (max 60 characters, no clickbait), a hook line (max 8 words), a " +
     "one-sentence rationale, and an excerpt quote supporting your scoring.\n\n" +
+    // Fix N (lab sermons 4e and 1k, 2026-10-20): without this the model returned 7 to 11 of the 25
+    // windows, the ones it liked, so a sermon ran out of reserves when the lab steps dropped clips;
+    // sermon 4e ended with 3. Asking for one entry per window scored 25 of 25.
+    `Score every numbered excerpt below: return exactly ${kept.length} entries in scoredClips, one per number, ` +
+    "even for weak excerpts. Low scores are how weak excerpts are ranked out.\n\n" +
     kept.map((index) => `[${index}] ${candidates[index].text}`).join("\n\n")
   );
 }
