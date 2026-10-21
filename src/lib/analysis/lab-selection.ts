@@ -1,4 +1,3 @@
-import { computeIoU } from "./chunking";
 import type { CameraCheckResult } from "./camera-check";
 
 /**
@@ -36,6 +35,18 @@ export type LabSelectionResult<T> = {
   /** Clips dropped because they are not inside the sermon. */
   outsideSermon: number;
 };
+
+/**
+ * The share of the shorter clip that the two clips have in common. Gate run, 2026-10-20: lab sermon
+ * 4c clip 6 became 85 seconds and held all 29.6 seconds of clip 5, an intersection over union of only
+ * 0.35; Jake failed both 4c clips that overlapped. Clips may now run to 90 seconds, so one can hold
+ * another.
+ */
+function sharedShare(a: { startMs: number; endMs: number }, b: { startMs: number; endMs: number }): number {
+  const shared = Math.max(0, Math.min(a.endMs, b.endMs) - Math.max(a.startMs, b.startMs));
+  const shorter = Math.min(a.endMs - a.startMs, b.endMs - b.startMs);
+  return shorter > 0 ? shared / shorter : 0;
+}
 
 async function inBatches<A, B>(items: A[], size: number, run: (item: A) => Promise<B>): Promise<B[]> {
   const out: B[] = [];
@@ -79,10 +90,11 @@ export async function applyLabSelectionSteps<T extends LabClip>(
       fixed.push({ ...clip, startMs: range.startMs, endMs: range.endMs, text });
     });
     // Fixed clips first, then the deep reserves, then the clips the step could not fix. Moved
-    // clips can now cover the same words; the clip ahead in that order keeps them.
+    // clips can now cover the same words; the clip ahead in that order keeps them when the two share
+    // more than half of the shorter one.
     const byScore = (list: T[]) => [...list].sort((a, b) => b.total - a.total);
     const ordered = [...byScore(fixed), ...byScore(clips.slice(topN)), ...byScore(unfixed)];
-    clips = ordered.filter((clip, i) => !ordered.slice(0, i).some((other) => computeIoU(clip, other) > 0.5));
+    clips = ordered.filter((clip, i) => !ordered.slice(0, i).some((other) => sharedShare(clip, other) > 0.5));
   }
   // A raw window the boundary step could not fix, or a deep reserve, may still cross the edge.
   if (span) keepWhere((clip) => clip.startMs >= span.startMs && clip.endMs <= span.endMs);

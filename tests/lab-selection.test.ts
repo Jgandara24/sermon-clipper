@@ -73,6 +73,26 @@ describe("applyLabSelectionSteps", () => {
     expect(result.clips.map((c) => c.title)).toEqual(["clip at 100"]);
   });
 
+  it("drops a clip that shares more than half of a shorter clip, even inside a much longer one (lab sermon 4c)", async () => {
+    // Gate run, 2026-10-20: 4c clip 6 became 85 seconds and held all 29.6 seconds of clip 5; their
+    // intersection over union was 0.35, so both stayed. Jake failed both 4c clips that overlapped.
+    const kept = [clipAt(100, 90), clipAt(300, 80)];
+    const boundary = vi
+      .fn()
+      .mockImplementation(async (clip: Clip) => (clip.startMs === 100_000 ? { startMs: 100_000, endMs: 185_000 } : { startMs: 130_000, endMs: 160_000 }));
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 6, boundary, cameraCheck: null });
+    expect(result.clips.map((c) => c.title)).toEqual(["clip at 100"]);
+  });
+
+  it("keeps two clips that share less than half of the shorter one", async () => {
+    const kept = [clipAt(100, 90), clipAt(300, 80)];
+    const boundary = vi
+      .fn()
+      .mockImplementation(async (clip: Clip) => (clip.startMs === 100_000 ? { startMs: 100_000, endMs: 140_000 } : { startMs: 130_000, endMs: 170_000 }));
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 6, boundary, cameraCheck: null });
+    expect(result.clips.map((c) => c.title)).toEqual(["clip at 100", "clip at 300"]);
+  });
+
   it("rejects clips that fail the camera check and lets the next clip move up, in rank order", async () => {
     const kept = [clipAt(100, 90), clipAt(300, 85), clipAt(500, 80), clipAt(700, 75), clipAt(900, 70)];
     const cameraCheck = vi
