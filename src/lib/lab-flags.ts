@@ -9,6 +9,7 @@ const LAB_SWITCHES = {
   boundaryStep: "LAB_BOUNDARY_STEP_ENABLED",
   phraseCaptions: "LAB_PHRASE_CAPTIONS_ENABLED",
   sermonSpan: "LAB_SERMON_SPAN_ENABLED",
+  transcriptReuse: "LAB_TRANSCRIPT_REUSE_ENABLED",
 } as const;
 
 export function labStepEnabled(step: keyof typeof LAB_SWITCHES): boolean {
