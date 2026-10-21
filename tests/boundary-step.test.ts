@@ -1,14 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  announcedListWithOnlyFirst,
   applyBoundaryChoice,
   BOUNDARY_MAX_MS,
   boundaryRefusal,
   chooseBoundary,
+  correctionAtStart,
   endsInsideList,
   endsOnQuotationStart,
   boundaryContext,
   boundaryPrompt,
   looksLikeScriptureReadingStart,
+  prayerInClip,
   wholeSentences,
 } from "@/lib/analysis/boundary-step";
 
@@ -68,8 +71,8 @@ describe("boundaryContext and boundaryPrompt", () => {
     expect(prompt).toMatch(/where the thought starts/i);
     expect(prompt).toMatch(/where the point lands/i);
     expect(prompt).toMatch(/never start on the scripture reading/i);
-    expect(prompt).toMatch(/15 and 59 seconds/);
-    expect(prompt).toMatch(/under 60 seconds/i);
+    expect(prompt).toMatch(/30 to 60 seconds/);
+    expect(prompt).toMatch(/never go past 90 seconds/i);
   });
 
   it("numbers every unit and marks the current clip", () => {
@@ -107,12 +110,15 @@ describe("applyBoundaryChoice", () => {
     expect(applyBoundaryChoice(long, { startUnit: 0, endUnit: 59 })).toBeNull();
   });
 
-  it("refuses any clip of 60 seconds or more (Jake, 2026-10-18: keep clips under 60 seconds)", () => {
+  it("accepts a clip of up to 90 seconds and refuses a longer one (Jake, 2026-10-20)", () => {
+    // "If the clip's main point goes past 60 seconds and closer to something like 75 seconds, then
+    // let it be. Try to refrain from going past 90 seconds."
     const units = Array.from({ length: 40 }, (_, i) => ({ idx: i, startMs: i * 3_000, endMs: i * 3_000 + 2_900, text: "Point." }));
     const context = boundaryContext(units, { startMs: 30_000, endMs: 60_000 }, 90_000);
-    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 19 })).toEqual({ startMs: 0, endMs: 59_900, adjustedForScripture: false, adjustedEnd: false });
-    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 20 })).toBeNull();
-    expect(BOUNDARY_MAX_MS).toBeLessThan(60_000);
+    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 24 })).toMatchObject({ startMs: 0, endMs: 74_900 });
+    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 29 })).toEqual({ startMs: 0, endMs: 89_900, adjustedForScripture: false, adjustedEnd: false });
+    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 30 })).toBeNull();
+    expect(BOUNDARY_MAX_MS).toBe(90_000);
   });
 });
 
@@ -199,14 +205,19 @@ describe("boundaryPrompt teaches Jake's corrections", () => {
   });
 });
 
-describe("boundaryPrompt aims for 30 to 55 seconds and teaches Jake's sermon 3 notes", () => {
+describe("boundaryPrompt aims for 30 to 60 seconds and teaches Jake's sermon 3 notes", () => {
   const prompt = boundaryPrompt(boundaryContext(CLIP5, { startMs: 3455184, endMs: 3522400 }, 90_000));
 
-  it("aims for 30 to 55 seconds and goes shorter only when the lines around it are a different idea", () => {
+  it("aims for 30 to 60 seconds and goes shorter only when the lines around it are a different idea", () => {
     // Lab sermon 3 clip 6 (17 s): "This could pass by itself, but I feel like it could be a longer clip."
-    expect(prompt).toMatch(/aim for 30 to 55 seconds/i);
+    expect(prompt).toMatch(/aim for 30 to 60 seconds/i);
     expect(prompt).toMatch(/under 30 seconds only when/i);
-    expect(prompt).toMatch(/15 and 59 seconds/);
+  });
+
+  it("lets a point that needs it run to 75 seconds, and never past 90 (Jake, 2026-10-20)", () => {
+    expect(prompt).toMatch(/up to 75 seconds is fine/i);
+    expect(prompt).toMatch(/never go past 90 seconds/i);
+    expect(prompt).not.toMatch(/under 60 seconds/i);
   });
 
   it("includes his two sermon 3 corrections as worked examples 4 and 5", () => {
@@ -232,10 +243,15 @@ describe("boundaryRefusal", () => {
     expect(boundaryRefusal(EVEN, { startUnit: 5, endUnit: 20 })).toBeNull();
   });
 
-  it("explains a choice that runs 60 seconds or more", () => {
-    const reason = boundaryRefusal(EVEN, { startUnit: 0, endUnit: 20 });
-    expect(reason).toMatch(/62\.9 seconds/);
-    expect(reason).toMatch(/under 60 seconds/);
+  it("explains a choice that runs past 90 seconds, and says to keep the end and start later", () => {
+    expect(boundaryRefusal(EVEN, { startUnit: 0, endUnit: 20 })).toBeNull();
+    const reason = boundaryRefusal(EVEN, { startUnit: 0, endUnit: 31 });
+    expect(reason).toMatch(/95\.9 seconds/);
+    expect(reason).toMatch(/must not run past 90 seconds/);
+    expect(reason).toMatch(/keep the end where the point ends and start later/i);
+    // Gate run, 2026-10-20: told only "not past 90", the model started 1g clip 3 just late enough to
+    // run 89.9 seconds.
+    expect(reason).toMatch(/30 to 60 seconds, or 75 at most/);
   });
 
   it("explains a choice that is too short after the end steps back past a quotation lead-in", () => {
@@ -266,8 +282,8 @@ describe("chooseBoundary", () => {
     // Lab sermon 3 clip 5: the only answer was too long, so the clip kept its raw window.
     const ask = vi
       .fn()
-      .mockResolvedValueOnce({ startUnit: 0, endUnit: 25, reason: "the whole story" })
-      .mockResolvedValueOnce({ startUnit: 5, endUnit: 20, reason: "shorter" });
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: 35, reason: "the whole story" })
+      .mockResolvedValueOnce({ startUnit: 13, endUnit: 35, reason: "start later" });
     const result = await chooseBoundary(EVEN, ask);
 
     expect(ask).toHaveBeenCalledTimes(2);
@@ -275,11 +291,11 @@ describe("chooseBoundary", () => {
     expect(turns).toHaveLength(3);
     expect(turns[0]).toEqual({ role: "user", content: boundaryPrompt(EVEN) });
     expect(turns[1].role).toBe("assistant");
-    expect(JSON.parse(turns[1].content)).toMatchObject({ startUnit: 0, endUnit: 25 });
+    expect(JSON.parse(turns[1].content)).toMatchObject({ startUnit: 0, endUnit: 35 });
     expect(turns[2].role).toBe("user");
-    expect(turns[2].content).toMatch(/77\.9 seconds/);
+    expect(turns[2].content).toMatch(/107\.9 seconds/);
     expect(turns[2].content).toMatch(/choose again/i);
-    expect(result.range).toMatchObject({ startMs: 15_000, endMs: 62_900 });
+    expect(result.range).toMatchObject({ startMs: 39_000, endMs: 107_900 });
     expect(result.attempts.map((a) => a.refused === null)).toEqual([false, true]);
   });
 
@@ -646,5 +662,268 @@ describe("fix I2: no end inside a list", () => {
     const context = { ...FOUR_B_C4, units: FOUR_B_C4.units.map((u) => (u.idx === 472 ? { ...u, text: "And notice what he says." } : u)) };
     expect(boundaryRefusal(context, { startUnit: at4(456), endUnit: at4(472) })).toBeNull();
     expect(boundaryRefusal(context, { startUnit: at4(457), endUnit: at4(470) })).toContain("is inside a list");
+  });
+});
+
+// Lab sermon 4c (2026-10-20), real lines. Clip 6 ran from "death and taxes" (421) to 427, clip 5 from
+// 423 to 429. Jake on clip 6: "it feels odd that he says here are three things and he only lists one
+// thing."; on clip 5: "it isn't cleanly making a point, rather starting one."
+const FOUR_C = boundaryContext(
+  [
+    { idx: 416, startMs: 1884150, endMs: 1885670, text: "Speak to your people today." },
+    { idx: 417, startMs: 1886170, endMs: 1887470, text: "In Jesus' name we pray." },
+    { idx: 418, startMs: 1887490, endMs: 1888869, text: "And all God's people said-" },
+    { idx: 419, startMs: 1889650, endMs: 1889770, text: "Amen." },
+    { idx: 420, startMs: 1889770, endMs: 1890810, text: "Amen and amen." },
+    { idx: 421, startMs: 1892370, endMs: 1900610, text: "You know, someone once said that there is nothing certain in life but death and taxes." },
+    { idx: 422, startMs: 1901970, endMs: 1908050, text: "And while that's certain, I wanna say that there's actually some other things that are certain." },
+    { idx: 423, startMs: 1909410, endMs: 1912810, text: "I call them divine certainties." },
+    { idx: 424, startMs: 1913950, endMs: 1922390, text: "In fact, this morning I, I wanna show you three things that are certain in an uncertain world." },
+    { idx: 425, startMs: 1923230, endMs: 1930490, text: "First of all, I want you to know that it is for certain that Christians never die." },
+    { idx: 426, startMs: 1931890, endMs: 1931970, text: "Amen." },
+    { idx: 427, startMs: 1931970, endMs: 1935750, text: "It is for certain that Christians never die." },
+    { idx: 428, startMs: 1935970, endMs: 1944390, text: "Look, the Bible says that our understanding at what happens at death is not based on human speculation, but divine revelation." },
+    { idx: 429, startMs: 1944930, endMs: 1952810, text: "In fact, the Bible says in verse 12, Simon Peter says it is presented and it stands on the truth of God's word." },
+  ],
+  { startMs: 1892370, endMs: 1935750 },
+  90_000,
+);
+const at4c = (idx: number) => FOUR_C.units.findIndex((u) => u.idx === idx);
+const lines = (texts: string[]) => texts.map((text, i) => ({ idx: i, startMs: i * 4_000, endMs: i * 4_000 + 3_900, text }));
+
+describe("fix K1: no announced list with only its first item", () => {
+  it("finds \"three things\" and \"First of all\" with no second item in lab sermon 4c clips 5 and 6", () => {
+    expect(announcedListWithOnlyFirst(FOUR_C.units, at4c(421), at4c(427))).toEqual({
+      announcement: at4c(424),
+      first: at4c(425),
+      count: "three things",
+      firstWords: "First of all",
+    });
+    expect(announcedListWithOnlyFirst(FOUR_C.units, at4c(423), at4c(429))).toMatchObject({ announcement: at4c(424), first: at4c(425) });
+  });
+
+  it("accepts the clip when the announcement is left out", () => {
+    expect(announcedListWithOnlyFirst(FOUR_C.units, at4c(425), at4c(429))).toBeNull();
+  });
+
+  it("accepts the clip when it gives the second item too", () => {
+    const units = lines([
+      "I want to give you two reasons to pray.",
+      "First of all, prayer changes you.",
+      "Secondly, prayer changes the people you pray for.",
+      "Amen.",
+    ]);
+    expect(announcedListWithOnlyFirst(units, 0, 2)).toBeNull();
+    expect(announcedListWithOnlyFirst(units, 0, 1)).toMatchObject({ announcement: 0, first: 1, count: "two reasons" });
+  });
+
+  it("accepts a count he lists without \"first\": lab sermon 3e clip 2 (passed)", () => {
+    const units = lines([
+      "I, I can, I can look at two things you own and tell whether you're sold out to Jesus: your calendar and your checkbook.",
+      "Amen.",
+    ]);
+    expect(announcedListWithOnlyFirst(units, 0, 1)).toBeNull();
+  });
+
+  it("refuses the clip and says to start after the announcement", () => {
+    const reason = boundaryRefusal(FOUR_C, { startUnit: at4c(421), endUnit: at4c(427) });
+    expect(reason).toContain(`Unit [${at4c(424)}] announces "three things"`);
+    expect(reason).toContain(`only the first ("First of all", unit [${at4c(425)}])`);
+    expect(reason).toContain(`Start after unit [${at4c(424)}]`);
+    expect(applyBoundaryChoice(FOUR_C, { startUnit: at4c(421), endUnit: at4c(427) })).toBeNull();
+  });
+});
+
+// Lab sermon 1g clip 1 (2026-10-20), real lines. Jake: "The pastor mispeaks at the beginning. That's
+// not a proper hook ... the beginning has to be clean and catch. Start it right after on, "You know
+// the story.""
+const ONE_G_C1 = boundaryContext(
+  [
+    { idx: 1179, startMs: 4441520, endMs: 4442420, text: "But what else is there?" },
+    { idx: 1180, startMs: 4443580, endMs: 4447840, text: "Once you get saved, then there is grace that sustains us." },
+    { idx: 1181, startMs: 4448400, endMs: 4449860, text: "You got grace that saves us." },
+    { idx: 1182, startMs: 4450420, endMs: 4452840, text: "Now Christian, there's grace that saves us." },
+    { idx: 1183, startMs: 4454139, endMs: 4455279, text: "I- I'm sorry, sustains us." },
+    { idx: 1184, startMs: 4455279, endMs: 4455860, text: "Excuse me." },
+    { idx: 1185, startMs: 4456460, endMs: 4457140, text: "Sustains us." },
+    { idx: 1186, startMs: 4457320, endMs: 4458060, text: "You know the story." },
+    { idx: 1187, startMs: 4458780, endMs: 4460300, text: "Paul had a thorn in his flesh." },
+    { idx: 1188, startMs: 4461180, endMs: 4463800, text: "Three times he asked God to remove it." },
+    { idx: 1189, startMs: 4464640, endMs: 4466220, text: "God said no all three times." },
+    { idx: 1190, startMs: 4466600, endMs: 4467500, text: "But what'd God say?" },
+    { idx: 1191, startMs: 4468020, endMs: 4470780, text: 'God said, "My grace is sufficient for you.' },
+    { idx: 1192, startMs: 4471340, endMs: 4474800, text: 'My strength is made perfect in weakness."' },
+  ],
+  { startMs: 4450420, endMs: 4474800 },
+  90_000,
+);
+const at1g = (idx: number) => ONE_G_C1.units.findIndex((u) => u.idx === idx);
+
+describe("fix K3: no start on a correction", () => {
+  const SLIP = { first: at1g(1183), last: at1g(1185), words: "I'm sorry" };
+
+  it("finds the correction in the first 15 seconds of lab sermon 1g clip 1, with the words he says again", () => {
+    // "I- I'm sorry, sustains us." "Excuse me." "Sustains us." The short line he repeats belongs to it.
+    expect(correctionAtStart(ONE_G_C1.units, at1g(1182), at1g(1192))).toEqual(SLIP);
+  });
+
+  it("finds it 12.6 seconds in, where the 90-second rule starts the clip (gate run, 2026-10-20)", () => {
+    expect(correctionAtStart(ONE_G_C1.units, at1g(1179), at1g(1192))).toEqual(SLIP);
+  });
+
+  it("refuses a start on the words he says again, \"Sustains us.\" (gate run 2, 2026-10-20)", () => {
+    expect(correctionAtStart(ONE_G_C1.units, at1g(1185), at1g(1192))).toEqual(SLIP);
+  });
+
+  it("accepts Jake's start, \"You know the story.\"", () => {
+    expect(correctionAtStart(ONE_G_C1.units, at1g(1186), at1g(1192))).toBeNull();
+  });
+
+  it("accepts a correction more than 15 seconds into the clip (Jake: in the middle it is probably okay)", () => {
+    // Lines start every 4 seconds, so line 4 starts 16 seconds in.
+    const whole = "This is a whole point.";
+    expect(correctionAtStart(lines([whole, whole, whole, whole, "I'm sorry, the third chapter.", whole]), 0, 5)).toBeNull();
+    expect(correctionAtStart(lines([whole, whole, whole, "I'm sorry, the third chapter.", whole]), 0, 4)).toEqual({ first: 3, last: 3, words: "I'm sorry" });
+  });
+
+  it("reads \"I mean\" as a correction only after a comma, not as an opening word", () => {
+    const whole = "This is a whole point.";
+    expect(correctionAtStart(lines(["I mean, here's this big tough guy fisherman, right?", whole]), 0, 1)).toBeNull();
+    expect(correctionAtStart(lines(["He was a fisherman, I mean, a tax collector.", whole]), 0, 1)).toEqual({ first: 0, last: 0, words: "I mean" });
+    expect(correctionAtStart(lines([whole, "I misspoke there.", whole]), 0, 2)).toEqual({ first: 1, last: 1, words: "I misspoke" });
+  });
+
+  it("refuses the clip and says to start after the correction and the words he says again", () => {
+    const reason = boundaryRefusal(ONE_G_C1, { startUnit: at1g(1182), endUnit: at1g(1192) });
+    expect(reason).toContain(`Units [${at1g(1183)}] to [${at1g(1185)}] are a correction ("I'm sorry")`);
+    expect(reason).toContain(`Start after unit [${at1g(1185)}]`);
+    expect(boundaryRefusal(ONE_G_C1, { startUnit: at1g(1185), endUnit: at1g(1192) })).toContain("are a correction");
+    // Jake: "Start it right after on, "You know the story.""
+    expect(boundaryRefusal(ONE_G_C1, { startUnit: at1g(1186), endUnit: at1g(1192) })).toBeNull();
+  });
+});
+
+// Lab sermon 1g clip 5 (2026-10-20), real lines. Jake: "The pastor is praying, this shouldn't be a
+// clip." The prayer comes after the reading, inside the sermon span.
+const ONE_G_C5 = boundaryContext(
+  [
+    { idx: 453, startMs: 2020200, endMs: 2024320, text: "So Lord, as your messenger, I just ask for the anointing of the Holy Spirit right now." },
+    { idx: 454, startMs: 2025660, endMs: 2026780, text: "Touch my mind." },
+    { idx: 455, startMs: 2027940, endMs: 2028840, text: "Touch my mouth." },
+    { idx: 456, startMs: 2029780, endMs: 2031200, text: "Touch the ears that are here today." },
+    { idx: 457, startMs: 2032100, endMs: 2038560, text: "Lord, I want to confess today that the devil is a defeated foe, and he has no right in this church house this morning." },
+    { idx: 458, startMs: 2039260, endMs: 2043680, text: "For Jesus, you broke his power on the cross and on your resurrection." },
+    { idx: 459, startMs: 2044580, endMs: 2048340, text: "So God, today, we celebrate the fact that you wanna move in our lives." },
+    { idx: 460, startMs: 2049140, endMs: 2053520, text: "Lord, I know we're not here today by accident, chance, or fate, but it's a divine appointment." },
+    { idx: 461, startMs: 2053580, endMs: 2056800, text: "You've come to speak to people today through your Word." },
+    { idx: 462, startMs: 2057540, endMs: 2059180, text: "Hide me behind your cross." },
+    { idx: 463, startMs: 2060200, endMs: 2062260, text: "I must decrease, and you must increase." },
+    { idx: 464, startMs: 2063020, endMs: 2066540, text: "And I pray, Jesus, you'll be glorified in everything we do today." },
+    { idx: 465, startMs: 2066980, endMs: 2071240, text: "In Jesus' name we pray, and all God's people said- Amen." },
+    { idx: 466, startMs: 2071240, endMs: 2071740, text: "Amen." },
+    { idx: 467, startMs: 2072380, endMs: 2080260, text: "Now, I want to remind you here that Peter is writing to these Christians who are going through serious persecution." },
+  ],
+  { startMs: 2032100, endMs: 2080260 },
+  90_000,
+);
+const at1g5 = (idx: number) => ONE_G_C5.units.findIndex((u) => u.idx === idx);
+
+describe("fix K4: no prayer", () => {
+  it("finds the prayer in lab sermon 1g clip 5, from its first \"Lord,\" to \"In Jesus' name we pray\"", () => {
+    expect(prayerInClip(ONE_G_C5.units, at1g5(457), at1g5(467))).toEqual({ first: at1g5(457), last: at1g5(465), words: "In Jesus' name we pray" });
+  });
+
+  it("finds the end of the prayer before lab sermon 4c clip 6, and accepts clip 6 itself", () => {
+    expect(prayerInClip(FOUR_C.units, at4c(416), at4c(424))).toMatchObject({ first: at4c(417), last: at4c(418) });
+    expect(prayerInClip(FOUR_C.units, at4c(421), at4c(427))).toBeNull();
+  });
+
+  it("finds two lines that speak to the Lord, even with no closing words", () => {
+    expect(prayerInClip(ONE_G_C5.units, at1g5(453), at1g5(461))).toEqual({ first: at1g5(453), last: at1g5(460), words: "Lord," });
+  });
+
+  it("accepts preaching that names God: lab sermon 1f clip 3 (passed), and one line to the Lord in a story", () => {
+    expect(prayerInClip(lines(["God, listen to this, He resists the proud, but He gives grace to the humble.", "Point."]), 0, 1)).toBeNull();
+    expect(prayerInClip(lines(["And she cried out, Lord, help me.", "And he did.", "Point."]), 0, 2)).toBeNull();
+    expect(prayerInClip(lines(["There is power in Jesus' name.", "Point."]), 0, 1)).toBeNull();
+  });
+
+  it("refuses the clip and says to leave the prayer out", () => {
+    const reason = boundaryRefusal(ONE_G_C5, { startUnit: at1g5(457), endUnit: at1g5(467) });
+    expect(reason).toContain(`Units [${at1g5(457)}] to [${at1g5(465)}] are a prayer ("In Jesus' name we pray")`);
+    expect(reason).toMatch(/leaves out all of the prayer/);
+    expect(boundaryRefusal(ONE_G_C5, { startUnit: at1g5(467), endUnit: at1g5(467) })).not.toMatch(/prayer/);
+  });
+
+  it("tells the model in the prompt", () => {
+    expect(boundaryPrompt(ONE_G_C5)).toMatch(/prayer \("Lord, \.\.\."/);
+  });
+});
+
+describe("fix K2: keep the end when a point runs too long", () => {
+  // Lab sermon 5 clip 6 (2026-10-20): the first answer held the whole 188.6-second story; told it was
+  // too long, the model ended 93.2 seconds sooner, in the middle of the story. Jake: "It seems like
+  // the pastor wasn't done tell the story or making his point."
+  it("refuses an answer that ends more than 8 seconds sooner than the answer that ran too long", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: 35, reason: "the whole story" })
+      .mockResolvedValueOnce({ startUnit: 5, endUnit: 20, reason: "the first scene" })
+      .mockResolvedValueOnce({ startUnit: 12, endUnit: 35, reason: "the end of the story" });
+    const result = await chooseBoundary(EVEN, ask);
+    expect(ask).toHaveBeenCalledTimes(3);
+    const refused = result.attempts[1].refused!;
+    expect(refused).toContain("Your last answer that ran too long ended at unit [35]");
+    expect(refused).toContain("This answer ends at unit [20], 45.0 seconds sooner");
+    expect(refused).toContain("Keep the end at unit [35] or later, and start later.");
+    expect(result.range).toMatchObject({ startMs: 36_000, endMs: 107_900 });
+  });
+
+  it("lets a clip cut from a longer point run 75 seconds at most (gate run, 2026-10-20: 1g clip 3 ran 89.9)", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: 35, reason: "the whole point" })
+      .mockResolvedValueOnce({ startUnit: 10, endUnit: 35, reason: "just under 90" })
+      .mockResolvedValueOnce({ startUnit: 16, endUnit: 35, reason: "the end of the point" });
+    const result = await chooseBoundary(EVEN, ask);
+    expect(ask).toHaveBeenCalledTimes(3);
+    expect(result.attempts[1].refused).toMatch(/77\.9 seconds/);
+    expect(result.attempts[1].refused).toMatch(/must run 75 seconds at most/);
+    expect(result.range).toMatchObject({ startMs: 48_000, endMs: 107_900 });
+  });
+
+  it("accepts a first answer of 75 to 90 seconds when the point needs it", () => {
+    expect(boundaryRefusal(EVEN, { startUnit: 0, endUnit: 25 })).toBeNull();
+  });
+
+  it("accepts an end up to 8 seconds sooner", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: 35, reason: "the whole story" })
+      .mockResolvedValueOnce({ startUnit: 12, endUnit: 33, reason: "a little sooner" });
+    const result = await chooseBoundary(EVEN, ask);
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(result.range).toMatchObject({ startMs: 36_000, endMs: 101_900 });
+  });
+
+  it("does not hold the end of an answer refused for another reason", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 20, endUnit: 21, reason: "too short" })
+      .mockResolvedValueOnce({ startUnit: 5, endUnit: 12, reason: "earlier" });
+    const result = await chooseBoundary(EVEN, ask);
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(result.range).toMatchObject({ startMs: 15_000, endMs: 38_900 });
+  });
+
+  it("holds the end of the latest answer that ran too long", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: 35, reason: "the whole story" })
+      .mockResolvedValueOnce({ startUnit: 0, endUnit: 39, reason: "more" })
+      .mockResolvedValueOnce({ startUnit: 20, endUnit: 35, reason: "shorter" });
+    const result = await chooseBoundary(EVEN, ask);
+    expect(result.attempts[2].refused).toContain("ended at unit [39]");
+    expect(result.range).toBeNull();
   });
 });

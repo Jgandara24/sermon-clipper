@@ -7,13 +7,18 @@ import { z } from "zod";
  * ("should have kept going", "stops at the wrong time", "shouldn't start by reading a verse").
  *
  * The model reads whole transcript sentences around a clip and picks where the thought starts
- * and where the point lands. Code then enforces what can be checked: whole sentences, 15 seconds
- * to under 60, and no start on a Scripture reading.
+ * and where the point lands. Code then enforces what can be checked: whole sentences, 15 to 90
+ * seconds, no start on a Scripture reading, and fix K's rules below.
  */
 
 export const BOUNDARY_MIN_MS = 15_000;
-// Jake, 2026-10-18: "keep the clips under 60 seconds."
-export const BOUNDARY_MAX_MS = 59_900;
+// Jake, 2026-10-20: "if the clip's main point goes past 60 seconds and closer to something like 75
+// seconds, then let it be. Try to refrain from going past 90 seconds." 30 to 60 is the sweet spot,
+// which the prompt asks for; candidate windows stay under 60 (MAX_CANDIDATE_MS).
+export const BOUNDARY_MAX_MS = 90_000;
+// A clip cut from a point longer than BOUNDARY_MAX_MS: gate run, 2026-10-20, told only "not past 90",
+// the model started lab sermon 1g clip 3 just late enough to run 89.9 seconds.
+export const BOUNDARY_CUT_MAX_MS = 75_000;
 export const BOUNDARY_CONTEXT_MS = 90_000;
 
 export type BoundaryUnit = { idx: number; startMs: number; endMs: number; text: string };
@@ -90,7 +95,7 @@ const WORKED_EXAMPLES =
   "lead into the next verse. 58 seconds.\n" +
   "3. A clip ended on Peter's objection, '\"Oh, no, you're not gonna wash my feet, Jesus.\"' The founder said it stopped " +
   "too early: the preacher had not finished his point. Jesus's reply and the meaning came after. Never end in the middle " +
-  "of a dialogue; if the whole story and its point will not fit under 60 seconds, start later in the story.\n" +
+  "of a dialogue; if the whole story and its point will not fit in 90 seconds, keep its end and start later in the story.\n" +
   "4. A clip started on \"Now let me ask you something.\" and ended on \"That's right.\" right after '...are now the " +
   "people calling me saying, \"Bill, help me, I'm in trouble.\"' (17 seconds), because the next lines looked like a " +
   "tangent. The founder said it could be a longer clip. Correct: same start, end on \"And we're so concerned about " +
@@ -191,6 +196,125 @@ export function endsInsideList(units: BoundaryUnit[], endUnit: number): { first:
   return null;
 }
 
+// Fix K1 (lab sermon 4c clips 5 and 6, 2026-10-20): "three things that are certain", then "First of
+// all", and the clip ends. Jake: "it feels odd that he says here are three things and he only lists one."
+const ANNOUNCED_COUNT =
+  /\b(?:two|three|four|five|six|seven|[2-7])\s+(?:\w+\s+){0,2}?(?:things|ways|reasons|truths|certainties|points|keys|lessons|questions|steps|marks|facts|principles|kinds|types|areas|benefits|promises|blessings|secrets)\b/i;
+const FIRST_ITEM = /\b(?:first of all|first(?:ly)?,|number one|the first (?:one|thing|is))/i;
+const LATER_ITEM = /\b(?:second(?:ly)?|number two|third(?:ly)?|the next (?:one|thing)|another (?:one|thing)|finally|lastly)\b/i;
+
+/**
+ * A count the preacher announces inside the clip ("three things") whose first item the clip gives
+ * ("First of all") with no later item after it. Null when the clip leaves the announcement out,
+ * gives a second item, or lists the items without "first" ("two things you own: your calendar and
+ * your checkbook", lab sermon 3e clip 2, which Jake passed).
+ */
+export function announcedListWithOnlyFirst(
+  units: BoundaryUnit[],
+  startUnit: number,
+  endUnit: number,
+): { announcement: number; first: number; count: string; firstWords: string } | null {
+  for (let a = startUnit; a <= endUnit; a += 1) {
+    const count = ANNOUNCED_COUNT.exec(units[a].text);
+    if (!count) continue;
+    for (let f = a; f <= endUnit; f += 1) {
+      const text = f === a ? units[a].text.slice(count.index + count[0].length) : units[f].text;
+      const first = FIRST_ITEM.exec(text);
+      if (!first) continue;
+      const rest = [text.slice(first.index + first[0].length), ...units.slice(f + 1, endUnit + 1).map((u) => u.text)].join(" ");
+      return LATER_ITEM.test(rest) ? null : { announcement: a, first: f, count: count[0], firstWords: first[0].replace(/,$/, "") };
+    }
+  }
+  return null;
+}
+
+// Fix K3 (lab sermon 1g clip 1, 2026-10-20): "there's grace that saves us. I- I'm sorry, sustains us.
+// Excuse me." Jake: "if he were to do that in the middle of the point that's probably okay, but the
+// beginning has to be clean and catch." 15 seconds: under the 90-second rule the clip starts 8.9 s
+// earlier and the correction falls 12.6 s in. Over the 126 marked clips, 15 seconds finds 1g clip 1 and
+// 1f clip 1 (both failed); 20 seconds also finds a passed clip's quoted "I'm sorry to tell you".
+const CORRECTION_WINDOW_MS = 15_000;
+// "I mean" opening a line is a filler ("I mean, here's this big tough guy fisherman"); after a comma
+// it takes a word back.
+const CORRECTIONS = [/\b(I'?m sorry)\b/i, /\b(excuse me)\b/i, /,\s*(I mean)\b/i, /\b(I misspoke)\b/i];
+// The words he says again to fix the slip belong to it. Gate run 2, 2026-10-20: told to start after
+// "Excuse me.", the model started on "Sustains us."; Jake's start is the next line.
+const CORRECTION_TAIL_LINES = 2;
+const CORRECTION_TAIL_WORDS = 3;
+const CORRECTION_TAIL_GAP_MS = 1_500;
+
+const correctionWords = (text: string) => CORRECTIONS.map((pattern) => pattern.exec(text)).find(Boolean)?.[1] ?? null;
+const wordCount = (text: string) => text.split(/\s+/).filter((word) => /\p{L}/u.test(word)).length;
+
+/**
+ * The correction of a slip in the clip's first 15 seconds, from its first line to the last short
+ * line he says again after it; null when none. A correction just before the start counts when the
+ * clip starts on those repeated words.
+ */
+export function correctionAtStart(
+  units: BoundaryUnit[],
+  startUnit: number,
+  endUnit: number,
+): { first: number; last: number; words: string } | null {
+  const found: { first: number; last: number; words: string }[] = [];
+  const windowEndMs = units[startUnit].startMs + CORRECTION_WINDOW_MS;
+  for (let i = Math.max(0, startUnit - CORRECTION_TAIL_LINES); i <= endUnit && units[i].startMs < windowEndMs; i += 1) {
+    const words = correctionWords(units[i].text);
+    if (!words) continue;
+    let last = i;
+    let tail = 0;
+    while (last + 1 <= endUnit) {
+      const next = units[last + 1];
+      if (correctionWords(next.text)) last += 1;
+      else if (
+        tail < CORRECTION_TAIL_LINES &&
+        wordCount(next.text) <= CORRECTION_TAIL_WORDS &&
+        next.startMs - units[last].endMs <= CORRECTION_TAIL_GAP_MS
+      ) {
+        last += 1;
+        tail += 1;
+      } else break;
+    }
+    // A slip right after another one ("I'm sorry, sustains us." "Excuse me.") is the same correction.
+    const before = found.at(-1);
+    if (last >= startUnit) found.push(before && i <= before.last + 1 ? { ...before, last } : { first: i, last, words });
+    i = last;
+  }
+  return found.at(-1) ?? null;
+}
+
+// Fix K4 (lab sermon 1g clip 5, 2026-10-20): the preacher's prayer after the reading is inside the
+// sermon span. Jake: "The pastor is praying, this shouldn't be a clip."
+const PRAYER_CLOSES = [
+  /\b(in (?:jesus'?|christ'?s?)(?:\s+(?:holy|precious|mighty|wonderful|matchless))?\s+name,?\s+(?:we|i)\s+pray)\b/i,
+  /\b(in (?:jesus'?|christ'?s?)(?:\s+(?:holy|precious|mighty|wonderful|matchless))?\s+name,?\s+amen)\b/i,
+  /\b(all god'?s people said)\b/i,
+];
+// A line that speaks to the Lord: "Lord, I want to confess today ...". "God, listen to this" is
+// preaching (lab sermon 1f clip 3, passed), so only "Lord" and "Father" count, and only twice.
+const TO_THE_LORD = /^\W*(?:(?:and|so|now|oh|o|dear|heavenly)\s+)*(lord|father),/i;
+
+/** The lines of a prayer inside the clip: its closing words, or two lines that speak to the Lord. */
+export function prayerInClip(units: BoundaryUnit[], startUnit: number, endUnit: number): { first: number; last: number; words: string } | null {
+  const closes: { unit: number; words: string }[] = [];
+  const toTheLord: { unit: number; words: string }[] = [];
+  for (let i = startUnit; i <= endUnit; i += 1) {
+    const close = PRAYER_CLOSES.map((pattern) => pattern.exec(units[i].text)).find(Boolean);
+    if (close) closes.push({ unit: i, words: close[1] });
+    const lord = TO_THE_LORD.exec(units[i].text);
+    if (lord) toTheLord.push({ unit: i, words: `${lord[1]},` });
+  }
+  if (!closes.length && toTheLord.length < 2) return null;
+  const lines = [...closes, ...toTheLord].map((line) => line.unit);
+  return { first: Math.min(...lines), last: Math.max(...lines), words: (closes[0] ?? toTheLord[0]).words };
+}
+
+// Fix K2 (lab sermon 5 clip 6, 2026-10-20): told that the whole 188.6-second story was too long, the
+// model ended 93.2 seconds sooner, in the middle of it. Across the marked rounds, answers that ended
+// more than 9 seconds sooner after that refusal failed 5 times in 7; answers that kept the end and
+// started later failed 3 times in 12, none of them for the end.
+export const KEEP_END_SLACK_MS = 8_000;
+
 export const clock = (ms: number) => {
   const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600);
@@ -210,6 +334,8 @@ export function boundaryPrompt(context: BoundaryContext): string {
     "Prefer an opening line that catches attention.\n" +
     "- Start on a line that speaks directly to the listener or states the point. Do not start on background " +
     "or set-up that only leads into a story.\n" +
+    "- Start on a clean line. When the preacher slips and corrects himself near the start (\"I'm sorry\", \"excuse " +
+    "me\"), start after the correction.\n" +
     "- Never start on the Scripture reading: not the preacher reading the passage aloud, and not him announcing " +
     "the book, chapter or verse, or asking people to turn there. Start where he begins to explain or apply it. " +
     "A short verse he quotes inside his point is fine, but not as the first line.\n" +
@@ -223,12 +349,16 @@ export function boundaryPrompt(context: BoundaryContext): string {
     "again in other words, keep going and end after his answer: \"You know what God wants to do today? He wants to " +
     "heal you.\" ends on \"He wants to heal you.\" Never end the clip early to leave a question out. End on a question " +
     "only when the next line starts a new idea.\n" +
-    "- The clip must be between 15 and 59 seconds long: always under 60 seconds. Aim for 30 to 55 seconds: the setup, " +
-    "the explanation or story, and the payoff. Go under 30 seconds only when the lines just before and just after " +
-    "belong to a different idea. When the preacher comes back to the same question or point, keep going until he " +
-    "lands it; a story or aside inside the point is not a new idea. Do not cut a clip short to make it tidy; a viewer " +
-    "must feel the point land.\n" +
-    "- Never include worship singing, announcements, prayer, or the altar call or invitation.\n" +
+    "- When the preacher announces a number of points (\"three things\"), give all of them, or start after the " +
+    "announcement. Never end after only the first.\n" +
+    "- Aim for 30 to 60 seconds: the setup, the explanation or story, and the payoff. That is the sweet spot. When the " +
+    "point needs more time to land, up to 75 seconds is fine. Never go past 90 seconds, and never under 15 seconds. If " +
+    "the whole point will not fit in 90 seconds, keep its end and start later. Go under 30 seconds only when the lines " +
+    "just before and just after belong to a different idea. When the preacher comes back to the same question or " +
+    "point, keep going until he lands it; a story or aside inside the point is not a new idea. Do not cut a clip short " +
+    "to make it tidy; a viewer must feel the point land.\n" +
+    "- Never include worship singing, announcements, prayer (\"Lord, ...\", \"in Jesus' name we pray\"), or the altar " +
+    "call or invitation.\n" +
     "- Stay on the current clip's idea. You may move the start earlier or later and the end earlier or later.\n\n" +
     WORKED_EXAMPLES +
     "Return startUnit and endUnit (both included) and a one-sentence reason.\n\n" +
@@ -236,9 +366,9 @@ export function boundaryPrompt(context: BoundaryContext): string {
   );
 }
 
-type BoundaryLimits = { minMs: number; maxMs: number };
+type BoundaryLimits = { minMs: number; maxMs: number; cutMaxMs: number };
 type BoundaryRange = { startMs: number; endMs: number; adjustedForScripture: boolean; adjustedEnd: boolean };
-const DEFAULT_LIMITS: BoundaryLimits = { minMs: BOUNDARY_MIN_MS, maxMs: BOUNDARY_MAX_MS };
+const DEFAULT_LIMITS: BoundaryLimits = { minMs: BOUNDARY_MIN_MS, maxMs: BOUNDARY_MAX_MS, cutMaxMs: BOUNDARY_CUT_MAX_MS };
 
 /**
  * Turns a model choice into a range, or null when it breaks a rule. A start on a Scripture
@@ -251,21 +381,26 @@ export function applyBoundaryChoice(
   choice: BoundaryChoice,
   limits: BoundaryLimits = DEFAULT_LIMITS,
 ): BoundaryRange | null {
-  const result = evaluateBoundaryChoice(context, choice, limits);
+  const result = evaluateBoundaryChoice(context, choice, limits, null);
   return "range" in result ? result.range : null;
 }
 
 /** Why the code refuses a choice, in a sentence the model can act on; null when it is accepted. */
 export function boundaryRefusal(context: BoundaryContext, choice: BoundaryChoice, limits: BoundaryLimits = DEFAULT_LIMITS) {
-  const result = evaluateBoundaryChoice(context, choice, limits);
+  const result = evaluateBoundaryChoice(context, choice, limits, null);
   return "refused" in result ? result.refused : null;
 }
 
+/**
+ * `heldEnd` is the end unit of the latest answer refused as too long (fix K2); null before one.
+ * A refusal for length returns its end unit as `tooLongEnd`.
+ */
 function evaluateBoundaryChoice(
   context: BoundaryContext,
   choice: BoundaryChoice,
   limits: BoundaryLimits,
-): { range: BoundaryRange; endUnit: number } | { refused: string } {
+  heldEnd: number | null,
+): { range: BoundaryRange; endUnit: number } | { refused: string; tooLongEnd?: number } {
   const { units } = context;
   let { startUnit, endUnit } = choice;
   const asked = `Units [${startUnit}] to [${endUnit}]`;
@@ -300,36 +435,82 @@ function evaluateBoundaryChoice(
     endUnit -= 1;
   }
 
-  const list = endsInsideList(units, endUnit);
-  if (list) {
-    const span = endUnit === choice.endUnit ? "" : `${asked} become units [${startUnit}] to [${endUnit}] after the checks. `;
+  const moved =
+    startUnit === choice.startUnit && endUnit === choice.endUnit ? "" : `${asked} become units [${startUnit}] to [${endUnit}] after the checks. `;
+  const prayer = prayerInClip(units, startUnit, endUnit);
+  if (prayer) {
     return {
       refused:
-        `${span}Unit [${endUnit}] is inside a list: units [${list.first}] to [${list.last}] start the same way ("${list.opening}"), ` +
+        `${moved}Units [${prayer.first}] to [${prayer.last}] are a prayer ("${prayer.words}"). Never include prayer: choose a ` +
+        "range that leaves out all of the prayer, before it starts or after it ends.",
+    };
+  }
+  const announced = announcedListWithOnlyFirst(units, startUnit, endUnit);
+  if (announced) {
+    return {
+      refused:
+        `${moved}Unit [${announced.announcement}] announces "${announced.count}", but the clip gives only the first ` +
+        `("${announced.firstWords}", unit [${announced.first}]), so a viewer waits for the rest. Start after unit ` +
+        `[${announced.announcement}], or end after his last item.`,
+    };
+  }
+  const correction = correctionAtStart(units, startUnit, endUnit);
+  if (correction) {
+    const lines =
+      correction.first === correction.last
+        ? `Unit [${correction.last}] is a correction`
+        : `Units [${correction.first}] to [${correction.last}] are a correction`;
+    return {
+      refused:
+        `${moved}${lines} ("${correction.words}"): the preacher fixes a slip of the tongue in the first ` +
+        `${CORRECTION_WINDOW_MS / 1000} seconds, and the opening must be clean. Start after unit [${correction.last}].`,
+    };
+  }
+
+  const list = endsInsideList(units, endUnit);
+  if (list) {
+    return {
+      refused:
+        `${moved}Unit [${endUnit}] is inside a list: units [${list.first}] to [${list.last}] start the same way ("${list.opening}"), ` +
         `and the list goes on after it. End after its last item, unit [${list.last}], or before the list starts, at unit ` +
-        `[${list.first - 1}] or earlier. Start later if you must to stay under 60 seconds.`,
+        `[${list.first - 1}] or earlier. Start later if you must to stay within ${limits.maxMs / 1000} seconds.`,
+    };
+  }
+
+  if (heldEnd !== null && units[endUnit].endMs < units[heldEnd].endMs - KEEP_END_SLACK_MS) {
+    const sooner = ((units[heldEnd].endMs - units[endUnit].endMs) / 1000).toFixed(1);
+    return {
+      refused:
+        `${moved}Your last answer that ran too long ended at unit [${heldEnd}] (${clock(units[heldEnd].startMs)}), where the ` +
+        `point ends. This answer ends at unit [${endUnit}], ${sooner} seconds sooner, which cuts the point short. Keep the ` +
+        `end at unit [${heldEnd}] or later, and start later.`,
     };
   }
 
   const startMs = units[startUnit].startMs;
   const endMs = units[endUnit].endMs;
   const duration = endMs - startMs;
-  if (duration >= limits.minMs && duration <= limits.maxMs) {
+  const maxMs = heldEnd === null ? limits.maxMs : Math.min(limits.maxMs, limits.cutMaxMs);
+  if (duration >= limits.minMs && duration <= maxMs) {
     return { range: { startMs, endMs, adjustedForScripture, adjustedEnd }, endUnit };
   }
   const steps =
     (adjustedForScripture ? " The start moved past the Scripture reading." : "") +
     (adjustedEnd ? " The end moved back because the last lines only lead into a quotation." : "");
-  const limit =
-    duration < limits.minMs
-      ? ` A clip must be at least ${limits.minMs / 1000} seconds.`
-      : ` A clip must be under 60 seconds (${Math.floor(limits.maxMs / 1000)} at most). Start later or end sooner, and keep the point whole.`;
+  const tooShort = duration < limits.minMs;
+  const aim = ` Keep the end where the point ends and start later, so the clip runs 30 to 60 seconds, or ${limits.cutMaxMs / 1000} at most`;
+  const limit = tooShort
+    ? ` A clip must be at least ${limits.minMs / 1000} seconds.`
+    : duration > limits.maxMs
+      ? ` A clip must not run past ${limits.maxMs / 1000} seconds.${aim} if the point needs it.`
+      : ` The point runs past ${limits.maxMs / 1000} seconds, so this clip is part of it and must run ${limits.cutMaxMs / 1000} ` +
+        `seconds at most.${aim}.`;
   const seconds = `${(duration / 1000).toFixed(1)} seconds`;
   const span =
     startUnit === choice.startUnit && endUnit === choice.endUnit
       ? `${asked} run ${seconds}.`
       : `${asked} become units [${startUnit}] to [${endUnit}] after the checks, ${seconds}.`;
-  return { refused: `${span}${steps}${limit}` };
+  return tooShort ? { refused: `${span}${steps}${limit}` } : { refused: `${span}${steps}${limit}`, tooLongEnd: endUnit };
 }
 
 export type BoundaryTurn = { role: "user" | "assistant"; content: string };
@@ -358,7 +539,8 @@ const REFUSED_TRIES = 3;
  * A refused answer gets up to two more tries with the reason (lab sermon 3 clip 5: the only answer
  * ran over 60 seconds, so the clip kept its raw window and ran past the punch line; fix I2 refuses
  * an end inside a list as well). After three refusals the range is null and the clip has no fixed
- * boundary.
+ * boundary. Once an answer runs too long, every later answer must keep its end, give or take
+ * KEEP_END_SLACK_MS (fix K2), and run BOUNDARY_CUT_MAX_MS at most.
  *
  * An accepted answer that ends on a question gets one more look (lab sermon 1d clips 3 and 5, 2b
  * clip 6: each ended on a question the preacher answered or asked again in the next lines). The
@@ -377,9 +559,11 @@ export async function chooseBoundary(
 ): Promise<{ range: BoundaryRange | null; attempts: BoundaryAttempt[] }> {
   const turns: BoundaryTurn[] = [{ role: "user", content: boundaryPrompt(context) }];
   const attempts: BoundaryAttempt[] = [];
+  let heldEnd: number | null = null;
   const answerOnce = async () => {
     const answer = await ask([...turns]);
-    const result = evaluateBoundaryChoice(context, answer, limits);
+    const result = evaluateBoundaryChoice(context, answer, limits, heldEnd);
+    if ("tooLongEnd" in result && result.tooLongEnd !== undefined) heldEnd = result.tooLongEnd;
     const record: BoundaryAttempt = {
       startUnit: answer.startUnit,
       endUnit: answer.endUnit,
@@ -409,7 +593,7 @@ export async function chooseBoundary(
   reply(
     accepted.answer,
     `Unit [${endUnit}] ends on a question: "${question}" Read the lines after it. If the preacher answers it ` +
-      "or asks it again, end after his answer, and keep the clip under 60 seconds; start later if you must, but do " +
+      `or asks it again, end after his answer, and keep the clip within ${limits.maxMs / 1000} seconds; start later if you must, but do ` +
       "not end before the question. If the next line starts a new idea, return the same end. Return startUnit, " +
       "endUnit and a one-sentence reason.",
   );
