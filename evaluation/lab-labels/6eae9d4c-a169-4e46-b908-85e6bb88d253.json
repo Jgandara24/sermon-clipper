@@ -1,0 +1,64 @@
+{
+  "projectId": "6eae9d4c-a169-4e46-b908-85e6bb88d253",
+  "projectName": "Lab 5b - Bible Conference Herb Reavis - fix K + 90 s rule",
+  "sourceUrl": "https://www.youtube.com/watch?v=mhLBojrgy_s",
+  "judge": "jake",
+  "clips": {
+    "9bcc0c49-911f-4593-9060-8f019e571bab": {
+      "rank": 1,
+      "startMs": 3151768,
+      "endMs": 3182148,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:51:13.045Z"
+    },
+    "ee728d2a-bf1e-4bcd-a42b-9866e476377b": {
+      "rank": 2,
+      "startMs": 3484472,
+      "endMs": 3548292,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:53:27.026Z"
+    },
+    "bd8d3836-d7b0-4a1f-9fc6-83c30eeeba8c": {
+      "rank": 3,
+      "startMs": 3241448,
+      "endMs": 3299588,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "It stops abruptly. Speaker is finished yet.",
+      "labeledAt": "2026-10-21T02:54:52.044Z"
+    },
+    "f816560f-113f-4718-92dc-b14fbd2113dd": {
+      "rank": 4,
+      "startMs": 1734756,
+      "endMs": 1792196,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:57:31.056Z"
+    },
+    "eb86fc63-ae88-41b7-99b0-bcfe80ca20b7": {
+      "rank": 5,
+      "startMs": 2004572,
+      "endMs": 2031132,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:58:02.336Z"
+    },
+    "78326dcc-d192-4a79-a2a1-1a6ea667034f": {
+      "rank": 6,
+      "startMs": 2618472,
+      "endMs": 2684612,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:59:13.684Z"
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "projectId": "9c3cf939-e650-459d-a12c-61a36722e654",
+  "projectName": "Lab 2f - Wednesday Night - fix K + 90 s rule",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "4dfa7ac5-3830-444d-a911-d39bb31f3a0c": {
+      "rank": 1,
+      "startMs": 1745924,
+      "endMs": 1790604,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:05:33.878Z"
+    },
+    "19613125-1e69-459e-b24b-3d347227ef0a": {
+      "rank": 2,
+      "startMs": 1306032,
+      "endMs": 1381112,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:07:39.352Z"
+    },
+    "bdb00d2e-995a-4c0d-9cef-48b4e3262227": {
+      "rank": 3,
+      "startMs": 1601764,
+      "endMs": 1640024,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:10:11.771Z"
+    },
+    "e1e7daa8-14a8-4f6c-8659-42cf6d58f6fe": {
+      "rank": 4,
+      "startMs": 2324768,
+      "endMs": 2386628,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:14:44.337Z"
+    },
+    "7833917f-517e-4773-83b1-0ff7846a9715": {
+      "rank": 5,
+      "startMs": 783556,
+      "endMs": 817536,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:15:26.304Z"
+    },
+    "7f9390ec-bbf7-4a59-b5de-4841c007c734": {
+      "rank": 6,
+      "startMs": 378011,
+      "endMs": 433472,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:16:28.381Z"
+    }
+  }
+}
