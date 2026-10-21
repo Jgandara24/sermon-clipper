@@ -7,7 +7,7 @@ import type { PrismaClient } from "@prisma/client";
 import { labStepEnabled } from "@/lib/lab-flags";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { getStorageProvider } from "@/lib/storage";
-import { boundaryContext, BoundaryChoiceSchema, chooseBoundary } from "./boundary-step";
+import { boundaryContext, BoundaryChoiceSchema, chooseBoundary, EndLookSchema, lookPastTheEnd, type EndLook } from "./boundary-step";
 import { checkClipCamera } from "./camera-check-run";
 import { scoringModel } from "./claude-provider";
 import { applyLabSelectionSteps } from "./lab-selection";
@@ -17,7 +17,7 @@ type LabClip = { startMs: number; endMs: number; text: string; total: number; ti
 type Segment = { idx: number; startMs: number; endMs: number; text: string };
 
 /**
- * Lab only. Runs the sermon span, the boundary step and the camera check (whichever flags are on) on ANALYZE's
+ * Lab only. Runs the sermon span, the boundary step (with fix M's look past the end) and the camera check (whichever flags are on) on ANALYZE's
  * ranked clips and records what each did as one operational event. Not cost-metered: the lab
  * records token counts in the event instead.
  */
@@ -38,7 +38,10 @@ export async function runLabSelection<T extends LabClip>(params: {
 
   const startedAt = Date.now();
   const workDir = await mkdtemp(path.join(os.tmpdir(), "lab-selection-"));
-  const usage = { spanInput: 0, spanOutput: 0, boundaryInput: 0, boundaryOutput: 0, cameraInput: 0, cameraOutput: 0, cameraFrames: 0 };
+  const usage = {
+    spanInput: 0, spanOutput: 0, boundaryInput: 0, boundaryOutput: 0, endLookInput: 0, endLookOutput: 0,
+    cameraInput: 0, cameraOutput: 0, cameraFrames: 0,
+  };
   const boundaryLog: {
     title: string;
     from: [number, number];
@@ -47,6 +50,7 @@ export async function runLabSelection<T extends LabClip>(params: {
     adjustedEnd?: boolean;
     reason?: string;
     attempts?: { startUnit: number; endUnit: number; refused: string | null; question?: string }[];
+    endLook?: EndLook | { error: string };
     error?: string;
   }[] = [];
   const cameraLog: { title: string; result: string; at?: number; error?: string }[] = [];
@@ -104,16 +108,41 @@ export async function runLabSelection<T extends LabClip>(params: {
               const block = message.content.find((b) => b.type === "text");
               return BoundaryChoiceSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
             });
+            let final = range && { startMs: range.startMs, endMs: range.endMs };
+            let endLook: EndLook | { error: string } | undefined;
+            if (final) {
+              try {
+                const looked = await lookPastTheEnd(context.units, final, async (prompt) => {
+                  const message = await new Anthropic().messages.create({
+                    model: scoringModel(),
+                    max_tokens: 600,
+                    thinking: { type: "disabled" },
+                    messages: [{ role: "user", content: prompt }],
+                    output_config: { format: zodOutputFormat(EndLookSchema) },
+                  });
+                  usage.endLookInput += message.usage.input_tokens;
+                  usage.endLookOutput += message.usage.output_tokens;
+                  const block = message.content.find((b) => b.type === "text");
+                  return EndLookSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
+                });
+                final = looked.range;
+                endLook = looked.look;
+              } catch (error) {
+                // Fails open: the end the boundary step accepted stands.
+                endLook = { error: String(error) };
+              }
+            }
             boundaryLog.push({
               title: clip.title,
               from: [clip.startMs, clip.endMs],
-              to: range ? [range.startMs, range.endMs] : null,
+              to: final ? [final.startMs, final.endMs] : null,
               adjustedForScripture: range?.adjustedForScripture,
               adjustedEnd: range?.adjustedEnd,
               reason: attempts.at(-1)?.reason,
               attempts: attempts.map(({ startUnit, endUnit, refused, question }) => ({ startUnit, endUnit, refused, question })),
+              endLook,
             });
-            return range && { startMs: range.startMs, endMs: range.endMs };
+            return final;
           } catch (error) {
             boundaryLog.push({ title: clip.title, from: [clip.startMs, clip.endMs], to: null, error: String(error) });
             return null;
@@ -166,6 +195,7 @@ export async function runLabSelection<T extends LabClip>(params: {
         sermonSpan: spanLog,
         outsideSermon: result.outsideSermon,
         boundaryChanged: result.boundaryChanged,
+        endsMovedLater: boundaryLog.filter((b) => b.endLook && "movedMs" in b.endLook && b.endLook.movedMs > 0).length,
         rejected: result.rejected,
         boundary: boundaryLog,
         camera: cameraLog,

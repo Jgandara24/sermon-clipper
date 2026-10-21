@@ -603,3 +603,90 @@ export async function chooseBoundary(
   const retry = await answerOnce();
   return { range: "range" in retry.result ? retry.result.range : range, attempts };
 }
+
+/**
+ * Fix M, one look past the end (lab sermons 1j clip 4 and 5b clip 3, 2026-10-20): both clips ended one
+ * beat before the preacher finished the point. 1j clip 4 ended on "If you're a friend of Jesus Christ,
+ * you've got an enemy."; Jake: "It should end with, " Amen. He is the devil."" No pause, word or
+ * pattern marks these ends (of 53 marked clips with under 0.3 s after the end, 35 passed), so one model
+ * call reads the clip and the lines that end within 6 seconds after it. The end can only move later, to
+ * the first line that finishes the point. Prototype, two runs on the 83 clips Jake marked in three
+ * rounds: 3 of 9 failed ends fixed, 0 of 66 passed ends moved. A looser prompt fixed 5 and moved 9.
+ */
+export const END_LOOK_MAX_MS = 6_000;
+const END_LOOK_LINES = 5;
+
+export const EndLookSchema = z.object({ finishesLater: z.boolean(), endUnit: z.number().int(), reason: z.string() });
+export type EndLookAnswer = z.infer<typeof EndLookSchema>;
+export type EndLook = { asked: boolean; movedMs: number; refused: string | null; reason?: string; added?: string };
+
+/** The clip's sentences and up to five that end within 6 seconds after it, numbered from the clip's start; null when none do. */
+export function endLookLines(
+  units: BoundaryUnit[],
+  range: { startMs: number; endMs: number },
+): { lines: BoundaryUnit[]; end: number; last: number; offset: number } | null {
+  const start = units.findIndex((u) => u.endMs > range.startMs);
+  if (start < 0) return null;
+  let end = units.length - 1;
+  while (end > start && units[end].startMs >= range.endMs) end -= 1;
+  let last = end;
+  while (last + 1 < units.length && last - end < END_LOOK_LINES && units[last + 1].endMs - units[end].endMs <= END_LOOK_MAX_MS) last += 1;
+  return last === end ? null : { lines: units.slice(start, last + 1), end: end - start, last: last - start, offset: start };
+}
+
+export function endLookPrompt(lines: BoundaryUnit[], end: number, last: number): string {
+  // Neutral examples only: the gate on Jake's clips is fair only when the prompt holds none of them.
+  return (
+    "Below are the numbered sentences of a short sermon clip, with their times, and the sentences that come right after it. " +
+    `The clip ends on [${end}]. Lines after [${end}] are not in the clip yet.\n\n` +
+    "Decide one thing: does the clip stop one beat before the preacher finishes this point? That is true only when the " +
+    `last line [${end}] sets something up that the very next lines complete: he answers the question he just asked, names ` +
+    "what he just described, says the line his build-up was leading to, or in one more line turns the same point into what " +
+    "it means for the listener. Examples: \"There is one thing God cannot do.\" then \"He cannot lie.\"; \"You don't have to " +
+    "carry that guilt.\" then \"Amen. Jesus already carried it for you.\" The finishing line may come after a short " +
+    "\"Amen.\" or \"Yeah.\".\n" +
+    `Keep the end when [${end}] already lands the point: a punch line, a charge or command (\"Be sober, be vigilant.\"), or a ` +
+    "summary. Keep it also when the next line is a question to the crowd (\"is it not?\"), a crowd response with nothing " +
+    "after it, the next item of a list, a Scripture reading, or a turn to a new thought (\"But…\", \"Now…\"). Most clips " +
+    "already end in the right place.\n" +
+    `If it is true, return the FIRST line that finishes the point, one of [${end + 1}] to [${last}], and nothing after it.\n\n` +
+    "Return finishesLater, endUnit (the same end when finishesLater is false) and a one-sentence reason.\n\n" +
+    lines.map((u, i) => `[${i}] (${clock(u.startMs)}) ${u.text}`).join("\n")
+  );
+}
+
+/**
+ * One look past an accepted end. The code keeps the end unless the answer is a later line it showed,
+ * not a quotation lead-in, not inside a list, and the clip stays within `maxMs`.
+ */
+export async function lookPastTheEnd(
+  units: BoundaryUnit[],
+  range: { startMs: number; endMs: number },
+  ask: (prompt: string) => Promise<EndLookAnswer>,
+  maxMs = BOUNDARY_MAX_MS,
+): Promise<{ range: { startMs: number; endMs: number }; look: EndLook }> {
+  const look = endLookLines(units, range);
+  if (!look) return { range, look: { asked: false, movedMs: 0, refused: null } };
+  const answer = await ask(endLookPrompt(look.lines, look.end, look.last));
+  const kept = (refused: string | null) => ({ range, look: { asked: true, movedMs: 0, refused, reason: answer.reason } });
+  if (!answer.finishesLater) return kept(null);
+  if (!Number.isInteger(answer.endUnit) || answer.endUnit <= look.end || answer.endUnit > look.last) {
+    return kept(`Unit [${answer.endUnit}] is not one of the lines after the end, [${look.end + 1}] to [${look.last}].`);
+  }
+  const unit = look.offset + answer.endUnit;
+  if (endsOnQuotationStart(units[unit].text)) return kept(`Unit [${answer.endUnit}] only leads into a quotation.`);
+  if (endsInsideList(units, unit)) return kept(`Unit [${answer.endUnit}] is inside a list.`);
+  if (units[unit].endMs - range.startMs > maxMs) {
+    return kept(`Ending on unit [${answer.endUnit}] makes the clip run past ${maxMs / 1000} seconds.`);
+  }
+  return {
+    range: { startMs: range.startMs, endMs: units[unit].endMs },
+    look: {
+      asked: true,
+      movedMs: units[unit].endMs - range.endMs,
+      refused: null,
+      reason: answer.reason,
+      added: look.lines.slice(look.end + 1, answer.endUnit + 1).map((u) => u.text).join(" "),
+    },
+  };
+}

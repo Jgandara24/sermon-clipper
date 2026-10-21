@@ -6,11 +6,14 @@ import {
   boundaryRefusal,
   chooseBoundary,
   correctionAtStart,
+  endLookLines,
+  endLookPrompt,
   endsInsideList,
   endsOnQuotationStart,
   boundaryContext,
   boundaryPrompt,
   looksLikeScriptureReadingStart,
+  lookPastTheEnd,
   prayerInClip,
   wholeSentences,
 } from "@/lib/analysis/boundary-step";
@@ -925,5 +928,102 @@ describe("fix K2: keep the end when a point runs too long", () => {
     const result = await chooseBoundary(EVEN, ask);
     expect(result.attempts[2].refused).toContain("ended at unit [39]");
     expect(result.range).toBeNull();
+  });
+});
+
+// Lab sermon 1j clip 4 (2026-10-20), real lines. The clip ended on 880; Jake: "It should end with,
+// " Amen. He is the devil.""
+const ONE_J_C4 = [
+  { idx: 877, startMs: 3524472, endMs: 3527312, text: "Friend, did you know you have an adversary?" },
+  { idx: 878, startMs: 3528232, endMs: 3528572, text: "Oh, yeah." },
+  { idx: 879, startMs: 3528892, endMs: 3532712, text: "Did you know you as a believer in Jesus Christ have an enemy?" },
+  { idx: 880, startMs: 3534232, endMs: 3537532, text: "If you're a friend of Jesus Christ, you've got an enemy." },
+  { idx: 881, startMs: 3538312, endMs: 3538392, text: "Amen." },
+  { idx: 882, startMs: 3538472, endMs: 3539832, text: "He is the devil." },
+  { idx: 883, startMs: 3540532, endMs: 3542372, text: "He is your adversary." },
+  { idx: 884, startMs: 3543292, endMs: 3545712, text: "Not my adversary, your adversary." },
+  { idx: 885, startMs: 3546712, endMs: 3549931, text: "Oh, he's mine too, but that's not the emphasis here." },
+];
+const C4_RANGE = { startMs: 3524472, endMs: 3537532 };
+
+describe("fix M: one look past the end", () => {
+  it("shows the clip and the lines that end within 6 seconds after it, numbered from the clip's start", () => {
+    const look = endLookLines(ONE_J_C4, C4_RANGE)!;
+    expect(look.lines.map((u) => u.idx)).toEqual([877, 878, 879, 880, 881, 882, 883]);
+    expect(look).toMatchObject({ end: 3, last: 6 });
+    const prompt = endLookPrompt(look.lines, look.end, look.last);
+    expect(prompt).toContain("[3] (58:54) If you're a friend of Jesus Christ, you've got an enemy.");
+    expect(prompt).toContain("[6] (59:00) He is your adversary.");
+    expect(prompt).not.toContain("Not my adversary");
+  });
+
+  it("asks only whether the point finishes in the next lines, with neutral examples", () => {
+    const look = endLookLines(ONE_J_C4, C4_RANGE)!;
+    const prompt = endLookPrompt(look.lines, look.end, look.last);
+    expect(prompt).toContain("The clip ends on [3].");
+    expect(prompt).toContain("does the clip stop one beat before the preacher finishes this point?");
+    expect(prompt).toContain('"There is one thing God cannot do." then "He cannot lie."');
+    expect(prompt).toContain("Most clips already end in the right place.");
+    expect(prompt).toContain("return the FIRST line that finishes the point, one of [4] to [6], and nothing after it.");
+    // The gate is fair only when the prompt holds none of Jake's clips.
+    expect(prompt.split("\n\n").slice(0, -1).join(" ")).not.toContain("He is the devil");
+  });
+
+  it("moves the end of lab sermon 1j clip 4 to \"He is the devil.\" when the model says the point finishes there", async () => {
+    const ask = vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 5, reason: "names the enemy" });
+    const result = await lookPastTheEnd(ONE_J_C4, C4_RANGE, ask);
+    expect(ask).toHaveBeenCalledTimes(1);
+    const look = endLookLines(ONE_J_C4, C4_RANGE)!;
+    expect(ask).toHaveBeenCalledWith(endLookPrompt(look.lines, look.end, look.last));
+    expect(result.range).toEqual({ startMs: 3524472, endMs: 3539832 });
+    expect(result.look).toEqual({ asked: true, movedMs: 2_300, refused: null, reason: "names the enemy", added: "Amen. He is the devil." });
+  });
+
+  it("keeps the end when the model says the point is finished", async () => {
+    const ask = vi.fn().mockResolvedValue({ finishesLater: false, endUnit: 3, reason: "lands" });
+    const result = await lookPastTheEnd(ONE_J_C4, C4_RANGE, ask);
+    expect(result.range).toEqual(C4_RANGE);
+    expect(result.look).toMatchObject({ asked: true, movedMs: 0, refused: null });
+  });
+
+  it("never moves the end earlier, and never past the lines it showed", async () => {
+    for (const endUnit of [2, 3, 7]) {
+      const ask = vi.fn().mockResolvedValue({ finishesLater: true, endUnit, reason: "x" });
+      const result = await lookPastTheEnd(ONE_J_C4, C4_RANGE, ask);
+      expect(result.range).toEqual(C4_RANGE);
+      expect(result.look.refused).toMatch(/not one of the lines after the end/);
+    }
+  });
+
+  it("refuses a new end on a line that only leads into a quotation", async () => {
+    const units = ONE_J_C4.map((u) => (u.idx === 882 ? { ...u, text: "And Jesus said this to Peter." } : u));
+    const result = await lookPastTheEnd(units, C4_RANGE, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 5, reason: "x" }));
+    expect(result.range).toEqual(C4_RANGE);
+    expect(result.look.refused).toMatch(/quotation/);
+  });
+
+  it("refuses a new end inside a list: lab sermon 4b clip 4's \"We're gonna\" lines", async () => {
+    const units = FOUR_B_C4.units;
+    const range = { startMs: 2133709, endMs: 2183610 };
+    const look = endLookLines(units, range)!;
+    expect(look.lines[look.end].text).toMatch(/^We're gonna live/);
+    const result = await lookPastTheEnd(units, range, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: look.end + 1, reason: "x" }));
+    expect(result.range).toEqual(range);
+    expect(result.look.refused).toMatch(/inside a list/);
+  });
+
+  it("refuses a new end that makes the clip run past 90 seconds", async () => {
+    const units = [{ idx: 800, startMs: 3_449_000, endMs: 3_452_000, text: "This is where the clip starts." }, ...ONE_J_C4];
+    const range = { startMs: 3_449_000, endMs: 3537532 };
+    const result = await lookPastTheEnd(units, range, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 6, reason: "x" }));
+    expect(result.range).toEqual(range);
+    expect(result.look.refused).toMatch(/90 seconds/);
+  });
+
+  it("makes no call when no line ends within 6 seconds after the clip", async () => {
+    const ask = vi.fn();
+    const result = await lookPastTheEnd(ONE_J_C4, { startMs: 3524472, endMs: 3549931 }, ask);
+    expect(ask).not.toHaveBeenCalled();
+    expect(result.look).toEqual({ asked: false, movedMs: 0, refused: null });
   });
 });
