@@ -7,6 +7,7 @@ import type { PrismaClient } from "@prisma/client";
 import { labStepEnabled } from "@/lib/lab-flags";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { getStorageProvider } from "@/lib/storage";
+import { findAudioDropouts, type AudioDropout } from "./audio-dropout";
 import { boundaryContext, BoundaryChoiceSchema, chooseBoundary, EndLookSchema, lookPastTheEnd, type EndLook } from "./boundary-step";
 import { checkClipCamera } from "./camera-check-run";
 import { scoringModel } from "./claude-provider";
@@ -17,7 +18,8 @@ type LabClip = { startMs: number; endMs: number; text: string; total: number; ti
 type Segment = { idx: number; startMs: number; endMs: number; text: string };
 
 /**
- * Lab only. Runs the sermon span, the boundary step (with fix M's look past the end) and the camera check (whichever flags are on) on ANALYZE's
+ * Lab only. Runs the sermon span, the boundary step (with fix M's look past the end), the audio dropout
+ * check (fix Q) and the camera check (whichever flags are on) on ANALYZE's
  * ranked clips and records what each did as one operational event. Not cost-metered: the lab
  * records token counts in the event instead.
  */
@@ -34,7 +36,8 @@ export async function runLabSelection<T extends LabClip>(params: {
   const boundaryOn = labStepEnabled("boundaryStep");
   const cameraOn = labStepEnabled("cameraCheck") && Boolean(params.sourceStorageKey);
   const spanOn = labStepEnabled("sermonSpan");
-  if (!boundaryOn && !cameraOn && !spanOn) return params.ranked;
+  const dropoutOn = labStepEnabled("dropoutCheck") && Boolean(params.sourceStorageKey);
+  if (!boundaryOn && !cameraOn && !spanOn && !dropoutOn) return params.ranked;
 
   const startedAt = Date.now();
   const workDir = await mkdtemp(path.join(os.tmpdir(), "lab-selection-"));
@@ -54,13 +57,27 @@ export async function runLabSelection<T extends LabClip>(params: {
     error?: string;
   }[] = [];
   const cameraLog: { title: string; result: string; at?: number; error?: string }[] = [];
+  let dropoutLog: { found?: AudioDropout[]; seconds?: number; error?: string } | null = null;
   let spanLog: { firstLine?: number; lastLine?: number; reason?: string; lines?: number; span?: SermonSpan | null; error?: string } | null = null;
 
   try {
     let sourceFilePath: string | null = null;
-    if (cameraOn) {
+    if (cameraOn || dropoutOn) {
       sourceFilePath = path.join(workDir, "source-video");
       await getStorageProvider().downloadToFile(params.sourceStorageKey!, sourceFilePath);
+    }
+
+    let audioDropouts: AudioDropout[] | null = null;
+    if (dropoutOn) {
+      const scanStartedAt = Date.now();
+      try {
+        // The render plays the source video's sound, so the check reads that file.
+        audioDropouts = await findAudioDropouts(sourceFilePath!);
+        dropoutLog = { found: audioDropouts, seconds: Math.round((Date.now() - scanStartedAt) / 1000) };
+      } catch (error) {
+        // Fails open: without a scan the lab keeps every clip, as before fix Q.
+        dropoutLog = { error: String(error) };
+      }
     }
 
     let span: SermonSpan | null = null;
@@ -178,6 +195,7 @@ export async function runLabSelection<T extends LabClip>(params: {
       boundary,
       cameraCheck,
       sermonSpan: span,
+      audioDropouts,
     });
 
     await recordOperationalEventSafely(params.prisma, {
@@ -185,14 +203,16 @@ export async function runLabSelection<T extends LabClip>(params: {
       category: "analysis",
       eventType: "lab_selection_steps",
       severity: "info",
-      message: `Lab steps: ${result.outsideSermon} clips outside the sermon, ${result.boundaryChanged} clips moved to sentence boundaries, ${result.rejected.length} rejected by the camera check.`,
+      message: `Lab steps: ${result.outsideSermon} clips outside the sermon, ${result.boundaryChanged} clips moved to sentence boundaries, ${result.rejected.length} rejected by the audio and camera checks.`,
       projectId: params.projectId,
       jobId: params.jobId,
       metadata: {
         spanOn,
         boundaryOn,
         cameraOn,
+        dropoutOn,
         sermonSpan: spanLog,
+        audioDropouts: dropoutLog,
         outsideSermon: result.outsideSermon,
         boundaryChanged: result.boundaryChanged,
         endsMovedLater: boundaryLog.filter((b) => b.endLook && "movedMs" in b.endLook && b.endLook.movedMs > 0).length,
