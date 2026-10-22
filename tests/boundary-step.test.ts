@@ -171,6 +171,62 @@ describe("endsOnQuotationStart", () => {
   ])("does not flag a line that lands a point: %s", (text) => {
     expect(endsOnQuotationStart(text)).toBe(false);
   });
+
+  // Fix O (2026-10-21): in 173 marked clips the check moved an end back 3 times, and all 3 failed.
+  // Lab sermon 5d clip 5 lost "Jesus said, ..."; Jake: 'Should have ended with, "Jesus said, "Ask and
+  // you shall receive." Amen."'
+  it.each([
+    'Jesus said, "Ask and you shall receive."',
+    'God says right here, "I\'m providing one way for sinners to be saved."',
+    'He said, "I can\'t do that right now."',
+    'And he said, "Young man, can I read you something out of this book?"',
+  ])("does not flag a line whose quotation is a whole sentence (fix O): %s", (text) => {
+    expect(endsOnQuotationStart(text)).toBe(false);
+  });
+
+  it.each([
+    // The period is outside the quotation marks: the verse goes on (lab sermon 1c clip 5).
+    'He says, "Your adversary the devil".',
+    // The quotation does not close in the line.
+    'He said, "Moreover, I will be careful to ensure you that, that you always have a reminder of these things',
+    // A whole verse, but a Scripture reading starts here.
+    'The Bible says in verse 30, "And when they said these things the king stood up, as well as the governor."',
+  ])("still flags a quotation that is not a whole sentence, or a reading (fix O): %s", (text) => {
+    expect(endsOnQuotationStart(text)).toBe(true);
+  });
+});
+
+// Real lines from lab sermon 5d around clip 5 (42:02–42:23), which Jake failed on test 1.
+const FIVE_D_C5 = [
+  { idx: 639, startMs: 2508616, endMs: 2510436, text: "Prayer." },
+  { idx: 640, startMs: 2510496, endMs: 2518576, text: "And then in Acts 4, the Bible says they prayed, and when they prayed the place was shaken and they were filled with" },
+  { idx: 641, startMs: 2518616, endMs: 2522396, text: "the Holy Spirit, and they preached the Word of God with boldness." },
+  { idx: 642, startMs: 2522496, endMs: 2522776, text: "Yes." },
+  { idx: 643, startMs: 2522896, endMs: 2524636, text: "I am telling you it only takes one." },
+  { idx: 644, startMs: 2525096, endMs: 2533096, text: "It just takes one who's willing to pray, one who's willing to grab ahold of heaven, one who's willing to stand on the Word of God, one who's will- willing to believe the" },
+  { idx: 645, startMs: 2533136, endMs: 2536436, text: "promises of God, one who is willing to take God seriously." },
+  { idx: 646, startMs: 2536476, endMs: 2542196, text: "It just takes one or two to begin to pray, to rip open the sky and have heaven come down and glory- Yeah ..." },
+  { idx: 647, startMs: 2542196, endMs: 2543216, text: "to fill our souls." },
+  { idx: 648, startMs: 2543316, endMs: 2547376, text: 'Jesus said, "Ask and you shall receive."' },
+  { idx: 649, startMs: 2547436, endMs: 2548556, text: "Amen." },
+  { idx: 650, startMs: 2548616, endMs: 2551696, text: 'Then he said, "Seek and you shall find."' },
+  { idx: 651, startMs: 2552716, endMs: 2556396, text: 'Then he said, "Knock and the door will be opened."' },
+  { idx: 652, startMs: 2556576, endMs: 2556916, text: "Amen." },
+  { idx: 653, startMs: 2556956, endMs: 2559476, text: "Do you ever notice the first letter of each of those words?" },
+];
+
+describe("applyBoundaryChoice keeps an end on a whole quoted sentence (fix O, lab sermon 5d clip 5)", () => {
+  const context = boundaryContext(FIVE_D_C5, { startMs: 2518466, endMs: 2542346 }, 90_000);
+  const at = (idx: number) => context.units.findIndex((u) => u.idx === idx);
+
+  it("ends on the model's chosen line, 'Jesus said, \"Ask and you shall receive.\"'", () => {
+    expect(applyBoundaryChoice(context, { startUnit: at(643), endUnit: at(648) })).toEqual({
+      startMs: 2522896,
+      endMs: 2547376,
+      adjustedForScripture: false,
+      adjustedEnd: false,
+    });
+  });
 });
 
 describe("applyBoundaryChoice never ends on the start of a quotation", () => {

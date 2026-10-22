@@ -107,6 +107,43 @@ describe("applyLabSelectionSteps", () => {
   });
 });
 
+// Fix Q. Lab sermon 4f clip 2 (2026-10-21) played 3.5 seconds of the livestream's lost sound. Jake:
+// "we can't allows that to be posted."
+describe("applyLabSelectionSteps rejects a clip with an audio dropout (fix Q)", () => {
+  const dropout = { startMs: 310_000, endMs: 313_500 };
+
+  it("rejects it before the camera check and lets the next clip move up", async () => {
+    const kept = [clipAt(100, 90), clipAt(300, 85), clipAt(500, 80), clipAt(700, 75)];
+    const cameraCheck = vi.fn().mockResolvedValue({ pass: true });
+    const result = await applyLabSelectionSteps(kept, {
+      segments: SEGMENTS, targetCount: 3, boundary: null, cameraCheck, audioDropouts: [dropout],
+    });
+    expect(result.clips.map((c) => c.title)).toEqual(["clip at 100", "clip at 500", "clip at 700"]);
+    expect(result.rejected).toEqual([{ title: "clip at 300", reason: "audio dropout", at: 310 }]);
+    expect(cameraCheck.mock.calls.map(([clip]) => clip.title)).toEqual(["clip at 100", "clip at 500", "clip at 700"]);
+  });
+
+  it("checks the range the boundary step chose, and the reserves too, with no camera check", async () => {
+    // The boundary step moves clip at 250 onto the dropout; the reserve at 305 holds it as well.
+    const kept = [clipAt(100, 90), clipAt(250, 85), clipAt(305, 60)];
+    const boundary = vi
+      .fn()
+      .mockImplementation(async (clip: Clip) => (clip.startMs === 250_000 ? { startMs: 270_000, endMs: 320_000 } : { startMs: clip.startMs, endMs: clip.endMs }));
+    const result = await applyLabSelectionSteps(kept, {
+      segments: SEGMENTS, targetCount: 6, boundary, boundaryTopN: 2, cameraCheck: null, audioDropouts: [dropout],
+    });
+    expect(result.clips.map((c) => c.title)).toEqual(["clip at 100"]);
+    expect(result.rejected.map((r) => r.title)).toEqual(["clip at 250", "clip at 305"]);
+  });
+
+  it("keeps every clip when the service has no dropout", async () => {
+    const kept = [clipAt(100, 90), clipAt(300, 85)];
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 6, boundary: null, cameraCheck: null, audioDropouts: [] });
+    expect(result.clips).toBe(kept);
+    expect(result.rejected).toEqual([]);
+  });
+});
+
 // Fix J. Lab sermon 4b clip 6 (2026-10-19) came from the welcome before a baptism, 20 minutes
 // before the sermon began; Jake failed it on test 2. Only the sermon may become a clip.
 describe("applyLabSelectionSteps keeps only the sermon (fix J)", () => {

@@ -1,3 +1,4 @@
+import { dropoutInClip, type AudioDropout } from "./audio-dropout";
 import type { CameraCheckResult } from "./camera-check";
 
 /**
@@ -7,9 +8,11 @@ import type { CameraCheckResult } from "./camera-check";
  * 1. The boundary step moves each top clip to whole sentences where its thought starts and lands.
  *    A clip it cannot fix keeps its raw window and goes behind every other clip (Jake, lab sermon
  *    3 clip 5: a raw window ran past the punch line).
- * 2. The camera check walks the clips in rank order and rejects any that show a slide, until the
+ * 2. The audio dropout check (fix Q) rejects every clip whose sound the recording lost for a second
+ *    or more. It is free, so it runs before the camera check and on the reserves too.
+ * 3. The camera check walks the clips in rank order and rejects any that show a slide, until the
  *    target number of first picks has passed. Later clips stay as unchecked reserves.
- * Both are dependencies, so this ordering is tested without a model, ffmpeg or a database.
+ * All are dependencies, so this ordering is tested without a model, ffmpeg or a database.
  */
 
 type LabClip = { startMs: number; endMs: number; text: string; total: number; title: string };
@@ -25,6 +28,8 @@ export type LabSelectionDependencies<T extends LabClip> = {
   boundaryTopN?: number;
   /** Where the sermon starts and ends on the source clock; null or absent keeps every clip. */
   sermonSpan?: { startMs: number; endMs: number } | null;
+  /** Where the recording lost its sound, on the source clock; null or absent checks nothing. */
+  audioDropouts?: AudioDropout[] | null;
   concurrency?: number;
 };
 
@@ -59,7 +64,10 @@ export async function applyLabSelectionSteps<T extends LabClip>(
   deps: LabSelectionDependencies<T>,
 ): Promise<LabSelectionResult<T>> {
   const span = deps.sermonSpan ?? null;
-  if (!deps.boundary && !deps.cameraCheck && !span) return { clips: kept, rejected: [], boundaryChanged: 0, outsideSermon: 0 };
+  const dropouts = deps.audioDropouts ?? [];
+  if (!deps.boundary && !deps.cameraCheck && !span && dropouts.length === 0) {
+    return { clips: kept, rejected: [], boundaryChanged: 0, outsideSermon: 0 };
+  }
   let clips = kept;
   let boundaryChanged = 0;
   let outsideSermon = 0;
@@ -100,6 +108,13 @@ export async function applyLabSelectionSteps<T extends LabClip>(
   if (span) keepWhere((clip) => clip.startMs >= span.startMs && clip.endMs <= span.endMs);
 
   const rejected: LabSelectionResult<T>["rejected"] = [];
+  if (dropouts.length > 0) {
+    clips = clips.filter((clip) => {
+      const dropout = dropoutInClip(clip, dropouts);
+      if (dropout) rejected.push({ title: clip.title, reason: "audio dropout", at: dropout.startMs / 1000 });
+      return !dropout;
+    });
+  }
   if (deps.cameraCheck) {
     const passed: T[] = [];
     let next = 0;

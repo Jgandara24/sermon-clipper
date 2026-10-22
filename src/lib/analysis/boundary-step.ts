@@ -68,13 +68,18 @@ const QUOTATION_LEADS = [
   /\b(says|said)\s+(it\s+)?again[\s.,:"”']*$/i,
 ];
 
+// Fix O (lab sermon 5d clip 5, 2026-10-21): 'Jesus said, "Ask and you shall receive."' says the
+// quotation; it does not lead into it. In 173 marked clips this check moved an end back 3 times, and
+// all 3 failed. 'He says, "Your adversary the devil".' (1c clip 5) closes no sentence inside its quote.
+const closesQuotedSentence = (text: string) => quoteBalance(text) === 0 && /[.!?]["”]/.test(text);
+
 /**
  * True when a sentence only leads into a quotation — announcing it, or opening a quote that the
  * next sentence finishes — so a clip ending there stops before the words it promised. Lab sermon
  * 1c clip 5 ended on two such lines after Jake's chosen end, "Secondly, you need to resist him."
  */
 export function endsOnQuotationStart(text: string): boolean {
-  if (QUOTATION_LEADS.some((pattern) => pattern.test(text))) return true;
+  if (QUOTATION_LEADS.some((pattern) => pattern.test(text)) && !closesQuotedSentence(text)) return true;
   if (looksLikeScriptureReadingStart(text)) return true;
   // An opening quote mark with no closing one: the quotation runs on into the next sentence.
   return quoteBalance(text) === 1 && !/["”]\W*$/.test(text.trim());
