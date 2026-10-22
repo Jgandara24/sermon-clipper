@@ -1,0 +1,64 @@
+{
+  "projectId": "24745acf-a87d-4dc1-9d71-e9611b375d91",
+  "projectName": "Lab 5d - Bible Conference Herb Reavis - fix N",
+  "sourceUrl": "https://www.youtube.com/watch?v=mhLBojrgy_s",
+  "judge": "jake",
+  "clips": {
+    "3f89ae8c-e8a4-47e6-883e-7fe9d7491c31": {
+      "rank": 1,
+      "startMs": 1804256,
+      "endMs": 1867032,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:44:29.618Z"
+    },
+    "53528e97-f8b1-413f-b354-b53262f73368": {
+      "rank": 2,
+      "startMs": 1950012,
+      "endMs": 2020772,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:45:11.632Z"
+    },
+    "8569a366-fd57-477e-a237-1d0e103324cf": {
+      "rank": 3,
+      "startMs": 2608012,
+      "endMs": 2632032,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:45:44.132Z"
+    },
+    "3d680fbf-a458-4cb5-813c-57d15e430a8b": {
+      "rank": 4,
+      "startMs": 3517412,
+      "endMs": 3548292,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:46:20.483Z"
+    },
+    "5f3bb4ea-8007-4137-bc84-8e64dfd1c39d": {
+      "rank": 5,
+      "startMs": 2522896,
+      "endMs": 2543216,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should have ended with,  \"Jesus said, \"Ask and you shall receive.\" Amen.\"",
+      "labeledAt": "2026-10-22T02:47:12.257Z"
+    },
+    "9e957275-1136-4ade-aedd-2fbf4a18ded6": {
+      "rank": 6,
+      "startMs": 3151768,
+      "endMs": 3182148,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:47:27.565Z"
+    }
+  }
+}
