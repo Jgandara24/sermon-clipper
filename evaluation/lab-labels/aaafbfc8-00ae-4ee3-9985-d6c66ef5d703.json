@@ -1,0 +1,64 @@
+{
+  "projectId": "aaafbfc8-00ae-4ee3-9985-d6c66ef5d703",
+  "projectName": "Lab 3h - Revival - fix N",
+  "sourceUrl": "https://www.youtube.com/watch?v=JIIo4_gc_44",
+  "judge": "jake",
+  "clips": {
+    "2c503d87-a394-4ed0-9aa5-c286d6173dab": {
+      "rank": 1,
+      "startMs": 2893530,
+      "endMs": 2944266,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:30:07.011Z"
+    },
+    "66b72d56-b85f-4509-bc29-e0557d5c4b7d": {
+      "rank": 2,
+      "startMs": 1920542,
+      "endMs": 1940182,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "This is not the, \"Sumo Wrestle Warning (Funny Bit)\" it's also might be too short. I think 20seconds might be too short. ",
+      "labeledAt": "2026-10-22T02:31:34.596Z"
+    },
+    "1e9a0171-0b9b-4baa-929c-e476ebbeebd6": {
+      "rank": 3,
+      "startMs": 2203046,
+      "endMs": 2276486,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:32:20.994Z"
+    },
+    "af1c2ea8-4437-4283-b259-ee322b291335": {
+      "rank": 4,
+      "startMs": 3741086,
+      "endMs": 3760946,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:32:49.247Z"
+    },
+    "b1d9ece0-70d5-4c22-afd6-c419339a981b": {
+      "rank": 5,
+      "startMs": 2487746,
+      "endMs": 2545626,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:33:52.685Z"
+    },
+    "dc97e66c-ab4f-45dd-8ea4-8f978763f474": {
+      "rank": 6,
+      "startMs": 3477130,
+      "endMs": 3521770,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Stopped too early, hadn't finished his point.",
+      "labeledAt": "2026-10-22T02:35:15.135Z"
+    }
+  }
+}
