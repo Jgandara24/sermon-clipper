@@ -1,0 +1,62 @@
+{
+  "projectId": "d71b3d19-e1d2-4680-828e-7f6de4c1b133",
+  "projectName": "Lab 5e - Bible Conference Herb Reavis - fix O + Q",
+  "sourceUrl": "https://www.youtube.com/watch?v=mhLBojrgy_s",
+  "judge": "jake",
+  "clips": {
+    "c3f5194d-8767-46bd-b08b-5aac0b51a0f0": {
+      "rank": 1,
+      "startMs": 3484472,
+      "endMs": 3548292,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T04:06:48.453Z"
+    },
+    "0eb7464c-58e1-4c58-b021-f8b716bc585e": {
+      "rank": 2,
+      "startMs": 1804256,
+      "endMs": 1867032,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T04:07:10.684Z"
+    },
+    "d51fe2e3-1525-488b-965f-6375e9494b1a": {
+      "rank": 3,
+      "startMs": 1950012,
+      "endMs": 2020772,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T04:07:27.437Z"
+    },
+    "4992c020-3126-4f10-8c0a-c246fb9ff75d": {
+      "rank": 4,
+      "startMs": 2866812,
+      "endMs": 2940148,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T04:07:57.401Z"
+    },
+    "3e3d6292-c4e8-4133-a0ff-93f8c4d08a8f": {
+      "rank": 6,
+      "startMs": 3151768,
+      "endMs": 3182148,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T21:33:31.649Z"
+    },
+    "2bf5738a-01be-485f-89a0-98c332a71684": {
+      "rank": 5,
+      "startMs": 2061732,
+      "endMs": 2128892,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T21:33:22.760Z"
+    }
+  }
+}

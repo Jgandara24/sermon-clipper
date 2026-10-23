@@ -145,6 +145,9 @@ const fieldSchemas = {
   CAPTION_FONT_DIR: optionalString,
   YTDLP_PATH: optionalString,
   YTDLP_PROXY_URL: optionalString,
+  // Tallest video yt-dlp may pick for a URL import. 1080 is the production behavior; the lab
+  // sets 720 so three sermons fit on a laptop disk. Any other value is a deliberate choice.
+  YTDLP_MAX_HEIGHT: positiveInt(1080),
   YTDLP_PROXY_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   RAILWAY_EGRESS_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   // Provider selection is explicit policy, validated in src/lib/transcription/policy.ts so the
@@ -312,6 +315,11 @@ export function ytDlpPath(): string {
  */
 export function ytDlpProxyUrl(): string | undefined {
   return env.YTDLP_PROXY_URL || undefined;
+}
+
+/** Tallest video a URL import may download. 1080 unless `YTDLP_MAX_HEIGHT` says otherwise. */
+export function ytDlpMaxHeight(): number {
+  return env.YTDLP_MAX_HEIGHT;
 }
 
 /**

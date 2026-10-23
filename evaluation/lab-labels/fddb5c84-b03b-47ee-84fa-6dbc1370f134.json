@@ -1,0 +1,70 @@
+{
+  "projectId": "fddb5c84-b03b-47ee-84fa-6dbc1370f134",
+  "projectName": "Lab 1g - Normal Sunday - whole ends + sermon only + caps captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "4cfcf26a-cb34-44a6-8317-08f3722adf4f": {
+      "rank": 1,
+      "startMs": 4450420,
+      "endMs": 4508340,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "The pastor mispeaks at the beginning. That's not a proper hook, if he were to do that in the middle of the point that's probably okay, but the beginning has to be clean and catch. Start ir right after on ,\"You know the story. \"",
+      "labeledAt": "2026-10-20T23:29:24.358Z"
+    },
+    "93c07c1d-04d1-48ff-90db-d88fb18cc2c2": {
+      "rank": 2,
+      "startMs": 2367904,
+      "endMs": 2420184,
+      "verdict": "fail",
+      "failedTests": [
+        4
+      ],
+      "note": "",
+      "labeledAt": "2026-10-20T23:30:01.091Z"
+    },
+    "9ca08d6a-6886-48a7-a685-9f8564a1b4d4": {
+      "rank": 3,
+      "startMs": 4104120,
+      "endMs": 4143760,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:30:32.264Z"
+    },
+    "e6c3e9c8-76d7-4a4d-b23c-ba63c8d1d4d0": {
+      "rank": 4,
+      "startMs": 2796120,
+      "endMs": 2835420,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "The camera angle changed so quickly at the end, and it sounds like there's more to what he was about to say.",
+      "labeledAt": "2026-10-20T23:31:30.071Z"
+    },
+    "e6e76224-c548-4b33-9737-e2f5c1ef1a82": {
+      "rank": 5,
+      "startMs": 2032100,
+      "endMs": 2080260,
+      "verdict": "fail",
+      "failedTests": [
+        2
+      ],
+      "note": "The pastor is praying, this shouldn't be a clip. should be excluded",
+      "labeledAt": "2026-10-20T23:32:19.948Z"
+    },
+    "ade95175-4689-483e-b176-e7a5f50d260c": {
+      "rank": 6,
+      "startMs": 3096156,
+      "endMs": 3135716,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:32:52.498Z"
+    }
+  }
+}

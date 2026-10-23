@@ -1,0 +1,68 @@
+{
+  "projectId": "f18bc091-06a9-486a-be0d-0db0a105276c",
+  "projectName": "Lab 1c - Normal Sunday - tracking + camera check + boundaries",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "f88a0310-bbdd-4fa7-98c7-4289ee3d93c0": {
+      "rank": 2,
+      "startMs": 2331588,
+      "endMs": 2384708,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "probably topped too early. Speaker hadn't finished making his point.",
+      "labeledAt": "2026-10-18T05:03:37.367Z"
+    },
+    "17a05a00-cc2a-4975-8f2a-b3b9bec79944": {
+      "rank": 1,
+      "startMs": 4593264,
+      "endMs": 4656544,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "Camera not tracking pastor well enough when he is moving.  it must track him and keep him center at all times.",
+      "labeledAt": "2026-10-18T05:03:32.423Z"
+    },
+    "e1866c20-51cf-409d-bda3-d44e25ac442d": {
+      "rank": 3,
+      "startMs": 2885724,
+      "endMs": 2944660,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "Camera not tracking pastor well enough when he is moving.  it must track him and keep him center at all times.",
+      "labeledAt": "2026-10-18T05:03:40.128Z"
+    },
+    "a28a9cee-de35-45ec-9a86-eda6dcb86d47": {
+      "rank": 4,
+      "startMs": 4207964,
+      "endMs": 4239264,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T05:04:19.207Z"
+    },
+    "d4b916d5-0073-4c3f-8ad2-ff25ff7c3701": {
+      "rank": 5,
+      "startMs": 3455184,
+      "endMs": 3522564,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should have ended with, \"First of all, very first thing you need to do is you need to recognize him. You need to recognize the devil. Secondly, you need to resist him\"",
+      "labeledAt": "2026-10-18T05:06:03.220Z"
+    },
+    "90fcbd6e-b9a5-4ca9-a9b4-27489b1946b6": {
+      "rank": 6,
+      "startMs": 3646114,
+      "endMs": 3703590,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should have started with, \"I'm speaking to somebody today\"\nShould have ended with, \"and he's gonna swallow you down so quick that you won't even recognize it, because he's setting you up. Be sober. Be vigilant.\"",
+      "labeledAt": "2026-10-18T05:07:32.218Z"
+    }
+  }
+}

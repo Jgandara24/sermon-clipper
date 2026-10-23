@@ -9,7 +9,12 @@ import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
 import { env } from "@/lib/env";
+import { labStepEnabled } from "@/lib/lab-flags";
+import { computeLabSpeakerTrack } from "@/lib/speaker-tracking/lab-observe";
+import type { LabTrack } from "@/lib/speaker-tracking/lab-track";
 import type { EditorState } from "@/lib/editor/types";
+import { flattenWords, wordsInRange } from "@/lib/editor/words";
+import { measureWordLevels } from "@/lib/export/word-levels";
 import { countCaptionDialogueEvents } from "@/lib/export/ass-generator";
 import { renderClipExport } from "@/lib/export/render";
 import { probeVideoFile } from "@/lib/media/probe";
@@ -196,7 +201,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
 
   // Every render decision the document implies, derived in one pure place. The parity gate drives
   // the same function with the same document, so what it checks is what this job renders.
-  const plan = buildExportRenderPlan({
+  const planInput = {
     state,
     segments,
     sourceWidth: sourceVideo.width,
@@ -206,8 +211,12 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     brandTemplate,
     processingConfig: clip.project.processingConfig,
     source: { id: sourceVideo.id, durationMs: sourceVideo.durationS ? Math.round(sourceVideo.durationS.toNumber() * 1000) : null },
-  });
+    captionGrouping: labStepEnabled("phraseCaptions") ? ("phrases" as const) : undefined,
+  };
+  const plan = buildExportRenderPlan(planInput);
   const { range, cropPixels, assContent } = plan;
+  // Lab phrase captions are rebuilt once the source is on disk, without quiet congregation responses.
+  let captionPlan = plan;
   if (rangeInput && (rangeInput.sourceVideoId !== sourceVideo.id || rangeInput.editVersion !== job.editVersion ||
     rangeInput.startMs !== BigInt(range.startMs) || rangeInput.endMs !== BigInt(range.endMs))) {
     throw new ExportFailureError("EXPORT_RANGE_PIN_CHANGED", "The saved range input no longer matches this export.", { terminal: true });
@@ -306,17 +315,85 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         details: costDetails,
       });
 
+      // Phase 1 lab: follow the preacher instead of the fixed center crop. A person's manual
+      // crop always wins. If tracking fails, the clip still renders with the fixed crop.
+      let speakerTrack: LabTrack | undefined;
+      if (labStepEnabled("speakerTracking") && state.layout.mode !== "manual") {
+        try {
+          speakerTrack = await computeLabSpeakerTrack({ sourceFilePath, range, workDir });
+          await recordOperationalEventSafely(prisma, {
+            workspaceId: job.workspaceId,
+            category: "export",
+            eventType: "lab_speaker_tracking",
+            severity: "info",
+            message: `Lab speaker tracking follows the preacher ${speakerTrack.followingPercent}% of the clip.`,
+            metadata: {
+              exportJobId: job.id,
+              clipId: clip.id,
+              followingPercent: speakerTrack.followingPercent,
+              holds: speakerTrack.holds,
+              shots: speakerTrack.shots,
+              addedCuts: speakerTrack.addedCuts,
+              filledFrames: speakerTrack.filledFrames,
+              bodyFilledFrames: speakerTrack.bodyFilledFrames,
+              offCrop: speakerTrack.offCrop,
+            },
+          });
+        } catch (error) {
+          await recordOperationalEventSafely(prisma, {
+            workspaceId: job.workspaceId,
+            category: "export",
+            eventType: "lab_speaker_tracking_failed",
+            severity: "warning",
+            message: "Lab speaker tracking failed; the clip renders with the fixed crop.",
+            metadata: { exportJobId: job.id, clipId: clip.id, detail: error instanceof Error ? error.message : String(error) },
+          });
+        }
+      }
+
+      // Phase 1 lab, fix G1: leave the congregation's quiet "Amen." out of the captions. If the
+      // measurement fails, the clip renders with every word, as before.
+      if (planInput.captionGrouping === "phrases") {
+        try {
+          const words = wordsInRange(flattenWords(segments), range.startMs, range.endMs);
+          const captionWordLevels = await measureWordLevels({ sourceFilePath, range, words, workDir });
+          captionPlan = buildExportRenderPlan({ ...planInput, captionWordLevels });
+          await recordOperationalEventSafely(prisma, {
+            workspaceId: job.workspaceId,
+            category: "export",
+            eventType: "lab_caption_cleanup",
+            severity: "info",
+            message: `Lab captions: ${plan.captionLineCount} lines before the congregation check, ${captionPlan.captionLineCount} after.`,
+            metadata: { exportJobId: job.id, clipId: clip.id, measuredWords: captionWordLevels.size, linesBefore: plan.captionLineCount, linesAfter: captionPlan.captionLineCount },
+          });
+        } catch (error) {
+          await recordOperationalEventSafely(prisma, {
+            workspaceId: job.workspaceId,
+            category: "export",
+            eventType: "lab_caption_cleanup_failed",
+            severity: "warning",
+            message: "Lab caption loudness check failed; the clip renders with every word.",
+            metadata: { exportJobId: job.id, clipId: clip.id, detail: error instanceof Error ? error.message : String(error) },
+          });
+        }
+      }
+
       const renderStartedAt = startRuntimeMeasurement();
       try {
         await renderClipExport({
           sourceFilePath,
           range,
           cropPixels,
-          assFileContent: assContent,
+          assFileContent: captionPlan.assContent,
           outputPath,
           outputWidth: OUTPUT_WIDTH,
           outputHeight: OUTPUT_HEIGHT,
           originalVolume: plan.originalVolume,
+          speakerTrack: speakerTrack && {
+            commands: speakerTrack.commands,
+            crop: speakerTrack.crop,
+            first: speakerTrack.first,
+          },
         });
       } catch (error) {
         await recordRenderFact({
@@ -359,14 +436,14 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         probeError,
         bytes: outputBytes,
         checksum: outputChecksum,
-        captionEvents: countCaptionDialogueEvents(assContent),
+        captionEvents: countCaptionDialogueEvents(captionPlan.assContent),
       },
       {
         width: OUTPUT_WIDTH,
         height: OUTPUT_HEIGHT,
         durationS: outputDurationS,
         durationToleranceS: renderQcDurationToleranceS(outputDurationS),
-        captionLines: plan.captionLineCount,
+        captionLines: captionPlan.captionLineCount,
         completeMessageTiming: plan.completeMessageTiming,
       },
     );

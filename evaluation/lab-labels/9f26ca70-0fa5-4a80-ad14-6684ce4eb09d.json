@@ -1,0 +1,64 @@
+{
+  "projectId": "9f26ca70-0fa5-4a80-ad14-6684ce4eb09d",
+  "projectName": "Lab 3d - Revival - calm tracking + clean captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=JIIo4_gc_44",
+  "judge": "jake",
+  "clips": {
+    "3d15d8d5-887c-41b1-9269-f2f46fffb57f": {
+      "rank": 1,
+      "startMs": 2269286,
+      "endMs": 2306866,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:53:58.035Z"
+    },
+    "74ab2530-79ea-49ea-a886-e733acb69f38": {
+      "rank": 2,
+      "startMs": 3712546,
+      "endMs": 3744386,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:54:23.573Z"
+    },
+    "fd8d1dd1-3d7a-4c2a-8d1c-6cc800181ea7": {
+      "rank": 3,
+      "startMs": 2439966,
+      "endMs": 2495086,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:55:01.506Z"
+    },
+    "2e7c25b8-8b04-46d4-9547-29d4101e87ba": {
+      "rank": 4,
+      "startMs": 2893530,
+      "endMs": 2947026,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:55:34.806Z"
+    },
+    "9fa6be0d-05e8-432c-b97a-51746ab9c5e9": {
+      "rank": 5,
+      "startMs": 3471870,
+      "endMs": 3521770,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "It seems like he hadn't made his finishing point yet.",
+      "labeledAt": "2026-10-20T01:56:30.351Z"
+    },
+    "cf1d1a9d-d6bc-4093-9a80-03163279ba85": {
+      "rank": 6,
+      "startMs": 1788450,
+      "endMs": 1824530,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:57:04.023Z"
+    }
+  }
+}

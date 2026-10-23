@@ -1,0 +1,64 @@
+{
+  "projectId": "d7ec1227-d77e-4d10-9368-3a33770ebead",
+  "projectName": "Lab 2b - Wednesday Night - body fill + boundary retry",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "0e06388d-8606-4227-9dd2-a371acf0e277": {
+      "rank": 1,
+      "startMs": 378011,
+      "endMs": 433472,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T23:38:39.128Z"
+    },
+    "b158979a-0914-4294-8128-870c564f597e": {
+      "rank": 2,
+      "startMs": 1759224,
+      "endMs": 1796804,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T23:39:24.780Z"
+    },
+    "21ade51b-20f3-44fe-b816-028e6161e4da": {
+      "rank": 3,
+      "startMs": 1324072,
+      "endMs": 1381112,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T23:40:01.448Z"
+    },
+    "f0aaa441-3be6-425f-990a-a4e57b2e900c": {
+      "rank": 4,
+      "startMs": 693872,
+      "endMs": 723712,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "The speaker moves out of the camera frame at the very beginning, and it struggles tracking him and resetting. It's too shaky and snaps back too oddly. ",
+      "labeledAt": "2026-10-18T23:40:44.993Z"
+    },
+    "c5e3f28b-3351-482b-b28b-73c6c9dd8a54": {
+      "rank": 5,
+      "startMs": 780316,
+      "endMs": 818856,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T23:41:27.257Z"
+    },
+    "1042e730-9cf7-4553-8d3e-7e047c403c32": {
+      "rank": 6,
+      "startMs": 2423848,
+      "endMs": 2461148,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should end with, \"Yes, sir. Some mercy? Would you be willing\"",
+      "labeledAt": "2026-10-18T23:42:15.371Z"
+    }
+  }
+}

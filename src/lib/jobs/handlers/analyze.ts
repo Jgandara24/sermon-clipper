@@ -14,6 +14,7 @@ import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidat
 import { ANALYSIS_RETAINED_CLIP_STATUS } from "@/lib/analysis/clip-status";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
+import { runLabSelection } from "@/lib/analysis/lab-selection-run";
 import { analysisCallCostFact } from "@/lib/analysis/usage";
 import { resolveAndSnapshotProjectAnalysisRouting } from "@/lib/analysis/routing-store";
 import { AnalysisProviderUnavailableError, type ScoredCandidate } from "@/lib/analysis/types";
@@ -43,7 +44,8 @@ import { CompleteMessageFailure, prepareCompleteMessageTranscript, readCompleteM
 import { CompleteMessageProvider } from "@/lib/analysis/complete-message/provider";
 
 const MIN_CANDIDATE_MS = 20_000;
-const MAX_CANDIDATE_MS = 90_000;
+// Jake, 2026-10-18: "keep the clips under 60 seconds." Was 90_000; refineBoundaries adds 0.3 s.
+export const MAX_CANDIDATE_MS = 59_000;
 
 function readGenre(processingConfig: unknown): string {
   if (processingConfig && typeof processingConfig === "object" && "genre" in processingConfig) {
@@ -357,7 +359,20 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     refined.map((clip) => ({ ...clip, score: clip.total })),
     0.5,
   );
-  const kept = deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
+  const ranked = deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
+  // Phase 1 lab: sentence boundaries and the camera check. Off unless a lab flag is set.
+  const kept = messagePolicy
+    ? ranked
+    : await runLabSelection({
+        prisma,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        jobId: job.id,
+        sourceStorageKey: project.sourceVideo?.storageKey ?? null,
+        ranked,
+        segments,
+        targetCount: targetClipCount,
+      });
 
   await prisma.$transaction(async (tx) => {
     // Match replacement/scheduling lock order. First durable writers take the source lock too,

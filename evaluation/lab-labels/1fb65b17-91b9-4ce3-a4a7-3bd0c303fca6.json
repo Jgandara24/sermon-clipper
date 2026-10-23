@@ -1,0 +1,64 @@
+{
+  "projectId": "1fb65b17-91b9-4ce3-a4a7-3bd0c303fca6",
+  "projectName": "Lab 1e - Normal Sunday - whole sentences + questions + phrase captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "883751a3-b711-4dda-a199-a089c58cc51a": {
+      "rank": 1,
+      "startMs": 2297568,
+      "endMs": 2343968,
+      "verdict": "fail",
+      "failedTests": [
+        4
+      ],
+      "note": "It should have started with, \"why would you think Simon Peter would use that figure of speech?\"\nAlso It doesn't get to the main point or major statement / preaching point. \n",
+      "labeledAt": "2026-10-19T03:35:34.160Z"
+    },
+    "4ba88810-ab1a-4028-9872-f7ffe4cbbefc": {
+      "rank": 2,
+      "startMs": 2459848,
+      "endMs": 2498308,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:39:20.739Z"
+    },
+    "42838391-4209-4236-a219-d8d6481c6fac": {
+      "rank": 3,
+      "startMs": 3173940,
+      "endMs": 3223000,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:40:43.502Z"
+    },
+    "c6c9ba9b-7671-49a2-8d23-0e691488af50": {
+      "rank": 4,
+      "startMs": 2808724,
+      "endMs": 2864724,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "Content was great, but at times idk if the camera angle changed in the orgiinal video or if something tracker messed up but there were a couple times it seem to shift quickly when he moved side to side.",
+      "labeledAt": "2026-10-19T03:43:19.337Z"
+    },
+    "32297f2a-f83f-4d78-b281-26bbc3daf798": {
+      "rank": 5,
+      "startMs": 2692284,
+      "endMs": 2718384,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:43:52.484Z"
+    },
+    "37b0a9b1-fd27-45c0-8da0-050b9f0dd618": {
+      "rank": 6,
+      "startMs": 4746524,
+      "endMs": 4773304,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:44:28.519Z"
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "projectId": "3ebe5496-c42f-4424-bb54-cddd8804da8c",
+  "projectName": "Lab 4d - Sunday 10-11-26 Divine Certainties - fix K + 90 s rule",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "e24fc819-b1e9-4e32-b09a-6f72211bf027": {
+      "rank": 1,
+      "startMs": 2133709,
+      "endMs": 2193370,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:22:07.084Z"
+    },
+    "f22138d7-5f62-43af-a866-6b29703e3eae": {
+      "rank": 2,
+      "startMs": 3531746,
+      "endMs": 3598126,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:23:16.427Z"
+    },
+    "321b4317-31f9-4cfa-83d5-2c3ad4fa960b": {
+      "rank": 3,
+      "startMs": 2350630,
+      "endMs": 2418930,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:24:08.651Z"
+    },
+    "b0639b8c-c168-4489-9161-20db93e38d1b": {
+      "rank": 4,
+      "startMs": 1923230,
+      "endMs": 2008230,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:25:06.072Z"
+    },
+    "3338611d-b808-417f-95fb-d8ddf94e273f": {
+      "rank": 5,
+      "startMs": 2920746,
+      "endMs": 3003398,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T02:26:07.192Z"
+    }
+  }
+}

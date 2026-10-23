@@ -1,0 +1,64 @@
+{
+  "projectId": "e745bd6f-47da-464a-a578-b527de8ee28c",
+  "projectName": "Lab 1f - Normal Sunday - calm tracking + clean captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "92048566-59c2-4e9d-b2c0-9f0ddb25a3d1": {
+      "rank": 1,
+      "startMs": 4441424,
+      "endMs": 4499544,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "End on \"never forget that\" is pretty quick cut off. \nCould probably end on \"You've got that today as a believer. Amen.\" for an eaiser ending.",
+      "labeledAt": "2026-10-20T01:49:49.365Z"
+    },
+    "727d4fe0-872b-4179-9bbf-bc971ff874e5": {
+      "rank": 2,
+      "startMs": 4043724,
+      "endMs": 4102364,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:50:40.602Z"
+    },
+    "1d96159f-da32-4615-983a-b7bc7d5734fc": {
+      "rank": 3,
+      "startMs": 2893724,
+      "endMs": 2944660,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:51:19.253Z"
+    },
+    "7839a5a1-dcbb-41bc-8960-1fc6d5c232d1": {
+      "rank": 4,
+      "startMs": 3096060,
+      "endMs": 3135620,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:51:54.145Z"
+    },
+    "24730ee5-6027-4ea8-a766-3f0d5f592f05": {
+      "rank": 5,
+      "startMs": 3685020,
+      "endMs": 3728560,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:52:41.336Z"
+    },
+    "6e99e9d2-bac3-41a1-8b7e-3a498664b255": {
+      "rank": 6,
+      "startMs": 2764844,
+      "endMs": 2816804,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:53:14.521Z"
+    }
+  }
+}
