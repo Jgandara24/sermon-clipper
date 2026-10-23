@@ -270,3 +270,47 @@ describe("export filter graph with a speaker track", () => {
     expect(args[args.indexOf("-vf") + 1]).toContain("crop@speaker=w=404:h=720:x=438:y=0");
   });
 });
+
+// Fix S. Lab sermon 4g clip 4 (2026-10-22): the crop waited for him while he walked out of it for
+// about 1 s. Jake: "We cannot have a pastor be off the screen for half a second or a second."
+describe("buildLabTrack off-crop check (fix S)", () => {
+  /** Face seen at 430 for one second, then lost; `later(i)` gives the person box centers from frame 30 on. */
+  const lostAt430 = (later: (i: number) => number[]) => {
+    const file = clip(4, (i) => (i < 30 ? { x: 400, w: 60 } : null));
+    file.people = {
+      frames: Array.from({ length: 40 }, (_, k) => ({
+        t: 100 + (3 * k) / FPS,
+        people: (3 * k < 30 ? [430] : later(3 * k)).map((x) => ({ score: 0.92, box: { x: x - 140, y: 60, w: 280, h: 640 } })),
+      })),
+    };
+    return buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" });
+  };
+
+  it("notes a stretch of half a second or more where the person detector sees him outside the crop", () => {
+    // The detector misses him for a second, then sees him at 1100 while the crop still waits at 430.
+    const track = lostAt430((i) => (i < 60 ? [] : [1100]));
+    expect(track.offCrop).toHaveLength(1);
+    expect(track.offCrop![0].start).toBeCloseTo(2, 3);
+    expect(track.offCrop![0].end).toBeCloseTo(4, 3);
+  });
+
+  it("notes nothing for a stretch shorter than half a second", () => {
+    expect(lostAt430((i) => (i >= 60 && i < 72 ? [1100] : [])).offCrop).toEqual([]);
+  });
+
+  it("does not note a stretch where someone is inside the crop", () => {
+    expect(lostAt430((i) => (i < 60 ? [] : [430, 1100])).offCrop).toEqual([]);
+  });
+
+  it("notes nothing while the crop follows him", () => {
+    const walk = (i: number) => (i < 30 ? 600 : i < 90 ? 600 + (300 * (i - 30)) / 60 : 900);
+    const file = clip(4, (i) => (i >= 30 && i < 90 ? null : { x: walk(i) - 30, w: 60 }));
+    file.people = {
+      frames: Array.from({ length: 40 }, (_, k) => ({
+        t: 100 + (3 * k) / FPS,
+        people: [{ score: 0.92, box: { x: walk(3 * k) - 140, y: 60, w: 280, h: 640 } }],
+      })),
+    };
+    expect(buildLabTrack(file, { seekSeconds: 100, rules: "lab-v1" }).offCrop).toEqual([]);
+  });
+});

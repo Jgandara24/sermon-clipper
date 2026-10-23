@@ -250,6 +250,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
             addedCuts: speakerTrack.addedCuts,
             filledFrames: speakerTrack.filledFrames,
             bodyFilledFrames: speakerTrack.bodyFilledFrames,
+            offCrop: speakerTrack.offCrop,
           },
         });
       } catch (error) {
