@@ -614,16 +614,32 @@ export async function chooseBoundary(
  * beat before the preacher finished the point. 1j clip 4 ended on "If you're a friend of Jesus Christ,
  * you've got an enemy."; Jake: "It should end with, " Amen. He is the devil."" No pause, word or
  * pattern marks these ends (of 53 marked clips with under 0.3 s after the end, 35 passed), so one model
- * call reads the clip and the lines that end within 6 seconds after it. The end can only move later, to
+ * call reads the clip and the lines that end within 6 seconds after it. The end moves later only, to
  * the first line that finishes the point. Prototype, two runs on the 83 clips Jake marked in three
  * rounds: 3 of 9 failed ends fixed, 0 of 66 passed ends moved. A looser prompt fixed 5 and moved 9.
+ *
+ * Fix R (lab sermon 3i clip 4, 2026-10-22): when the look finds that the last line sets up lines the
+ * code then refuses as the new end, the last line is dropped and the clip ends on the line before. 3d
+ * clip 5, 3h clip 6 and 3i clip 4 all ended on 'you're not gonna say, "Man, I just spent too much time
+ * down there at the church."'; the look chose "I should've watched ESPN more.", inside a list, so the
+ * set-up stood. Jake failed all three ("the preacher didn't finish his statement") and passed 3b clip 2
+ * and 3e clip 4, which end on the line before. In 90 looks over two marked rounds, only these two were
+ * refused for a reason other than a bad line number.
  */
 export const END_LOOK_MAX_MS = 6_000;
 const END_LOOK_LINES = 5;
 
 export const EndLookSchema = z.object({ finishesLater: z.boolean(), endUnit: z.number().int(), reason: z.string() });
 export type EndLookAnswer = z.infer<typeof EndLookSchema>;
-export type EndLook = { asked: boolean; movedMs: number; refused: string | null; reason?: string; added?: string };
+export type EndLook = {
+  asked: boolean;
+  movedMs: number;
+  refused: string | null;
+  reason?: string;
+  added?: string;
+  /** Fix R: the set-up lines taken off the end. */
+  dropped?: string;
+};
 
 /** The clip's sentences and up to five that end within 6 seconds after it, numbered from the clip's start; null when none do. */
 export function endLookLines(
@@ -662,7 +678,9 @@ export function endLookPrompt(lines: BoundaryUnit[], end: number, last: number):
 
 /**
  * One look past an accepted end. The code keeps the end unless the answer is a later line it showed,
- * not a quotation lead-in, not inside a list, and the clip stays within `maxMs`.
+ * not a quotation lead-in, not inside a list, and the clip stays within `maxMs`. When the answer is a
+ * line it showed but refuses on those grounds, the clip drops its last line instead (fix R), if the
+ * shorter clip passes the boundary step's checks and does not end on a question.
  */
 export async function lookPastTheEnd(
   units: BoundaryUnit[],
@@ -678,11 +696,32 @@ export async function lookPastTheEnd(
   if (!Number.isInteger(answer.endUnit) || answer.endUnit <= look.end || answer.endUnit > look.last) {
     return kept(`Unit [${answer.endUnit}] is not one of the lines after the end, [${look.end + 1}] to [${look.last}].`);
   }
+  const withoutSetUp = (refused: string) => {
+    const lastUnit = look.offset + look.end;
+    const context = { units, currentStart: look.offset, currentEnd: lastUnit - 1 };
+    const shorter =
+      lastUnit > look.offset
+        ? evaluateBoundaryChoice(context, { startUnit: look.offset, endUnit: lastUnit - 1 }, { ...DEFAULT_LIMITS, maxMs }, null)
+        : null;
+    if (!shorter || !("range" in shorter) || shorter.range.startMs !== range.startMs || endingQuestion(context, shorter.endUnit)) {
+      return kept(refused);
+    }
+    return {
+      range: { startMs: range.startMs, endMs: shorter.range.endMs },
+      look: {
+        asked: true,
+        movedMs: shorter.range.endMs - range.endMs,
+        refused,
+        reason: answer.reason,
+        dropped: units.slice(shorter.endUnit + 1, lastUnit + 1).map((u) => u.text).join(" "),
+      },
+    };
+  };
   const unit = look.offset + answer.endUnit;
-  if (endsOnQuotationStart(units[unit].text)) return kept(`Unit [${answer.endUnit}] only leads into a quotation.`);
-  if (endsInsideList(units, unit)) return kept(`Unit [${answer.endUnit}] is inside a list.`);
+  if (endsOnQuotationStart(units[unit].text)) return withoutSetUp(`Unit [${answer.endUnit}] only leads into a quotation.`);
+  if (endsInsideList(units, unit)) return withoutSetUp(`Unit [${answer.endUnit}] is inside a list.`);
   if (units[unit].endMs - range.startMs > maxMs) {
-    return kept(`Ending on unit [${answer.endUnit}] makes the clip run past ${maxMs / 1000} seconds.`);
+    return withoutSetUp(`Ending on unit [${answer.endUnit}] makes the clip run past ${maxMs / 1000} seconds.`);
   }
   return {
     range: { startMs: range.startMs, endMs: units[unit].endMs },
