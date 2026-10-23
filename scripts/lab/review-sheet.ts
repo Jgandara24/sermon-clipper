@@ -65,6 +65,8 @@ type SheetClip = {
   exportError: string | null;
   exportJobId: string | null;
   videoPath: string | null;
+  /** Fix S: where the export's tracker saw the preacher outside the crop; null when unknown. */
+  offCrop: { start: number; end: number }[] | null;
   before: string[];
   words: string[];
   after: string[];
@@ -144,6 +146,14 @@ async function main() {
 
     // 3. Build the sheet.
     const words = flattenWords(project.sourceVideo.transcript.segments);
+    const trackingEvents = await prisma.operationalEvent.findMany({
+      where: { workspaceId: project.workspaceId, eventType: "lab_speaker_tracking", createdAt: { gte: project.createdAt } },
+      orderBy: { createdAt: "asc" },
+    });
+    const offCropFor = (exportJobId: string | undefined) => {
+      const event = trackingEvents.findLast((e) => (e.metadata as { exportJobId?: string }).exportJobId === exportJobId);
+      return (event?.metadata as { offCrop?: { start: number; end: number }[] } | undefined)?.offCrop ?? null;
+    };
     const sheetClips: SheetClip[] = [];
     for (const clip of firstPicks) {
       const job = await prisma.exportJob.findUnique({
@@ -163,6 +173,7 @@ async function main() {
         exportError: job?.errorMessageUser ?? null,
         exportJobId: job?.id ?? null,
         videoPath: job?.outputFile ? path.join(storageRoot, job.outputFile.storageKey) : null,
+        offCrop: offCropFor(job?.id),
         ...text,
       });
     }
@@ -371,6 +382,12 @@ function renderPage(
   </div>
   <h2>${escapeHtml(clip.title)}</h2>
   ${video}
+  ${(clip.offCrop ?? [])
+    .map(
+      (o) =>
+        `<p class="offcrop">Off-crop check: the preacher is outside the crop from ${o.start.toFixed(1)} s to ${o.end.toFixed(1)} s (${(o.end - o.start).toFixed(1)} s).</p>`,
+    )
+    .join("")}
   <p class="words"><span class="ctx">${escapeHtml(clip.before.join(" "))}</span> <span class="in">${escapeHtml(
     clip.words.join(" "),
   )}</span> <span class="ctx">${escapeHtml(clip.after.join(" "))}</span></p>
@@ -414,6 +431,7 @@ function renderPage(
   .novideo { padding: 24px; background: #8882; border-radius: 8px; color: var(--muted); }
   .words { margin: 12px 0; } .ctx { color: var(--muted); } .in { font-weight: 500; }
   .summary { color: var(--muted); font-size: 14px; }
+  .offcrop { padding: 8px 12px; border-radius: 8px; background: #c0392b22; color: #c0392b; font-weight: 600; }
   .mark { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   button { font: inherit; padding: 10px 18px; border-radius: 8px; border: 1px solid #8886; cursor: pointer; background: #8881; }
   button.pass { border-color: var(--ok); color: var(--ok); } button.fail { border-color: var(--bad); color: var(--bad); }

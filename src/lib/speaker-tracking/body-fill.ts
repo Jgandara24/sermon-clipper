@@ -12,6 +12,10 @@ import type { FaceObservations } from "./faces";
  * where his face never appears is not filled, so no other person is followed. Filled positions
  * keep the face's offset from the body center, blended from the offset before the gap to the one
  * after, so the path meets the real face at both ends. Boxes are in source pixels.
+ *
+ * Fix S (lab sermon 4g clip 4, 2026-10-22): the camera can re-frame him without a cut. His box then
+ * jumps with no overlap, and the chain stopped there. When one person is in view and his box keeps
+ * its height, the chain follows the jump.
  */
 
 type Box = FaceObservations["frames"][number]["faces"][number]["box"];
@@ -27,6 +31,11 @@ const EDGE_SAMPLE_S = 0.15;
  * 642 px with his arms out, 60 px of swing. Such a box keeps the chain going but gives no position.
  */
 const ARMS_OUT_RATIO = 1.3;
+/**
+ * Fix S: a lone box at most this much taller or shorter than his last box is him after a re-frame.
+ * Measured on 4g clip 4: 328 px tall after the jump, 335 px before. A zoom changes it more.
+ */
+const REFRAME_SIZE_RATIO = 1.2;
 
 const centerX = (b: Box) => b.x + b.w / 2;
 
@@ -72,7 +81,10 @@ export function applyBodyFill(input: FaceObservations, people: PeopleObservation
         const best = samples[k].people
           .map((p) => ({ box: p.box, overlap: iou(p.box, last) }))
           .sort((a, b) => b.overlap - a.overlap)[0];
-        previous = best && best.overlap >= MIN_FOLLOW_IOU ? best.box : null;
+        const lone = samples[k].people.length === 1 ? samples[k].people[0].box : null;
+        if (best && best.overlap >= MIN_FOLLOW_IOU) previous = best.box;
+        else if (lone && Math.max(lone.h, last.h) / Math.min(lone.h, last.h) <= REFRAME_SIZE_RATIO) previous = lone;
+        else previous = null;
       }
       chosen[k] = previous;
     }

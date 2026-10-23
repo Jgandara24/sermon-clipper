@@ -33,6 +33,8 @@ export type LabTrack = {
   filledFrames: number;
   /** Frames without a lone face whose position came from the preacher's person box. */
   bodyFilledFrames: number;
+  /** Fix S: stretches of OFF_CROP_MIN_S or more where the preacher is outside the crop. Center lock only. */
+  offCrop?: { start: number; end: number }[];
   /** Codex's tracking record; only the "codex" motion builds one. */
   record?: TrackingRecord;
 };
@@ -170,6 +172,48 @@ function centerLockXs(frames: FaceObservations["frames"], width: number, cropW: 
 }
 
 /**
+ * Fix S, the off-crop check (lab sermon 4g clip 4, 2026-10-22): the crop waited for him while he
+ * walked out of it for about 1 s. Jake: "We cannot have a pastor be off the screen for half a second
+ * or a second." A frame is off the crop only on evidence: his lone face (seen, or placed from his
+ * body) is outside the crop, or, with no such face, the person detector sees people and none of
+ * them is inside the crop. A frame with no evidence ends a stretch. The guesses of the lab rules
+ * (bridges and edge fills) are not evidence. `frames` and `people` are in source pixels, `xs` in
+ * tracking pixels.
+ */
+export const OFF_CROP_MIN_S = 0.5;
+/** A person sample this recent stands in for a frame; the observer samples every 0.1 s. */
+const PEOPLE_SAMPLE_S = 0.15;
+
+function offCropStretches(
+  frames: FaceObservations["frames"],
+  people: PeopleObservations | undefined,
+  crop: { xs: number[]; w: number; scale: number },
+  clipEnd: number,
+) {
+  const samples = people?.frames ?? [];
+  let s = -1;
+  const off = frames.map((f, i) => {
+    const inside = (b: { x: number; w: number }) => {
+      const center = (b.x + b.w / 2) / crop.scale;
+      return center >= crop.xs[i] && center <= crop.xs[i] + crop.w;
+    };
+    if (f.faces.length === 1) return !inside(f.faces[0].box);
+    while (s + 1 < samples.length && samples[s + 1].t <= f.t + 1e-6) s += 1;
+    const sample = s >= 0 && f.t - samples[s].t <= PEOPLE_SAMPLE_S ? samples[s] : null;
+    return Boolean(sample?.people.length) && !sample!.people.some((p) => inside(p.box));
+  });
+  const stretches: { start: number; end: number }[] = [];
+  for (let i = 0; i < frames.length; ) {
+    let j = i;
+    while (j < frames.length && off[j]) j += 1;
+    const end = frames[j]?.t ?? clipEnd;
+    if (j > i && end - frames[i].t >= OFF_CROP_MIN_S - 1e-6) stretches.push({ start: frames[i].t - frames[0].t, end: end - frames[0].t });
+    i = Math.max(j, i + 1);
+  }
+  return stretches;
+}
+
+/**
  * Builds Codex's speaker-tracking path ("face-follow-smooth-v2", unchanged) from face
  * observations, optionally behind the lab-v1 rules, and turns it into per-frame crop commands in
  * source pixels. Command times count from `seekSeconds`, the `-ss` value the render uses, which
@@ -227,6 +271,7 @@ export function buildLabTrack(
       addedCuts: prepared?.addedCuts ?? 0,
       filledFrames: prepared?.filledFrames ?? 0,
       bodyFilledFrames: bodyFilled?.bodyFilledFrames ?? 0,
+      offCrop: offCropStretches((bodyFilled?.observations ?? file.observations).frames, file.people, { xs, w: crop.w, scale }, file.end),
     };
   }
 

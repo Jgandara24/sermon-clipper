@@ -172,3 +172,52 @@ describe("applyBodyFill while his arms are out (fix H)", () => {
     expect(bodyFilledFrames).toBe(60);
   });
 });
+
+describe("applyBodyFill across a camera re-frame (fix S)", () => {
+  // Lab sermon 4g clip 4 (2026-10-22): he faced sideways for the first 5.9 s, and at 5.8 s the camera
+  // re-framed him without a cut. His person box jumped 147 px with the same height, so the overlap
+  // chain back from his first face stopped there, and he walked out of the waiting crop for about
+  // 1 s. Jake: "We cannot have a pastor be off the screen for half a second or a second."
+  const t = (i: number) => 100 + i / FPS;
+  /** He walks right with his face away; at frame 171 the camera re-frames him 400 px to the left. */
+  const at = (i: number) => 500 + 2 * i - (i >= 171 ? 400 : 0);
+  const faces: FaceObservations = {
+    frames: Array.from({ length: 210 }, (_, i) => ({
+      t: t(i),
+      cut: false,
+      faces: i < 180 ? [] : [{ score: 0.92, box: { x: at(i) + 20 - FACE_W / 2, y: 100, w: FACE_W, h: 72 } }],
+    })),
+  };
+  const bodies = (people: (i: number) => { x: number; w: number; h: number }[]): PeopleObservations => ({
+    frames: Array.from({ length: 70 }, (_, k) => ({
+      t: t(3 * k),
+      people: people(3 * k).map((p) => ({ score: 0.92, box: { x: p.x - p.w / 2, y: 70, w: p.w, h: p.h } })),
+    })),
+  });
+
+  it("keeps following the one person in view when his box jumps but keeps its size", () => {
+    const { observations, bodyFilledFrames } = applyBodyFill(faces, bodies((i) => [{ x: at(i), w: BODY_W, h: 640 }]));
+
+    expect(bodyFilledFrames).toBe(180);
+    // Frames 169 and 170 lie between the samples on either side of the jump.
+    for (let i = 0; i < 180; i += 1) {
+      if (i === 169 || i === 170) continue;
+      expect(Math.abs(centerAt(observations, i)! - (at(i) + 20)), `frame ${i}`).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it("does not follow the jump when the box changes size, as at a zoom", () => {
+    const { observations } = applyBodyFill(faces, bodies((i) => [i < 171 ? { x: at(i), w: BODY_W, h: 640 } : { x: at(i), w: 180, h: 420 }]));
+    expect(centerAt(observations, 60)).toBeNull();
+    expect(centerAt(observations, 175)).not.toBeNull();
+  });
+
+  it("does not follow the jump when two people are in view", () => {
+    const { observations } = applyBodyFill(
+      faces,
+      bodies((i) => (i < 171 ? [{ x: at(i), w: BODY_W, h: 640 }, { x: 1150, w: BODY_W, h: 640 }] : [{ x: at(i), w: BODY_W, h: 640 }])),
+    );
+    expect(centerAt(observations, 60)).toBeNull();
+    expect(centerAt(observations, 175)).not.toBeNull();
+  });
+});
