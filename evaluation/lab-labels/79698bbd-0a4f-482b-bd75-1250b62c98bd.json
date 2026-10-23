@@ -1,0 +1,65 @@
+{
+  "projectId": "79698bbd-0a4f-482b-bd75-1250b62c98bd",
+  "projectName": "Lab 4g - Sunday 10-11-26 Divine Certainties - fix O + Q",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "8ed3f412-4ae4-49e0-804c-0718bcf2e35e": {
+      "rank": 1,
+      "startMs": 3376566,
+      "endMs": 3437266,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T04:00:13.256Z"
+    },
+    "3b3862b4-a9fe-4ead-a88e-92c928509307": {
+      "rank": 2,
+      "startMs": 2133709,
+      "endMs": 2193370,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T04:00:20.950Z"
+    },
+    "8c11a064-1875-464c-871e-f877c6920b6a": {
+      "rank": 3,
+      "startMs": 2375450,
+      "endMs": 2418930,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T04:00:25.582Z"
+    },
+    "99cb531b-5c22-4de1-b919-bc58f4d1417e": {
+      "rank": 5,
+      "startMs": 2655606,
+      "endMs": 2706706,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-23T04:01:38.838Z"
+    },
+    "dc7089a2-8b82-4682-9b75-395ea976f965": {
+      "rank": 6,
+      "startMs": 1978390,
+      "endMs": 2008230,
+      "verdict": "fail",
+      "failedTests": [
+        1,
+        4
+      ],
+      "note": "Doesn't feel like he makes any point. If anything, the last sentence sounds like the start of a new video. ",
+      "labeledAt": "2026-10-23T04:05:28.256Z"
+    },
+    "bf4e9ff2-2e40-4b33-bf8e-8103dd6b8768": {
+      "rank": 4,
+      "startMs": 1703862,
+      "endMs": 1729442,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "At the very beginning of the clip, the pastor starts to move outside the frame, and he does. There's about a second where no one is being viewed on the clip. The camera should either track his body and then estimate when he's about to go off the screen and find out if it's a quick readjustment or if it's not. Then we don't need to use this clip, and that needs to be noted. We cannot have a pastor be off the screen for half a second or a second. ",
+      "labeledAt": "2026-10-23T04:06:38.519Z"
+    }
+  }
+}
