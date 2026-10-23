@@ -1083,3 +1083,96 @@ describe("fix M: one look past the end", () => {
     expect(result.look).toEqual({ asked: false, movedMs: 0, refused: null });
   });
 });
+
+// Lab sermon 3i clip 4 (2026-10-22), real lines; the same answers ended 3h clip 6 and 3d clip 5 there.
+// Jake failed all three: "I feel like the preacher didn't finish his statement." He passed 3e clip 4
+// and 3b clip 2, which end on "That's right." after "2,000 years later."
+const THREE_I_C4 = [
+  { idx: 1162, startMs: 3477130, endMs: 3478150, text: "Read your New Testament." },
+  { idx: 1163, startMs: 3478610, endMs: 3479470, text: "Read the Book of Acts." },
+  { idx: 1164, startMs: 3480590, endMs: 3482410, text: "You'll never read where Agrippa got saved." },
+  { idx: 1165, startMs: 3482830, endMs: 3483290, text: "That's right." },
+  { idx: 1166, startMs: 3483350, endMs: 3483750, text: "That's right." },
+  { idx: 1167, startMs: 3484830, endMs: 3485430, text: "Never did." },
+  { idx: 1168, startMs: 3487710, endMs: 3488930, text: "I thought about this, Brother Danny." },
+  { idx: 1169, startMs: 3491950, endMs: 3498570, text: 'What, what if when Agrippa died and slipped into hell, he began to cry out, "Almost.' },
+  { idx: 1170, startMs: 3501890, endMs: 3503030, text: "Almost." },
+  { idx: 1171, startMs: 3505690, endMs: 3506870, text: 'Almost."' },
+  { idx: 1172, startMs: 3508390, endMs: 3512590, text: "Well, he's still crying it tonight, 2,000 years later." },
+  { idx: 1174, startMs: 3512890, endMs: 3513290, text: "That's right." },
+  { idx: 1175, startMs: 3514970, endMs: 3521770, text: 'And some of us, when we get to heaven, you\'re not gonna say, "Man, I just spent too much time down there at the church."' },
+  { idx: 1177, startMs: 3522270, endMs: 3522410, text: "Yeah." },
+  { idx: 1178, startMs: 3522410, endMs: 3525610, text: '"I read my Bible way too much.' },
+  { idx: 1179, startMs: 3525670, endMs: 3527090, text: 'I should\'ve watched ESPN more."' },
+  { idx: 1180, startMs: 3528410, endMs: 3528570, text: "Right." },
+  { idx: 1181, startMs: 3528770, endMs: 3530310, text: '"I should\'ve played video games longer.' },
+  { idx: 1182, startMs: 3531370, endMs: 3534170, text: 'I gave way too much money to that church down there at Sunny Lane."' },
+  { idx: 1183, startMs: 3534270, endMs: 3534690, text: "That's right." },
+  { idx: 1184, startMs: 3534690, endMs: 3538210, text: '"I, I should\'ve kept some of that for myself."' },
+  { idx: 1185, startMs: 3539650, endMs: 3542510, text: "No, when we stand before God- Come on." },
+];
+const THREE_I_C4_RANGE = { startMs: 3477130, endMs: 3521770 };
+
+describe("fix R: a set-up line the clip cannot finish is dropped", () => {
+  it("ends lab sermon 3i clip 4 on the line before its set-up when the finishing line is inside a list", async () => {
+    // The real answer: "the thought is completed by the ironic lines [14]-[15]".
+    const look = endLookLines(THREE_I_C4, THREE_I_C4_RANGE)!;
+    expect(look).toMatchObject({ end: 12, last: 15 });
+    const ask = vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 15, reason: "sets up the ironic lines" });
+    const result = await lookPastTheEnd(THREE_I_C4, THREE_I_C4_RANGE, ask);
+    expect(result.range).toEqual({ startMs: 3477130, endMs: 3513290 });
+    expect(result.look).toEqual({
+      asked: true,
+      movedMs: -8_480,
+      refused: "Unit [15] is inside a list.",
+      reason: "sets up the ironic lines",
+      dropped: THREE_I_C4[12].text,
+    });
+  });
+
+  it("drops the set-up line when the finishing line only leads into a quotation", async () => {
+    const units = THREE_I_C4.map((u) => (u.idx === 1177 ? { ...u, text: "And Jesus said this to Peter." } : u));
+    const result = await lookPastTheEnd(units, THREE_I_C4_RANGE, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 13, reason: "x" }));
+    expect(result.range).toEqual({ startMs: 3477130, endMs: 3513290 });
+    expect(result.look.refused).toMatch(/quotation/);
+  });
+
+  it("drops the set-up line when the finishing line makes the clip too long", async () => {
+    const result = await lookPastTheEnd(
+      THREE_I_C4,
+      THREE_I_C4_RANGE,
+      vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 13, reason: "x" }),
+      45_000,
+    );
+    expect(result.range).toEqual({ startMs: 3477130, endMs: 3513290 });
+    expect(result.look.refused).toMatch(/45 seconds/);
+  });
+
+  it("keeps the end when the clip would fall under 15 seconds without its set-up line", async () => {
+    const range = { startMs: 3508390, endMs: 3521770 };
+    const ask = vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 5, reason: "x" });
+    const result = await lookPastTheEnd(THREE_I_C4, range, ask);
+    expect(result.range).toEqual(range);
+    expect(result.look).toMatchObject({ movedMs: 0, refused: "Unit [5] is inside a list." });
+  });
+
+  it("keeps the end when the line before the set-up is a question", async () => {
+    const units = THREE_I_C4.map((u) => (u.idx === 1174 ? { ...u, text: "Do you know what he's still crying?" } : u));
+    const result = await lookPastTheEnd(units, THREE_I_C4_RANGE, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 15, reason: "x" }));
+    expect(result.range).toEqual(THREE_I_C4_RANGE);
+    expect(result.look).toMatchObject({ movedMs: 0, refused: "Unit [15] is inside a list." });
+  });
+
+  it("moves back past a line that only leads into a quotation, as the boundary step does", async () => {
+    const units = THREE_I_C4.map((u) => (u.idx === 1174 ? { ...u, text: "And he says," } : u));
+    const result = await lookPastTheEnd(units, THREE_I_C4_RANGE, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 15, reason: "x" }));
+    expect(result.range).toEqual({ startMs: 3477130, endMs: 3512590 });
+    expect(result.look.dropped).toBe(`And he says, ${THREE_I_C4[12].text}`);
+  });
+
+  it("keeps the end when the model's answer is not one of the lines shown", async () => {
+    const result = await lookPastTheEnd(THREE_I_C4, THREE_I_C4_RANGE, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 16, reason: "x" }));
+    expect(result.range).toEqual(THREE_I_C4_RANGE);
+    expect(result.look.refused).toMatch(/not one of the lines after the end/);
+  });
+});

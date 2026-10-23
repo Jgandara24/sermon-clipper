@@ -216,6 +216,7 @@ export async function runLabSelection<T extends LabClip>(params: {
         outsideSermon: result.outsideSermon,
         boundaryChanged: result.boundaryChanged,
         endsMovedLater: boundaryLog.filter((b) => b.endLook && "movedMs" in b.endLook && b.endLook.movedMs > 0).length,
+        setUpsDropped: boundaryLog.filter((b) => b.endLook && "dropped" in b.endLook && b.endLook.dropped).length,
         rejected: result.rejected,
         boundary: boundaryLog,
         camera: cameraLog,
