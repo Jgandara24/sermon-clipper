@@ -19,6 +19,7 @@
     "launch:phase8": "tsx scripts/collect-launch-evidence.ts --require-complete",
     "lint": "eslint",
     "prepare": "git config core.hooksPath .githooks || true",
+    "lab:replay": "node --env-file=.env --import tsx scripts/lab/replay-marked.ts",
     "lab:review": "node --env-file=.env --import tsx scripts/lab/review-sheet.ts",
     "lab:run": "node --env-file=.env --import tsx scripts/lab/run-sermon.ts",
     "lab:worker": "YTDLP_MAX_HEIGHT=720 LAB_SPEAKER_TRACKING_ENABLED=true LAB_CAMERA_CHECK_ENABLED=true LAB_BOUNDARY_STEP_ENABLED=true LAB_PHRASE_CAPTIONS_ENABLED=true LAB_SERMON_SPAN_ENABLED=true LAB_TRANSCRIPT_REUSE_ENABLED=true LAB_DROPOUT_CHECK_ENABLED=true node --env-file=.env --import tsx src/worker/run-jobs.ts",
