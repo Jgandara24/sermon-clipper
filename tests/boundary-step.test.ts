@@ -11,6 +11,7 @@ import {
   endsInsideList,
   endsOnQuotationStart,
   checkStory,
+  endsOnRecapIntoNextPoint,
   readsVerseNext,
   storyLookLines,
   storyPrompt,
@@ -1409,5 +1410,75 @@ describe("fix U: the story check", () => {
     const result = await checkStory(context, { startMs: 2311284, endMs: 2462104 }, askStory, vi.fn());
     expect(askStory).not.toHaveBeenCalled();
     expect(result.check).toEqual({ asked: false, continues: false, landsMs: null, refused: null });
+  });
+});
+
+// Lab sermon 1n clip 2 (2026-10-23), real lines. The clip ended on "So God's grace gonna make you fit.",
+// which recaps point one right before "But number two". Jake: 'it would be better if it ended on, "Jesus
+// can heal you today. Hallelujah."' The same clip failed in 1d with the same note and passed in 1g.
+const ONE_N_C2 = [
+  { idx: 1054, startMs: 4110300, endMs: 4113060, text: "His grace will do that for you today." },
+  { idx: 1055, startMs: 4113260, endMs: 4113620, text: "Yeah." },
+  { idx: 1056, startMs: 4113680, endMs: 4115100, text: "You've gotten bent out of shape." },
+  { idx: 1057, startMs: 4115440, endMs: 4116960, text: "You've gotten away from the Lord." },
+  { idx: 1058, startMs: 4117600, endMs: 4118600, text: "Sin in your life." },
+  { idx: 1059, startMs: 4119180, endMs: 4120080, text: "You've failed Him." },
+  { idx: 1060, startMs: 4120440, endMs: 4121420, text: "You've gone down." },
+  { idx: 1061, startMs: 4121940, endMs: 4123220, text: "You've disappointed Him." },
+  { idx: 1062, startMs: 4123780, endMs: 4124360, text: "Guess what?" },
+  { idx: 1063, startMs: 4124740, endMs: 4127280, text: "He will mend your net." },
+  { idx: 1064, startMs: 4127760, endMs: 4130560, text: "He will tie up all those loose ends." },
+  { idx: 1065, startMs: 4130860, endMs: 4134080, text: "He will set that bone straight again." },
+  { idx: 1066, startMs: 4134560, endMs: 4134600, text: "Amen." },
+  { idx: 1067, startMs: 4134660, endMs: 4136980, text: "Jesus can heal you today." },
+  { idx: 1068, startMs: 4137180, endMs: 4137580, text: "Hallelujah." },
+  { idx: 1069, startMs: 4137640, endMs: 4138500, text: "That's what He can do." },
+  { idx: 1070, startMs: 4140920, endMs: 4143760, text: "So God's grace gonna make you fit." },
+  { idx: 1071, startMs: 4144520, endMs: 4147440, text: "But number two, God's grace can make you firm." },
+  { idx: 1072, startMs: 4148340, endMs: 4149559, text: "Not just fit, but firm." },
+  { idx: 1073, startMs: 4150080, endMs: 4151320, text: "Look at it again in verse 10." },
+];
+
+describe("fix T: no end on a recap that leads into the next numbered point", () => {
+  const units = wholeSentences(ONE_N_C2);
+  const recap = units.findIndex((u) => u.text.startsWith("So God's grace"));
+
+  it("finds the recap before \"But number two\", and nothing else", () => {
+    expect(endsOnRecapIntoNextPoint(units, recap)).toBe(true);
+    expect(endsOnRecapIntoNextPoint(units, recap - 1)).toBe(false);
+    expect(endsOnRecapIntoNextPoint(units, recap + 1)).toBe(false);
+    const plainNext = units.map((u, i) => (i === recap + 1 ? { ...u, text: "And God's grace can make you firm." } : u));
+    expect(endsOnRecapIntoNextPoint(plainNext, recap)).toBe(false);
+    const noRecap = units.map((u, i) => (i === recap ? { ...u, text: "God's grace gonna make you fit." } : u));
+    expect(endsOnRecapIntoNextPoint(noRecap, recap)).toBe(false);
+    expect(endsOnRecapIntoNextPoint(units, units.length - 1)).toBe(false);
+  });
+
+  it("reads later points in other words: \"There's a third certainty\", \"Secondly\"", () => {
+    for (const next of ["There's a third certainty I want you to see.", "Secondly, you need to resist him.", "Truth number two, y'all still with me?"]) {
+      const changed = units.map((u, i) => (i === recap + 1 ? { ...u, text: next } : u));
+      expect(endsOnRecapIntoNextPoint(changed, recap)).toBe(true);
+    }
+  });
+
+  it("steps lab sermon 1n clip 2's end back onto \"That's what He can do.\"", () => {
+    const context = boundaryContext(ONE_N_C2, { startMs: 4110300, endMs: 4143760 });
+    const start = context.units.findIndex((u) => u.text.startsWith("His grace will do that"));
+    const end = context.units.findIndex((u) => u.text.startsWith("So God's grace"));
+    expect(applyBoundaryChoice(context, { startUnit: start, endUnit: end })).toEqual({
+      startMs: 4110300,
+      endMs: 4138500,
+      adjustedForScripture: false,
+      adjustedEnd: true,
+    });
+  });
+
+  it("does not let the end look move the end onto the recap", async () => {
+    const range = { startMs: 4110300, endMs: 4138500 };
+    const look = endLookLines(units, range)!;
+    expect(look.lines[look.end + 1].text).toMatch(/^So God's grace/);
+    const result = await lookPastTheEnd(units, range, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: look.end + 1, reason: "x" }));
+    expect(result.range).toEqual(range);
+    expect(result.look.refused).toBe(`Unit [${look.end + 1}] recaps the point and leads into the next numbered point.`);
   });
 });
