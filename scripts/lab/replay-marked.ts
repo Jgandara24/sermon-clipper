@@ -9,6 +9,7 @@
  * sermon span the lab run saved for that project. Fix U calls the scoring model once per clip, and
  * again for a clip it restarts later in its story. Reads the lab database only. Writes nothing to it.
  */
+import { existsSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +26,7 @@ import {
   type StoryCheck,
 } from "@/lib/analysis/boundary-step";
 import { scoringModel } from "@/lib/analysis/claude-provider";
+import { snapClipEnd } from "@/lib/analysis/end-silence";
 import { assertLabEnvironment, formatClock, LabEnvironmentError, readArgs } from "./lab-guard";
 
 type LabelFile = {
@@ -51,7 +53,7 @@ export type ReplayRow = MarkedClip & {
   detail: Record<string, unknown>;
 };
 
-const FIXES = ["U"] as const;
+const FIXES = ["U", "V"] as const;
 type Fix = (typeof FIXES)[number];
 
 async function main() {
@@ -74,7 +76,8 @@ async function main() {
     const labelsDir = path.resolve("evaluation/lab-labels");
     const files = (await readdir(labelsDir)).filter((f) => f.endsWith(".json"));
     const marked: MarkedClip[] = [];
-    const projects = new Map<string, { segments: BoundaryUnit[]; span: { startMs: number; endMs: number } | null }>();
+    const projects = new Map<string, { segments: BoundaryUnit[]; span: { startMs: number; endMs: number } | null; source: string | null }>();
+    const storageRoot = path.resolve(process.env.STORAGE_LOCAL_ROOT ?? ".data/storage");
     for (const file of files) {
       const label = JSON.parse(await readFile(path.join(labelsDir, file), "utf8")) as LabelFile;
       const sermon = label.projectName.split(" - ")[0];
@@ -94,9 +97,19 @@ async function main() {
         orderBy: { createdAt: "desc" },
       });
       const span = ((steps?.metadata as { sermonSpan?: { span?: { startMs: number; endMs: number } | null } } | null)?.sermonSpan?.span ?? null);
+      // Fix V reads the recording. A project's own source file, or another lab copy of the same video.
+      let source: string | null = null;
+      if (fix === "V") {
+        const originUrl = project.sourceVideo?.originUrl ?? null;
+        const others = originUrl ? await prisma.sourceVideo.findMany({ where: { originUrl }, select: { storageKey: true } }) : [];
+        const keys = [project.sourceVideo?.storageKey ?? null, ...others.map((s) => s.storageKey)];
+        source = keys.map((k) => (k ? path.join(storageRoot, k) : null)).find((p): p is string => Boolean(p) && existsSync(p!)) ?? null;
+        if (!source) console.error(`${label.projectName}: no source file on disk, so fix V cannot replay its clips.`);
+      }
       projects.set(label.projectId, {
         segments: segments.map((s) => ({ idx: s.idx, startMs: s.startMs, endMs: s.endMs, text: s.text })),
         span,
+        source,
       });
       for (const [clipId, clip] of Object.entries(label.clips)) {
         marked.push({ sermon, projectId: label.projectId, clipId, ...clip });
@@ -110,10 +123,10 @@ async function main() {
     const worker = async () => {
       while (next < marked.length) {
         const clip = marked[next++];
-        const { segments, span } = projects.get(clip.projectId)!;
+        const { segments, span, source } = projects.get(clip.projectId)!;
         const sermonSegments = span ? segments.filter((s) => s.startMs >= span.startMs && s.endMs <= span.endMs) : segments;
         try {
-          const row = await replayOne(fix, clip, sermonSegments, usage);
+          const row = await replayOne(fix, clip, sermonSegments, usage, source);
           rows.push(row);
           const mark = row.moved ? "MOVED" : "same ";
           console.log(
@@ -143,6 +156,10 @@ async function main() {
       console.log(`Story check: ${by("extended")} extended, ${by("restarted")} restarted, ${by("unresolved")} unresolved (story goes on, no landing found).`);
       console.log(`Model calls: ${usage.calls}, ${usage.input} input tokens, ${usage.output} output tokens.`);
     }
+    if (fix === "V" && moved.length > 0) {
+      const sizes = moved.map((r) => Math.abs(Number(r.detail.movedMs)));
+      console.log(`Cut moves: ${Math.min(...sizes)} to ${Math.max(...sizes)} ms back into the pause.`);
+    }
     if (moved.length > 0) {
       console.log("\nMoved clips:");
       for (const r of moved) {
@@ -166,8 +183,16 @@ async function replayOne(
   clip: MarkedClip,
   segments: BoundaryUnit[],
   usage: { input: number; output: number; calls: number },
+  source: string | null,
 ): Promise<ReplayRow> {
   const range = { startMs: clip.startMs, endMs: clip.endMs };
+  if (fix === "V") {
+    if (!source) return { ...clip, to: null, moved: false, detail: { error: "no source file on disk" } };
+    const snapped = await snapClipEnd(source, range);
+    return snapped
+      ? { ...clip, to: [range.startMs, snapped.endMs], moved: true, detail: { outcome: "snapped", movedMs: snapped.movedMs } }
+      : { ...clip, to: null, moved: false, detail: {} };
+  }
   const context = boundaryContext(segments, range);
   if (fix === "U") {
     const client = new Anthropic();
