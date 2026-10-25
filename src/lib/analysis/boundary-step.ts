@@ -207,7 +207,6 @@ const ANNOUNCED_COUNT =
   /\b(?:two|three|four|five|six|seven|[2-7])\s+(?:\w+\s+){0,2}?(?:things|ways|reasons|truths|certainties|points|keys|lessons|questions|steps|marks|facts|principles|kinds|types|areas|benefits|promises|blessings|secrets)\b/i;
 const FIRST_ITEM = /\b(?:first of all|first(?:ly)?,|number one|the first (?:one|thing|is))/i;
 const LATER_ITEM = /\b(?:second(?:ly)?|number two|third(?:ly)?|the next (?:one|thing)|another (?:one|thing)|finally|lastly)\b/i;
-
 /**
  * A count the preacher announces inside the clip ("three things") whose first item the clip gives
  * ("First of all") with no later item after it. Null when the clip leaves the announcement out,
@@ -328,8 +327,13 @@ export const clock = (ms: number) => {
   return h ? `${h}:${mm}:${ss}` : `${Math.floor(s / 60)}:${ss}`;
 };
 
-export function boundaryPrompt(context: BoundaryContext): string {
+export function boundaryPrompt(context: BoundaryContext, hold: HeldEnd | null = null): string {
   const lines = context.units.map((u, i) => `[${i}] (${clock(u.startMs)}) ${u.text}`);
+  // Fix U: the story check found where the story lands, past 90 seconds from the clip's start.
+  const holdTheEnd = hold
+    ? `Hold the end: ${hold.why} Keep the end at unit [${hold.endUnit}], or within ${KEEP_END_SLACK_MS / 1000} seconds of it, and ` +
+      `start later, so the clip runs ${BOUNDARY_CUT_MAX_MS / 1000} seconds at most and a viewer sees the story land.\n\n`
+    : "";
   return (
     "You are editing a short social media clip cut from a sermon. Below are numbered transcript " +
     "sentences with their times. The current clip is units " +
@@ -366,6 +370,7 @@ export function boundaryPrompt(context: BoundaryContext): string {
     "call or invitation.\n" +
     "- Stay on the current clip's idea. You may move the start earlier or later and the end earlier or later.\n\n" +
     WORKED_EXAMPLES +
+    holdTheEnd +
     "Return startUnit and endUnit (both included) and a one-sentence reason.\n\n" +
     lines.join("\n")
   );
@@ -396,15 +401,18 @@ export function boundaryRefusal(context: BoundaryContext, choice: BoundaryChoice
   return "refused" in result ? result.refused : null;
 }
 
+/** An end the clip must keep, give or take KEEP_END_SLACK_MS, and the sentence that tells the model why. */
+export type HeldEnd = { endUnit: number; why: string };
+
 /**
- * `heldEnd` is the end unit of the latest answer refused as too long (fix K2); null before one.
- * A refusal for length returns its end unit as `tooLongEnd`.
+ * `held` is the end unit of the latest answer refused as too long (fix K2), or the line where a story
+ * lands (fix U); null before one. A refusal for length returns its end unit as `tooLongEnd`.
  */
 function evaluateBoundaryChoice(
   context: BoundaryContext,
   choice: BoundaryChoice,
   limits: BoundaryLimits,
-  heldEnd: number | null,
+  held: HeldEnd | null,
 ): { range: BoundaryRange; endUnit: number } | { refused: string; tooLongEnd?: number } {
   const { units } = context;
   let { startUnit, endUnit } = choice;
@@ -482,20 +490,19 @@ function evaluateBoundaryChoice(
     };
   }
 
-  if (heldEnd !== null && units[endUnit].endMs < units[heldEnd].endMs - KEEP_END_SLACK_MS) {
-    const sooner = ((units[heldEnd].endMs - units[endUnit].endMs) / 1000).toFixed(1);
+  if (held !== null && units[endUnit].endMs < units[held.endUnit].endMs - KEEP_END_SLACK_MS) {
+    const sooner = ((units[held.endUnit].endMs - units[endUnit].endMs) / 1000).toFixed(1);
     return {
       refused:
-        `${moved}Your last answer that ran too long ended at unit [${heldEnd}] (${clock(units[heldEnd].startMs)}), where the ` +
-        `point ends. This answer ends at unit [${endUnit}], ${sooner} seconds sooner, which cuts the point short. Keep the ` +
-        `end at unit [${heldEnd}] or later, and start later.`,
+        `${moved}${held.why} This answer ends at unit [${endUnit}], ${sooner} seconds sooner, which cuts the point short. Keep the ` +
+        `end at unit [${held.endUnit}] or later, and start later.`,
     };
   }
 
   const startMs = units[startUnit].startMs;
   const endMs = units[endUnit].endMs;
   const duration = endMs - startMs;
-  const maxMs = heldEnd === null ? limits.maxMs : Math.min(limits.maxMs, limits.cutMaxMs);
+  const maxMs = held === null ? limits.maxMs : Math.min(limits.maxMs, limits.cutMaxMs);
   if (duration >= limits.minMs && duration <= maxMs) {
     return { range: { startMs, endMs, adjustedForScripture, adjustedEnd }, endUnit };
   }
@@ -561,14 +568,21 @@ export async function chooseBoundary(
   context: BoundaryContext,
   ask: (turns: BoundaryTurn[]) => Promise<BoundaryAnswer>,
   limits: BoundaryLimits = DEFAULT_LIMITS,
+  hold: HeldEnd | null = null,
 ): Promise<{ range: BoundaryRange | null; attempts: BoundaryAttempt[] }> {
-  const turns: BoundaryTurn[] = [{ role: "user", content: boundaryPrompt(context) }];
+  const turns: BoundaryTurn[] = [{ role: "user", content: boundaryPrompt(context, hold) }];
   const attempts: BoundaryAttempt[] = [];
-  let heldEnd: number | null = null;
+  let held: HeldEnd | null = hold;
   const answerOnce = async () => {
     const answer = await ask([...turns]);
-    const result = evaluateBoundaryChoice(context, answer, limits, heldEnd);
-    if ("tooLongEnd" in result && result.tooLongEnd !== undefined) heldEnd = result.tooLongEnd;
+    const result = evaluateBoundaryChoice(context, answer, limits, held);
+    if ("tooLongEnd" in result && result.tooLongEnd !== undefined) {
+      const unit = result.tooLongEnd;
+      held = {
+        endUnit: unit,
+        why: `Your last answer that ran too long ended at unit [${unit}] (${clock(context.units[unit].startMs)}), where the point ends.`,
+      };
+    }
     const record: BoundaryAttempt = {
       startUnit: answer.startUnit,
       endUnit: answer.endUnit,
@@ -732,5 +746,233 @@ export async function lookPastTheEnd(
       reason: answer.reason,
       added: look.lines.slice(look.end + 1, answer.endUnit + 1).map((u) => u.text).join(" "),
     },
+  };
+}
+
+/**
+ * Fix U, the story check (lab sermon 1n clip 6, 2026-10-23). The clip ended as Jesus knelt and washed
+ * the disciples' feet; Peter's objection, Jesus's reply and the meaning came 75 seconds later. Jake:
+ * "It stops in the middle of the story." The boundary step called the description a landed point, and
+ * the end look saw only "Amen." in its 6 seconds. This story was marked 10 times over the rounds and
+ * passed clean once: 1l clip 1, from Peter's objection to "wash our feet", 73 seconds.
+ *
+ * One model call reads the clip and up to 25 sentences that start within 90 seconds after it, and
+ * says whether the clip is cut from the middle of one story, dialogue or argument, and where its point
+ * lands. When the landing line keeps the clip within 90 seconds, the end moves there. When it does
+ * not, the boundary step runs again with that end held (fix K2's rule) so the clip starts later.
+ */
+export const STORY_LOOK_MAX_MS = 90_000;
+const STORY_LOOK_LINES = 25;
+
+export const StoryCheckSchema = z.object({
+  /** The model's own reading of the clip's last line; code keeps the range unless it is narration. */
+  endIsNarration: z.boolean(),
+  /** What the clip tells; code goes on only for a story of events. */
+  storyKind: z.enum(["events", "list", "teaching", "verse", "none"]),
+  /** The first line of the clip that narrates the story, -1 when none; code needs 12 seconds of story in the clip. */
+  storyStartsUnit: z.number().int(),
+  /** The line inside the clip where the preacher states his point about the story, -1 when none; code keeps such a clip. */
+  pointStatedUnit: z.number().int(),
+  continues: z.boolean(),
+  landsUnit: z.number().int(),
+  reason: z.string(),
+});
+// Gate run over 244 marked clips, 2026-10-24: without this, the check restarted lab sermon 2d clip 5 and
+// extended 2b, 2d, 2e and 2f clip 5 (all passed), where Saul's story began on the clip's last line after
+// the point had landed. A story the clip only introduces belongs to the next clip.
+export const STORY_MIN_IN_CLIP_MS = 12_000;
+export type StoryCheckAnswer = z.infer<typeof StoryCheckSchema>;
+export type StoryCheck = {
+  asked: boolean;
+  continues: boolean;
+  /** Where the model says the story lands, on the source clock; null when it did not say. */
+  landsMs: number | null;
+  refused: string | null;
+  reason?: string;
+  /** The second look's reason, when the first said the story continues. */
+  secondReason?: string;
+  /** How the range changed: the end moved to the landing line, or the clip kept that end and started later. */
+  outcome?: "extended" | "restarted" | "unresolved";
+  movedMs?: number;
+};
+
+/** The clip's sentences and up to 25 that start within 90 seconds after it, numbered from the clip's start; null when none do. */
+export function storyLookLines(
+  units: BoundaryUnit[],
+  range: { startMs: number; endMs: number },
+): { lines: BoundaryUnit[]; end: number; last: number; offset: number } | null {
+  const start = units.findIndex((u) => u.endMs > range.startMs);
+  if (start < 0) return null;
+  let end = units.length - 1;
+  while (end > start && units[end].startMs >= range.endMs) end -= 1;
+  let last = end;
+  while (last + 1 < units.length && last - end < STORY_LOOK_LINES && units[last + 1].startMs - units[end].endMs <= STORY_LOOK_MAX_MS) last += 1;
+  return last === end ? null : { lines: units.slice(start, last + 1), end: end - start, last: last - start, offset: start };
+}
+
+export function storyPrompt(lines: BoundaryUnit[], end: number, last: number): string {
+  // Neutral example only: the gate on Jake's clips is fair only when the prompt holds none of them.
+  return (
+    "Below are the numbered sentences of a short sermon clip, with their times, and up to 25 sentences that start within " +
+    `90 seconds after it. The clip ends on [${end}]. Lines after [${end}] are not in the clip.\n\n` +
+    "Decide one thing: is this clip cut out of the middle of a story the preacher is telling, so that a viewer never hears " +
+    `how it ends? A story means narration: people, events, and quoted dialogue, told in order. First say whether line [${end}] ` +
+    "itself is narration or dialogue of a story (endIsNarration). When it is not, the clip is complete and continues is false. " +
+    `Say the story continues only when line [${end}] is narration or dialogue of that story, with no point drawn yet, and the ` +
+    `lines after [${end}] keep telling the same story to its ending, its reply, or the sentence that says what it means. Example: a clip ends as the ` +
+    "prodigal son leaves home with his money. The famine, his return and the father's welcome come after, so the story " +
+    "continues, and it lands on the father's welcome.\n" +
+    `The clip is complete when [${end}] is the preacher speaking to the listener: a point, a charge, a command, a question he ` +
+    "puts to the crowd, an application or a summary. It is complete when the story inside it has been told, even when he goes " +
+    "on talking about it. It is complete when the clip already states the preacher's point about the story, what it means for " +
+    "the listener, even though the story goes on after it. It is complete when the lines after it begin a new story, example " +
+    "or point (\"Now…\", \"But number two…\"), read a verse, or are a crowd response. One more line that answers a question or " +
+    "finishes a thought is not a story continuing; say complete. A list, a chain of reasoning, a verse he reads and explains, " +
+    "or the preacher saying what a Bible writer teaches is not a story. Most clips are complete.\n" +
+    "Also return storyKind: \"events\" when the clip tells people and happenings in order, \"list\" for a list or a run of " +
+    "parallel lines, \"teaching\" for explanation or reasoning, \"verse\" for a verse he reads and explains, \"none\" for no story. " +
+    `Return storyStartsUnit: the first line of the clip, [0] to [${end}], that narrates the story, or -1 when none does. Return ` +
+    `pointStatedUnit: the line inside the clip, [0] to [${end}], where the preacher states his point about the story, what it ` +
+    "means for the listener, or -1 when the clip holds no such line.\n" +
+    "If the story continues, return the FIRST line after which the story and its meaning have landed: the sentence that " +
+    `says what it means or applies it, or, when he draws no meaning within these lines, its last event, one of [${end + 1}] to ` +
+    `[${last}]. Stop there; do not go on to a verse he reads after it or to a new point. If it does not land within these ` +
+    "lines, return landsUnit -1.\n\n" +
+    "Return endIsNarration, storyKind, storyStartsUnit, pointStatedUnit, continues, landsUnit (-1 when continues is false) and a " +
+    "one-sentence reason.\n\n" +
+    lines.map((u, i) => `[${i}] (${clock(u.startMs)}) ${u.text}`).join("\n")
+  );
+}
+
+// A crowd or preacher response the check skips when it reads the line after the clip.
+const RESPONSE_LINE = /^\W*(?:(?:amen|yeah|yes|hallelujah|good|right|wow|that's right|yes,? sir|come on)[.!?,]*\s*)+$/i;
+// "Look at what the Bible says in verse three." / "Notice verse four."
+const VERSE_LEAD = /\b(?:look|notice|listen|read|see|watch)\b[^.?!]*\b(?:verse|chapter)\s+\w+/i;
+
+/** True when the first line after the clip, past any short response, announces or reads a verse. */
+export function readsVerseNext(units: BoundaryUnit[], endUnit: number): boolean {
+  let i = endUnit + 1;
+  while (i < units.length && i <= endUnit + 2 && RESPONSE_LINE.test(units[i].text)) i += 1;
+  const next = units[i];
+  if (!next) return false;
+  return looksLikeScriptureReadingStart(next.text) || VERSE_LEAD.test(next.text);
+}
+
+/**
+ * One story check on an accepted range, asked twice. Gate runs over the 244 marked clips, 2026-10-24: a
+ * clip the check moved in one run and not the next (lab sermons 2j clip 1, 5f clip 5, 2d clip 5, all
+ * passed) was a borderline reading, while every clip Jake failed for a cut-off story moved in all three
+ * runs. So the second look, made only when the first says the story continues, must agree.
+ *
+ * The end moves to the landing line when the code accepts that choice (whole sentences, not inside a
+ * list, within `limits.maxMs`). When the landing line makes the clip too long, the boundary step runs
+ * again with that end held, and the clip starts later. Any other refusal keeps the range as it was.
+ */
+export async function checkStory(
+  context: BoundaryContext,
+  range: { startMs: number; endMs: number },
+  askStory: (prompt: string) => Promise<StoryCheckAnswer>,
+  askBoundary: (turns: BoundaryTurn[]) => Promise<BoundaryAnswer>,
+  limits: BoundaryLimits = DEFAULT_LIMITS,
+): Promise<{ range: { startMs: number; endMs: number }; check: StoryCheck; attempts?: BoundaryAttempt[] }> {
+  const { units } = context;
+  const look = storyLookLines(units, range);
+  if (!look) return { range, check: { asked: false, continues: false, landsMs: null, refused: null } };
+  // Gate run, 2026-10-24: lab sermon 2b clip 5 (passed four times) ends Saul's story on "he has an
+  // encounter with Jesus Christ. Amen." and the preacher then reads verse three. The reading is the
+  // next clip's business, so no call is made.
+  if (readsVerseNext(units, look.offset + look.end)) {
+    return { range, check: { asked: false, continues: false, landsMs: null, refused: "The lines after the clip read a verse." } };
+  }
+
+  /** Why the code stops at this answer; "" when the answer says the clip is complete; null when the story continues. */
+  const gate = (a: StoryCheckAnswer): string | null => {
+    // The model's own reading of the last line gates its answer: a point, charge or question is complete.
+    if (!a.endIsNarration || !a.continues) return "";
+    // Gate run, 2026-10-24: a recounting of Paul's blessings in Ephesians (lab sermon 5e clip 4, passed) is
+    // not a story, and the Transfiguration clip (4g clip 5, passed) states its point before the narration.
+    if (a.storyKind !== "events") return `What the clip tells is ${a.storyKind === "none" ? "not a story" : `a ${a.storyKind}, not a story of events`}.`;
+    if (Number.isInteger(a.pointStatedUnit) && a.pointStatedUnit >= 0 && a.pointStatedUnit <= look.end) {
+      return `The clip states the preacher's point about the story at [${a.pointStatedUnit}].`;
+    }
+    // A story the clip only introduces in its last seconds belongs to the next clip.
+    const storyStart =
+      Number.isInteger(a.storyStartsUnit) && a.storyStartsUnit >= 0 && a.storyStartsUnit <= look.end ? units[look.offset + a.storyStartsUnit] : null;
+    if (!storyStart || units[look.offset + look.end].endMs - storyStart.startMs < STORY_MIN_IN_CLIP_MS) {
+      return `The story fills less than ${STORY_MIN_IN_CLIP_MS / 1000} seconds of the clip, so the clip's point is not the story.`;
+    }
+    if (a.landsUnit === -1) return "The story does not land within the lines shown.";
+    if (!Number.isInteger(a.landsUnit) || a.landsUnit <= look.end || a.landsUnit > look.last) {
+      return `Unit [${a.landsUnit}] is not one of the lines after the end, [${look.end + 1}] to [${look.last}].`;
+    }
+    return null;
+  };
+
+  const prompt = storyPrompt(look.lines, look.end, look.last);
+  const answer = await askStory(prompt);
+  const kept = (refused: string | null, extra: Partial<StoryCheck> = {}) => ({
+    range,
+    check: { asked: true, continues: answer.continues, landsMs: null, refused, reason: answer.reason, ...extra },
+  });
+  const stop = gate(answer);
+  if (stop !== null) return kept(stop === "" ? null : stop, answer.landsUnit === -1 && answer.continues ? { outcome: "unresolved" } : {});
+
+  const second = await askStory(prompt);
+  const stopSecond = gate(second);
+  if (stopSecond !== null) {
+    return kept(`A second look did not agree that the story continues.${stopSecond ? ` It said: ${stopSecond}` : ""}`, { secondReason: second.reason });
+  }
+  // Two landings: the later one, so the meaning the preacher draws is not left out, but never a verse he
+  // reads after the story (gate run 4: one look landed the foot-washing story on John 13:14 itself).
+  const isVerse = (u: number) =>
+    looksLikeScriptureReadingStart(units[u].text) || (u > 0 && (looksLikeScriptureReadingStart(units[u - 1].text) || VERSE_LEAD.test(units[u - 1].text)));
+  const landings = [...new Set([answer.landsUnit, second.landsUnit])].map((l) => look.offset + l).filter((u) => !isVerse(u));
+  if (landings.length === 0) return kept("The landing is a verse he reads after the story.", { secondReason: second.reason });
+  const unit = Math.max(...landings);
+  const landsMs = units[unit].endMs;
+  const extended = evaluateBoundaryChoice(context, { startUnit: look.offset, endUnit: unit }, limits, null);
+  if ("range" in extended) {
+    if (extended.range.startMs !== range.startMs) return kept("The start moved.", { landsMs });
+    return {
+      range: { startMs: range.startMs, endMs: extended.range.endMs },
+      check: {
+        asked: true,
+        continues: true,
+        landsMs,
+        refused: null,
+        reason: answer.reason,
+        secondReason: second.reason,
+        outcome: "extended",
+        movedMs: extended.range.endMs - range.endMs,
+      },
+    };
+  }
+  if (!("tooLongEnd" in extended) || extended.tooLongEnd === undefined) return kept(extended.refused, { landsMs });
+
+  // Past 90 seconds: keep the landing and start later.
+  const hold: HeldEnd = {
+    endUnit: extended.tooLongEnd,
+    why: `The story this clip is inside lands at unit [${extended.tooLongEnd}] (${clock(units[extended.tooLongEnd].startMs)}): "${units[extended.tooLongEnd].text}"`,
+  };
+  const restarted = await chooseBoundary(context, askBoundary, limits, hold);
+  if (!restarted.range) {
+    return {
+      ...kept(`No later start was accepted: ${restarted.attempts.at(-1)?.refused ?? "no answer"}`, { landsMs, outcome: "unresolved" }),
+      attempts: restarted.attempts,
+    };
+  }
+  return {
+    range: { startMs: restarted.range.startMs, endMs: restarted.range.endMs },
+    check: {
+      asked: true,
+      continues: true,
+      landsMs,
+      refused: null,
+      reason: answer.reason,
+      secondReason: second.reason,
+      outcome: "restarted",
+      movedMs: restarted.range.endMs - range.endMs,
+    },
+    attempts: restarted.attempts,
   };
 }

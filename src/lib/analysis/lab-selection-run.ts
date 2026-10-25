@@ -8,7 +8,18 @@ import { labStepEnabled } from "@/lib/lab-flags";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { getStorageProvider } from "@/lib/storage";
 import { findAudioDropouts, type AudioDropout } from "./audio-dropout";
-import { boundaryContext, BoundaryChoiceSchema, chooseBoundary, EndLookSchema, lookPastTheEnd, type EndLook } from "./boundary-step";
+import {
+  boundaryContext,
+  BoundaryChoiceSchema,
+  checkStory,
+  chooseBoundary,
+  EndLookSchema,
+  lookPastTheEnd,
+  StoryCheckSchema,
+  type BoundaryTurn,
+  type EndLook,
+  type StoryCheck,
+} from "./boundary-step";
 import { checkClipCamera } from "./camera-check-run";
 import { scoringModel } from "./claude-provider";
 import { applyLabSelectionSteps } from "./lab-selection";
@@ -43,6 +54,7 @@ export async function runLabSelection<T extends LabClip>(params: {
   const workDir = await mkdtemp(path.join(os.tmpdir(), "lab-selection-"));
   const usage = {
     spanInput: 0, spanOutput: 0, boundaryInput: 0, boundaryOutput: 0, endLookInput: 0, endLookOutput: 0,
+    storyInput: 0, storyOutput: 0,
     cameraInput: 0, cameraOutput: 0, cameraFrames: 0,
   };
   const boundaryLog: {
@@ -54,6 +66,9 @@ export async function runLabSelection<T extends LabClip>(params: {
     reason?: string;
     attempts?: { startUnit: number; endUnit: number; refused: string | null; question?: string }[];
     endLook?: EndLook | { error: string };
+    /** Fix U: the story check, and the boundary step's attempts when the clip restarted later. */
+    story?: StoryCheck | { error: string };
+    storyAttempts?: { startUnit: number; endUnit: number; refused: string | null; question?: string }[];
     error?: string;
   }[] = [];
   const cameraLog: { title: string; result: string; at?: number; error?: string }[] = [];
@@ -110,7 +125,7 @@ export async function runLabSelection<T extends LabClip>(params: {
       ? async (clip: T) => {
           const context = boundaryContext(sermonSegments, clip);
           try {
-            const { range, attempts } = await chooseBoundary(context, async (turns) => {
+            const askBoundary = async (turns: BoundaryTurn[]) => {
               // Thinking off, as Stage B does: on a long prompt the model otherwise spends the
               // whole token budget thinking and returns no answer.
               const message = await new Anthropic().messages.create({
@@ -124,7 +139,8 @@ export async function runLabSelection<T extends LabClip>(params: {
               usage.boundaryOutput += message.usage.output_tokens;
               const block = message.content.find((b) => b.type === "text");
               return BoundaryChoiceSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
-            });
+            };
+            const { range, attempts } = await chooseBoundary(context, askBoundary);
             let final = range && { startMs: range.startMs, endMs: range.endMs };
             let endLook: EndLook | { error: string } | undefined;
             if (final) {
@@ -149,6 +165,32 @@ export async function runLabSelection<T extends LabClip>(params: {
                 endLook = { error: String(error) };
               }
             }
+            // Fix U: a clip cut from the middle of a story moves to where the story lands, or starts later.
+            let story: StoryCheck | { error: string } | undefined;
+            let storyAttempts: (typeof boundaryLog)[number]["storyAttempts"];
+            if (final) {
+              try {
+                const checked = await checkStory(context, final, async (prompt) => {
+                  const message = await new Anthropic().messages.create({
+                    model: scoringModel(),
+                    max_tokens: 600,
+                    thinking: { type: "disabled" },
+                    messages: [{ role: "user", content: prompt }],
+                    output_config: { format: zodOutputFormat(StoryCheckSchema) },
+                  });
+                  usage.storyInput += message.usage.input_tokens;
+                  usage.storyOutput += message.usage.output_tokens;
+                  const block = message.content.find((b) => b.type === "text");
+                  return StoryCheckSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
+                }, askBoundary);
+                final = checked.range;
+                story = checked.check;
+                storyAttempts = checked.attempts?.map(({ startUnit, endUnit, refused, question }) => ({ startUnit, endUnit, refused, question }));
+              } catch (error) {
+                // Fails open: the range stands.
+                story = { error: String(error) };
+              }
+            }
             boundaryLog.push({
               title: clip.title,
               from: [clip.startMs, clip.endMs],
@@ -158,6 +200,8 @@ export async function runLabSelection<T extends LabClip>(params: {
               reason: attempts.at(-1)?.reason,
               attempts: attempts.map(({ startUnit, endUnit, refused, question }) => ({ startUnit, endUnit, refused, question })),
               endLook,
+              story,
+              storyAttempts,
             });
             return final;
           } catch (error) {
@@ -217,6 +261,9 @@ export async function runLabSelection<T extends LabClip>(params: {
         boundaryChanged: result.boundaryChanged,
         endsMovedLater: boundaryLog.filter((b) => b.endLook && "movedMs" in b.endLook && b.endLook.movedMs > 0).length,
         setUpsDropped: boundaryLog.filter((b) => b.endLook && "dropped" in b.endLook && b.endLook.dropped).length,
+        storiesExtended: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "extended").length,
+        storiesRestarted: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "restarted").length,
+        storiesUnresolved: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "unresolved").length,
         rejected: result.rejected,
         boundary: boundaryLog,
         camera: cameraLog,

@@ -10,6 +10,10 @@ import {
   endLookPrompt,
   endsInsideList,
   endsOnQuotationStart,
+  checkStory,
+  readsVerseNext,
+  storyLookLines,
+  storyPrompt,
   boundaryContext,
   boundaryPrompt,
   looksLikeScriptureReadingStart,
@@ -1174,5 +1178,236 @@ describe("fix R: a set-up line the clip cannot finish is dropped", () => {
     const result = await lookPastTheEnd(THREE_I_C4, THREE_I_C4_RANGE, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 16, reason: "x" }));
     expect(result.range).toEqual(THREE_I_C4_RANGE);
     expect(result.look.refused).toMatch(/not one of the lines after the end/);
+  });
+});
+
+// Lab sermon 1n clip 6 (2026-10-23), real lines: the foot-washing story. Jake: "It stops in the middle
+// of the story." He passed 1l clip 1, from Peter's objection to "wash our feet" (39:28–40:41), and
+// failed 1c clip 2 (ended on Peter's objection) and 1d clip 1 (ended before the meaning).
+const ONE_N_C6 = [
+  { idx: 520, startMs: 2292244, endMs: 2296304, text: "And, and so that is the figure of speech that Peter is using here." },
+  { idx: 521, startMs: 2297664, endMs: 2300764, text: "Now, now, why would Simon Peter..." },
+  { idx: 522, startMs: 2301224, endMs: 2305704, text: "I mean, why would you think Simon Peter would use that figure of speech?" },
+  { idx: 523, startMs: 2306764, endMs: 2308144, text: "I don't think we have to guess." },
+  { idx: 524, startMs: 2309184, endMs: 2310284, text: "I believe we know." },
+  { idx: 525, startMs: 2311284, endMs: 2319044, text: "Because Simon Peter was there when the Lord Jesus Christ himself had done the exact same thing." },
+  { idx: 526, startMs: 2320204, endMs: 2322884, text: "You remember over there in the Gospel of John chapter 13?" },
+  { idx: 527, startMs: 2323704, endMs: 2330804, text: "Supper had been ended, and Jesus laid aside his garment, and he took a towel, and he girded himself with it." },
+  { idx: 528, startMs: 2331684, endMs: 2336764, text: "The Lord Jesus Christ put on a servant's apron." },
+  { idx: 529, startMs: 2337464, endMs: 2344004, text: "Jesus tied on a servant's towel, and then Jesus began to wash the disciples' feet." },
+  { idx: 530, startMs: 2345404, endMs: 2347424, text: "And you remember those high and mighty disciples?" },
+  { idx: 531, startMs: 2347824, endMs: 2349844, text: "None of them would even think about doing that." },
+  { idx: 532, startMs: 2350904, endMs: 2359424, text: "But the Lord Jesus Christ laid aside his garment, took a basin of water, clothed himself with humility," },
+  { idx: 533, startMs: 2359984, endMs: 2366284, text: "tied that behind him, that towel, and knelt and washed the disciples' feet." },
+  { idx: 534, startMs: 2366624, endMs: 2367864, text: "Amen." },
+  { idx: 535, startMs: 2367904, endMs: 2373484, text: 'And when Jesus came to Simon Peter, Simon Peter said, "You\'re not gonna wash my feet."' },
+  { idx: 536, startMs: 2374824, endMs: 2379984, text: 'Now, I gotta tell you, if I was there at that time, I would\'ve said, "Peter, you better let him do it, because you\'re about to stick it in your mouth."' },
+  { idx: 537, startMs: 2380084, endMs: 2380524, text: "Amen?" },
+  { idx: 538, startMs: 2382444, endMs: 2384804, text: '"Oh, no, you\'re not gonna wash my feet, Jesus."' },
+  { idx: 539, startMs: 2385184, endMs: 2386604, text: "And Jesus said this to Peter." },
+  { idx: 540, startMs: 2386644, endMs: 2391364, text: 'He said, "Now, Peter, if I don\'t wash your feet, you\'ll have no part in me.' },
+  { idx: 541, startMs: 2392364, endMs: 2393844, text: 'You\'ll have nothing to do with me."' },
+  { idx: 542, startMs: 2394984, endMs: 2398424, text: 'Well, Peter says, "Well, man, if that\'s the case, Lord, wash me all over," right?' },
+  { idx: 543, startMs: 2398904, endMs: 2401144, text: '"Not just my feet, but my hands and my head also."' },
+  { idx: 544, startMs: 2401984, endMs: 2403124, text: "And this is what Jesus said." },
+  { idx: 545, startMs: 2403164, endMs: 2409344, text: 'He said, "Peter, he that had a bath doesn\'t need to be washed except his feet."' },
+  { idx: 546, startMs: 2410324, endMs: 2419144, text: "Now, folks, Jesus makes it very clear here that he's doing this as a symbolic act, because that bath referred" },
+  { idx: 547, startMs: 2419204, endMs: 2420184, text: "to salvation." },
+  { idx: 548, startMs: 2421464, endMs: 2429764, text: "The washing, therefore, of Peter's feet was symbolic of the fact that, that even though we've been saved, we're walking" },
+  { idx: 549, startMs: 2429824, endMs: 2430924, text: "in a dirty world." },
+  { idx: 550, startMs: 2432084, endMs: 2432104, text: "Amen." },
+  { idx: 551, startMs: 2432144, endMs: 2440264, text: "And day by day, we need to come to Jesus, and we need to let him refresh us and restore us and cleanse us and" },
+  { idx: 552, startMs: 2440324, endMs: 2441244, text: "wash our feet." },
+  { idx: 553, startMs: 2444584, endMs: 2445864, text: "And then Jesus said this." },
+  { idx: 554, startMs: 2445924, endMs: 2446704, text: "Now listen to this." },
+  { idx: 555, startMs: 2446944, endMs: 2449704, text: "John chapter 13 verse 14, Jesus said this." },
+  { idx: 556, startMs: 2450043, endMs: 2458244, text: 'He said, "Peter, if I, your Lord and Teacher, have washed your feet, you also ought to wash one another\'s feet."' },
+  { idx: 557, startMs: 2458484, endMs: 2459004, text: "That's right." },
+  { idx: 558, startMs: 2459824, endMs: 2459884, text: "Amen." },
+  { idx: 559, startMs: 2459944, endMs: 2462104, text: "Now, friend, he's not talking about a church ceremony here." },
+];
+const ONE_N_C6_RANGE = { startMs: 2311284, endMs: 2366284 };
+
+describe("fix U: the story check", () => {
+  const context = boundaryContext(ONE_N_C6, ONE_N_C6_RANGE);
+  const abs = (start: string) => context.units.findIndex((u) => u.text.startsWith(start));
+  const look = storyLookLines(context.units, ONE_N_C6_RANGE)!;
+  const rel = (start: string) => abs(start) - look.offset;
+  const story = (landsUnit: number, endIsNarration = true, continues = true, storyStartsUnit = 0, extra: Record<string, unknown> = {}) =>
+    vi.fn().mockResolvedValue({ endIsNarration, storyKind: "events", storyStartsUnit, pointStatedUnit: -1, continues, landsUnit, reason: "x", ...extra });
+  const boundary = (startUnit: number, endUnit: number) => vi.fn().mockResolvedValue({ startUnit, endUnit, reason: "y" });
+
+  it("shows the clip and up to 25 lines that start within 90 seconds after it, numbered from the clip's start", () => {
+    expect(look.lines[0].text).toMatch(/^Because Simon Peter was there/);
+    expect(look.lines[look.end].text).toMatch(/^But the Lord Jesus Christ laid aside/);
+    expect(look.lines[look.end].text).toMatch(/washed the disciples' feet\.$/);
+    expect(look.lines[look.last].text).toMatch(/^He said, "Peter, if I, your Lord/);
+    expect(look.last - look.end).toBe(20);
+    expect(look.lines.length).toBe(look.last + 1);
+  });
+
+  it("asks whether the clip is cut from the middle of a story, with a neutral example", () => {
+    const prompt = storyPrompt(look.lines, look.end, look.last);
+    expect(prompt).toContain(`The clip ends on [${look.end}].`);
+    expect(prompt).toContain("First say whether line [" + look.end + "] itself is narration or dialogue of a story (endIsNarration).");
+    expect(prompt).toContain("prodigal son");
+    expect(prompt).toContain("Most clips are complete.");
+    expect(prompt).toContain(`one of [${look.end + 1}] to [${look.last}]`);
+    expect(prompt).toContain(`Return storyStartsUnit: the first line of the clip, [0] to [${look.end}], that narrates the story`);
+    expect(prompt).toContain("A list, a chain of reasoning, a verse he reads and explains, or the preacher saying what a Bible writer teaches is not a story.");
+    expect(prompt).toContain('Also return storyKind: "events" when the clip tells people and happenings in order');
+    expect(prompt).toContain(`pointStatedUnit: the line inside the clip, [0] to [${look.end}], where the preacher states his point about the story`);
+    // The gate is fair only when the prompt holds none of Jake's clips.
+    expect(prompt.split("\n\n").slice(0, -1).join(" ")).not.toContain("wash my feet");
+  });
+
+  it("keeps the range when the model says the clip is complete", async () => {
+    const result = await checkStory(context, ONE_N_C6_RANGE, story(-1, true, false), vi.fn());
+    expect(result.range).toEqual(ONE_N_C6_RANGE);
+    expect(result.check).toMatchObject({ asked: true, continues: false, refused: null });
+  });
+
+  it("keeps the range when the model says the story continues but the last line is not narration", async () => {
+    const askBoundary = vi.fn();
+    const result = await checkStory(context, ONE_N_C6_RANGE, story(rel("And day by day"), false, true), askBoundary);
+    expect(result.range).toEqual(ONE_N_C6_RANGE);
+    expect(askBoundary).not.toHaveBeenCalled();
+  });
+
+  it("keeps the range when the story begins only in the clip's last seconds (gate run: Saul's story in lab sermon 2b clip 5)", async () => {
+    // A clip that ends on "Jesus began to wash the disciples' feet." (6.5 seconds of story) only introduces it.
+    const range = { startMs: 2311284, endMs: 2344004 };
+    const ctx = boundaryContext(ONE_N_C6, range);
+    const lk = storyLookLines(ctx.units, range)!;
+    const lands = ctx.units.findIndex((u) => u.text.startsWith("And day by day")) - lk.offset;
+    const askBoundary = vi.fn();
+    const result = await checkStory(ctx, range, story(lands, true, true, lk.end), askBoundary);
+    expect(result.range).toEqual(range);
+    expect(result.check.refused).toMatch(/fills less than 12 seconds of the clip/);
+    expect(askBoundary).not.toHaveBeenCalled();
+    const none = await checkStory(ctx, range, story(lands, true, true, -1), askBoundary);
+    expect(none.range).toEqual(range);
+    // From the clip's first line the story fills the whole clip, and the check goes on to the landing.
+    const whole = await checkStory(ctx, range, story(lands, true, true, 0), vi.fn().mockResolvedValue({ startUnit: 0, endUnit: 0, reason: "y" }));
+    expect(whole.check.refused).not.toMatch(/fills less than/);
+  });
+
+  it("keeps the range when what the clip tells is not a story of events (gate run: Paul's blessings, lab sermon 5e clip 4)", async () => {
+    for (const storyKind of ["list", "teaching", "verse", "none"]) {
+      const askBoundary = vi.fn();
+      const result = await checkStory(context, ONE_N_C6_RANGE, story(rel("And day by day"), true, true, 0, { storyKind }), askBoundary);
+      expect(result.range).toEqual(ONE_N_C6_RANGE);
+      expect(result.check.refused).toMatch(/not a story/);
+      expect(askBoundary).not.toHaveBeenCalled();
+    }
+  });
+
+  it("keeps the range when the clip already states the preacher's point about the story (gate run: lab sermon 4g clip 5)", async () => {
+    const result = await checkStory(context, ONE_N_C6_RANGE, story(rel("And day by day"), true, true, 0, { pointStatedUnit: 0 }), vi.fn());
+    expect(result.range).toEqual(ONE_N_C6_RANGE);
+    expect(result.check.refused).toBe("The clip states the preacher's point about the story at [0].");
+  });
+
+  it("makes no call when the lines after the clip read a verse (gate run: Saul's story, lab sermon 2b clip 5)", async () => {
+    const units = ONE_N_C6.map((u) => (u.idx === 535 ? { ...u, text: "Look at what the Bible says in verse three." } : u));
+    expect(readsVerseNext(wholeSentences(units), wholeSentences(units).findIndex((u) => u.idx === 532))).toBe(true);
+    expect(readsVerseNext(wholeSentences(ONE_N_C6), wholeSentences(ONE_N_C6).findIndex((u) => u.idx === 532))).toBe(false);
+    const askStory = vi.fn();
+    const result = await checkStory(boundaryContext(units, ONE_N_C6_RANGE), ONE_N_C6_RANGE, askStory, vi.fn());
+    expect(askStory).not.toHaveBeenCalled();
+    expect(result.range).toEqual(ONE_N_C6_RANGE);
+    expect(result.check).toEqual({ asked: false, continues: false, landsMs: null, refused: "The lines after the clip read a verse." });
+  });
+
+  it("asks a second time and keeps the range when the second look does not agree (gate runs: 2j clip 1, 5f clip 5)", async () => {
+    const agree = { endIsNarration: true, storyKind: "events", storyStartsUnit: 0, pointStatedUnit: -1, continues: true, landsUnit: rel("And day by day"), reason: "first" };
+    const askStory = vi.fn().mockResolvedValueOnce(agree).mockResolvedValueOnce({ ...agree, continues: false, landsUnit: -1, reason: "second" });
+    const askBoundary = vi.fn();
+    const result = await checkStory(context, ONE_N_C6_RANGE, askStory, askBoundary);
+    expect(askStory).toHaveBeenCalledTimes(2);
+    expect(result.range).toEqual(ONE_N_C6_RANGE);
+    expect(result.check).toMatchObject({ refused: "A second look did not agree that the story continues.", reason: "first", secondReason: "second" });
+    expect(askBoundary).not.toHaveBeenCalled();
+    // When both agree, the later of the two landings is used.
+    const earlier = { ...agree, landsUnit: rel("Now, folks, Jesus makes it very clear") };
+    const both = vi.fn().mockResolvedValueOnce(earlier).mockResolvedValueOnce(agree);
+    const moved = await checkStory(context, ONE_N_C6_RANGE, both, boundary(abs("And when Jesus came to Simon Peter"), abs("And day by day")));
+    expect(moved.check).toMatchObject({ landsMs: 2441244, outcome: "restarted" });
+  });
+
+  it("never lands on a verse he reads after the story (gate run 4: John 13:14), and takes the other look's landing", async () => {
+    const agree = { endIsNarration: true, storyKind: "events", storyStartsUnit: 0, pointStatedUnit: -1, continues: true, landsUnit: rel("And day by day"), reason: "a" };
+    const verse = { ...agree, landsUnit: rel('He said, "Peter, if I, your Lord'), reason: "b" };
+    const askStory = vi.fn().mockResolvedValueOnce(agree).mockResolvedValueOnce(verse);
+    const result = await checkStory(context, ONE_N_C6_RANGE, askStory, boundary(abs("And when Jesus came to Simon Peter"), abs("And day by day")));
+    expect(result.check).toMatchObject({ landsMs: 2441244, outcome: "restarted" });
+    const both = vi.fn().mockResolvedValue(verse);
+    const kept = await checkStory(context, ONE_N_C6_RANGE, both, vi.fn());
+    expect(kept.range).toEqual(ONE_N_C6_RANGE);
+    expect(kept.check.refused).toBe("The landing is a verse he reads after the story.");
+  });
+
+  it("makes one call when the first look says the clip is complete", async () => {
+    const askStory = story(-1, true, false);
+    await checkStory(context, ONE_N_C6_RANGE, askStory, vi.fn());
+    expect(askStory).toHaveBeenCalledTimes(1);
+  });
+
+  it("restarts lab sermon 1n clip 6 later in the story when the landing makes it too long: Jake's 1l clip 1", async () => {
+    const landing = abs("And day by day");
+    const askBoundary = boundary(abs("And when Jesus came to Simon Peter"), landing);
+    const result = await checkStory(context, ONE_N_C6_RANGE, story(rel("And day by day")), askBoundary);
+    expect(result.range).toEqual({ startMs: 2367904, endMs: 2441244 });
+    expect(result.check).toMatchObject({ asked: true, continues: true, landsMs: 2441244, refused: null, outcome: "restarted", movedMs: 74_960 });
+    expect(result.attempts).toHaveLength(1);
+    // The boundary step is told to hold that end and start later.
+    const firstTurn = askBoundary.mock.calls[0][0][0].content as string;
+    expect(firstTurn).toContain(`Hold the end: The story this clip is inside lands at unit [${landing}] (40:32): "And day by day`);
+    expect(firstTurn).toContain(`Keep the end at unit [${landing}], or within 8 seconds of it, and start later, so the clip runs 75 seconds at most`);
+  });
+
+  it("refuses a restart that ends well before the landing, with the hold as the reason", async () => {
+    const landing = abs("And day by day");
+    const early = abs('He said, "Peter, he that had a bath');
+    const askBoundary = vi.fn().mockResolvedValue({ startUnit: abs("And when Jesus came to Simon Peter"), endUnit: early, reason: "y" });
+    const result = await checkStory(context, ONE_N_C6_RANGE, story(rel("And day by day")), askBoundary);
+    expect(result.range).toEqual(ONE_N_C6_RANGE);
+    expect(result.check).toMatchObject({ outcome: "unresolved" });
+    expect(result.attempts).toHaveLength(3);
+    expect(result.attempts![0].refused).toContain(`The story this clip is inside lands at unit [${landing}]`);
+    expect(result.attempts![0].refused).toContain(`Keep the end at unit [${landing}] or later, and start later.`);
+  });
+
+  it("extends the end to the landing when the clip stays within 90 seconds: lab sermon 1d clip 1", async () => {
+    const range = { startMs: 2367904, endMs: 2409344 };
+    const ctx = boundaryContext(ONE_N_C6, range);
+    const lk = storyLookLines(ctx.units, range)!;
+    const lands = ctx.units.findIndex((u) => u.text.startsWith("And day by day")) - lk.offset;
+    const askBoundary = vi.fn();
+    const result = await checkStory(ctx, range, story(lands), askBoundary);
+    expect(result.range).toEqual({ startMs: 2367904, endMs: 2441244 });
+    expect(result.check).toMatchObject({ outcome: "extended", movedMs: 31_900, landsMs: 2441244 });
+    expect(askBoundary).not.toHaveBeenCalled();
+  });
+
+  it("keeps the range when the story does not land within the lines shown", async () => {
+    const result = await checkStory(context, ONE_N_C6_RANGE, story(-1), vi.fn());
+    expect(result.range).toEqual(ONE_N_C6_RANGE);
+    expect(result.check).toMatchObject({ outcome: "unresolved", refused: "The story does not land within the lines shown." });
+  });
+
+  it("refuses a landing that is not one of the lines after the end", async () => {
+    for (const landsUnit of [0, look.end, look.last + 1]) {
+      const result = await checkStory(context, ONE_N_C6_RANGE, story(landsUnit), vi.fn());
+      expect(result.range).toEqual(ONE_N_C6_RANGE);
+      expect(result.check.refused).toMatch(/not one of the lines after the end/);
+    }
+  });
+
+  it("makes no call when no line starts within 90 seconds after the clip", async () => {
+    const askStory = vi.fn();
+    const result = await checkStory(context, { startMs: 2311284, endMs: 2462104 }, askStory, vi.fn());
+    expect(askStory).not.toHaveBeenCalled();
+    expect(result.check).toEqual({ asked: false, continues: false, landsMs: null, refused: null });
   });
 });
