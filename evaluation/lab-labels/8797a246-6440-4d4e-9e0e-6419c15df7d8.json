@@ -1,0 +1,62 @@
+{
+  "projectId": "8797a246-6440-4d4e-9e0e-6419c15df7d8",
+  "projectName": "Lab 1o - Normal Sunday - fix T + U + V",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "a0162723-15f2-47ae-bcf4-c6049273d762": {
+      "rank": 2,
+      "startMs": 4401880,
+      "endMs": 4438120,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:10:09.130Z"
+    },
+    "e55ba7da-e13f-4846-aeb5-e1949c79119a": {
+      "rank": 3,
+      "startMs": 2478024,
+      "endMs": 2514524,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:10:20.961Z"
+    },
+    "d92f22b6-509f-4b90-872a-238b2d2cc22d": {
+      "rank": 4,
+      "startMs": 2367904,
+      "endMs": 2441244,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:10:48.411Z"
+    },
+    "56407d91-7908-499a-9bf1-a257ce6d8055": {
+      "rank": 5,
+      "startMs": 3336932,
+      "endMs": 3423592,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:11:39.613Z"
+    },
+    "8a30273e-17ec-41a6-9b8a-e1765850d118": {
+      "rank": 6,
+      "startMs": 4688680,
+      "endMs": 4763380,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:14:56.770Z"
+    },
+    "81b2ba6d-e2f5-4d43-ad47-1ae72f2850c2": {
+      "rank": 1,
+      "startMs": 4565120,
+      "endMs": 4622000,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:15:07.578Z"
+    }
+  }
+}
