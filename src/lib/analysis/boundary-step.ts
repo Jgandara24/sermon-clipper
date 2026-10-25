@@ -207,6 +207,22 @@ const ANNOUNCED_COUNT =
   /\b(?:two|three|four|five|six|seven|[2-7])\s+(?:\w+\s+){0,2}?(?:things|ways|reasons|truths|certainties|points|keys|lessons|questions|steps|marks|facts|principles|kinds|types|areas|benefits|promises|blessings|secrets)\b/i;
 const FIRST_ITEM = /\b(?:first of all|first(?:ly)?,|number one|the first (?:one|thing|is))/i;
 const LATER_ITEM = /\b(?:second(?:ly)?|number two|third(?:ly)?|the next (?:one|thing)|another (?:one|thing)|finally|lastly)\b/i;
+
+// Fix T (lab sermon 1n clip 2, 2026-10-23; the same clip failed in 1d and passed in 1g): the clip ended on
+// "So God's grace gonna make you fit.", a recap of point one, right before "But number two, God's grace
+// can make you firm." Jake: 'it would be better if it ended on, "Jesus can heal you today. Hallelujah."'
+// Over the 244 marked clips, only this clip (3 marks) ends on a recap that leads into the next point.
+const RECAP_OPENER = /^\W*(?:(?:and|now|well|yeah|amen|see)\W+)*(?:so|that'?s why|that is why)\b/i;
+const NEXT_POINT = /\b(?:number (?:two|three|four|five|2|3|4|5)|(?:a|the) (?:second|third|fourth|next) (?:\w+ )?(?:thing|point|truth|certainty|reason|way|one))\b/i;
+const NEXT_POINT_WORDS = 6;
+
+/** True when the end line recaps the point ("So …") and the line after it opens the next numbered point. */
+export function endsOnRecapIntoNextPoint(units: BoundaryUnit[], endUnit: number): boolean {
+  const next = units[endUnit + 1];
+  if (!next || !RECAP_OPENER.test(units[endUnit].text)) return false;
+  const head = next.text.split(/\s+/).slice(0, NEXT_POINT_WORDS).join(" ");
+  return LATER_ITEM.test(head) || NEXT_POINT.test(head);
+}
 /**
  * A count the preacher announces inside the clip ("three things") whose first item the clip gives
  * ("First of all") with no later item after it. Null when the clip leaves the announcement out,
@@ -447,6 +463,11 @@ function evaluateBoundaryChoice(
     adjustedEnd = true;
     endUnit -= 1;
   }
+  // Fix T: a "So …" recap of the point right before the next numbered point is not the ending either.
+  while (endUnit > startUnit && endsOnRecapIntoNextPoint(units, endUnit)) {
+    adjustedEnd = true;
+    endUnit -= 1;
+  }
 
   const moved =
     startUnit === choice.startUnit && endUnit === choice.endUnit ? "" : `${asked} become units [${startUnit}] to [${endUnit}] after the checks. `;
@@ -508,7 +529,7 @@ function evaluateBoundaryChoice(
   }
   const steps =
     (adjustedForScripture ? " The start moved past the Scripture reading." : "") +
-    (adjustedEnd ? " The end moved back because the last lines only lead into a quotation." : "");
+    (adjustedEnd ? " The end moved back because the last lines only lead into a quotation, or recap the point before the next one." : "");
   const tooShort = duration < limits.minMs;
   const aim = ` Keep the end where the point ends and start later, so the clip runs 30 to 60 seconds, or ${limits.cutMaxMs / 1000} at most`;
   const limit = tooShort
@@ -734,6 +755,8 @@ export async function lookPastTheEnd(
   const unit = look.offset + answer.endUnit;
   if (endsOnQuotationStart(units[unit].text)) return withoutSetUp(`Unit [${answer.endUnit}] only leads into a quotation.`);
   if (endsInsideList(units, unit)) return withoutSetUp(`Unit [${answer.endUnit}] is inside a list.`);
+  // Fix T: the recap before the next numbered point is not where the point lands.
+  if (endsOnRecapIntoNextPoint(units, unit)) return kept(`Unit [${answer.endUnit}] recaps the point and leads into the next numbered point.`);
   if (units[unit].endMs - range.startMs > maxMs) {
     return withoutSetUp(`Ending on unit [${answer.endUnit}] makes the clip run past ${maxMs / 1000} seconds.`);
   }

@@ -20,6 +20,7 @@ import {
   boundaryContext,
   BoundaryChoiceSchema,
   checkStory,
+  endsOnRecapIntoNextPoint,
   StoryCheckSchema,
   type BoundaryTurn,
   type BoundaryUnit,
@@ -53,7 +54,7 @@ export type ReplayRow = MarkedClip & {
   detail: Record<string, unknown>;
 };
 
-const FIXES = ["U", "V"] as const;
+const FIXES = ["U", "V", "T"] as const;
 type Fix = (typeof FIXES)[number];
 
 async function main() {
@@ -194,6 +195,19 @@ async function replayOne(
       : { ...clip, to: null, moved: false, detail: {} };
   }
   const context = boundaryContext(segments, range);
+  if (fix === "T") {
+    const { units, currentStart, currentEnd } = context;
+    if (currentEnd > currentStart && endsOnRecapIntoNextPoint(units, currentEnd)) {
+      const endMs = units[currentEnd - 1].endMs;
+      return {
+        ...clip,
+        to: [range.startMs, endMs],
+        moved: true,
+        detail: { outcome: "recap dropped", movedMs: endMs - range.endMs, dropped: units[currentEnd].text, next: units[currentEnd + 1]?.text },
+      };
+    }
+    return { ...clip, to: null, moved: false, detail: {} };
+  }
   if (fix === "U") {
     const client = new Anthropic();
     const askStory = async (prompt: string) => {
