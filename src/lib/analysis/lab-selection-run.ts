@@ -21,6 +21,7 @@ import {
   type StoryCheck,
 } from "./boundary-step";
 import { checkClipCamera } from "./camera-check-run";
+import { snapClipEnd } from "./end-silence";
 import { scoringModel } from "./claude-provider";
 import { applyLabSelectionSteps } from "./lab-selection";
 import { findSermonSpan, SermonSpanSchema, type SermonSpan } from "./sermon-span";
@@ -69,6 +70,8 @@ export async function runLabSelection<T extends LabClip>(params: {
     /** Fix U: the story check, and the boundary step's attempts when the clip restarted later. */
     story?: StoryCheck | { error: string };
     storyAttempts?: { startUnit: number; endUnit: number; refused: string | null; question?: string }[];
+    /** Fix V: the cut moved back into the pause before the sound it cut into. */
+    endSnap?: { endMs: number; movedMs: number } | { error: string };
     error?: string;
   }[] = [];
   const cameraLog: { title: string; result: string; at?: number; error?: string }[] = [];
@@ -191,6 +194,21 @@ export async function runLabSelection<T extends LabClip>(params: {
                 story = { error: String(error) };
               }
             }
+            // Fix V: a cut on a sound that starts right after a pause moves back into the pause. Needs the
+            // source file, which the camera check or the dropout check downloads.
+            let endSnap: { endMs: number; movedMs: number } | { error: string } | undefined;
+            if (final && sourceFilePath) {
+              try {
+                const snapped = await snapClipEnd(sourceFilePath, final);
+                if (snapped) {
+                  final = { startMs: final.startMs, endMs: snapped.endMs };
+                  endSnap = snapped;
+                }
+              } catch (error) {
+                // Fails open: the cut stays on the transcript's clock.
+                endSnap = { error: String(error) };
+              }
+            }
             boundaryLog.push({
               title: clip.title,
               from: [clip.startMs, clip.endMs],
@@ -202,6 +220,7 @@ export async function runLabSelection<T extends LabClip>(params: {
               endLook,
               story,
               storyAttempts,
+              endSnap,
             });
             return final;
           } catch (error) {
@@ -264,6 +283,7 @@ export async function runLabSelection<T extends LabClip>(params: {
         storiesExtended: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "extended").length,
         storiesRestarted: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "restarted").length,
         storiesUnresolved: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "unresolved").length,
+        endsSnapped: boundaryLog.filter((b) => b.endSnap && "movedMs" in b.endSnap).length,
         rejected: result.rejected,
         boundary: boundaryLog,
         camera: cameraLog,
