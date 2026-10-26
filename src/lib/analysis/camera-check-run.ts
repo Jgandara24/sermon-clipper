@@ -7,11 +7,14 @@ import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import {
   cameraCheckPrompt,
   CameraFrameLabelsSchema,
+  cameraRunsToShow,
   decideCameraCheck,
   groupNoFaceRuns,
+  sceneChangeRuns,
   type CameraCheckResult,
   type CameraLabel,
   type CameraSample,
+  type SceneChange,
 } from "./camera-check";
 
 const SAMPLE_SCRIPT = path.resolve("scripts/lab/tracking/camera-sample.py");
@@ -20,9 +23,9 @@ const CAMERA_CHECK_MODEL = "claude-haiku-4-5";
 /** One request carries every faceless moment of a clip; cap it so a slide-heavy clip stays cheap. */
 const MAX_FRAMES_PER_REQUEST = 12;
 
-export type CameraCheckUsage = { inputTokens: number; outputTokens: number; frames: number };
+export type CameraCheckUsage = { inputTokens: number; outputTokens: number; frames: number; sceneFrames: number };
 
-/** Lab only. Samples one clip of a local source file and asks the vision model about faceless frames. */
+/** Lab only. Samples one clip of a local source file and asks the vision model about faceless frames and scene changes (fix Y). */
 export async function checkClipCamera(params: {
   sourceFilePath: string;
   startMs: number;
@@ -41,13 +44,11 @@ export async function checkClipCamera(params: {
     ],
     { maxBuffer: 1024 * 1024 * 8, timeoutMs: envTimeoutMs("LAB_CAMERA_CHECK_TIMEOUT_MS", 5 * 60_000) },
   );
-  const samples = (JSON.parse(stdout) as { samples: CameraSample[] }).samples;
-  const runs = groupNoFaceRuns(samples);
-  const usage: CameraCheckUsage = { inputTokens: 0, outputTokens: 0, frames: 0 };
-  if (runs.length === 0) return { result: { pass: true }, usage };
-
-  // The longest faceless moments first, so a cap never hides the longest slide.
-  const shown = [...runs].sort((a, b) => b.end - b.start - (a.end - a.start)).slice(0, MAX_FRAMES_PER_REQUEST);
+  const { samples, sceneChanges = [] } = JSON.parse(stdout) as { samples: CameraSample[]; sceneChanges?: SceneChange[] };
+  const step = samples.length > 1 ? samples[1].t - samples[0].t : 0.25;
+  const shown = cameraRunsToShow(groupNoFaceRuns(samples), sceneChangeRuns(sceneChanges, step), MAX_FRAMES_PER_REQUEST);
+  const usage: CameraCheckUsage = { inputTokens: 0, outputTokens: 0, frames: 0, sceneFrames: shown.filter((run) => run.via === "scene change").length };
+  if (shown.length === 0) return { result: { pass: true }, usage };
   const content: Anthropic.ContentBlockParam[] = [];
   for (const [index, run] of shown.entries()) {
     content.push({ type: "text", text: `Frame ${index}:` });
@@ -69,7 +70,7 @@ export async function checkClipCamera(params: {
   usage.frames = shown.length;
   const block = message.content.find((b) => b.type === "text");
   const parsed = CameraFrameLabelsSchema.safeParse(block && block.type === "text" ? JSON.parse(block.text) : null);
-  if (!parsed.success) return { result: { pass: false, reason: "unchecked", at: runs[0].start }, usage };
+  if (!parsed.success) return { result: { pass: false, reason: "unchecked", at: shown[0].start }, usage };
 
   const byIndex = new Map(parsed.data.frames.map((f) => [f.index, f.label]));
   const labels: CameraLabel[] = shown.map((_, i) => byIndex.get(i)).filter((l): l is CameraLabel => Boolean(l));

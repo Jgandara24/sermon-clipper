@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   cameraCheckPrompt,
   CameraFrameLabelsSchema,
+  cameraRunsToShow,
   decideCameraCheck,
   groupNoFaceRuns,
+  sceneChangeRuns,
   type CameraSample,
 } from "@/lib/analysis/camera-check";
 
@@ -16,8 +18,8 @@ describe("groupNoFaceRuns", () => {
   it("groups consecutive samples with no face and picks the middle frame of each run", () => {
     const runs = groupNoFaceRuns(samples([1, 1, 0, 0, 0, 1, 0, 1]));
     expect(runs).toEqual([
-      { start: 1, end: 2.5, image: "frame-3.jpg" },
-      { start: 3, end: 3.5, image: "frame-6.jpg" },
+      { start: 1, end: 2.5, image: "frame-3.jpg", via: "no face" },
+      { start: 3, end: 3.5, image: "frame-6.jpg", via: "no face" },
     ]);
   });
 
@@ -26,15 +28,63 @@ describe("groupNoFaceRuns", () => {
   });
 });
 
+describe("fix Y: scene changes go to the model too", () => {
+  // Lab sermon 4i clip 6: the "Christians Never Die" slide at 16.0 s, gray difference 58, between two samples with a face.
+  const faceless = [
+    { start: 40, end: 43, image: "turned-away.jpg", via: "no face" as const },
+    { start: 10, end: 10.25, image: "blink.jpg", via: "no face" as const },
+  ];
+
+  it("turns each scene change into a run one sample long", () => {
+    expect(sceneChangeRuns([{ t: 1939.23, score: 58.4, image: "scene-000.jpg" }], 0.25)).toEqual([
+      { start: 1939.23, end: 1939.48, image: "scene-000.jpg", via: "scene change" },
+    ]);
+  });
+
+  it("shows scene changes outside the faceless runs first, then the faceless runs longest first", () => {
+    const scene = sceneChangeRuns(
+      [
+        { t: 16, score: 58, image: "slide.jpg" },
+        { t: 41, score: 37, image: "inside-a-run.jpg" },
+      ],
+      0.25,
+    );
+    expect(cameraRunsToShow(faceless, scene, 12).map((run) => run.image)).toEqual(["slide.jpg", "turned-away.jpg", "blink.jpg"]);
+  });
+
+  it("keeps the scene changes when the cap cuts the list", () => {
+    const scene = sceneChangeRuns([{ t: 16, score: 58, image: "slide.jpg" }], 0.25);
+    expect(cameraRunsToShow(faceless, scene, 2).map((run) => run.image)).toEqual(["slide.jpg", "turned-away.jpg"]);
+  });
+
+  it("passes a clip with no faceless runs and no scene changes", () => {
+    expect(cameraRunsToShow([], [], 12)).toEqual([]);
+  });
+
+  it("says a slide was found at a scene change", () => {
+    const scene = sceneChangeRuns([{ t: 16, score: 58, image: "slide.jpg" }], 0.25);
+    expect(decideCameraCheck(cameraRunsToShow(faceless, scene, 12), ["SLIDE", "PREACHER_OR_STAGE", "OTHER"])).toEqual({
+      pass: false,
+      reason: "slide",
+      at: 16,
+      via: "scene change",
+    });
+  });
+
+  it("tells the model a slide fading in over the camera view is still a slide", () => {
+    expect(cameraCheckPrompt(2)).toMatch(/fading in or out .* still a SLIDE/);
+  });
+});
+
 describe("decideCameraCheck", () => {
   const runs = [
-    { start: 4, end: 9, image: "a.jpg" },
-    { start: 20, end: 21, image: "b.jpg" },
+    { start: 4, end: 9, image: "a.jpg", via: "no face" as const },
+    { start: 20, end: 21, image: "b.jpg", via: "no face" as const },
   ];
 
   it("rejects a clip when any run is a full-screen slide", () => {
     const result = decideCameraCheck(runs, ["PREACHER_OR_STAGE", "SLIDE"]);
-    expect(result).toEqual({ pass: false, reason: "slide", at: 20 });
+    expect(result).toEqual({ pass: false, reason: "slide", at: 20, via: "no face" });
   });
 
   it("passes a clip whose faceless moments are the preacher turned away or the stage", () => {

@@ -2,9 +2,18 @@
 
 Frames without a face are saved as JPEG so the vision model can say whether they are a slide.
 
-    python camera-sample.py --source <mp4> --start <s> --end <s> --out-dir <dir> [--fps 2]
+Fix Y (lab sermon 4i clip 6, 2026-10-25): a "Christians Never Die" slide dissolved in for a quarter
+of a second, 16 seconds into the clip. At 2 frames per second every sample held a face, so no frame
+went to the vision model. The sampler now decodes once at --scan-fps (12), checks faces every
+(scan-fps / fps) frames, and reports a scene change wherever a frame differs from the one before by
+--scene-diff (20) or more in mean gray level, each with its frame, so a slide that flashes between
+face samples is seen. That slide scored 58, camera-angle cuts in lab sermon 2k scored 37, and steady
+preaching stays under 5. (ffmpeg's select=scene filter does the same but took 28 seconds a clip.)
 
-Run with Codex's tracking venv. Prints one JSON object: {"samples": [{"t", "faceCount", "image"}]}.
+    python camera-sample.py --source <mp4> --start <s> --end <s> --out-dir <dir> [--fps 4] [--scan-fps 12] [--scene-diff 20]
+
+Run with Codex's tracking venv. Prints one JSON object:
+{"samples": [{"t", "faceCount", "image"}], "sceneChanges": [{"t", "score", "image"}]}.
 """
 import argparse
 import hashlib
@@ -26,9 +35,12 @@ def main():
     parser.add_argument('--start', type=float, required=True)
     parser.add_argument('--end', type=float, required=True)
     parser.add_argument('--out-dir', type=pathlib.Path, required=True)
-    parser.add_argument('--fps', type=float, default=2)
+    parser.add_argument('--fps', type=float, default=4, help='face checks per second')
+    parser.add_argument('--scan-fps', type=float, default=12, help='decoded frames per second, for scene changes')
+    parser.add_argument('--scene-diff', type=float, default=20, help='mean gray difference from the frame before that marks a scene change')
     args = parser.parse_args()
-    assert args.end > args.start and args.fps > 0
+    assert args.end > args.start and args.fps > 0 and args.scan_fps >= args.fps
+    every = max(1, round(args.scan_fps / args.fps))
 
     import cv2
     import numpy as np
@@ -39,10 +51,12 @@ def main():
     decoder = subprocess.Popen(
         ['ffmpeg', '-nostdin', '-v', 'error', '-ss', f'{args.start:.3f}', '-i', str(args.source),
          '-t', f'{args.end - args.start:.3f}', '-an',
-         '-vf', f'fps={args.fps},scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=disable',
+         '-vf', f'fps={args.scan_fps},scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=disable',
          '-pix_fmt', 'bgr24', '-f', 'rawvideo', '-'],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     samples = []
+    scene_changes = []
+    previous = None
     try:
         index = 0
         while True:
@@ -50,21 +64,30 @@ def main():
             if len(data) < WIDTH * HEIGHT * 3:
                 break
             frame = np.frombuffer(data, np.uint8).reshape(HEIGHT, WIDTH, 3)
-            _, found = detector.detect(frame)
-            count = 0 if found is None else len(found)
-            t = round(args.start + index / args.fps, 3)
-            image = None
-            if count == 0:
-                image = str(args.out_dir / f'frame-{index:04d}.jpg')
-                cv2.imwrite(image, frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            samples.append({'t': t, 'faceCount': count, 'image': image})
+            t = round(args.start + index / args.scan_fps, 3)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.int16)
+            if previous is not None:
+                score = float(np.abs(gray - previous).mean())
+                if score >= args.scene_diff:
+                    image = str(args.out_dir / f'scene-{len(scene_changes):03d}.jpg')
+                    cv2.imwrite(image, frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    scene_changes.append({'t': t, 'score': round(score, 1), 'image': image})
+            previous = gray
+            if index % every == 0:
+                _, found = detector.detect(frame)
+                count = 0 if found is None else len(found)
+                image = None
+                if count == 0:
+                    image = str(args.out_dir / f'frame-{index:04d}.jpg')
+                    cv2.imwrite(image, frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                samples.append({'t': t, 'faceCount': count, 'image': image})
             index += 1
     finally:
         decoder.stdout.close()
         if decoder.poll() is None:
             decoder.kill()
         decoder.wait(timeout=10)
-    print(json.dumps({'samples': samples}))
+    print(json.dumps({'samples': samples, 'sceneChanges': scene_changes}))
 
 
 if __name__ == '__main__':

@@ -74,7 +74,7 @@ export async function runLabSelection<T extends LabClip>(params: {
     endSnap?: { endMs: number; movedMs: number } | { error: string };
     error?: string;
   }[] = [];
-  const cameraLog: { title: string; result: string; at?: number; error?: string }[] = [];
+  const cameraLog: { title: string; result: string; at?: number; via?: string; error?: string }[] = [];
   let dropoutLog: { found?: AudioDropout[]; seconds?: number; error?: string } | null = null;
   let spanLog: { firstLine?: number; lastLine?: number; reason?: string; lines?: number; span?: SermonSpan | null; error?: string } | null = null;
 
@@ -242,7 +242,12 @@ export async function runLabSelection<T extends LabClip>(params: {
             usage.cameraInput += used.inputTokens;
             usage.cameraOutput += used.outputTokens;
             usage.cameraFrames += used.frames;
-            cameraLog.push({ title: clip.title, result: result.pass ? "pass" : result.reason, at: result.pass ? undefined : result.at });
+            cameraLog.push({
+              title: clip.title,
+              result: result.pass ? "pass" : result.reason,
+              at: result.pass ? undefined : result.at,
+              via: result.pass ? undefined : result.via,
+            });
             return result;
           } catch (error) {
             // Fails closed: a clip nobody could check is not a first pick.

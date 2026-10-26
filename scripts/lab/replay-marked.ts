@@ -31,6 +31,7 @@ import {
   type BoundaryUnit,
   type StoryCheck,
 } from "@/lib/analysis/boundary-step";
+import { checkClipCamera } from "@/lib/analysis/camera-check-run";
 import { scoringModel } from "@/lib/analysis/claude-provider";
 import { snapClipEnd } from "@/lib/analysis/end-silence";
 import { assertLabEnvironment, formatClock, LabEnvironmentError, readArgs } from "./lab-guard";
@@ -59,7 +60,7 @@ export type ReplayRow = MarkedClip & {
   detail: Record<string, unknown>;
 };
 
-const FIXES = ["U", "V", "T", "W", "X"] as const;
+const FIXES = ["U", "V", "T", "W", "X", "Y"] as const;
 type Fix = (typeof FIXES)[number];
 /** Fix X: ask the end look (fix M) again on every clip it shows lines for; a control for the look's model variance. */
 let REASK = false;
@@ -77,7 +78,7 @@ async function main() {
   const concurrency = typeof args.get("concurrency") === "string" ? Number(args.get("concurrency")) : 4;
   const out = typeof args.get("out") === "string" ? (args.get("out") as string) : path.join(os.tmpdir(), `lab-replay-${fix}-${Date.now()}.json`);
 
-  assertLabEnvironment({ requireAnthropicKey: fix === "U" || fix === "X" });
+  assertLabEnvironment({ requireAnthropicKey: fix === "U" || fix === "X" || fix === "Y" });
 
   const prisma = new PrismaClient();
   const usage = { input: 0, output: 0, calls: 0 };
@@ -106,14 +107,14 @@ async function main() {
         orderBy: { createdAt: "desc" },
       });
       const span = ((steps?.metadata as { sermonSpan?: { span?: { startMs: number; endMs: number } | null } } | null)?.sermonSpan?.span ?? null);
-      // Fix V reads the recording. A project's own source file, or another lab copy of the same video.
+      // Fixes V and Y read the recording. A project's own source file, or another lab copy of the same video.
       let source: string | null = null;
-      if (fix === "V") {
+      if (fix === "V" || fix === "Y") {
         const originUrl = project.sourceVideo?.originUrl ?? null;
         const others = originUrl ? await prisma.sourceVideo.findMany({ where: { originUrl }, select: { storageKey: true } }) : [];
         const keys = [project.sourceVideo?.storageKey ?? null, ...others.map((s) => s.storageKey)];
         source = keys.map((k) => (k ? path.join(storageRoot, k) : null)).find((p): p is string => Boolean(p) && existsSync(p!)) ?? null;
-        if (!source) console.error(`${label.projectName}: no source file on disk, so fix V cannot replay its clips.`);
+        if (!source) console.error(`${label.projectName}: no source file on disk, so fix ${fix} cannot replay its clips.`);
       }
       projects.set(label.projectId, {
         segments: segments.map((s) => ({ idx: s.idx, startMs: s.startMs, endMs: s.endMs, text: s.text })),
@@ -172,6 +173,13 @@ async function main() {
       console.log(`Verse ends refused: ${verse}.` + (REASK ? ` The end look was asked again on ${asked} clips and moved ${lookMoved}.` : ""));
       console.log(`Model calls: ${usage.calls}, ${usage.input} input tokens, ${usage.output} output tokens.`);
     }
+    if (fix === "Y") {
+      const slides = rows.filter((r) => String(r.detail.outcome ?? "").startsWith("slide")).length;
+      const unchecked = rows.filter((r) => String(r.detail.outcome ?? "").startsWith("unchecked")).length;
+      const sceneFrames = rows.reduce((n, r) => n + Number(r.detail.sceneFrames ?? 0), 0);
+      const frames = rows.reduce((n, r) => n + Number(r.detail.frames ?? 0), 0);
+      console.log(`Slides found: ${slides}; unchecked: ${unchecked}. Frames shown: ${frames}, of them ${sceneFrames} at scene changes. Vision calls: ${usage.calls}, ${usage.input} input tokens.`);
+    }
     if (fix === "W") {
       const joined = rows.filter((r) => r.detail.ellipsisJoined).length;
       console.log(`The "..." fix: ${joined} marked clips end on a sentence that now runs on through a "..." segment.`);
@@ -206,6 +214,31 @@ async function replayOne(
   source: string | null,
 ): Promise<ReplayRow> {
   const range = { startMs: clip.startMs, endMs: clip.endMs };
+  if (fix === "Y") {
+    if (!source) return { ...clip, to: null, moved: false, detail: { error: "no source file on disk" } };
+    const { result, usage: used } = await checkClipCamera({
+      sourceFilePath: source,
+      startMs: range.startMs,
+      endMs: range.endMs,
+      workDir: path.join(os.tmpdir(), "lab-replay-camera"),
+    });
+    if (used.frames > 0) usage.calls += 1;
+    usage.input += used.inputTokens;
+    usage.output += used.outputTokens;
+    const detail: Record<string, unknown> = { frames: used.frames, sceneFrames: used.sceneFrames };
+    if (result.pass) return { ...clip, to: null, moved: false, detail };
+    return {
+      ...clip,
+      to: null,
+      moved: true,
+      detail: {
+        ...detail,
+        outcome: result.via ? `${result.reason} (${result.via})` : result.reason,
+        at: result.at,
+        reason: `${result.reason} at ${formatClock(Math.round(result.at * 1000))}, ${((result.at * 1000 - range.startMs) / 1000).toFixed(1)} s into the clip${result.via ? `, via ${result.via}` : ""}`,
+      },
+    };
+  }
   if (fix === "V") {
     if (!source) return { ...clip, to: null, moved: false, detail: { error: "no source file on disk" } };
     const snapped = await snapClipEnd(source, range);
