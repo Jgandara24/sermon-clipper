@@ -9,6 +9,7 @@ import {
   endLookLines,
   endLookPrompt,
   endsInsideList,
+  endsInsideParallelBlock,
   endsOnQuotationStart,
   checkStory,
   endsOnRecapIntoNextPoint,
@@ -1480,5 +1481,139 @@ describe("fix T: no end on a recap that leads into the next numbered point", () 
     const result = await lookPastTheEnd(units, range, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: look.end + 1, reason: "x" }));
     expect(result.range).toEqual(range);
     expect(result.look.refused).toBe(`Unit [${look.end + 1}] recaps the point and leads into the next numbered point.`);
+  });
+});
+
+// Lab sermon 5g clip 4 (2026-10-25), real lines. The clip ended on "Revival is an experience for God's
+// people." Jake: "I don't think he finished his point completely." The point runs on through six more
+// parallel lines to "of our Lord and Savior, Jesus Christ."
+const FIVE_G_C4 = boundaryContext(
+  [
+    { idx: 386, startMs: 1712656, endMs: 1712756, text: "Amen." },
+    { idx: 387, startMs: 1712816, endMs: 1720236, text: "Sometimes people get confused about revival, 'cause revival is not for lost people." },
+    { idx: 388, startMs: 1720756, endMs: 1723676, text: "See, only the vived can be revived." },
+    { idx: 389, startMs: 1723736, endMs: 1723836, text: "Yep." },
+    { idx: 390, startMs: 1724156, endMs: 1729176, text: "If you've never been saved, you don't need revival, but you need a resurrection- Yeah ..." },
+    { idx: 391, startMs: 1729176, endMs: 1734156, text: "because the Bible says the lost are dead in trespasses and sin." },
+    { idx: 392, startMs: 1734216, endMs: 1734356, text: "That's right." },
+    { idx: 393, startMs: 1734756, endMs: 1737256, text: "Revival is an experience for the church." },
+    { idx: 394, startMs: 1737756, endMs: 1740316, text: "Revival is an experience for God's people." },
+    { idx: 395, startMs: 1740816, endMs: 1743516, text: "It is a renewal in the body of Christ." },
+    { idx: 396, startMs: 1743556, endMs: 1743636, text: "Yeah." },
+    { idx: 397, startMs: 1743956, endMs: 1747796, text: "It is a spiritual awakening among the people of God." },
+    { idx: 398, startMs: 1748216, endMs: 1752336, text: "And in times of revival, people's hearts are warmed." },
+    { idx: 399, startMs: 1752856, endMs: 1756896, text: "In times of revival, God's people are drawn closer to the Lord." },
+    { idx: 400, startMs: 1757376, endMs: 1762956, text: "In times of revival, our vision is expanded, our faith is deepened." },
+    { idx: 401, startMs: 1763476, endMs: 1771696, text: "In times of revival, the very atmosphere of the church is literally electrified by the manifest presence- Yes" },
+    { idx: 402, startMs: 1771736, endMs: 1771836, text: "..." },
+    { idx: 403, startMs: 1771836, endMs: 1774596, text: "of our Lord and Savior, Jesus Christ." },
+    { idx: 404, startMs: 1774616, endMs: 1774716, text: "Right." },
+    { idx: 405, startMs: 1775116, endMs: 1775196, text: "Amen." },
+    { idx: 406, startMs: 1775196, endMs: 1779036, text: 'Now, some people say, "You know, revival\'s a bunch of emotionalism.' },
+    { idx: 407, startMs: 1780316, endMs: 1782056, text: 'You know, revivals don\'t last."' },
+    { idx: 408, startMs: 1782096, endMs: 1785716, text: "And I just say to the skeptics, neither does deodorant, but it sure helps." },
+    { idx: 409, startMs: 1786216, endMs: 1787796, text: "And if a revival- Amen ..." },
+    { idx: 410, startMs: 1787796, endMs: 1791636, text: "doesn't last but a couple of hours, I don't think it's gonna hurt anything in the church." },
+    { idx: 411, startMs: 1791716, endMs: 1791796, text: "Yeah." },
+    { idx: 412, startMs: 1792176, endMs: 1792196, text: "Amen." },
+  ],
+  { startMs: 1712816, endMs: 1740316 },
+  90_000,
+);
+const at5g = (idx: number) => FIVE_G_C4.units.findIndex((u) => u.idx === idx);
+
+// Lab sermon 1f clip 5 (passed), real lines: three pairs of parallel lines, no run of three.
+const ONE_F_C5 = wholeSentences([
+  { idx: 956, startMs: 3687740, endMs: 3693240, text: "But friend, lurking behind the next bush is your adversary, the Devil." },
+  { idx: 957, startMs: 3694880, endMs: 3694960, text: "Amen." },
+  { idx: 958, startMs: 3694960, endMs: 3703440, text: "And he's gonna pounce on you, and he's gonna swallow you down so quick that you won't even recognize it, because" },
+  { idx: 959, startMs: 3703480, endMs: 3704700, text: "he's setting you up." },
+  { idx: 960, startMs: 3706040, endMs: 3706780, text: "Be sober." },
+  { idx: 961, startMs: 3707040, endMs: 3707800, text: "Be vigilant." },
+  { idx: 962, startMs: 3708680, endMs: 3712380, text: "He's gonna swallow you up because you haven't been watching." },
+  { idx: 963, startMs: 3713720, endMs: 3714820, text: "You haven't been praying." },
+  { idx: 964, startMs: 3716220, endMs: 3717320, text: "You haven't been sober." },
+  { idx: 965, startMs: 3718440, endMs: 3719820, text: "You haven't been in the Word." },
+  { idx: 966, startMs: 3721160, endMs: 3725000, text: "You haven't been vigilant, and you think you're gonna make it?" },
+  { idx: 967, startMs: 3726440, endMs: 3727140, text: "You will not." },
+  { idx: 968, startMs: 3728020, endMs: 3728560, text: "You will not." },
+  { idx: 969, startMs: 3730560, endMs: 3734760, text: "Simon Peter knew, and you're not any better a man than he was." },
+  { idx: 970, startMs: 3735960, endMs: 3743540, text: "Simon Peter went down, and so will you if you don't do what Simon Peter says to do today." },
+  { idx: 971, startMs: 3744120, endMs: 3747060, text: "Be sober, be vigilant, and watch." },
+]);
+const at1f5 = (idx: number) => ONE_F_C5.findIndex((u) => u.idx === idx);
+
+describe("fix W: no end inside a block of parallel lines", () => {
+  it('runs an open sentence through a "..." segment instead of closing it there', () => {
+    const unit = FIVE_G_C4.units[at5g(401)];
+    expect(unit.text).toBe(
+      "In times of revival, the very atmosphere of the church is literally electrified by the manifest presence- Yes ... of our Lord and Savior, Jesus Christ.",
+    );
+    expect(unit.endMs).toBe(1774596);
+    expect(at5g(402)).toBe(-1);
+    expect(at5g(403)).toBe(-1);
+  });
+
+  it('drops a "..." segment that follows a closed sentence', () => {
+    const units = wholeSentences([
+      { idx: 1, startMs: 0, endMs: 1_000, text: "Amen." },
+      { idx: 2, startMs: 1_000, endMs: 1_100, text: "..." },
+      { idx: 3, startMs: 1_100, endMs: 2_000, text: "Now listen." },
+    ]);
+    expect(units.map((u) => u.text)).toEqual(["Amen.", "Now listen."]);
+  });
+
+  it('finds the block: "Revival is" twice, "It is" twice, "In times" four times, and where it ends', () => {
+    expect(endsInsideParallelBlock(FIVE_G_C4.units, at5g(394))).toEqual({
+      first: at5g(393),
+      last: at5g(401),
+      openings: ["Revival is", "It is", "in times"],
+    });
+    expect(endsInsideParallelBlock(FIVE_G_C4.units, at5g(397))).toMatchObject({ last: at5g(401) });
+    expect(endsInsideParallelBlock(FIVE_G_C4.units, at5g(399))).toMatchObject({ last: at5g(401) });
+  });
+
+  it("accepts an end on the block's last line, after it, or before it", () => {
+    expect(endsInsideParallelBlock(FIVE_G_C4.units, at5g(401))).toBeNull();
+    expect(endsInsideParallelBlock(FIVE_G_C4.units, at5g(408))).toBeNull();
+    expect(endsInsideParallelBlock(FIVE_G_C4.units, at5g(391))).toBeNull();
+  });
+
+  it("refuses Jake's failed end and says where the block ends; accepts the block's last line", () => {
+    const refusal = boundaryRefusal(FIVE_G_C4, { startUnit: at5g(387), endUnit: at5g(394) });
+    expect(refusal).toContain(`is inside a run of parallel lines: units [${at5g(393)}] to [${at5g(401)}] open with "Revival is", "It is", "in times"`);
+    expect(refusal).toContain(`End after its last line, unit [${at5g(401)}]`);
+    expect(applyBoundaryChoice(FIVE_G_C4, { startUnit: at5g(387), endUnit: at5g(401) })).toMatchObject({ startMs: 1712816, endMs: 1774596 });
+  });
+
+  it("needs one run of three or more: lab sermon 1f clip 5's three pairs are not a block (passed)", () => {
+    expect(endsInsideParallelBlock(ONE_F_C5, at1f5(968))).toBeNull();
+    expect(endsInsideParallelBlock(ONE_F_C5, at1f5(962))).toBeNull();
+    expect(endsInsideParallelBlock(ONE_F_C5, at1f5(965))).toBeNull();
+  });
+
+  it("chains runs across a full line, but an end on that line is not inside: lab sermon 4b clips 1 and 4", () => {
+    // "And everywhere God speaks, it is absolute truth." sits between the "That's why" pair and the "What God says"
+    // list. Jake's end is right after it, on "Amen."; an end on the pair's last line is inside.
+    expect(endsInsideParallelBlock(FOUR_B_C1.units, at1(769))).toBeNull();
+    expect(endsInsideParallelBlock(FOUR_B_C1.units, at1(768))).toBeNull();
+    expect(endsInsideParallelBlock(FOUR_B_C1.units, at1(767))).toEqual({ first: at1(766), last: at1(777), openings: ["That's why", "What God"] });
+    expect(applyBoundaryChoice(FOUR_B_C1, { startUnit: at1(758), endUnit: at1(769) })).toMatchObject({ endMs: 3397886 });
+    expect(endsInsideParallelBlock(FOUR_B_C4.units, at4(466))).toEqual({ first: at4(465), last: at4(471), openings: ["I want", "We're gonna"] });
+    expect(endsInsideParallelBlock(FOUR_B_C4.units, at4(467))).toBeNull();
+    expect(endsInsideParallelBlock(FOUR_B_C4.units, at4(471))).toBeNull();
+  });
+
+  it("counts a call-out right after a line of the block as an end on that line", () => {
+    expect(endsInsideParallelBlock(FIVE_G_C4.units, at5g(396))).toMatchObject({ last: at5g(401) });
+  });
+
+  it("refuses a new end from the look past the end when it is inside the block", async () => {
+    const range = { startMs: 1712816, endMs: 1737256 };
+    const look = endLookLines(FIVE_G_C4.units, range)!;
+    expect(look.lines[look.end].text).toBe("Revival is an experience for the church.");
+    const result = await lookPastTheEnd(FIVE_G_C4.units, range, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: look.end + 1, reason: "x" }));
+    expect(result.look.refused).toMatch(/inside a run of parallel lines/);
+    expect(result.range.endMs).toBeLessThanOrEqual(range.endMs);
   });
 });

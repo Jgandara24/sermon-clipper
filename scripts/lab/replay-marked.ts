@@ -20,6 +20,7 @@ import {
   boundaryContext,
   BoundaryChoiceSchema,
   checkStory,
+  endsInsideParallelBlock,
   endsOnRecapIntoNextPoint,
   StoryCheckSchema,
   type BoundaryTurn,
@@ -54,7 +55,7 @@ export type ReplayRow = MarkedClip & {
   detail: Record<string, unknown>;
 };
 
-const FIXES = ["U", "V", "T"] as const;
+const FIXES = ["U", "V", "T", "W"] as const;
 type Fix = (typeof FIXES)[number];
 
 async function main() {
@@ -157,6 +158,10 @@ async function main() {
       console.log(`Story check: ${by("extended")} extended, ${by("restarted")} restarted, ${by("unresolved")} unresolved (story goes on, no landing found).`);
       console.log(`Model calls: ${usage.calls}, ${usage.input} input tokens, ${usage.output} output tokens.`);
     }
+    if (fix === "W") {
+      const joined = rows.filter((r) => r.detail.ellipsisJoined).length;
+      console.log(`The "..." fix: ${joined} marked clips end on a sentence that now runs on through a "..." segment.`);
+    }
     if (fix === "V" && moved.length > 0) {
       const sizes = moved.map((r) => Math.abs(Number(r.detail.movedMs)));
       console.log(`Cut moves: ${Math.min(...sizes)} to ${Math.max(...sizes)} ms back into the pause.`);
@@ -195,6 +200,26 @@ async function replayOne(
       : { ...clip, to: null, moved: false, detail: {} };
   }
   const context = boundaryContext(segments, range);
+  if (fix === "W") {
+    const { units, currentStart, currentEnd } = context;
+    // The "..." fix: a marked end whose sentence now runs on through a "..." segment.
+    const ellipsisJoined = /\s\.\.\.\s/.test(units[currentEnd].text);
+    const block = currentEnd > currentStart ? endsInsideParallelBlock(units, currentEnd) : null;
+    if (!block) return { ...clip, to: null, moved: false, detail: ellipsisJoined ? { ellipsisJoined } : {} };
+    const endMs = units[block.last].endMs;
+    return {
+      ...clip,
+      to: [range.startMs, endMs],
+      moved: true,
+      detail: {
+        outcome: endMs - range.startMs > 90_000 ? "block end, over 90 s" : "block end",
+        movedMs: endMs - range.endMs,
+        openings: block.openings,
+        reason: `parallel lines open with ${block.openings.map((o) => `"${o}"`).join(", ")}; the block ends on "${units[block.last].text.slice(0, 80)}"`,
+        ellipsisJoined,
+      },
+    };
+  }
   if (fix === "T") {
     const { units, currentStart, currentEnd } = context;
     if (currentEnd > currentStart && endsOnRecapIntoNextPoint(units, currentEnd)) {
