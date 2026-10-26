@@ -13,6 +13,7 @@ import {
   endsOnQuotationStart,
   checkStory,
   endsOnRecapIntoNextPoint,
+  recapIntoNextPoint,
   readsVerse,
   readsVerseNext,
   storyLookLines,
@@ -23,6 +24,7 @@ import {
   lookPastTheEnd,
   prayerInClip,
   wholeSentences,
+  type BoundaryUnit,
 } from "@/lib/analysis/boundary-step";
 
 // Real lines from lab sermon 1b around clip 2 (1:11:45–1:12:09), which Jake failed:
@@ -78,7 +80,7 @@ describe("boundaryContext and boundaryPrompt", () => {
   const prompt = boundaryPrompt(context);
 
   it("states the founder's start and end rules", () => {
-    expect(prompt).toMatch(/where the thought starts/i);
+    expect(prompt).toMatch(/start on the hook/i);
     expect(prompt).toMatch(/where the point lands/i);
     expect(prompt).toMatch(/never start on the scripture reading/i);
     expect(prompt).toMatch(/30 to 60 seconds/);
@@ -1693,5 +1695,126 @@ describe("fix X: no end on a verse reading", () => {
     expect(result.range).toEqual(range);
     expect(result.look.refused).toMatch(/reads the Scripture/);
     expect(result.look.dropped).toBeUndefined();
+  });
+});
+
+// Fix Z (2026-10-25). Real lines from lab sermon 1p around clip 4's end (56:26–57:10). The recap before
+// "But then the third thing" runs two lines. Jake: 'should have ended at "He cares for you. He cares for
+// you. He loves you. He loves you."'
+const ONE_P_C4_END: BoundaryUnit[] = [
+  { idx: 760, startMs: 3386530, endMs: 3390350, text: "You're being misused, you're being abused, some of you are feeling beat up." },
+  { idx: 761, startMs: 3390810, endMs: 3393990, text: "Cast your burden upon the Lord." },
+  { idx: 762, startMs: 3394510, endMs: 3397850, text: "Cast your burden upon the Lord." },
+  { idx: 763, startMs: 3398270, endMs: 3401930, text: "Cast your burden upon the Lord." },
+  { idx: 764, startMs: 3402210, endMs: 3404690, text: "He cares for you." },
+  { idx: 765, startMs: 3405110, endMs: 3408930, text: "He cares for you." },
+  { idx: 766, startMs: 3409450, endMs: 3410370, text: "He loves you." },
+  { idx: 767, startMs: 3410870, endMs: 3411670, text: "He loves you." },
+  { idx: 768, startMs: 3414110, endMs: 3417390, text: "So, so there must be this spirit of servitude." },
+  { idx: 769, startMs: 3418070, endMs: 3423590, text: "There must be this spirit of serenity as you cast your troubles upon the Lord and He cares for you." },
+  { idx: 770, startMs: 3424070, endMs: 3428650, text: "But then the third thing that you need to put in this kit is a spirit of sobriety." },
+  { idx: 771, startMs: 3429690, endMs: 3430310, text: "Sobriety." },
+];
+
+describe("fix Z: the recap before the next point may run two lines (lab sermon 1p clip 4)", () => {
+  const units = ONE_P_C4_END;
+  const so = units.findIndex((u) => u.text.startsWith("So, so there must"));
+
+  it("finds both recap lines before \"But then the third thing\"", () => {
+    expect(recapIntoNextPoint(units, so + 1)).toEqual({ first: so });
+    expect(endsOnRecapIntoNextPoint(units, so + 1)).toBe(true);
+    // The line after the "So" line is the recap's second line, not the next point.
+    expect(recapIntoNextPoint(units, so)).toBeNull();
+    expect(recapIntoNextPoint(units, so - 1)).toBeNull();
+    expect(recapIntoNextPoint(units, units.length - 1)).toBeNull();
+  });
+
+  it("needs the same opening words on the earlier line", () => {
+    const changed = units.map((u, i) => (i === so ? { ...u, text: "So cast it on Him and leave it there." } : u));
+    expect(recapIntoNextPoint(changed, so + 1)).toBeNull();
+  });
+
+  it("still finds a one-line recap (fix T, lab sermon 1n clip 2)", () => {
+    const oneLine = units.filter((_, i) => i !== so);
+    const recap = oneLine.findIndex((u) => u.text.startsWith("There must be this spirit of serenity"));
+    expect(recapIntoNextPoint(oneLine, recap)).toBeNull(); // no "So": not a recap
+    const withSo = oneLine.map((u, i) => (i === recap ? { ...u, text: "So there must be this spirit of serenity." } : u));
+    expect(recapIntoNextPoint(withSo, recap)).toEqual({ first: recap });
+  });
+
+  it("moves lab sermon 1p clip 4's end back onto the second \"He loves you.\"", () => {
+    const context = boundaryContext(units, { startMs: units[0].startMs, endMs: units[so + 1].endMs });
+    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: so + 1 })).toEqual({
+      startMs: units[0].startMs,
+      endMs: units[so - 1].endMs,
+      adjustedForScripture: false,
+      adjustedEnd: true,
+    });
+  });
+});
+
+describe("fix Z: the prompts start on the hook, end on the strongest line, and prefer the shorter clip", () => {
+  const prompt = boundaryPrompt(boundaryContext(CLIP5, { startMs: 3455184, endMs: 3522400 }, 90_000));
+
+  it("tells the model to start on the hook and skip the lead-in", () => {
+    expect(prompt).toContain("Start on the hook: the first line that would stop a viewer scrolling.");
+    expect(prompt).toContain("Look for the hook in the first 35 seconds of the current clip.");
+    expect(prompt).toContain("skip the lines that lead into the hook, even when they introduce the theme");
+    expect(prompt).toContain("Never move the start later than that to hunt for a hook");
+    expect(prompt).toContain("start on the hook, not on the announcement.");
+    expect(prompt).not.toContain("the first sentence a viewer with no context needs");
+  });
+
+  it("tells the model to stop on the punch line and to prefer the shorter clip", () => {
+    expect(prompt).toContain("End on the strongest line, not on the last related line.");
+    expect(prompt).toContain("Go past 60 only when the point cannot land sooner");
+    expect(prompt).toContain("A later start on the hook and an earlier end on the punch line both shorten the clip");
+  });
+
+  it("tells the end look never to move past a punch line", () => {
+    const look = endLookLines(ONE_P_C4_END, { startMs: ONE_P_C4_END[0].startMs, endMs: ONE_P_C4_END[6].endMs });
+    expect(look).not.toBeNull();
+    expect(endLookPrompt(look!.lines, look!.end, look!.last)).toContain(
+      "Never move past a line like that to add a supporting verse, a reason, or a restatement of it",
+    );
+  });
+
+  it("lets the lab's control run pass the prompts as they were", async () => {
+    const units = ONE_P_C4_END;
+    const context = boundaryContext(units, { startMs: units[0].startMs, endMs: units[7].endMs });
+    const ask = vi.fn(async () => ({ startUnit: 0, endUnit: 7, reason: "test" }));
+    const chosen = await chooseBoundary(context, ask, undefined, null, () => "CUSTOM BOUNDARY PROMPT");
+    expect(ask).toHaveBeenCalledWith([{ role: "user", content: "CUSTOM BOUNDARY PROMPT" }]);
+    expect(chosen.range).toMatchObject({ startMs: units[0].startMs, endMs: units[7].endMs });
+    const askLook = vi.fn(async () => ({ finishesLater: false, endUnit: 6, reason: "test" }));
+    await lookPastTheEnd(units, { startMs: units[0].startMs, endMs: units[6].endMs }, askLook, 90_000, () => "CUSTOM LOOK PROMPT");
+    expect(askLook).toHaveBeenCalledWith("CUSTOM LOOK PROMPT");
+  });
+});
+
+describe("fix Z: the hook sits within the first 35 seconds of the current clip", () => {
+  // EVEN: unit i runs i*3000 to i*3000+2900, and the current clip is units 10 to 19 (30 to 59.9 s).
+  it("refuses a first answer that starts more than 35 seconds after the current start", () => {
+    const refused = boundaryRefusal(EVEN, { startUnit: 22, endUnit: 31 });
+    expect(refused).toContain("Unit [22] starts 36.0 seconds after the current clip's start, unit [10].");
+    expect(refused).toContain("start on unit [10], on a line up to unit [21], or earlier.");
+    expect(boundaryRefusal(EVEN, { startUnit: 21, endUnit: 30 })).toBeNull();
+    expect(boundaryRefusal(EVEN, { startUnit: 5, endUnit: 15 })).toBeNull();
+  });
+
+  it("lets the clip start later once an answer ran too long, and when the story check holds the end", async () => {
+    const answers = [
+      { startUnit: 0, endUnit: 31, reason: "too long" },
+      { startUnit: 22, endUnit: 31, reason: "later" },
+    ];
+    const ask = vi.fn(async () => answers.shift()!);
+    const chosen = await chooseBoundary(EVEN, ask);
+    expect(chosen.attempts[0].refused).toContain("must not run past 90 seconds");
+    expect(chosen.range).toMatchObject({ startMs: 66_000 });
+    const held = await chooseBoundary(EVEN, async () => ({ startUnit: 22, endUnit: 30, reason: "held" }), undefined, {
+      endUnit: 30,
+      why: "The story lands at unit [30].",
+    });
+    expect(held.range).toMatchObject({ startMs: 66_000 });
   });
 });

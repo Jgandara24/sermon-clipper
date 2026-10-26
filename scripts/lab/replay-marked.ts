@@ -17,18 +17,27 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { PrismaClient } from "@prisma/client";
 import {
+  BOUNDARY_CUT_MAX_MS,
+  BOUNDARY_MAX_MS,
+  BOUNDARY_MIN_MS,
   boundaryContext,
   BoundaryChoiceSchema,
+  boundaryPrompt,
   checkStory,
+  chooseBoundary,
   endLookLines,
+  endLookPrompt,
   EndLookSchema,
   endsInsideParallelBlock,
-  endsOnRecapIntoNextPoint,
   lookPastTheEnd,
   readsVerse,
+  recapIntoNextPoint,
   StoryCheckSchema,
+  type BoundaryContext,
+  type BoundaryLimits,
   type BoundaryTurn,
   type BoundaryUnit,
+  type HeldEnd,
   type StoryCheck,
 } from "@/lib/analysis/boundary-step";
 import { checkClipCamera } from "@/lib/analysis/camera-check-run";
@@ -60,25 +69,83 @@ export type ReplayRow = MarkedClip & {
   detail: Record<string, unknown>;
 };
 
-const FIXES = ["U", "V", "T", "W", "X", "Y"] as const;
+const FIXES = ["U", "V", "T", "W", "X", "Y", "Z"] as const;
 type Fix = (typeof FIXES)[number];
 /** Fix X: ask the end look (fix M) again on every clip it shows lines for; a control for the look's model variance. */
 let REASK = false;
+/** Fix Z: run the boundary step and the end look with the prompts as they were before the fix. */
+let CONTROL = false;
+
+/**
+ * Fix Z's control prompts: the new prompt with each changed sentence put back. Each swap must apply, or
+ * the control is not the prompt that ran before.
+ */
+function swap(text: string, from: string, to: string): string {
+  if (!text.includes(from)) throw new Error(`Control prompt: the text "${from.slice(0, 50)}…" is not in the prompt any more.`);
+  return text.replace(from, to);
+}
+const HOOK_RULES = /- Start on the hook: the first line that would stop a viewer scrolling\.[\s\S]*?start on the hook, not on the announcement\.\n/;
+function classicBoundaryPrompt(context: BoundaryContext, hold: HeldEnd | null): string {
+  let text = boundaryPrompt(context, hold);
+  if (!HOOK_RULES.test(text)) throw new Error("Control prompt: the hook rules are not in the prompt any more.");
+  text = text.replace(
+    HOOK_RULES,
+    "- Start where the thought starts: the first sentence a viewer with no context needs to follow this idea. " +
+      "Prefer an opening line that catches attention.\n",
+  );
+  text = swap(
+    text,
+    "Stop there: a supporting verse, a reason, or a restatement he adds after the punch line is not the ending. End on the " +
+      "strongest line, not on the last related line. ",
+    "",
+  );
+  text = swap(text, "the hook, the explanation or story, and the payoff", "the setup, the explanation or story, and the payoff");
+  text = swap(text, "Go past 60 only when the point cannot land sooner, and then by as little as it needs; when the point needs", "When the point needs");
+  text = swap(text, " A later start on the hook and an earlier end on the punch line both shorten the clip; prefer them to a longer clip.", "");
+  return text;
+}
+const classicEndLookPrompt: typeof endLookPrompt = (lines, end, last) =>
+  swap(
+    endLookPrompt(lines, end, last),
+    "Never move past a line like that to add a supporting verse, a reason, or a restatement of it: the clip ends on the " +
+      "strongest line, not on the last related line. ",
+    "",
+  );
+
+/** Fix Z's targets: the lines Jake named for the nine clips he failed in the fix W + X + Y round, as search keys. */
+const WANTED: { sermon: string; rank: number; start?: string[]; end?: string[] }[] = [
+  { sermon: "Lab 1p", rank: 2, start: ["here's my question today"] },
+  { sermon: "Lab 1p", rank: 1, start: ["stronger and mightier than the devil"], end: ["power of the lord jesus christ"] },
+  { sermon: "Lab 1p", rank: 4, end: ["he loves you"] },
+  { sermon: "Lab 1p", rank: 6, start: ["you know what jesus wants to do today"] },
+  { sermon: "Lab 2l", rank: 2, start: ["listen to me, church", "never give up on anybody"] },
+  { sermon: "Lab 2l", rank: 6, start: ["give you some hope tonight"] },
+  { sermon: "Lab 3l", rank: 2, end: ["today's the day of salvation"] },
+  { sermon: "Lab 4j", rank: 3, start: ["the gospel never changes"] },
+  { sermon: "Lab 5h", rank: 2, start: ["got their doctrine straight"] },
+  { sermon: "Lab 5h", rank: 4, start: ["the bible says jesus felt something go out of him"] },
+];
+const norm = (text: string) => text.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z0-9', ]/g, " ").replace(/\s+/g, " ").trim();
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+};
 
 async function main() {
   const args = readArgs(process.argv.slice(2));
   const fixArg = args.get("fix");
   if (typeof fixArg !== "string" || !(FIXES as readonly string[]).includes(fixArg)) {
-    console.error(`Usage: npm run lab:replay -- --fix ${FIXES.join("|")} [--only "Lab 1n"] [--concurrency 4] [--out replay.json] [--reask]`);
+    console.error(`Usage: npm run lab:replay -- --fix ${FIXES.join("|")} [--only "Lab 1n"] [--concurrency 4] [--out replay.json] [--reask] [--control]`);
     process.exit(2);
   }
   const fix = fixArg as Fix;
   const only = typeof args.get("only") === "string" ? (args.get("only") as string) : null;
   REASK = args.get("reask") === true;
+  CONTROL = args.get("control") === true;
   const concurrency = typeof args.get("concurrency") === "string" ? Number(args.get("concurrency")) : 4;
   const out = typeof args.get("out") === "string" ? (args.get("out") as string) : path.join(os.tmpdir(), `lab-replay-${fix}-${Date.now()}.json`);
 
-  assertLabEnvironment({ requireAnthropicKey: fix === "U" || fix === "X" || fix === "Y" });
+  assertLabEnvironment({ requireAnthropicKey: fix === "U" || fix === "X" || fix === "Y" || fix === "Z" });
 
   const prisma = new PrismaClient();
   const usage = { input: 0, output: 0, calls: 0 };
@@ -173,6 +240,31 @@ async function main() {
       console.log(`Verse ends refused: ${verse}.` + (REASK ? ` The end look was asked again on ${asked} clips and moved ${lookMoved}.` : ""));
       console.log(`Model calls: ${usage.calls}, ${usage.input} input tokens, ${usage.output} output tokens.`);
     }
+    if (fix === "Z") {
+      const ok = rows.filter((r) => !r.detail.error && typeof r.detail.seconds === "number");
+      const count = (verdict: string, key: "startMoved" | "endMoved") => ok.filter((r) => r.verdict === verdict && r.detail[key] === true).length;
+      const okPass = ok.filter((r) => r.verdict === "pass").length;
+      const okFail = ok.filter((r) => r.verdict === "fail").length;
+      console.log(
+        `${CONTROL ? "Control (the prompts before fix Z)" : "Fix Z"}: passed clips: ${count("pass", "startMoved")} of ${okPass} starts move, ` +
+          `${count("pass", "endMoved")} of ${okPass} ends move. Failed clips: ${count("fail", "startMoved")} of ${okFail} starts move, ` +
+          `${count("fail", "endMoved")} of ${okFail} ends move. No range after three refusals: ${rows.length - ok.length - rows.filter((r) => r.detail.error).length}.`,
+      );
+      const wantStart = rows.filter((r) => r.detail.wantStart !== undefined);
+      const wantEnd = rows.filter((r) => r.detail.wantEnd !== undefined);
+      console.log(
+        `Jake's wanted lines: start hit on ${wantStart.filter((r) => r.detail.wantStart === true).length} of ${wantStart.length}, ` +
+          `end hit on ${wantEnd.filter((r) => r.detail.wantEnd === true).length} of ${wantEnd.length}.`,
+      );
+      const over = (key: "seconds" | "secondsWas") => ok.filter((r) => Number(r.detail[key]) > 60).length;
+      const passRows = ok.filter((r) => r.verdict === "pass");
+      console.log(
+        `Over 60 seconds: ${over("secondsWas")} of ${ok.length} before, ${over("seconds")} after. Median length: ` +
+          `${median(ok.map((r) => Number(r.detail.secondsWas))).toFixed(1)} s before, ${median(ok.map((r) => Number(r.detail.seconds))).toFixed(1)} s after. ` +
+          `Passed clips over 60 s: ${passRows.filter((r) => Number(r.detail.secondsWas) > 60).length} before, ${passRows.filter((r) => Number(r.detail.seconds) > 60).length} after.`,
+      );
+      console.log(`Model calls: ${usage.calls}, ${usage.input} input tokens, ${usage.output} output tokens.`);
+    }
     if (fix === "Y") {
       const slides = rows.filter((r) => String(r.detail.outcome ?? "").startsWith("slide")).length;
       const unchecked = rows.filter((r) => String(r.detail.outcome ?? "").startsWith("unchecked")).length;
@@ -195,6 +287,8 @@ async function main() {
           `  ${r.sermon.padEnd(8)} clip ${r.rank} ${r.verdict.toUpperCase().padEnd(4)} tests=${JSON.stringify(r.failedTests)}  ` +
             `${formatClock(r.startMs)}-${formatClock(r.endMs)} -> ${r.to ? `${formatClock(r.to[0])}-${formatClock(r.to[1])}` : "null"}  ${String(r.detail.outcome ?? "")}` +
             (r.note ? `\n           Jake: ${r.note.trim().slice(0, 160)}` : "") +
+            (r.detail.startMoved ? `\n           start: "${String(r.detail.startWas)}" -> "${String(r.detail.startNow)}"` : "") +
+            (r.detail.endMoved ? `\n           end: "${String(r.detail.endWas)}" -> "${String(r.detail.endNow)}"` : "") +
             (r.detail.reason ? `\n           model: ${String(r.detail.reason).slice(0, 200)}` : ""),
         );
       }
@@ -305,16 +399,93 @@ async function replayOne(
   }
   if (fix === "T") {
     const { units, currentStart, currentEnd } = context;
-    if (currentEnd > currentStart && endsOnRecapIntoNextPoint(units, currentEnd)) {
-      const endMs = units[currentEnd - 1].endMs;
+    const recap = currentEnd > currentStart ? recapIntoNextPoint(units, currentEnd) : null;
+    if (recap && recap.first > currentStart) {
+      const endMs = units[recap.first - 1].endMs;
+      const lines = currentEnd - recap.first + 1;
       return {
         ...clip,
         to: [range.startMs, endMs],
         moved: true,
-        detail: { outcome: "recap dropped", movedMs: endMs - range.endMs, dropped: units[currentEnd].text, next: units[currentEnd + 1]?.text },
+        detail: {
+          outcome: lines === 1 ? "recap dropped" : `recap of ${lines} lines dropped`,
+          movedMs: endMs - range.endMs,
+          dropped: units.slice(recap.first, currentEnd + 1).map((u) => u.text).join(" "),
+          next: units[currentEnd + 1]?.text,
+          reason: `recap "${units.slice(recap.first, currentEnd + 1).map((u) => u.text).join(" ").slice(0, 100)}" before "${(units[currentEnd + 1]?.text ?? "").slice(0, 60)}"`,
+        },
       };
     }
     return { ...clip, to: null, moved: false, detail: {} };
+  }
+  if (fix === "Z") {
+    const { units, currentStart, currentEnd } = context;
+    const client = new Anthropic();
+    const askBoundary = async (turns: BoundaryTurn[]) => {
+      const message = await client.messages.create({
+        model: scoringModel(),
+        max_tokens: 1000,
+        thinking: { type: "disabled" },
+        messages: turns,
+        output_config: { format: zodOutputFormat(BoundaryChoiceSchema) },
+      });
+      usage.calls += 1;
+      usage.input += message.usage.input_tokens;
+      usage.output += message.usage.output_tokens;
+      const block = message.content.find((b) => b.type === "text");
+      return BoundaryChoiceSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
+    };
+    const askLook = async (prompt: string) => {
+      const message = await client.messages.create({
+        model: scoringModel(),
+        max_tokens: 600,
+        thinking: { type: "disabled" },
+        messages: [{ role: "user", content: prompt }],
+        output_config: { format: zodOutputFormat(EndLookSchema) },
+      });
+      usage.calls += 1;
+      usage.input += message.usage.input_tokens;
+      usage.output += message.usage.output_tokens;
+      const block = message.content.find((b) => b.type === "text");
+      return EndLookSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
+    };
+    const detail: Record<string, unknown> = {
+      control: CONTROL,
+      startWas: units[currentStart].text.slice(0, 100),
+      endWas: units[currentEnd].text.slice(0, 100),
+      secondsWas: (range.endMs - range.startMs) / 1000,
+    };
+    // The control runs without fix Z's hook window as well as with the prompts before it.
+    const limits: BoundaryLimits | undefined = CONTROL ? { minMs: BOUNDARY_MIN_MS, maxMs: BOUNDARY_MAX_MS, cutMaxMs: BOUNDARY_CUT_MAX_MS } : undefined;
+    const chosen = await chooseBoundary(context, askBoundary, limits, null, CONTROL ? classicBoundaryPrompt : boundaryPrompt);
+    detail.attempts = chosen.attempts.map(({ startUnit, endUnit, refused }) => ({ startUnit, endUnit, refused }));
+    detail.reason = chosen.attempts.at(-1)?.reason;
+    if (!chosen.range) return { ...clip, to: null, moved: false, detail: { ...detail, outcome: "no range: three answers refused" } };
+    let final = { startMs: chosen.range.startMs, endMs: chosen.range.endMs };
+    const looked = await lookPastTheEnd(units, final, askLook, BOUNDARY_MAX_MS, CONTROL ? classicEndLookPrompt : endLookPrompt);
+    final = looked.range;
+    detail.look = looked.look;
+    const startUnit = units.findIndex((u) => u.endMs > final.startMs);
+    let endUnit = units.length - 1;
+    while (endUnit > startUnit && units[endUnit].startMs >= final.endMs) endUnit -= 1;
+    const startMoved = startUnit !== currentStart;
+    const endMoved = endUnit !== currentEnd;
+    detail.startMoved = startMoved;
+    detail.endMoved = endMoved;
+    detail.startNow = units[startUnit].text.slice(0, 100);
+    detail.endNow = units[endUnit].text.slice(0, 100);
+    detail.seconds = (final.endMs - final.startMs) / 1000;
+    const want = WANTED.find((w) => w.sermon === clip.sermon && w.rank === clip.rank);
+    if (want?.start) detail.wantStart = want.start.some((key) => norm(units[startUnit].text).includes(key));
+    if (want?.end) detail.wantEnd = want.end.some((key) => norm(units[endUnit].text).includes(key));
+    const parts: string[] = [];
+    if (startMoved) parts.push(`start ${final.startMs > range.startMs ? "+" : ""}${((final.startMs - range.startMs) / 1000).toFixed(1)} s`);
+    if (endMoved) parts.push(`end ${final.endMs > range.endMs ? "+" : ""}${((final.endMs - range.endMs) / 1000).toFixed(1)} s`);
+    if (want) parts.push(`wanted ${want.start ? `start ${detail.wantStart ? "HIT" : "miss"}` : ""}${want.start && want.end ? ", " : ""}${want.end ? `end ${detail.wantEnd ? "HIT" : "miss"}` : ""}`);
+    parts.push(`${detail.secondsWas} -> ${(detail.seconds as number).toFixed(1)} s`);
+    detail.outcome = parts.join("; ");
+    const moved = startMoved || endMoved;
+    return { ...clip, to: moved ? [final.startMs, final.endMs] : null, moved, detail };
   }
   if (fix === "U") {
     const client = new Anthropic();
