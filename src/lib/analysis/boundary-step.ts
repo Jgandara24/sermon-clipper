@@ -291,6 +291,29 @@ export function endsInsideParallelBlock(units: BoundaryUnit[], endUnit: number):
   return null;
 }
 
+// Fix X (lab sermon 4i clip 6, 2026-10-25): the clip ended on 'He says there, "Yes, I think it is right
+// as long as I am in this tent to stir you up by reminding you of this truth."', the verse 13 quote,
+// with the preacher's application right after it. Jake: "he doesn't end with a powerful statement
+// about the scripture he read, it's just the last verse. The clips should always start and end with
+// a powerful statement / commentary." He passed 4d clip 4, the same verses with the application.
+// The prompt already says never to stop right after a verse; the code now refuses it. A line reads a
+// verse when it names a verse, chapter or book and quotes words, or quotes words right after a line
+// that names one. Over the 274 marked clips, no passed clip ends on such a line; 4i clip 6 does.
+const VERSE_REF = /\b(?:verses?|chapter)\s+\w+/i;
+const BOOK_CHAPTER = new RegExp(`\\b(?:(?:first|second|third|1st|2nd|3rd|[123]|i{1,3})\\s+)?(?:${BOOKS})\\s+(?:\\d+|chapter)\\b`, "i");
+const BIBLE_SAYS = /\b(?:the bible says|the word of god says|the scripture says|scripture says)\b/i;
+const SAYS_THEN_QUOTE = /\b(?:says?|said|wrote|writes|reads?)\b[^"“]{0,25}["“]/i;
+const QUOTED_WORDS = /["“][^"”]{12,}/;
+const namesScripture = (text: string) => VERSE_REF.test(text) || BOOK_CHAPTER.test(text) || BIBLE_SAYS.test(text);
+const quotesWords = (text: string) => SAYS_THEN_QUOTE.test(text) || QUOTED_WORDS.test(text) || /^\W*["“]/.test(text);
+
+/** True when the line reads or quotes a verse: it names Scripture and quotes words, or quotes words right after a line that names Scripture. */
+export function readsVerse(units: BoundaryUnit[], unit: number): boolean {
+  const text = units[unit].text;
+  if (namesScripture(text) && quotesWords(text)) return true;
+  return unit > 0 && quotesWords(text) && namesScripture(units[unit - 1].text);
+}
+
 // Fix K1 (lab sermon 4c clips 5 and 6, 2026-10-20): "three things that are certain", then "First of
 // all", and the clip ends. Jake: "it feels odd that he says here are three things and he only lists one."
 const ANNOUNCED_COUNT =
@@ -609,6 +632,13 @@ function evaluateBoundaryChoice(
         `the run starts, at unit [${block.first - 1}] or earlier. Start later if you must to stay within ${limits.maxMs / 1000} seconds.`,
     };
   }
+  if (readsVerse(units, endUnit)) {
+    return {
+      refused:
+        `${moved}Unit [${endUnit}] reads the Scripture. Never end on the reading: end after it, on the line where the preacher ` +
+        `says what it means, or before the reading starts. Start later if you must to stay within ${limits.maxMs / 1000} seconds.`,
+    };
+  }
 
   if (held !== null && units[endUnit].endMs < units[held.endUnit].endMs - KEEP_END_SLACK_MS) {
     const sooner = ((units[held.endUnit].endMs - units[endUnit].endMs) / 1000).toFixed(1);
@@ -759,6 +789,12 @@ export async function chooseBoundary(
  * set-up stood. Jake failed all three ("the preacher didn't finish his statement") and passed 3b clip 2
  * and 3e clip 4, which end on the line before. In 90 looks over two marked rounds, only these two were
  * refused for a reason other than a bad line number.
+ *
+ * Fix X (2026-10-25) tried a window counted from the next line's start: 4i clip 6's application line
+ * ran 6.8 seconds and ended 8.1 seconds after the cut, so the look was never asked. Over the 274
+ * marked clips it re-asked the look on 142 to 176 clips and moved 6 to 8 passed ones, while asking
+ * the old window again moved 4 passed ones from model variance alone, and it fixed no failed clip
+ * the old window did not. The window stays as it is; fix X's verse rule moves that clip instead.
  */
 export const END_LOOK_MAX_MS = 6_000;
 const END_LOOK_LINES = 5;
@@ -852,6 +888,9 @@ export async function lookPastTheEnd(
     };
   };
   const unit = look.offset + answer.endUnit;
+  // Fix X: the point lands where the preacher says what the verse means, not on the verse. Checked
+  // first: a verse the model picks is not a sign that the clip's last line was a set-up (fix R).
+  if (readsVerse(units, unit)) return kept(`Unit [${answer.endUnit}] reads the Scripture; the point lands where the preacher says what it means.`);
   if (endsOnQuotationStart(units[unit].text)) return withoutSetUp(`Unit [${answer.endUnit}] only leads into a quotation.`);
   if (endsInsideList(units, unit)) return withoutSetUp(`Unit [${answer.endUnit}] is inside a list.`);
   if (endsInsideParallelBlock(units, unit)) return withoutSetUp(`Unit [${answer.endUnit}] is inside a run of parallel lines.`);
