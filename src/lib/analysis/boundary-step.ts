@@ -112,6 +112,10 @@ const WORKED_EXAMPLES =
   "into the laughter or the next idea.\n\n";
 
 const SENTENCE_END = /[.!?…]["”'’)\]]*\s*$/;
+// Fix W (lab sermon 5g, 2026-10-25): Scribe writes a "..." segment where a crowd word cuts into a
+// sentence ("...the manifest presence- Yes" / "..." / "of our Lord and Savior, Jesus Christ."). Its
+// dots are not a sentence end: the open sentence runs on through it.
+const ELLIPSIS_ONLY = /^[.…\s]+$/;
 
 /**
  * Transcript segments joined into whole sentences. Lab sermon 1d clip 1 (2026-10-18) ended on a
@@ -123,6 +127,13 @@ export function wholeSentences(segments: BoundaryUnit[]): BoundaryUnit[] {
   let open: BoundaryUnit | null = null;
   for (const segment of segments) {
     const text = segment.text.trim();
+    if (ELLIPSIS_ONLY.test(text)) {
+      if (open !== null) {
+        open.endMs = segment.endMs;
+        open.text = `${open.text} ${text}`;
+      }
+      continue;
+    }
     const unit: BoundaryUnit = open
       ? { ...open, endMs: segment.endMs, text: `${open.text} ${text}` }
       : { idx: segment.idx, startMs: segment.startMs, endMs: segment.endMs, text };
@@ -196,6 +207,85 @@ export function endsInsideList(units: BoundaryUnit[], endUnit: number): { first:
     if (endUnit >= first && endUnit < last) {
       const opener = units[items[0]].text.trim().split(/\s+/).slice(0, 2).join(" ").replace(/[^\p{L}\p{N}'’]+$/u, "");
       return { first, last, opening: opener };
+    }
+  }
+  return null;
+}
+
+// Fix W (lab sermon 5g clip 4, 2026-10-25): the clip ended on "Revival is an experience for God's
+// people.", the second of two "Revival is" lines, with "It is a renewal …", "It is a spiritual
+// awakening …" and four "In times of revival …" lines right after it. Jake: "I don't think he
+// finished his point completely." Fix I2 needs three lines with the same opening, so none of these
+// runs of two counted. Runs of two or more lines with the same opening two words (a leading "and",
+// "but", "so" or "now" aside), with at most two other lines between the runs, are one block of
+// parallel lines, when one run has three or more. The clip must not end on a line of the block
+// before its last, nor on a call-out right after one. A full line between two runs is not a line of
+// the block: 4b clip 1's "And everywhere God speaks, it is absolute truth." closes the "That's why"
+// pair before the "What God says" list, and Jake's end is right after it. Over the 274 marked clips
+// this rule fires on 2b clip 6 and 5g clip 4, both failed, and on no passed clip; chaining runs of
+// two alone would also move 1f clip 5, which passed.
+const BLOCK_FILLERS = new Set(["and", "but", "so", "now", "see", "well", "yeah", "amen", "listen", "oh", "then"]);
+const BLOCK_CHAIN_STEP = LIST_MAX_STEP;
+
+/** The opening two words of a line of five words or more, past any filler words; null otherwise. */
+function blockOpening(words: string[]): string | null {
+  let first = 0;
+  while (first < words.length && BLOCK_FILLERS.has(words[first])) first += 1;
+  return words.length - first >= LIST_ITEM_MIN_WORDS ? words.slice(first, first + 2).join(" ") : null;
+}
+
+/** The opening words as the preacher said them, for the refusal. */
+function spokenOpening(text: string): string {
+  const words = text.trim().split(/\s+/);
+  let first = 0;
+  while (first < words.length && BLOCK_FILLERS.has(words[first].toLowerCase().replace(/[^a-z]/g, ""))) first += 1;
+  return words
+    .slice(first, first + 2)
+    .join(" ")
+    .replace(/[^\p{L}\p{N}'’]+$/u, "");
+}
+
+/**
+ * The block of parallel lines a clip would end inside: runs of two or more lines that open the same
+ * way, chained when the next run starts within BLOCK_CHAIN_STEP lines of the last one's end, with at
+ * least two runs and one of three or more lines. The end is inside when it is on a line of the block
+ * before its last, or on a call-out right after one; a full line between two runs is not inside. Null when the end is on the block's last line, after it, or
+ * before it.
+ */
+export function endsInsideParallelBlock(units: BoundaryUnit[], endUnit: number): { first: number; last: number; openings: string[] } | null {
+  const keys = units.map((unit) => blockOpening(listWords(unit.text)));
+  const runs: { key: string; items: number[] }[] = [];
+  let i = 0;
+  while (i < units.length) {
+    const key = keys[i];
+    if (!key) {
+      i += 1;
+      continue;
+    }
+    const items = [i];
+    for (let j = i + 1; j < units.length && j - items[items.length - 1] <= LIST_MAX_STEP; j += 1) if (keys[j] === key) items.push(j);
+    if (items.length >= 2) {
+      runs.push({ key, items });
+      i = items[items.length - 1] + 1;
+    } else i += 1;
+  }
+  const blocks: { first: number; last: number; runs: typeof runs }[] = [];
+  for (const run of runs) {
+    const last = blocks[blocks.length - 1];
+    if (last && run.items[0] - last.last <= BLOCK_CHAIN_STEP) {
+      last.runs.push(run);
+      last.last = run.items[run.items.length - 1];
+    } else blocks.push({ first: run.items[0], last: run.items[run.items.length - 1], runs: [run] });
+  }
+  for (const block of blocks) {
+    if (block.runs.length < 2 || !block.runs.some((run) => run.items.length >= LIST_MIN_ITEMS)) continue;
+    if (endUnit < block.first || endUnit >= block.last) continue;
+    const lines = new Set(block.runs.flatMap((run) => run.items));
+    // A clip that ends on "Yeah." or "Amen." right after a line of the block ends on that line.
+    let probe = endUnit;
+    while (probe > block.first && !lines.has(probe) && listWords(units[probe].text).length < LIST_ITEM_MIN_WORDS) probe -= 1;
+    if (lines.has(probe)) {
+      return { first: block.first, last: block.last, openings: block.runs.map((run) => spokenOpening(units[run.items[0]].text)) };
     }
   }
   return null;
@@ -510,6 +600,15 @@ function evaluateBoundaryChoice(
         `[${list.first - 1}] or earlier. Start later if you must to stay within ${limits.maxMs / 1000} seconds.`,
     };
   }
+  const block = endsInsideParallelBlock(units, endUnit);
+  if (block) {
+    return {
+      refused:
+        `${moved}Unit [${endUnit}] is inside a run of parallel lines: units [${block.first}] to [${block.last}] open with ` +
+        `"${block.openings.join('", "')}", and the run goes on after it. End after its last line, unit [${block.last}], or before ` +
+        `the run starts, at unit [${block.first - 1}] or earlier. Start later if you must to stay within ${limits.maxMs / 1000} seconds.`,
+    };
+  }
 
   if (held !== null && units[endUnit].endMs < units[held.endUnit].endMs - KEEP_END_SLACK_MS) {
     const sooner = ((units[held.endUnit].endMs - units[endUnit].endMs) / 1000).toFixed(1);
@@ -755,6 +854,7 @@ export async function lookPastTheEnd(
   const unit = look.offset + answer.endUnit;
   if (endsOnQuotationStart(units[unit].text)) return withoutSetUp(`Unit [${answer.endUnit}] only leads into a quotation.`);
   if (endsInsideList(units, unit)) return withoutSetUp(`Unit [${answer.endUnit}] is inside a list.`);
+  if (endsInsideParallelBlock(units, unit)) return withoutSetUp(`Unit [${answer.endUnit}] is inside a run of parallel lines.`);
   // Fix T: the recap before the next numbered point is not where the point lands.
   if (endsOnRecapIntoNextPoint(units, unit)) return kept(`Unit [${answer.endUnit}] recaps the point and leads into the next numbered point.`);
   if (units[unit].endMs - range.startMs > maxMs) {
