@@ -1,0 +1,66 @@
+{
+  "projectId": "6c3b10af-df77-4449-9c5a-09beef07f1e3",
+  "projectName": "Lab 5h - Bible Conference Herb Reavis - fix W + X + Y",
+  "sourceUrl": "https://www.youtube.com/watch?v=mhLBojrgy_s",
+  "judge": "jake",
+  "clips": {
+    "c0b8ad75-281a-4995-8564-547333dd2cd5": {
+      "rank": 1,
+      "startMs": 3484472,
+      "endMs": 3548292,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:27:49.538Z"
+    },
+    "f060ec3f-8a33-4be6-877f-e47c50224dd5": {
+      "rank": 2,
+      "startMs": 1792216,
+      "endMs": 1867032,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "should have started with, \"I mean, they've got their doctrine straight. \"",
+      "labeledAt": "2026-10-26T04:29:21.345Z"
+    },
+    "68c94548-cca3-48a5-82fc-7850d70013a6": {
+      "rank": 3,
+      "startMs": 3151768,
+      "endMs": 3182148,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:29:25.240Z"
+    },
+    "df9a39a8-0d56-4ee2-a558-63a372e04db7": {
+      "rank": 4,
+      "startMs": 1950012,
+      "endMs": 2020772,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "should have started with, \"The Bible says Jesus felt something go out of him. \"",
+      "labeledAt": "2026-10-26T04:30:03.288Z"
+    },
+    "d657d1e8-d72b-4dbb-a5cd-7088fc8bae4c": {
+      "rank": 5,
+      "startMs": 1712816,
+      "endMs": 1792196,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:30:25.417Z"
+    },
+    "321f3979-dd69-44ff-b663-d3df449906d0": {
+      "rank": 6,
+      "startMs": 2684912,
+      "endMs": 2759192,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:31:16.953Z"
+    }
+  }
+}
