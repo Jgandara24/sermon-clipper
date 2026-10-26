@@ -20,6 +20,12 @@ export const BOUNDARY_MAX_MS = 90_000;
 // the model started lab sermon 1g clip 3 just late enough to run 89.9 seconds.
 export const BOUNDARY_CUT_MAX_MS = 75_000;
 export const BOUNDARY_CONTEXT_MS = 90_000;
+// Fix Z: the hook sits within the first 35 seconds of the current clip. The gate run of 2026-10-26
+// showed the prompt alone was not enough: told to start on the hook, the model moved 17 of 222 passed
+// clips' starts more than 30 seconds later, to a different idea (the control moved 7), although every
+// start Jake wanted sat 4 to 30 seconds later. A later start stays allowed once an answer ran too long (the
+// held end, fix K2) and when the story check restarts the clip (fix U).
+export const HOOK_WINDOW_MS = 35_000;
 
 export type BoundaryUnit = { idx: number; startMs: number; endMs: number; text: string };
 export type BoundaryContext = { units: BoundaryUnit[]; currentStart: number; currentEnd: number };
@@ -329,12 +335,39 @@ const RECAP_OPENER = /^\W*(?:(?:and|now|well|yeah|amen|see)\W+)*(?:so|that'?s wh
 const NEXT_POINT = /\b(?:number (?:two|three|four|five|2|3|4|5)|(?:a|the) (?:second|third|fourth|next) (?:\w+ )?(?:thing|point|truth|certainty|reason|way|one))\b/i;
 const NEXT_POINT_WORDS = 6;
 
+// Fix Z (lab sermon 1p clip 4, 2026-10-25): the recap ran two lines, "So, so there must be this spirit of
+// servitude. There must be this spirit of serenity …", before "But then the third thing", and the one-line
+// rule saw only the second. Jake: 'should have ended at "He cares for you. He cares for you. He loves you.
+// He loves you."' A recap line may continue, in the same opening words, up to two more lines.
+const RECAP_MAX_LINES = 3;
+
+/**
+ * The recap of the point right before the next numbered point: the end line opens with "So …", or
+ * continues such a line in the same opening words, and the line after it opens the next point.
+ * Returns the recap's first unit, or null.
+ */
+export function recapIntoNextPoint(units: BoundaryUnit[], endUnit: number): { first: number } | null {
+  const next = units[endUnit + 1];
+  if (!next) return null;
+  const head = next.text.split(/\s+/).slice(0, NEXT_POINT_WORDS).join(" ");
+  if (!LATER_ITEM.test(head) && !NEXT_POINT.test(head)) return null;
+  const opening = blockOpening(listWords(units[endUnit].text));
+  let first = endUnit;
+  while (
+    first > 0 &&
+    endUnit - first < RECAP_MAX_LINES - 1 &&
+    !RECAP_OPENER.test(units[first].text) &&
+    opening !== null &&
+    blockOpening(listWords(units[first - 1].text)) === opening
+  ) {
+    first -= 1;
+  }
+  return RECAP_OPENER.test(units[first].text) ? { first } : null;
+}
+
 /** True when the end line recaps the point ("So …") and the line after it opens the next numbered point. */
 export function endsOnRecapIntoNextPoint(units: BoundaryUnit[], endUnit: number): boolean {
-  const next = units[endUnit + 1];
-  if (!next || !RECAP_OPENER.test(units[endUnit].text)) return false;
-  const head = next.text.split(/\s+/).slice(0, NEXT_POINT_WORDS).join(" ");
-  return LATER_ITEM.test(head) || NEXT_POINT.test(head);
+  return recapIntoNextPoint(units, endUnit) !== null;
 }
 /**
  * A count the preacher announces inside the clip ("three things") whose first item the clip gives
@@ -456,6 +489,21 @@ export const clock = (ms: number) => {
   return h ? `${h}:${mm}:${ss}` : `${Math.floor(s / 60)}:${ss}`;
 };
 
+/**
+ * Fix Z (2026-10-25, the fix W + X + Y round): eight of ten failed clips started one to six lines
+ * before the line Jake wanted, on a lead-in: "But it's only from the grace of God." before "Here's my
+ * question today."; "There's a second truth I want you to see here" before "now listen to this, that
+ * it is for certain that the gospel never changes."; "But there's another observation we could make"
+ * before "The Bible says Jesus felt something go out of him.". The model's reasons called the lead-in
+ * "the clear announcement" or "where he introduces the theme". Two ends ran past the punch line onto a
+ * supporting line (a James reference after "That's the one who's in you …"; "You don't have a promise
+ * of another heartbeat." after "Today's the day of salvation."). Jake: "there must always be a scroll
+ * stopping hook and powerful closing statement in these clips", and "try to keep videos in between
+ * 30s-60s … with appropriate flexibility"; 15 of that round's 30 clips ran over 60 seconds. The rules
+ * below say start on the hook and skip the lead-in, stop on the strongest line, and go past 60 seconds
+ * only when the point needs it. The examples in the rules are made up, so the gate on Jake's marked
+ * clips stays fair.
+ */
 export function boundaryPrompt(context: BoundaryContext, hold: HeldEnd | null = null): string {
   const lines = context.units.map((u, i) => `[${i}] (${clock(u.startMs)}) ${u.text}`);
   // Fix U: the story check found where the story lands, past 90 seconds from the clip's start.
@@ -468,8 +516,18 @@ export function boundaryPrompt(context: BoundaryContext, hold: HeldEnd | null = 
     "sentences with their times. The current clip is units " +
     `[${context.currentStart}] to [${context.currentEnd}]. Choose the best start unit and end unit for this clip's idea.\n\n` +
     "Rules:\n" +
-    "- Start where the thought starts: the first sentence a viewer with no context needs to follow this idea. " +
-    "Prefer an opening line that catches attention.\n" +
+    "- Start on the hook: the first line that would stop a viewer scrolling. A hook speaks to the listener and makes " +
+    "them want the next line: a question put to them (\"Let me ask you something tonight.\" \"Do you have it?\"), a " +
+    "direct address (\"Listen to me, somebody needs to hear this.\"), a bold claim (\"The Bible says the enemy has " +
+    "already lost.\"), or \"now listen to this\".\n" +
+    "- Look for the hook in the first 35 seconds of the current clip. When a line there is the hook, start on it and " +
+    "skip the lines that lead into the hook, even when they introduce the theme: a transition (\"Now, the second " +
+    "thing I want you to notice is this.\" \"Here's something else we can learn from that.\"), a call-back to the last " +
+    "point (\"See, that's how you do it.\" \"That's what grace does.\"), a crowd check (\"Y'all tracking with me?\"), " +
+    "or a few lines of illustration that only build up to the hook. The hook carries its own context; a viewer does " +
+    "not need the lead-in. Never move the start later than that to hunt for a hook: when no hook comes early, start " +
+    "where the thought starts and keep the clip's idea. When the hook comes a few lines after the theme is announced, " +
+    "start on the hook, not on the announcement.\n" +
     "- Start on a line that speaks directly to the listener or states the point. Do not start on background " +
     "or set-up that only leads into a story.\n" +
     "- Start on a clean line. When the preacher slips and corrects himself near the start (\"I'm sorry\", \"excuse " +
@@ -481,16 +539,20 @@ export function boundaryPrompt(context: BoundaryContext, hold: HeldEnd | null = 
     "listener. Never stop in the middle of a story, a list, an argument, or a quoted verse, and never stop right " +
     "after a verse before the preacher says what it means. Do not run on into the next point.\n" +
     "- End on the punch line: the short line that sums up the point or charges the listener, often the last item " +
-    "of a list or a command. Never end in the middle of a dialogue or a story, and never on a line that only " +
-    "leads into a quotation (\"He says,\", \"notice what he says there\").\n" +
+    "of a list or a command. Stop there: a supporting verse, a reason, or a restatement he adds after the punch line " +
+    "is not the ending. End on the strongest line, not on the last related line. Never end in the middle of a " +
+    "dialogue or a story, and never on a line that only leads into a quotation (\"He says,\", \"notice what he says " +
+    "there\").\n" +
     "- A question needs its answer. When the preacher asks a question and then answers it, or asks the same question " +
     "again in other words, keep going and end after his answer: \"You know what God wants to do today? He wants to " +
     "heal you.\" ends on \"He wants to heal you.\" Never end the clip early to leave a question out. End on a question " +
     "only when the next line starts a new idea.\n" +
     "- When the preacher announces a number of points (\"three things\"), give all of them, or start after the " +
     "announcement. Never end after only the first.\n" +
-    "- Aim for 30 to 60 seconds: the setup, the explanation or story, and the payoff. That is the sweet spot. When the " +
-    "point needs more time to land, up to 75 seconds is fine. Never go past 90 seconds, and never under 15 seconds. If " +
+    "- Aim for 30 to 60 seconds: the hook, the explanation or story, and the payoff. That is the sweet spot. Go past 60 " +
+    "only when the point cannot land sooner, and then by as little as it needs; when the point needs more time to land, " +
+    "up to 75 seconds is fine. Never go past 90 seconds, and never under 15 seconds. A later start on the hook and an " +
+    "earlier end on the punch line both shorten the clip; prefer them to a longer clip. If " +
     "the whole point will not fit in 90 seconds, keep its end and start later. Go under 30 seconds only when the lines " +
     "just before and just after belong to a different idea. When the preacher comes back to the same question or " +
     "point, keep going until he lands it; a story or aside inside the point is not a new idea. Do not cut a clip short " +
@@ -505,9 +567,15 @@ export function boundaryPrompt(context: BoundaryContext, hold: HeldEnd | null = 
   );
 }
 
-type BoundaryLimits = { minMs: number; maxMs: number; cutMaxMs: number };
+/** `hookWindowMs` left out means no limit on how much later than the current clip a first answer may start. */
+export type BoundaryLimits = { minMs: number; maxMs: number; cutMaxMs: number; hookWindowMs?: number };
 type BoundaryRange = { startMs: number; endMs: number; adjustedForScripture: boolean; adjustedEnd: boolean };
-const DEFAULT_LIMITS: BoundaryLimits = { minMs: BOUNDARY_MIN_MS, maxMs: BOUNDARY_MAX_MS, cutMaxMs: BOUNDARY_CUT_MAX_MS };
+const DEFAULT_LIMITS: BoundaryLimits = {
+  minMs: BOUNDARY_MIN_MS,
+  maxMs: BOUNDARY_MAX_MS,
+  cutMaxMs: BOUNDARY_CUT_MAX_MS,
+  hookWindowMs: HOOK_WINDOW_MS,
+};
 
 /**
  * Turns a model choice into a range, or null when it breaks a rule. A start on a Scripture
@@ -577,9 +645,12 @@ function evaluateBoundaryChoice(
     endUnit -= 1;
   }
   // Fix T: a "So …" recap of the point right before the next numbered point is not the ending either.
-  while (endUnit > startUnit && endsOnRecapIntoNextPoint(units, endUnit)) {
+  // Fix Z: the recap may run more than one line; the end moves to the line before it starts.
+  let recap = endUnit > startUnit ? recapIntoNextPoint(units, endUnit) : null;
+  while (recap && recap.first > startUnit) {
     adjustedEnd = true;
-    endUnit -= 1;
+    endUnit = recap.first - 1;
+    recap = endUnit > startUnit ? recapIntoNextPoint(units, endUnit) : null;
   }
 
   const moved =
@@ -654,6 +725,20 @@ function evaluateBoundaryChoice(
   const duration = endMs - startMs;
   const maxMs = held === null ? limits.maxMs : Math.min(limits.maxMs, limits.cutMaxMs);
   if (duration >= limits.minMs && duration <= maxMs) {
+    // Fix Z: a first answer may not start more than the hook window after the current clip's start.
+    // Checked after the length, so an answer that runs too long still sets the held end (fix K2).
+    const currentStartMs = units[context.currentStart].startMs;
+    const late = startMs - currentStartMs;
+    if (held === null && limits.hookWindowMs !== undefined && late > limits.hookWindowMs) {
+      let last = context.currentStart;
+      while (last + 1 < units.length && units[last + 1].startMs - currentStartMs <= limits.hookWindowMs) last += 1;
+      return {
+        refused:
+          `${moved}Unit [${startUnit}] starts ${(late / 1000).toFixed(1)} seconds after the current clip's start, unit ` +
+          `[${context.currentStart}]. The hook sits within the first ${limits.hookWindowMs / 1000} seconds of the current clip: ` +
+          `start on unit [${context.currentStart}], on a line up to unit [${last}], or earlier. Stay on the current clip's idea.`,
+      };
+    }
     return { range: { startMs, endMs, adjustedForScripture, adjustedEnd }, endUnit };
   }
   const steps =
@@ -719,8 +804,10 @@ export async function chooseBoundary(
   ask: (turns: BoundaryTurn[]) => Promise<BoundaryAnswer>,
   limits: BoundaryLimits = DEFAULT_LIMITS,
   hold: HeldEnd | null = null,
+  // The lab's replay gate passes the prompt as it was before a change, for a control run.
+  prompt: (context: BoundaryContext, hold: HeldEnd | null) => string = boundaryPrompt,
 ): Promise<{ range: BoundaryRange | null; attempts: BoundaryAttempt[] }> {
-  const turns: BoundaryTurn[] = [{ role: "user", content: boundaryPrompt(context, hold) }];
+  const turns: BoundaryTurn[] = [{ role: "user", content: prompt(context, hold) }];
   const attempts: BoundaryAttempt[] = [];
   let held: HeldEnd | null = hold;
   const answerOnce = async () => {
@@ -837,7 +924,9 @@ export function endLookPrompt(lines: BoundaryUnit[], end: number, last: number):
     "carry that guilt.\" then \"Amen. Jesus already carried it for you.\" The finishing line may come after a short " +
     "\"Amen.\" or \"Yeah.\".\n" +
     `Keep the end when [${end}] already lands the point: a punch line, a charge or command (\"Be sober, be vigilant.\"), or a ` +
-    "summary. Keep it also when the next line is a question to the crowd (\"is it not?\"), a crowd response with nothing " +
+    "summary. Never move past a line like that to add a supporting verse, a reason, or a restatement of it: the clip " +
+    "ends on the strongest line, not on the last related line. " +
+    "Keep it also when the next line is a question to the crowd (\"is it not?\"), a crowd response with nothing " +
     "after it, the next item of a list, a Scripture reading, or a turn to a new thought (\"But…\", \"Now…\"). Most clips " +
     "already end in the right place.\n" +
     `If it is true, return the FIRST line that finishes the point, one of [${end + 1}] to [${last}], and nothing after it.\n\n` +
@@ -857,10 +946,12 @@ export async function lookPastTheEnd(
   range: { startMs: number; endMs: number },
   ask: (prompt: string) => Promise<EndLookAnswer>,
   maxMs = BOUNDARY_MAX_MS,
+  // The lab's replay gate passes the prompt as it was before a change, for a control run.
+  prompt: typeof endLookPrompt = endLookPrompt,
 ): Promise<{ range: { startMs: number; endMs: number }; look: EndLook }> {
   const look = endLookLines(units, range);
   if (!look) return { range, look: { asked: false, movedMs: 0, refused: null } };
-  const answer = await ask(endLookPrompt(look.lines, look.end, look.last));
+  const answer = await ask(prompt(look.lines, look.end, look.last));
   const kept = (refused: string | null) => ({ range, look: { asked: true, movedMs: 0, refused, reason: answer.reason } });
   if (!answer.finishesLater) return kept(null);
   if (!Number.isInteger(answer.endUnit) || answer.endUnit <= look.end || answer.endUnit > look.last) {
