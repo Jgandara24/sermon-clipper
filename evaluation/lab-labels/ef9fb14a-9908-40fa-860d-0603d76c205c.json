@@ -1,0 +1,64 @@
+{
+  "projectId": "ef9fb14a-9908-40fa-860d-0603d76c205c",
+  "projectName": "Lab 4j - Sunday 10-11-26 Divine Certainties - fix W + X + Y",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "bda61ee0-04b1-4f01-b9b3-d0d2653105ca": {
+      "rank": 1,
+      "startMs": 3376566,
+      "endMs": 3437266,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:25:19.436Z"
+    },
+    "44d73424-fff5-48b9-a188-a4ec8cddbe93": {
+      "rank": 2,
+      "startMs": 2133709,
+      "endMs": 2193370,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:25:29.999Z"
+    },
+    "d5b19d72-d4e2-474a-be95-ebca8dbe092a": {
+      "rank": 3,
+      "startMs": 2422490,
+      "endMs": 2466850,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "should have started with, \"now listen to this, that it is for certain that the gospel never changes.\"",
+      "labeledAt": "2026-10-26T04:26:19.792Z"
+    },
+    "0c1f9a53-2805-4caf-b39e-2fdf9345defe": {
+      "rank": 4,
+      "startMs": 2982398,
+      "endMs": 3031498,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:26:37.713Z"
+    },
+    "8e9c2030-9f84-4644-8e19-d393d948d199": {
+      "rank": 5,
+      "startMs": 3555106,
+      "endMs": 3598126,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:26:51.112Z"
+    },
+    "ac6b65d5-d8fe-4520-a501-de28f721ba7d": {
+      "rank": 6,
+      "startMs": 2320410,
+      "endMs": 2393290,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:27:39.848Z"
+    }
+  }
+}

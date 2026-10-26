@@ -1,0 +1,70 @@
+{
+  "projectId": "1a2934fe-077f-4718-bf3a-75a52cf1f5d6",
+  "projectName": "Lab 1p - Normal Sunday - fix W + X + Y",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "34d8d4b0-5ab4-4562-8693-5e38c9ff0d39": {
+      "rank": 2,
+      "startMs": 4587300,
+      "endMs": 4657700,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should have started with, \"Here's my question today.\"",
+      "labeledAt": "2026-10-26T04:14:16.486Z"
+    },
+    "ef8663d2-2684-4368-89df-696b6869dee1": {
+      "rank": 1,
+      "startMs": 3776988,
+      "endMs": 3841228,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "It'd be more engaging to start with, \"You see, folks, that there's somebody that's stronger and mightier than the devil.\"\n\nand \n\nEnd with, \"That's the one who's in you, and the Bible says you can resist him, steadfast in the faith, and you can stand against him in the power of the Lord Jesus Christ. Amen\"",
+      "labeledAt": "2026-10-26T04:15:34.382Z"
+    },
+    "32049576-073d-4565-8e0e-140b6fd5c038": {
+      "rank": 3,
+      "startMs": 4457320,
+      "endMs": 4508340,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:16:30.135Z"
+    },
+    "e3abdc8e-b632-4327-9580-edc0c06f6e7f": {
+      "rank": 4,
+      "startMs": 3336932,
+      "endMs": 3423592,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "should have ended at, \" He cares for you. He cares for you. He loves you. He loves you.\"\n\nThe final starts a list (So, so there must be this spirit of servitude. There must be this spirit of serenity as you cast your troubles upon the Lord and He cares for you. But then the third thing that you need) note a final powerful concluding statement.",
+      "labeledAt": "2026-10-26T04:17:47.175Z"
+    },
+    "4e18f957-4096-467a-aec8-7c4c24127c89": {
+      "rank": 5,
+      "startMs": 4104120,
+      "endMs": 4138500,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:18:12.319Z"
+    },
+    "5c084c99-2942-4c64-8200-71c70ae53c7a": {
+      "rank": 6,
+      "startMs": 2463504,
+      "endMs": 2514524,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "should have started with, \"and you know what Jesus wants to do today?\"",
+      "labeledAt": "2026-10-26T04:19:00.468Z"
+    }
+  }
+}
