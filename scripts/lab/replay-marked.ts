@@ -20,8 +20,12 @@ import {
   boundaryContext,
   BoundaryChoiceSchema,
   checkStory,
+  endLookLines,
+  EndLookSchema,
   endsInsideParallelBlock,
   endsOnRecapIntoNextPoint,
+  lookPastTheEnd,
+  readsVerse,
   StoryCheckSchema,
   type BoundaryTurn,
   type BoundaryUnit,
@@ -55,22 +59,25 @@ export type ReplayRow = MarkedClip & {
   detail: Record<string, unknown>;
 };
 
-const FIXES = ["U", "V", "T", "W"] as const;
+const FIXES = ["U", "V", "T", "W", "X"] as const;
 type Fix = (typeof FIXES)[number];
+/** Fix X: ask the end look (fix M) again on every clip it shows lines for; a control for the look's model variance. */
+let REASK = false;
 
 async function main() {
   const args = readArgs(process.argv.slice(2));
   const fixArg = args.get("fix");
   if (typeof fixArg !== "string" || !(FIXES as readonly string[]).includes(fixArg)) {
-    console.error(`Usage: npm run lab:replay -- --fix ${FIXES.join("|")} [--only "Lab 1n"] [--concurrency 4] [--out replay.json]`);
+    console.error(`Usage: npm run lab:replay -- --fix ${FIXES.join("|")} [--only "Lab 1n"] [--concurrency 4] [--out replay.json] [--reask]`);
     process.exit(2);
   }
   const fix = fixArg as Fix;
   const only = typeof args.get("only") === "string" ? (args.get("only") as string) : null;
+  REASK = args.get("reask") === true;
   const concurrency = typeof args.get("concurrency") === "string" ? Number(args.get("concurrency")) : 4;
   const out = typeof args.get("out") === "string" ? (args.get("out") as string) : path.join(os.tmpdir(), `lab-replay-${fix}-${Date.now()}.json`);
 
-  assertLabEnvironment({ requireAnthropicKey: fix === "U" });
+  assertLabEnvironment({ requireAnthropicKey: fix === "U" || fix === "X" });
 
   const prisma = new PrismaClient();
   const usage = { input: 0, output: 0, calls: 0 };
@@ -158,6 +165,13 @@ async function main() {
       console.log(`Story check: ${by("extended")} extended, ${by("restarted")} restarted, ${by("unresolved")} unresolved (story goes on, no landing found).`);
       console.log(`Model calls: ${usage.calls}, ${usage.input} input tokens, ${usage.output} output tokens.`);
     }
+    if (fix === "X") {
+      const verse = rows.filter((r) => r.detail.verseEnd).length;
+      const asked = rows.filter((r) => r.detail.reask).length;
+      const lookMoved = rows.filter((r) => typeof r.detail.movedMs === "number").length;
+      console.log(`Verse ends refused: ${verse}.` + (REASK ? ` The end look was asked again on ${asked} clips and moved ${lookMoved}.` : ""));
+      console.log(`Model calls: ${usage.calls}, ${usage.input} input tokens, ${usage.output} output tokens.`);
+    }
     if (fix === "W") {
       const joined = rows.filter((r) => r.detail.ellipsisJoined).length;
       console.log(`The "..." fix: ${joined} marked clips end on a sentence that now runs on through a "..." segment.`);
@@ -219,6 +233,42 @@ async function replayOne(
         ellipsisJoined,
       },
     };
+  }
+  if (fix === "X") {
+    const { units, currentStart, currentEnd } = context;
+    const verseEnd = currentEnd > currentStart && readsVerse(units, currentEnd);
+    const reask = REASK && endLookLines(units, range) !== null;
+    if (!verseEnd && !reask) return { ...clip, to: null, moved: false, detail: {} };
+    const detail: Record<string, unknown> = { verseEnd, reask };
+    if (verseEnd) {
+      detail.outcome = "verse end refused";
+      detail.reason = units[currentEnd].text.slice(0, 120);
+    }
+    if (reask) {
+      const client = new Anthropic();
+      const looked = await lookPastTheEnd(units, range, async (prompt) => {
+        const message = await client.messages.create({
+          model: scoringModel(),
+          max_tokens: 600,
+          thinking: { type: "disabled" },
+          messages: [{ role: "user", content: prompt }],
+          output_config: { format: zodOutputFormat(EndLookSchema) },
+        });
+        usage.calls += 1;
+        usage.input += message.usage.input_tokens;
+        usage.output += message.usage.output_tokens;
+        const block = message.content.find((b) => b.type === "text");
+        return EndLookSchema.parse(JSON.parse(block && block.type === "text" ? block.text : "null"));
+      });
+      detail.look = looked.look;
+      if (looked.range.endMs !== range.endMs) {
+        detail.outcome = `${verseEnd ? "verse end refused; " : ""}end look moved`;
+        detail.movedMs = looked.range.endMs - range.endMs;
+        detail.reason = looked.look.reason;
+        return { ...clip, to: [range.startMs, looked.range.endMs], moved: true, detail };
+      }
+    }
+    return { ...clip, to: null, moved: verseEnd, detail };
   }
   if (fix === "T") {
     const { units, currentStart, currentEnd } = context;

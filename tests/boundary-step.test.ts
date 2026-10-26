@@ -13,6 +13,7 @@ import {
   endsOnQuotationStart,
   checkStory,
   endsOnRecapIntoNextPoint,
+  readsVerse,
   readsVerseNext,
   storyLookLines,
   storyPrompt,
@@ -1615,5 +1616,82 @@ describe("fix W: no end inside a block of parallel lines", () => {
     const result = await lookPastTheEnd(FIVE_G_C4.units, range, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: look.end + 1, reason: "x" }));
     expect(result.look.refused).toMatch(/inside a run of parallel lines/);
     expect(result.range.endMs).toBeLessThanOrEqual(range.endMs);
+  });
+});
+
+// Lab sermon 4i clip 6 (2026-10-25), real lines. The clip ended on the verse 13 quote. Jake: "he doesn't
+// end with a powerfull statment about the scripture he read, it's just the last verse. The clips should
+// always start and end with a powerful statement / commentary." He passed 4d clip 4, 32:03 to 33:28.
+const FOUR_I_C6 = boundaryContext(
+  [
+    { idx: 413, startMs: 1923230, endMs: 1930490, text: "First of all, I want you to know that it is for certain that Christians never die." },
+    { idx: 414, startMs: 1931870, endMs: 1931950, text: "Amen." },
+    { idx: 415, startMs: 1931950, endMs: 1935750, text: "It is for certain that Christians never die." },
+    { idx: 416, startMs: 1935970, endMs: 1944370, text: "Look, the Bible says that our understanding at what happens at death is not based on human speculation, but divine revelation." },
+    { idx: 417, startMs: 1944930, endMs: 1952750, text: 'In fact, the Bible says in verse 12, Simon Peter says, "It is presented and it stands on the truth of God\'s word."' },
+    { idx: 418, startMs: 1953370, endMs: 1961570, text: 'He says in verse 12, "For this reason I will not be negligent to remind you always of these things, though you know and are established in' },
+    { idx: 419, startMs: 1961630, endMs: 1962970, text: 'the present truth."' },
+    { idx: 420, startMs: 1963650, endMs: 1967950, text: "And then in verse 13, Simon Peter says that his body is a tent." },
+    { idx: 421, startMs: 1968590, endMs: 1976690, text: 'He says there, "Yes, I think it is right as long as I am in this tent to stir you up by reminding you of this' },
+    { idx: 422, startMs: 1976750, endMs: 1977110, text: 'truth."' },
+    { idx: 423, startMs: 1978390, endMs: 1984230, text: "You, you see, sometimes we remember the truth, but we forget the application of the truth." },
+    { idx: 424, startMs: 1985230, endMs: 1992430, text: "And we're living in a generation of people that are living in fear because of wars and rumors of wars." },
+    { idx: 425, startMs: 1993370, endMs: 2000910, text: "It, it seems that there is violence on every hand, wh- whether it's in the world at large or in our communities." },
+    { idx: 426, startMs: 2001669, endMs: 2008230, text: "A- and yet, here is a word that can help us face the uncertainties in life with confidence." },
+    { idx: 427, startMs: 2009070, endMs: 2018750, text: 'He says there in verse 13, "Yes, I think it is right as long as I am in this tent to stir you up by reminding you," I\'m gonna give you this truth, "knowing' },
+  ],
+  { startMs: 1923230, endMs: 1977110 },
+  90_000,
+);
+const at4i = (idx: number) => FOUR_I_C6.units.findIndex((u) => u.idx === idx);
+
+describe("fix X: no end on a verse reading", () => {
+  it("knows the lines that read or quote a verse", () => {
+    expect(readsVerse(FOUR_I_C6.units, at4i(417))).toBe(true);
+    expect(readsVerse(FOUR_I_C6.units, at4i(418))).toBe(true);
+    // The quote after "And then in verse 13, Simon Peter says that his body is a tent."
+    expect(readsVerse(FOUR_I_C6.units, at4i(421))).toBe(true);
+    expect(readsVerse(FOUR_I_C6.units, at4i(416))).toBe(false);
+    expect(readsVerse(FOUR_I_C6.units, at4i(420))).toBe(false);
+    expect(readsVerse(FOUR_I_C6.units, at4i(423))).toBe(false);
+  });
+
+  it("keeps a quoted punch line that names no verse, and refuses one right after a named verse", () => {
+    const punch = [
+      { idx: 1, startMs: 0, endMs: 2_000, text: "Listen to me today." },
+      { idx: 2, startMs: 2_000, endMs: 5_000, text: 'Jesus said, "Ask and you shall receive."' },
+    ];
+    expect(readsVerse(punch, 1)).toBe(false);
+    const named = [
+      { idx: 1, startMs: 0, endMs: 2_000, text: "Turn with me to Matthew 7." },
+      { idx: 2, startMs: 2_000, endMs: 5_000, text: 'He said, "Ask and you shall receive."' },
+    ];
+    expect(readsVerse(named, 1)).toBe(true);
+  });
+
+  it("refuses Jake's failed end and says to end where the preacher says what it means; accepts the application", () => {
+    const refusal = boundaryRefusal(FOUR_I_C6, { startUnit: at4i(413), endUnit: at4i(421) });
+    expect(refusal).toContain(`Unit [${at4i(421)}] reads the Scripture`);
+    expect(refusal).toMatch(/says what it means/);
+    expect(applyBoundaryChoice(FOUR_I_C6, { startUnit: at4i(413), endUnit: at4i(426) })).toMatchObject({ startMs: 1923230, endMs: 2008230 });
+  });
+
+  it("the look past the end never saw the application line: it ends 7.1 seconds after the cut", () => {
+    // The boundary rule, not the look, moves this clip: the window stays at 6 seconds (see END_LOOK_MAX_MS).
+    expect(endLookLines(FOUR_I_C6.units, { startMs: 1923230, endMs: 1977110 })).toBeNull();
+  });
+
+  it("refuses the look's answer when it is a verse line, and does not drop the clip's last line for it", async () => {
+    const units = [
+      { idx: 1, startMs: 0, endMs: 4_000, text: "God keeps every promise He makes." },
+      { idx: 2, startMs: 4_100, endMs: 6_000, text: "Turn with me to Matthew 7." },
+      { idx: 3, startMs: 6_100, endMs: 9_000, text: 'He said, "Ask and you shall receive."' },
+      { idx: 4, startMs: 9_100, endMs: 11_000, text: "That is the promise." },
+    ];
+    const range = { startMs: 0, endMs: 4_000 };
+    const result = await lookPastTheEnd(units, range, vi.fn().mockResolvedValue({ finishesLater: true, endUnit: 2, reason: "x" }));
+    expect(result.range).toEqual(range);
+    expect(result.look.refused).toMatch(/reads the Scripture/);
+    expect(result.look.dropped).toBeUndefined();
   });
 });
