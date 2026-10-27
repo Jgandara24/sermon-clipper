@@ -1,0 +1,64 @@
+{
+  "projectId": "f3acd9bc-87d7-4dd0-95bb-b1ad50ab51d0",
+  "projectName": "Lab 4k - Sunday 10-11-26 Divine Certainties - fix Z",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "cff20e7b-002d-45a4-8b80-f15ce1946e2e": {
+      "rank": 1,
+      "startMs": 2881146,
+      "endMs": 2932006,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should have ended on , \"There is one mediator between a sinner and a holy God, and it is the God man, the Lord Jesus Christ. \"",
+      "labeledAt": "2026-10-27T02:15:29.585Z"
+    },
+    "15a4905c-eea0-46c2-a15c-071b97a94b5f": {
+      "rank": 2,
+      "startMs": 2137610,
+      "endMs": 2193370,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:15:44.056Z"
+    },
+    "ebe6b238-4972-47fb-9e17-40365cb1f8e4": {
+      "rank": 3,
+      "startMs": 3363806,
+      "endMs": 3437266,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:15:59.032Z"
+    },
+    "52bb064c-7c5e-41fb-94bc-f4e36f4d9b7d": {
+      "rank": 4,
+      "startMs": 3018298,
+      "endMs": 3033738,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:16:22.777Z"
+    },
+    "65dbef4a-50ba-4f4c-b6ec-73f5531dbbc3": {
+      "rank": 5,
+      "startMs": 2092190,
+      "endMs": 2133469,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:17:13.196Z"
+    },
+    "e0f2e17a-d0ae-466a-8002-02495873ffa4": {
+      "rank": 6,
+      "startMs": 3571346,
+      "endMs": 3598126,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:17:25.008Z"
+    }
+  }
+}
