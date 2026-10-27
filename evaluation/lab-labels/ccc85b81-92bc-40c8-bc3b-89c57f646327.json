@@ -1,0 +1,66 @@
+{
+  "projectId": "ccc85b81-92bc-40c8-bc3b-89c57f646327",
+  "projectName": "Lab 1q - Normal Sunday - fix Z",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "a4255ee1-5275-4100-8478-e5f27381517d": {
+      "rank": 1,
+      "startMs": 2367904,
+      "endMs": 2441244,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T01:47:19.935Z"
+    },
+    "9d86c8fb-10c5-4cab-8ff3-53943eac200a": {
+      "rank": 2,
+      "startMs": 4386560,
+      "endMs": 4438120,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "\"Saving Grace\" the first part shouldn't start it. Start the clip with \"For by grace you are saved through faith...\"",
+      "labeledAt": "2026-10-27T01:48:28.032Z"
+    },
+    "dde6e948-014b-4fa2-af2a-4dc36fcdbcd6": {
+      "rank": 3,
+      "startMs": 2445924,
+      "endMs": 2514524,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T01:49:32.210Z"
+    },
+    "43043d0f-23b3-4215-8237-0377150dbb4d": {
+      "rank": 4,
+      "startMs": 2825140,
+      "endMs": 2870760,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "the preacher walks out of the frame for too long around 7-9 second mark.",
+      "labeledAt": "2026-10-27T01:51:03.437Z"
+    },
+    "d0197159-8dfc-49c5-9331-363c60e82cdb": {
+      "rank": 5,
+      "startMs": 3174036,
+      "endMs": 3221576,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T01:52:03.600Z"
+    },
+    "747944f6-eb80-4f07-8f41-7f6ab1853deb": {
+      "rank": 6,
+      "startMs": 4759940,
+      "endMs": 4813260,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "should have ended after, \"I'm glad- ... about that.\"\n\n\"Because I'm gonna tell you, there was a time in my life when I didn't know, and I was just like some of y'all today.\" starts a new section.",
+      "labeledAt": "2026-10-27T01:54:01.534Z"
+    }
+  }
+}
