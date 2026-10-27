@@ -63,6 +63,7 @@ export async function runLabSelection<T extends LabClip>(params: {
     from: [number, number];
     to: [number, number] | null;
     adjustedForScripture?: boolean;
+    adjustedStart?: boolean;
     adjustedEnd?: boolean;
     reason?: string;
     attempts?: { startUnit: number; endUnit: number; refused: string | null; question?: string }[];
@@ -214,6 +215,7 @@ export async function runLabSelection<T extends LabClip>(params: {
               from: [clip.startMs, clip.endMs],
               to: final ? [final.startMs, final.endMs] : null,
               adjustedForScripture: range?.adjustedForScripture,
+              adjustedStart: range?.adjustedStart,
               adjustedEnd: range?.adjustedEnd,
               reason: attempts.at(-1)?.reason,
               attempts: attempts.map(({ startUnit, endUnit, refused, question }) => ({ startUnit, endUnit, refused, question })),
@@ -288,6 +290,7 @@ export async function runLabSelection<T extends LabClip>(params: {
         storiesExtended: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "extended").length,
         storiesRestarted: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "restarted").length,
         storiesUnresolved: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "unresolved").length,
+        storiesCut: boundaryLog.filter((b) => b.story && "outcome" in b.story && b.story.outcome === "cut").length,
         endsSnapped: boundaryLog.filter((b) => b.endSnap && "movedMs" in b.endSnap).length,
         rejected: result.rejected,
         boundary: boundaryLog,

@@ -19,7 +19,7 @@ import { z } from "zod";
 
 export type CameraSample = { t: number; faceCount: number; image: string | null };
 export type SceneChange = { t: number; score: number; image: string };
-export type CameraRunVia = "no face" | "scene change";
+export type CameraRunVia = "no face" | "scene change" | "no person";
 export type FacelessRun = { start: number; end: number; image: string; via: CameraRunVia };
 
 export const CAMERA_LABELS = ["PREACHER_OR_STAGE", "SLIDE", "OTHER"] as const;
@@ -29,7 +29,7 @@ export const CameraFrameLabelsSchema = z.object({
   frames: z.array(z.object({ index: z.number().int(), label: z.enum(CAMERA_LABELS) })),
 });
 
-export type CameraCheckResult = { pass: true } | { pass: false; reason: "slide" | "unchecked"; at: number; via?: CameraRunVia };
+export type CameraCheckResult = { pass: true } | { pass: false; reason: "slide" | "unchecked" | "off-screen"; at: number; via?: CameraRunVia };
 
 /** Consecutive samples with no face, each with the middle frame to show the vision model. */
 export function groupNoFaceRuns(samples: CameraSample[]): FacelessRun[] {
@@ -87,4 +87,50 @@ export function cameraCheckPrompt(frameCount: number): string {
     `A slide fading in or out over the camera view is still a SLIDE when its words fill the picture.\n` +
     `Return one entry per frame with its index and label.`
   );
+}
+
+/**
+ * Fix AC (lab sermon 1q clip 4, 2026-10-26): the preacher walked out of the camera's own frame at the
+ * right edge, nobody was in the picture from 8.5 s to 9.0 s, and the video dissolved to a second
+ * camera. The vision model saw the stage and passed the frame, and the crop could follow nobody.
+ * Jake: "the preacher walks out of the frame for too long around 7-9 second mark." After the slide
+ * check passes, the person detector (YOLOX-s, the tracker's) runs on the faceless samples of every
+ * run of EMPTY_FRAME_MIN_S or more, and a run of samples with no face and nobody seen that spans
+ * EMPTY_FRAME_MIN_S or more rejects the clip as off-screen. The export's off-crop note (fix S) counts
+ * such frames too.
+ */
+export const EMPTY_FRAME_MIN_S = 0.5;
+
+/** The faceless runs long enough to hold an empty stretch; only their frames go to the person detector. */
+export function runsToDetectPeople(samples: CameraSample[]): FacelessRun[] {
+  return groupNoFaceRuns(samples).filter((run) => run.end - run.start >= EMPTY_FRAME_MIN_S - 1e-6);
+}
+
+/**
+ * Consecutive samples with no face where the detector saw nobody, spanning EMPTY_FRAME_MIN_S or
+ * more. `peopleSeen` gives the people in a sample's frame, or undefined when the detector did not
+ * look at it; such a sample ends a run.
+ */
+export function emptyRuns(samples: CameraSample[], peopleSeen: (image: string) => number | undefined): { start: number; end: number }[] {
+  const step = samples.length > 1 ? samples[1].t - samples[0].t : 0.25;
+  const empty = (s: CameraSample) => s.faceCount === 0 && s.image !== null && peopleSeen(s.image) === 0;
+  const runs: { start: number; end: number }[] = [];
+  let i = 0;
+  while (i < samples.length) {
+    if (!empty(samples[i])) {
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j + 1 < samples.length && empty(samples[j + 1])) j += 1;
+    const end = j + 1 < samples.length ? samples[j + 1].t : samples[j].t + step;
+    if (end - samples[i].t >= EMPTY_FRAME_MIN_S - 1e-6) runs.push({ start: samples[i].t, end });
+    i = j + 1;
+  }
+  return runs;
+}
+
+/** Fails on the first empty stretch. */
+export function decideEmptyFrames(runs: { start: number; end: number }[]): CameraCheckResult {
+  return runs.length === 0 ? { pass: true } : { pass: false, reason: "off-screen", at: runs[0].start, via: "no person" };
 }

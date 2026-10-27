@@ -287,19 +287,29 @@ describe("buildLabTrack off-crop check (fix S)", () => {
   };
 
   it("notes a stretch of half a second or more where the person detector sees him outside the crop", () => {
-    // The detector misses him for a second, then sees him at 1100 while the crop still waits at 430.
+    // The detector misses him for a second (an empty frame since fix AC), then sees him at 1100 while the crop still waits at 430.
     const track = lostAt430((i) => (i < 60 ? [] : [1100]));
     expect(track.offCrop).toHaveLength(1);
-    expect(track.offCrop![0].start).toBeCloseTo(2, 3);
+    expect(track.offCrop![0].start).toBeCloseTo(1, 3);
     expect(track.offCrop![0].end).toBeCloseTo(4, 3);
   });
 
   it("notes nothing for a stretch shorter than half a second", () => {
-    expect(lostAt430((i) => (i >= 60 && i < 72 ? [1100] : [])).offCrop).toEqual([]);
+    expect(lostAt430((i) => (i >= 60 && i < 72 ? [1100] : [430])).offCrop).toEqual([]);
+  });
+
+  it("notes a stretch of half a second or more where nobody is in the frame at all (fix AC, lab sermon 1q clip 4)", () => {
+    // No face from 1 s on; the person detector sees nobody from 1 s to 2 s, then him at 430 inside the crop.
+    const track = lostAt430((i) => (i < 60 ? [] : [430]));
+    expect(track.offCrop).toHaveLength(1);
+    expect(track.offCrop![0].start).toBeCloseTo(1, 3);
+    expect(track.offCrop![0].end).toBeCloseTo(2, 3);
+    // Nobody seen for 0.4 s only.
+    expect(lostAt430((i) => (i < 42 ? [] : [430])).offCrop).toEqual([]);
   });
 
   it("does not note a stretch where someone is inside the crop", () => {
-    expect(lostAt430((i) => (i < 60 ? [] : [430, 1100])).offCrop).toEqual([]);
+    expect(lostAt430(() => [430, 1100]).offCrop).toEqual([]);
   });
 
   it("notes nothing while the crop follows him", () => {

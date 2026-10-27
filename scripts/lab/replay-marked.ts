@@ -5,6 +5,9 @@
  *
  *   npm run lab:replay -- --fix U [--only "Lab 1n"] [--concurrency 4] [--out replay.json]
  *
+ * Fixes AA, AD and AE are code rules replayed on the marked range (no model); AB is fix U's story check
+ * with the cut; AC samples the recording and runs the person detector, no vision model.
+ *
  * Each clip is replayed as Jake saw it: the marked start and end, the project's transcript, and the
  * sermon span the lab run saved for that project. Fix U calls the scoring model once per clip, and
  * again for a clip it restarts later in its story. Reads the lab database only. Writes nothing to it.
@@ -25,13 +28,16 @@ import {
   boundaryPrompt,
   checkStory,
   chooseBoundary,
+  endBeforeNextPoint,
   endLookLines,
   endLookPrompt,
   EndLookSchema,
   endsInsideParallelBlock,
+  labelStart,
   lookPastTheEnd,
   readsVerse,
   recapIntoNextPoint,
+  sectionBreakInside,
   StoryCheckSchema,
   type BoundaryContext,
   type BoundaryLimits,
@@ -40,7 +46,7 @@ import {
   type HeldEnd,
   type StoryCheck,
 } from "@/lib/analysis/boundary-step";
-import { checkClipCamera } from "@/lib/analysis/camera-check-run";
+import { checkClipCamera, checkClipEmptyFrames } from "@/lib/analysis/camera-check-run";
 import { scoringModel } from "@/lib/analysis/claude-provider";
 import { snapClipEnd } from "@/lib/analysis/end-silence";
 import { assertLabEnvironment, formatClock, LabEnvironmentError, readArgs } from "./lab-guard";
@@ -61,6 +67,8 @@ type MarkedClip = {
   note: string;
   startMs: number;
   endMs: number;
+  /** Fix AE: the end before the end look (fix M) moved it, from the stored steps; the marked end when it did not. */
+  preLookEndMs?: number;
 };
 
 export type ReplayRow = MarkedClip & {
@@ -69,7 +77,7 @@ export type ReplayRow = MarkedClip & {
   detail: Record<string, unknown>;
 };
 
-const FIXES = ["U", "V", "T", "W", "X", "Y", "Z"] as const;
+const FIXES = ["U", "V", "T", "W", "X", "Y", "Z", "AA", "AB", "AC", "AD", "AE"] as const;
 type Fix = (typeof FIXES)[number];
 /** Fix X: ask the end look (fix M) again on every clip it shows lines for; a control for the look's model variance. */
 let REASK = false;
@@ -145,7 +153,7 @@ async function main() {
   const concurrency = typeof args.get("concurrency") === "string" ? Number(args.get("concurrency")) : 4;
   const out = typeof args.get("out") === "string" ? (args.get("out") as string) : path.join(os.tmpdir(), `lab-replay-${fix}-${Date.now()}.json`);
 
-  assertLabEnvironment({ requireAnthropicKey: fix === "U" || fix === "X" || fix === "Y" || fix === "Z" });
+  assertLabEnvironment({ requireAnthropicKey: fix === "U" || fix === "AB" || fix === "X" || fix === "Y" || fix === "Z" });
 
   const prisma = new PrismaClient();
   const usage = { input: 0, output: 0, calls: 0 };
@@ -174,9 +182,11 @@ async function main() {
         orderBy: { createdAt: "desc" },
       });
       const span = ((steps?.metadata as { sermonSpan?: { span?: { startMs: number; endMs: number } | null } } | null)?.sermonSpan?.span ?? null);
-      // Fixes V and Y read the recording. A project's own source file, or another lab copy of the same video.
+      const boundary =
+        (steps?.metadata as { boundary?: { to?: [number, number] | null; endLook?: { movedMs?: number } }[] } | null)?.boundary ?? [];
+      // Fixes V, Y and AC read the recording. A project's own source file, or another lab copy of the same video.
       let source: string | null = null;
-      if (fix === "V" || fix === "Y") {
+      if (fix === "V" || fix === "Y" || fix === "AC") {
         const originUrl = project.sourceVideo?.originUrl ?? null;
         const others = originUrl ? await prisma.sourceVideo.findMany({ where: { originUrl }, select: { storageKey: true } }) : [];
         const keys = [project.sourceVideo?.storageKey ?? null, ...others.map((s) => s.storageKey)];
@@ -189,7 +199,9 @@ async function main() {
         source,
       });
       for (const [clipId, clip] of Object.entries(label.clips)) {
-        marked.push({ sermon, projectId: label.projectId, clipId, ...clip });
+        const entry = boundary.find((b) => b.to && b.to[0] === clip.startMs && b.to[1] === clip.endMs);
+        const lookMoved = entry?.endLook && typeof entry.endLook.movedMs === "number" ? entry.endLook.movedMs : 0;
+        marked.push({ sermon, projectId: label.projectId, clipId, ...clip, preLookEndMs: clip.endMs - lookMoved });
       }
     }
     marked.sort((a, b) => a.sermon.localeCompare(b.sermon) || a.rank - b.rank);
@@ -228,9 +240,12 @@ async function main() {
     const pass = rows.filter((r) => r.verdict === "pass").length;
     const fail = rows.filter((r) => r.verdict === "fail").length;
     console.log(`\nFix ${fix}: ${moved.length} of ${rows.length} clips move. Passed: ${passMoved.length} of ${pass} move. Failed: ${failMoved.length} of ${fail} move.`);
-    if (fix === "U") {
+    if (fix === "U" || fix === "AB") {
       const by = (key: string) => rows.filter((r) => r.detail.outcome === key).length;
-      console.log(`Story check: ${by("extended")} extended, ${by("restarted")} restarted, ${by("unresolved")} unresolved (story goes on, no landing found).`);
+      console.log(
+        `Story check: ${by("extended")} extended, ${by("restarted")} restarted, ${by("unresolved")} unresolved (story goes on, no landing found), ` +
+          `${by("cut")} cut before a story the clip only opens (fix AB).`,
+      );
       console.log(`Model calls: ${usage.calls}, ${usage.input} input tokens, ${usage.output} output tokens.`);
     }
     if (fix === "X") {
@@ -271,6 +286,15 @@ async function main() {
       const sceneFrames = rows.reduce((n, r) => n + Number(r.detail.sceneFrames ?? 0), 0);
       const frames = rows.reduce((n, r) => n + Number(r.detail.frames ?? 0), 0);
       console.log(`Slides found: ${slides}; unchecked: ${unchecked}. Frames shown: ${frames}, of them ${sceneFrames} at scene changes. Vision calls: ${usage.calls}, ${usage.input} input tokens.`);
+    }
+    if (fix === "AC") {
+      const flagged = rows.filter((r) => r.moved);
+      const frames = rows.reduce((n, r) => n + Number(r.detail.framesChecked ?? 0), 0);
+      console.log(
+        `Empty stretches (no face, nobody seen, half a second or more): ${flagged.length} clips flagged, ` +
+          `${flagged.filter((r) => r.verdict === "pass").length} passed and ${flagged.filter((r) => r.verdict === "fail").length} failed. ` +
+          `The person detector read ${frames} faceless frames.`,
+      );
     }
     if (fix === "W") {
       const joined = rows.filter((r) => r.detail.ellipsisJoined).length;
@@ -333,6 +357,29 @@ async function replayOne(
       },
     };
   }
+  if (fix === "AC") {
+    if (!source) return { ...clip, to: null, moved: false, detail: { error: "no source file on disk" } };
+    const checked = await checkClipEmptyFrames({
+      sourceFilePath: source,
+      startMs: range.startMs,
+      endMs: range.endMs,
+      workDir: path.join(os.tmpdir(), "lab-replay-camera"),
+    });
+    const detail: Record<string, unknown> = { samples: checked.samples, framesChecked: checked.framesChecked, runs: checked.runs };
+    if (checked.result.pass) return { ...clip, to: null, moved: false, detail };
+    const at = checked.result.at;
+    return {
+      ...clip,
+      to: null,
+      moved: true,
+      detail: {
+        ...detail,
+        outcome: `off-screen ${checked.runs.map((r) => `${(r.start - range.startMs / 1000).toFixed(2)}-${(r.end - range.startMs / 1000).toFixed(2)} s`).join(", ")}`,
+        at,
+        reason: `nobody in the frame at ${formatClock(Math.round(at * 1000))}, ${(at - range.startMs / 1000).toFixed(1)} s into the clip`,
+      },
+    };
+  }
   if (fix === "V") {
     if (!source) return { ...clip, to: null, moved: false, detail: { error: "no source file on disk" } };
     const snapped = await snapClipEnd(source, range);
@@ -341,6 +388,59 @@ async function replayOne(
       : { ...clip, to: null, moved: false, detail: {} };
   }
   const context = boundaryContext(segments, range);
+  if (fix === "AA") {
+    const { units, currentStart, currentEnd } = context;
+    let start = currentStart;
+    while (start < currentEnd && labelStart(units, start)) start += 1;
+    if (start === currentStart) return { ...clip, to: null, moved: false, detail: {} };
+    const startMs = units[start].startMs;
+    return {
+      ...clip,
+      to: [startMs, range.endMs],
+      moved: true,
+      detail: {
+        outcome: "label start dropped",
+        movedMs: startMs - range.startMs,
+        dropped: units.slice(currentStart, start).map((u) => u.text).join(" "),
+        reason: `"${units.slice(currentStart, start).map((u) => u.text).join(" ")}" then a pause of ${((startMs - units[start - 1].endMs) / 1000).toFixed(1)} s before "${units[start].text.slice(0, 60)}"`,
+      },
+    };
+  }
+  if (fix === "AD") {
+    const { units, currentStart, currentEnd } = context;
+    const brk = sectionBreakInside(units, currentStart, currentEnd);
+    if (brk === null) return { ...clip, to: null, moved: false, detail: {} };
+    return {
+      ...clip,
+      to: null,
+      moved: true,
+      detail: {
+        outcome: `spans a section break at line ${brk - currentStart} of ${currentEnd - currentStart}`,
+        reason: units[brk].text.slice(0, 120),
+      },
+    };
+  }
+  if (fix === "AE") {
+    const { units, currentStart, currentEnd } = context;
+    let end = currentEnd;
+    if (typeof clip.preLookEndMs === "number" && clip.preLookEndMs < range.endMs) {
+      while (end > currentStart && units[end].startMs >= clip.preLookEndMs) end -= 1;
+    }
+    const before = endBeforeNextPoint(units, currentStart, end);
+    if (before === end) return { ...clip, to: null, moved: false, detail: {} };
+    const endMs = units[before].endMs;
+    return {
+      ...clip,
+      to: [range.startMs, endMs],
+      moved: true,
+      detail: {
+        outcome: `next-point opener cut${end !== currentEnd ? " (the end before the end look)" : ""}`,
+        movedMs: endMs - range.endMs,
+        dropped: units.slice(before + 1, end + 1).map((u) => u.text).join(" "),
+        reason: `"${units[end].text.slice(0, 100)}" opens the next point; the clip ends on "${units[before].text.slice(0, 80)}"`,
+      },
+    };
+  }
   if (fix === "W") {
     const { units, currentStart, currentEnd } = context;
     // The "..." fix: a marked end whose sentence now runs on through a "..." segment.
@@ -487,7 +587,7 @@ async function replayOne(
     const moved = startMoved || endMoved;
     return { ...clip, to: moved ? [final.startMs, final.endMs] : null, moved, detail };
   }
-  if (fix === "U") {
+  if (fix === "U" || fix === "AB") {
     const client = new Anthropic();
     const askStory = async (prompt: string) => {
       const message = await client.messages.create({
