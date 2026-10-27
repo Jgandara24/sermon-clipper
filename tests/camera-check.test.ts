@@ -4,7 +4,10 @@ import {
   CameraFrameLabelsSchema,
   cameraRunsToShow,
   decideCameraCheck,
+  decideEmptyFrames,
+  emptyRuns,
   groupNoFaceRuns,
+  runsToDetectPeople,
   sceneChangeRuns,
   type CameraSample,
 } from "@/lib/analysis/camera-check";
@@ -116,5 +119,41 @@ describe("cameraCheckPrompt", () => {
   it("parses the model's labels", () => {
     expect(CameraFrameLabelsSchema.parse({ frames: [{ index: 0, label: "SLIDE" }] }).frames[0].label).toBe("SLIDE");
     expect(() => CameraFrameLabelsSchema.parse({ frames: [{ index: 0, label: "MAYBE" }] })).toThrow();
+  });
+});
+
+describe("fix AC: an empty stretch rejects the clip as off-screen", () => {
+  // Samples every 0.25 s, as the sampler takes them; lab sermon 1q clip 4 had no face at 8.5 s and 8.75 s and nobody in either frame.
+  const quarter = (faces: number[], start = 0): CameraSample[] =>
+    faces.map((faceCount, i) => ({ t: start + i * 0.25, faceCount, image: faceCount === 0 ? `frame-${i}.jpg` : null }));
+  const nobody = () => 0;
+
+  it("only the faceless runs of half a second or more go to the person detector", () => {
+    const runs = runsToDetectPeople(quarter([1, 0, 1, 0, 0, 1, 0, 0, 0, 1]));
+    expect(runs.map((r) => [r.start, r.end])).toEqual([
+      [0.75, 1.25],
+      [1.5, 2.25],
+    ]);
+  });
+
+  it("finds a run of faceless samples where nobody is seen, half a second or more", () => {
+    expect(emptyRuns(quarter([1, 1, 0, 0, 1]), nobody)).toEqual([{ start: 0.5, end: 1 }]);
+    expect(emptyRuns(quarter([1, 1, 0, 1]), nobody)).toEqual([]);
+    // At the clip's end the last sample counts for one step.
+    expect(emptyRuns(quarter([1, 1, 0, 0]), nobody)).toEqual([{ start: 0.5, end: 1 }]);
+  });
+
+  it("ends a run where someone is seen, or where the detector did not look", () => {
+    // Faceless at 0.25 s to 1.0 s; someone is seen at 0.5 s, so only 0.75 s to 1.25 s is empty.
+    const seen = (image: string) => (image === "frame-2.jpg" ? 1 : 0);
+    expect(emptyRuns(quarter([1, 0, 0, 0, 0, 1]), seen)).toEqual([{ start: 0.75, end: 1.25 }]);
+    expect(emptyRuns(quarter([1, 0, 0, 0, 0, 0, 1]), seen)).toEqual([{ start: 0.75, end: 1.5 }]);
+    const unseen = (image: string) => (image === "frame-2.jpg" ? undefined : 0);
+    expect(emptyRuns(quarter([1, 0, 0, 0, 1]), unseen)).toEqual([]);
+  });
+
+  it("rejects on the first empty stretch", () => {
+    expect(decideEmptyFrames([])).toEqual({ pass: true });
+    expect(decideEmptyFrames([{ start: 2833.64, end: 2834.14 }])).toEqual({ pass: false, reason: "off-screen", at: 2833.64, via: "no person" });
   });
 });

@@ -13,7 +13,12 @@ import {
   endsOnQuotationStart,
   checkStory,
   endsOnRecapIntoNextPoint,
+  endBeforeNextPoint,
+  labelStart,
+  opensNextPoint,
   recapIntoNextPoint,
+  sectionBreak,
+  sectionBreakInside,
   readsVerse,
   readsVerseNext,
   storyLookLines,
@@ -100,13 +105,13 @@ describe("applyBoundaryChoice", () => {
 
   it("moves the clip to the chosen sentences", () => {
     const result = applyBoundaryChoice(context, { startUnit: at(1176), endUnit: at(1184) });
-    expect(result).toEqual({ startMs: 4308684, endMs: 4342000, adjustedForScripture: false, adjustedEnd: false });
+    expect(result).toEqual({ startMs: 4308684, endMs: 4342000, adjustedForScripture: false, adjustedStart: false, adjustedEnd: false });
   });
 
   it("steps past a Scripture reading at the start, through the end of the quoted passage", () => {
     // 1179 opens the quote of Ephesians 2:8-9 and 1180 closes it; the preacher resumes at 1181.
     const result = applyBoundaryChoice(context, { startUnit: at(1179), endUnit: at(1184) });
-    expect(result).toEqual({ startMs: 4324684, endMs: 4342000, adjustedForScripture: true, adjustedEnd: false });
+    expect(result).toEqual({ startMs: 4324684, endMs: 4342000, adjustedForScripture: true, adjustedStart: false, adjustedEnd: false });
   });
 
   it("refuses a choice that is too short, too long, reversed or out of range", () => {
@@ -128,7 +133,7 @@ describe("applyBoundaryChoice", () => {
     const units = Array.from({ length: 40 }, (_, i) => ({ idx: i, startMs: i * 3_000, endMs: i * 3_000 + 2_900, text: "Point." }));
     const context = boundaryContext(units, { startMs: 30_000, endMs: 60_000 }, 90_000);
     expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 24 })).toMatchObject({ startMs: 0, endMs: 74_900 });
-    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 29 })).toEqual({ startMs: 0, endMs: 89_900, adjustedForScripture: false, adjustedEnd: false });
+    expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 29 })).toEqual({ startMs: 0, endMs: 89_900, adjustedForScripture: false, adjustedStart: false, adjustedEnd: false });
     expect(applyBoundaryChoice(context, { startUnit: 0, endUnit: 30 })).toBeNull();
     expect(BOUNDARY_MAX_MS).toBe(90_000);
   });
@@ -233,6 +238,7 @@ describe("applyBoundaryChoice keeps an end on a whole quoted sentence (fix O, la
       startMs: 2522896,
       endMs: 2547376,
       adjustedForScripture: false,
+      adjustedStart: false,
       adjustedEnd: false,
     });
   });
@@ -247,6 +253,7 @@ describe("applyBoundaryChoice never ends on the start of a quotation", () => {
       startMs: 3455184,
       endMs: 3513400,
       adjustedForScripture: false,
+      adjustedStart: false,
       adjustedEnd: true,
     });
   });
@@ -654,6 +661,7 @@ describe("fix I1: the quotation check keeps a line that closes the point", () =>
       startMs: 2133709,
       endMs: 2193370,
       adjustedForScripture: false,
+      adjustedStart: false,
       adjustedEnd: false,
     });
   });
@@ -1279,19 +1287,30 @@ describe("fix U: the story check", () => {
     expect(askBoundary).not.toHaveBeenCalled();
   });
 
-  it("keeps the range when the story begins only in the clip's last seconds (gate run: Saul's story in lab sermon 2b clip 5)", async () => {
-    // A clip that ends on "Jesus began to wash the disciples' feet." (6.5 seconds of story) only introduces it.
+  it("cuts the end before a story that begins only in the clip's last seconds, when a second look agrees (fix AB, lab sermon 1q clip 6)", async () => {
+    // A clip that ends on "Jesus began to wash the disciples' feet." (6.5 seconds of story) only introduces it:
+    // the story is the next clip's, so the end moves to the line before it (gate run: Saul's story in 2b clip 5).
     const range = { startMs: 2311284, endMs: 2344004 };
     const ctx = boundaryContext(ONE_N_C6, range);
     const lk = storyLookLines(ctx.units, range)!;
     const lands = ctx.units.findIndex((u) => u.text.startsWith("And day by day")) - lk.offset;
     const askBoundary = vi.fn();
-    const result = await checkStory(ctx, range, story(lands, true, true, lk.end), askBoundary);
-    expect(result.range).toEqual(range);
-    expect(result.check.refused).toMatch(/fills less than 12 seconds of the clip/);
+    const askStory = story(lands, true, true, lk.end);
+    const result = await checkStory(ctx, range, askStory, askBoundary);
+    expect(askStory).toHaveBeenCalledTimes(2);
+    expect(result.range).toEqual({ startMs: range.startMs, endMs: ctx.units[lk.offset + lk.end - 1].endMs });
+    expect(result.check).toMatchObject({ outcome: "cut", refused: null, continues: true });
+    expect(result.check.movedMs).toBeLessThan(0);
     expect(askBoundary).not.toHaveBeenCalled();
+    // The second look must agree that the story starts there.
+    const first = { endIsNarration: true, storyKind: "events", storyStartsUnit: lk.end, pointStatedUnit: -1, continues: true, landsUnit: lands, reason: "first" };
+    const disagree = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce({ ...first, storyStartsUnit: 0, reason: "second" });
+    const keptRange = await checkStory(ctx, range, disagree, askBoundary);
+    expect(keptRange.range).toEqual(range);
+    expect(keptRange.check.refused).toMatch(/fills less than 12 seconds of the clip.*second look did not agree/);
     const none = await checkStory(ctx, range, story(lands, true, true, -1), askBoundary);
     expect(none.range).toEqual(range);
+    expect(none.check.refused).toMatch(/fills less than 12 seconds of the clip/);
     // From the clip's first line the story fills the whole clip, and the check goes on to the landing.
     const whole = await checkStory(ctx, range, story(lands, true, true, 0), vi.fn().mockResolvedValue({ startUnit: 0, endUnit: 0, reason: "y" }));
     expect(whole.check.refused).not.toMatch(/fills less than/);
@@ -1473,6 +1492,7 @@ describe("fix T: no end on a recap that leads into the next numbered point", () 
       startMs: 4110300,
       endMs: 4138500,
       adjustedForScripture: false,
+      adjustedStart: false,
       adjustedEnd: true,
     });
   });
@@ -1748,6 +1768,7 @@ describe("fix Z: the recap before the next point may run two lines (lab sermon 1
       startMs: units[0].startMs,
       endMs: units[so - 1].endMs,
       adjustedForScripture: false,
+      adjustedStart: false,
       adjustedEnd: true,
     });
   });
@@ -1816,5 +1837,182 @@ describe("fix Z: the hook sits within the first 35 seconds of the current clip",
       why: "The story lands at unit [30].",
     });
     expect(held.range).toMatchObject({ startMs: 66_000 });
+  });
+});
+
+// Lab sermon 1q clip 2 (2026-10-26), 73:05–74:02: the clip opened on the label "Saving grace." and a 2.5 s pause.
+const ONE_Q_C2: BoundaryUnit[] = [
+  { idx: 1052, startMs: 4385040, endMs: 4385540, text: "Amen." },
+  { idx: 1053, startMs: 4386560, endMs: 4387540, text: "Saving grace." },
+  { idx: 1054, startMs: 4390060, endMs: 4393680, text: "For by grace are you saved through faith, not of yourself." },
+  { idx: 1055, startMs: 4395380, endMs: 4396020, text: "It's a gift." },
+  { idx: 1056, startMs: 4397100, endMs: 4401620, text: "It's a gift of God, not of works, lest any man should boast." },
+  { idx: 1057, startMs: 4401880, endMs: 4403380, text: "You're trying to work your way to God." },
+  { idx: 1058, startMs: 4403440, endMs: 4405100, text: "Some of you are just, that's you today." },
+  { idx: 1059, startMs: 4405140, endMs: 4406440, text: "You're just trying to work." },
+  { idx: 1060, startMs: 4406700, endMs: 4409920, text: "You're trying to, you know, claw your way to God." },
+  { idx: 1061, startMs: 4410640, endMs: 4413700, text: "You're here today, say, \"Man, I'm at church today 'cause I wanna be at church.\"" },
+  { idx: 1062, startMs: 4413740, endMs: 4414620, text: "Well, that's a great thing." },
+  { idx: 1063, startMs: 4414680, endMs: 4415780, text: "We're glad you're here." },
+  { idx: 1064, startMs: 4416600, endMs: 4419920, text: "Maybe, maybe I can turn over a new leaf and I'm just gonna start going to church." },
+  { idx: 1065, startMs: 4419960, endMs: 4423560, text: "Well, that's wonderful, but going to church all day long's not gonna save you." },
+  { idx: 1066, startMs: 4423620, endMs: 4425140, text: "You need the saving grace of God." },
+  { idx: 1067, startMs: 4425340, endMs: 4426560, text: "Amen." },
+  { idx: 1068, startMs: 4426600, endMs: 4429460, text: "It's a gift of God, not of works, lest any man should boast." },
+  { idx: 1069, startMs: 4429640, endMs: 4430120, text: "Praise Him." },
+  { idx: 1070, startMs: 4430160, endMs: 4431880, text: "It's the amazing grace of God." },
+  { idx: 1071, startMs: 4432620, endMs: 4438120, text: "Man, I'm so grateful that God saved a wretch like me and a wretch like you." },
+  { idx: 1072, startMs: 4438720, endMs: 4438800, text: "Amen." },
+  { idx: 1073, startMs: 4438860, endMs: 4439880, text: "Saving grace." },
+  { idx: 1074, startMs: 4441520, endMs: 4442420, text: "But what else is there?" },
+];
+
+describe("fix AA: a short label with a pause after it is not the opening line (lab sermon 1q clip 2)", () => {
+  const range = { startMs: 4386560, endMs: 4438120 };
+  const context = boundaryContext(ONE_Q_C2, range);
+  const unit = (start: string) => context.units.findIndex((u) => u.text.startsWith(start));
+
+  it("sees a label of three words or fewer followed by a pause of two seconds or more", () => {
+    expect(labelStart(context.units, unit("Saving grace."))).toBe(true);
+    // Three words, but the next line follows within 1.1 s.
+    expect(labelStart(context.units, unit("It's a gift."))).toBe(false);
+    expect(labelStart(context.units, unit("For by grace"))).toBe(false);
+    // A short question with a pause is a hook, not a label.
+    const question: BoundaryUnit[] = [
+      { idx: 1, startMs: 0, endMs: 900, text: "Do you have it?" },
+      { idx: 2, startMs: 3500, endMs: 6000, text: "Man, I gotta tell y'all, I am so glad today that I am saved." },
+    ];
+    expect(labelStart(question, 0)).toBe(false);
+  });
+
+  it("moves the start past the label", () => {
+    const choice = { startUnit: unit("Saving grace."), endUnit: unit("Man, I'm so grateful") };
+    expect(applyBoundaryChoice(context, choice)).toMatchObject({ startMs: 4390060, endMs: 4438120, adjustedStart: true });
+    expect(applyBoundaryChoice(context, { startUnit: unit("For by grace"), endUnit: unit("Man, I'm so grateful") })).toMatchObject({
+      startMs: 4390060,
+      adjustedStart: false,
+    });
+    const short = boundaryRefusal(context, { startUnit: unit("Saving grace."), endUnit: unit("It's a gift of God") });
+    expect(short).toContain("The start moved past a short label line.");
+  });
+});
+
+// Lab sermon 3m clip 2 (2026-10-26), 31:23–32:24: a joke, the applause call, "You can be seated.", then the subject.
+const THREE_M_C2: BoundaryUnit[] = [
+  { idx: 445, startMs: 1883480, endMs: 1887080, text: "if I catch you, uh, this is a wireless mic." },
+  { idx: 446, startMs: 1887180, endMs: 1889140, text: "I can walk right out there where you are, all right?" },
+  { idx: 447, startMs: 1890540, endMs: 1896860, text: "But if I catch you, what we're gonna do after church is this: we're gonna go outside and find a grassy area, and we're gonna sumo wrestle." },
+  { idx: 448, startMs: 1899820, endMs: 1903700, text: "First thing you'll see is my belly button, the second thing you'll see is Jesus, amen?" },
+  { idx: 449, startMs: 1904660, endMs: 1907460, text: "Let's give, let's give a hand for these young people tonight, amen." },
+  { idx: 450, startMs: 1908200, endMs: 1911300, text: "You can be seated." },
+  { idx: 451, startMs: 1911420, endMs: 1912820, text: "Acts chapter 26." },
+  { idx: 452, startMs: 1912900, endMs: 1920540, text: "I'm just gonna read, uh, a few verses, and then we're gonna look at, uh, this scripture tonight, and I pray the Holy Spirit will, will speak to you." },
+  { idx: 453, startMs: 1920540, endMs: 1923000, text: "And I wanna preach on this subject tonight: almost." },
+  { idx: 454, startMs: 1924360, endMs: 1924480, text: "Almost." },
+  { idx: 455, startMs: 1924520, endMs: 1930000, text: "Why, why are some people almost saved, but not altogether saved?" },
+  { idx: 456, startMs: 1930040, endMs: 1930300, text: "Yeah." },
+  { idx: 457, startMs: 1930860, endMs: 1931200, text: "Amen." },
+  { idx: 458, startMs: 1931980, endMs: 1938280, text: "Why are many of us tonight, that are born again, why are we almost sold out to Jesus, but we're not totally sold out to Jesus?" },
+  { idx: 460, startMs: 1940880, endMs: 1944440, text: "Well, look with me, if you will, in Acts chapter, uh, 26." },
+];
+
+describe("fix AD: a clip never spans a section break, and the hook window counts from the break (lab sermon 3m clip 2)", () => {
+  const range = { startMs: 1885432, endMs: 1930152 };
+  const context = boundaryContext(THREE_M_C2, range);
+  const unit = (start: string) => context.units.findIndex((u) => u.text.startsWith(start));
+
+  it("knows an applause call and 'you can be seated' as section breaks", () => {
+    expect(sectionBreak("Let's give, let's give a hand for these young people tonight, amen.")).toBe(true);
+    expect(sectionBreak("You can be seated.")).toBe(true);
+    expect(sectionBreak("Put your hands together for the choir.")).toBe(true);
+    expect(sectionBreak("First thing you'll see is my belly button, the second thing you'll see is Jesus, amen?")).toBe(false);
+    expect(sectionBreakInside(context.units, unit("But if I catch you"), unit("Why are many of us"))).toBe(unit("Let's give"));
+    expect(sectionBreakInside(context.units, unit("Acts chapter 26."), unit("Why are many of us"))).toBeNull();
+  });
+
+  it("refuses a range that spans the break, and accepts one that ends on it", () => {
+    const refused = boundaryRefusal(context, { startUnit: unit("But if I catch you"), endUnit: unit("Why are many of us") });
+    expect(refused).toContain(`Unit [${unit("Let's give")}] closes one part of the service and opens another`);
+    expect(refused).toContain(`start after unit [${unit("Let's give")}], or end before it.`);
+    expect(applyBoundaryChoice(context, { startUnit: unit("But if I catch you"), endUnit: unit("Let's give") })).toMatchObject({ startMs: 1890540 });
+  });
+
+  it("counts the hook window from the line after the break, so the subject line is accepted 37 seconds in", async () => {
+    // 37.1 s after the current clip's start, but 9.1 s after "Acts chapter 26.", the line after "You can be seated."
+    expect(boundaryRefusal(context, { startUnit: unit("And I wanna preach"), endUnit: unit("Why are many of us") })).toBeNull();
+    const chosen = await chooseBoundary(context, async () => ({ startUnit: unit("And I wanna preach"), endUnit: unit("Why are many of us"), reason: "the subject" }));
+    expect(chosen.attempts[0].refused).toBeNull();
+    expect(chosen.range).toMatchObject({ startMs: 1920540, endMs: 1938280 });
+  });
+
+  it("still refuses a start more than 35 seconds after the break", () => {
+    const late = THREE_M_C2.map((u) => ({ ...u }));
+    late.push({ idx: 461, startMs: 1947000, endMs: 1960000, text: "Now here is the thing I want you to see tonight about being almost persuaded." });
+    late.push({ idx: 462, startMs: 1960100, endMs: 1966000, text: "Almost is not altogether, and almost will send you to hell." });
+    const ctx = boundaryContext(late, range);
+    const at = (start: string) => ctx.units.findIndex((u) => u.text.startsWith(start));
+    const refused = boundaryRefusal(ctx, { startUnit: at("Now here is the thing"), endUnit: at("Almost is not altogether") });
+    expect(refused).toContain(`starts 35.6 seconds after the line after the section break at unit [${at("You can be seated.")}], unit [${at("Acts chapter 26.")}]`);
+  });
+});
+
+// Lab sermon 4k clip 1 (2026-10-26), 48:01–49:00: the model ended one line past the punch line, on a next-point opener.
+const FOUR_K_C1: BoundaryUnit[] = [
+  { idx: 530, startMs: 2881140, endMs: 2890820, text: "That Mount of Transfiguration experience tells me that the only gospel there is is the gospel that is through Jesus Christ." },
+  { idx: 531, startMs: 2891320, endMs: 2891380, text: "Amen." },
+  { idx: 532, startMs: 2891440, endMs: 2895740, text: "There is no other name under heaven given among men whereby we must be saved." },
+  { idx: 533, startMs: 2896080, endMs: 2898180, text: "It is not in the name of Moses." },
+  { idx: 534, startMs: 2898400, endMs: 2900260, text: "It is not in the name of Elijah." },
+  { idx: 535, startMs: 2900480, endMs: 2902340, text: "It is not in the name of Confucius." },
+  { idx: 536, startMs: 2902580, endMs: 2904320, text: "It is not in the name of Muhammad." },
+  { idx: 537, startMs: 2904500, endMs: 2906020, text: "It is not in the name of Buddha." },
+  { idx: 538, startMs: 2906300, endMs: 2909140, text: "It's only in the name of Jesus Christ." },
+  { idx: 539, startMs: 2909340, endMs: 2917280, text: "There is one mediator between a sinner and a holy God, and it is the God man, the Lord Jesus Christ." },
+  { idx: 540, startMs: 2920520, endMs: 2920740, text: "Yes." },
+  { idx: 541, startMs: 2920740, endMs: 2929060, text: "But it also tells me, now listen, it also tells me that salvation is a powerful experience." },
+  { idx: 542, startMs: 2929820, endMs: 2929880, text: "Amen." },
+  { idx: 543, startMs: 2929940, endMs: 2932000, text: "Because we are changed." },
+  { idx: 544, startMs: 2932260, endMs: 2933600, text: "Yes, sir." },
+  { idx: 545, startMs: 2933660, endMs: 2940540, text: "Now listen, we're changed not from the outside in, but from the inside out." },
+];
+
+describe("fix AE: a line that opens the next point is not the ending (lab sermon 4k clip 1)", () => {
+  const range = { startMs: 2880916, endMs: 2920896 };
+  const context = boundaryContext(FOUR_K_C1, range);
+  const unit = (start: string) => context.units.findIndex((u) => u.text.startsWith(start));
+
+  it("knows the openers", () => {
+    expect(opensNextPoint("But it also tells me, now listen, it also tells me that salvation is a powerful experience.")).toBe(true);
+    expect(opensNextPoint("Not only that, He rose again on the third day.")).toBe(true);
+    expect(opensNextPoint("There's another thing I want you to see here.")).toBe(true);
+    expect(opensNextPoint("And here's something else we learn from Peter.")).toBe(true);
+    expect(opensNextPoint("Because we are changed.")).toBe(false);
+    expect(opensNextPoint("It is not in the name of Moses.")).toBe(false);
+    expect(opensNextPoint("You also need to know this tonight.")).toBe(false);
+  });
+
+  it("moves the end back past the opener and the crowd word before it", () => {
+    expect(endBeforeNextPoint(context.units, unit("That Mount"), unit("But it also tells me"))).toBe(unit("There is one mediator"));
+    expect(applyBoundaryChoice(context, { startUnit: unit("That Mount"), endUnit: unit("But it also tells me") })).toMatchObject({
+      endMs: 2917280,
+      adjustedEnd: true,
+    });
+    expect(applyBoundaryChoice(context, { startUnit: unit("That Mount"), endUnit: unit("There is one mediator") })).toMatchObject({
+      endMs: 2917280,
+      adjustedEnd: false,
+    });
+  });
+
+  it("never lets the end look move onto an opener", async () => {
+    // The opener ends within 6 seconds of the cut here, so the look shows it.
+    const units = FOUR_K_C1.map((u) => (u.idx === 541 ? { ...u, endMs: 2922700 } : u));
+    const ctx = boundaryContext(units, range);
+    const clip = { startMs: 2881140, endMs: 2917280 };
+    const lines = endLookLines(ctx.units, clip)!;
+    const opener = lines.lines.findIndex((u) => u.text.startsWith("But it also tells me"));
+    expect(opener).toBeGreaterThan(lines.end);
+    const looked = await lookPastTheEnd(ctx.units, clip, async () => ({ finishesLater: true, endUnit: opener, reason: "it goes on" }));
+    expect(looked.range).toEqual(clip);
+    expect(looked.look.refused).toBe(`Unit [${opener}] opens the next point.`);
   });
 });

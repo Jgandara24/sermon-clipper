@@ -369,6 +369,72 @@ export function recapIntoNextPoint(units: BoundaryUnit[], endUnit: number): { fi
 export function endsOnRecapIntoNextPoint(units: BoundaryUnit[], endUnit: number): boolean {
   return recapIntoNextPoint(units, endUnit) !== null;
 }
+
+// Fix AE (lab sermon 4k clip 1, 2026-10-26): the model's reason named "There is one mediator between a
+// sinner and a holy God…" as the punch line, but its end unit pointed one line later, to "But it also
+// tells me, now listen, it also tells me that salvation is a powerful experience.", and the end look
+// then added "Because we are changed." Jake: 'Should have ended on , "There is one mediator…"'. A line
+// that opens with "it also…", "not only that" or "there's another…" opens the next point: it is not an
+// ending, and the end look never moves onto one. Over the 335 marked clips, only this clip's end
+// (before the look) opens that way.
+const NEXT_POINT_OPENER =
+  /^\W*(?:(?:and|but|now|so|well|yeah|amen|see|listen|then|okay)\W+)*(?:(?:it|this|that|he|she|the bible|the word|god|jesus)\s+also\s+\w|not only (?:that|this)\b|(?:there|here)'?s (?:another|a second|something else)\b)/i;
+
+/** True when the line opens the next point ("But it also tells me…", "Not only that…", "There's another…"). */
+export function opensNextPoint(text: string): boolean {
+  return NEXT_POINT_OPENER.test(text);
+}
+
+/** Fix AE: the end moved back past any line that opens the next point, and past the crowd words before it. */
+export function endBeforeNextPoint(units: BoundaryUnit[], startUnit: number, endUnit: number): number {
+  while (endUnit > startUnit && opensNextPoint(units[endUnit].text)) {
+    endUnit -= 1;
+    while (endUnit > startUnit && RESPONSE_LINE.test(units[endUnit].text)) endUnit -= 1;
+  }
+  return endUnit;
+}
+
+// Fix AA (lab sermon 1q clip 2, 2026-10-26): the clip opened on the two-word label "Saving grace.",
+// then a 2.5 s pause, then "For by grace are you saved through faith". Jake: '"Saving Grace" the first
+// part shouldn't start it. Start the clip with "For by grace…"'. He passed the same start in 1l clip 3;
+// his later mark decides. Over the 335 marked clips, only that twin starts on a line of three words or
+// fewer followed by a pause of 2 s or more; "Friend, listen." and "Think about this.", which he passed,
+// run into their next line within 1.6 s.
+export const LABEL_START_MAX_WORDS = 3;
+export const LABEL_START_GAP_MS = 2_000;
+
+/** True when the start line is a short label ("Saving grace.") with a pause of LABEL_START_GAP_MS or more after it. */
+export function labelStart(units: BoundaryUnit[], startUnit: number): boolean {
+  const unit = units[startUnit];
+  const next = units[startUnit + 1];
+  if (!unit || !next) return false;
+  const text = unit.text.trim();
+  if (/[?!]$/.test(text)) return false;
+  const words = text.replace(/[^a-z0-9' ]/gi, " ").split(/\s+/).filter(Boolean);
+  return words.length > 0 && words.length <= LABEL_START_MAX_WORDS && next.startMs - unit.endMs >= LABEL_START_GAP_MS;
+}
+
+// Fix AD (lab sermon 3m clip 2, 2026-10-26): the model twice chose the right start, "And I wanna preach
+// on this subject tonight: almost.", 37.1 s after the candidate's start; fix Z's 35 s hook window refused
+// it both times, and the clip then started on the sumo-wrestle joke, the applause call, "You can be
+// seated." and the subject. Jake: "two different segments together. A joke and then an applause and total
+// subject change". A line like "let's give a hand" or "you can be seated" closes one part of the service
+// and opens another: the hook window counts from the line after it, and a clip never spans it. It may end
+// on one (3i clip 6 passed ending on the applause call). Over the 335 marked clips, only this clip holds
+// such a line before its last.
+const SECTION_BREAK =
+  /\b(?:you (?:can|may) be seated|be seated|(?:let'?s|let us) give (?:him|her|them|these|our|a) (?:a )?hand|give (?:him|her|them) a hand|put your hands together)\b/i;
+
+/** True when the line closes one part of the service and opens another ("Let's give a hand…", "You can be seated."). */
+export function sectionBreak(text: string): boolean {
+  return SECTION_BREAK.test(text);
+}
+
+/** The first section break at or after `startUnit` and before `endUnit`, or null. */
+export function sectionBreakInside(units: BoundaryUnit[], startUnit: number, endUnit: number): number | null {
+  for (let i = startUnit; i < endUnit; i += 1) if (sectionBreak(units[i].text)) return i;
+  return null;
+}
 /**
  * A count the preacher announces inside the clip ("three things") whose first item the clip gives
  * ("First of all") with no later item after it. Null when the clip leaves the announcement out,
@@ -569,7 +635,7 @@ export function boundaryPrompt(context: BoundaryContext, hold: HeldEnd | null = 
 
 /** `hookWindowMs` left out means no limit on how much later than the current clip a first answer may start. */
 export type BoundaryLimits = { minMs: number; maxMs: number; cutMaxMs: number; hookWindowMs?: number };
-type BoundaryRange = { startMs: number; endMs: number; adjustedForScripture: boolean; adjustedEnd: boolean };
+type BoundaryRange = { startMs: number; endMs: number; adjustedForScripture: boolean; adjustedStart: boolean; adjustedEnd: boolean };
 const DEFAULT_LIMITS: BoundaryLimits = {
   minMs: BOUNDARY_MIN_MS,
   maxMs: BOUNDARY_MAX_MS,
@@ -638,6 +704,12 @@ function evaluateBoundaryChoice(
   if (startUnit > endUnit) {
     return { refused: `${asked} are all the Scripture reading. Start where the preacher explains or applies it.` };
   }
+  // Fix AA: a short label with a pause after it is not the opening line.
+  let adjustedStart = false;
+  while (startUnit < endUnit && labelStart(units, startUnit)) {
+    adjustedStart = true;
+    startUnit += 1;
+  }
 
   let adjustedEnd = false;
   while (endUnit > startUnit && endsOnQuotationStart(units[endUnit].text)) {
@@ -652,6 +724,12 @@ function evaluateBoundaryChoice(
     endUnit = recap.first - 1;
     recap = endUnit > startUnit ? recapIntoNextPoint(units, endUnit) : null;
   }
+  // Fix AE: a line that opens the next point is not the ending; the crowd words before it go too.
+  const beforeNextPoint = endBeforeNextPoint(units, startUnit, endUnit);
+  if (beforeNextPoint !== endUnit) {
+    adjustedEnd = true;
+    endUnit = beforeNextPoint;
+  }
 
   const moved =
     startUnit === choice.startUnit && endUnit === choice.endUnit ? "" : `${asked} become units [${startUnit}] to [${endUnit}] after the checks. `;
@@ -661,6 +739,15 @@ function evaluateBoundaryChoice(
       refused:
         `${moved}Units [${prayer.first}] to [${prayer.last}] are a prayer ("${prayer.words}"). Never include prayer: choose a ` +
         "range that leaves out all of the prayer, before it starts or after it ends.",
+    };
+  }
+  // Fix AD: a clip never spans a section break.
+  const brk = sectionBreakInside(units, startUnit, endUnit);
+  if (brk !== null) {
+    return {
+      refused:
+        `${moved}Unit [${brk}] closes one part of the service and opens another ("${units[brk].text}"). A clip never ` +
+        `spans it: start after unit [${brk}], or end before it.`,
     };
   }
   const announced = announcedListWithOnlyFirst(units, startUnit, endUnit);
@@ -727,23 +814,35 @@ function evaluateBoundaryChoice(
   if (duration >= limits.minMs && duration <= maxMs) {
     // Fix Z: a first answer may not start more than the hook window after the current clip's start.
     // Checked after the length, so an answer that runs too long still sets the held end (fix K2).
-    const currentStartMs = units[context.currentStart].startMs;
-    const late = startMs - currentStartMs;
+    // Fix AD: after a section break inside the current clip, the window counts from the line after it.
+    let windowStart = context.currentStart;
+    for (let u = startUnit - 1; u >= context.currentStart; u -= 1) {
+      if (sectionBreak(units[u].text)) {
+        windowStart = u + 1;
+        break;
+      }
+    }
+    const windowStartMs = units[windowStart].startMs;
+    const late = startMs - windowStartMs;
     if (held === null && limits.hookWindowMs !== undefined && late > limits.hookWindowMs) {
-      let last = context.currentStart;
-      while (last + 1 < units.length && units[last + 1].startMs - currentStartMs <= limits.hookWindowMs) last += 1;
+      let last = windowStart;
+      while (last + 1 < units.length && units[last + 1].startMs - windowStartMs <= limits.hookWindowMs) last += 1;
+      const from = windowStart === context.currentStart ? "the current clip's start" : `the line after the section break at unit [${windowStart - 1}]`;
       return {
         refused:
-          `${moved}Unit [${startUnit}] starts ${(late / 1000).toFixed(1)} seconds after the current clip's start, unit ` +
-          `[${context.currentStart}]. The hook sits within the first ${limits.hookWindowMs / 1000} seconds of the current clip: ` +
-          `start on unit [${context.currentStart}], on a line up to unit [${last}], or earlier. Stay on the current clip's idea.`,
+          `${moved}Unit [${startUnit}] starts ${(late / 1000).toFixed(1)} seconds after ${from}, unit ` +
+          `[${windowStart}]. The hook sits within the first ${limits.hookWindowMs / 1000} seconds of the current clip: ` +
+          `start on unit [${windowStart}], on a line up to unit [${last}], or earlier. Stay on the current clip's idea.`,
       };
     }
-    return { range: { startMs, endMs, adjustedForScripture, adjustedEnd }, endUnit };
+    return { range: { startMs, endMs, adjustedForScripture, adjustedStart, adjustedEnd }, endUnit };
   }
   const steps =
     (adjustedForScripture ? " The start moved past the Scripture reading." : "") +
-    (adjustedEnd ? " The end moved back because the last lines only lead into a quotation, or recap the point before the next one." : "");
+    (adjustedStart ? " The start moved past a short label line." : "") +
+    (adjustedEnd
+      ? " The end moved back because the last lines only lead into a quotation, recap the point before the next one, or open the next point."
+      : "");
   const tooShort = duration < limits.minMs;
   const aim = ` Keep the end where the point ends and start later, so the clip runs 30 to 60 seconds, or ${limits.cutMaxMs / 1000} at most`;
   const limit = tooShort
@@ -987,6 +1086,8 @@ export async function lookPastTheEnd(
   if (endsInsideParallelBlock(units, unit)) return withoutSetUp(`Unit [${answer.endUnit}] is inside a run of parallel lines.`);
   // Fix T: the recap before the next numbered point is not where the point lands.
   if (endsOnRecapIntoNextPoint(units, unit)) return kept(`Unit [${answer.endUnit}] recaps the point and leads into the next numbered point.`);
+  // Fix AE: a line that opens the next point is not where this point lands.
+  if (opensNextPoint(units[unit].text)) return kept(`Unit [${answer.endUnit}] opens the next point.`);
   if (units[unit].endMs - range.startMs > maxMs) {
     return withoutSetUp(`Ending on unit [${answer.endUnit}] makes the clip run past ${maxMs / 1000} seconds.`);
   }
@@ -1044,8 +1145,11 @@ export type StoryCheck = {
   reason?: string;
   /** The second look's reason, when the first said the story continues. */
   secondReason?: string;
-  /** How the range changed: the end moved to the landing line, or the clip kept that end and started later. */
-  outcome?: "extended" | "restarted" | "unresolved";
+  /**
+   * How the range changed: the end moved to the landing line, the clip kept that end and started later,
+   * or (fix AB) the end moved back before a story the clip only opens in its last seconds.
+   */
+  outcome?: "extended" | "restarted" | "unresolved" | "cut";
   movedMs?: number;
 };
 
@@ -1161,6 +1265,24 @@ export async function checkStory(
     return null;
   };
 
+  /**
+   * Fix AB (lab sermon 1q clip 6, 2026-10-26): the clip ended on "Because I'm gonna tell you, there was a
+   * time in my life when I didn't know…", the first line of the story of the night he got saved. The
+   * check saw the story start on that line, refused to extend (under 12 seconds of story), and the end
+   * stood. Jake: 'should have ended after, "I'm glad- ... about that." … starts a new section.' A story
+   * the clip only opens in its last seconds is cut off: the end moves to the line before it, when a
+   * second look agrees the story starts there. Over the stored checks of 320 marked clips, only this
+   * clip's check said the story starts in its last 12 seconds and runs on. Returns the unit before the
+   * story's first line, or null.
+   */
+  const storyTail = (a: StoryCheckAnswer): number | null => {
+    if (!a.endIsNarration || !a.continues || a.storyKind !== "events") return null;
+    if (Number.isInteger(a.pointStatedUnit) && a.pointStatedUnit >= 0 && a.pointStatedUnit <= look.end) return null;
+    if (!Number.isInteger(a.storyStartsUnit) || a.storyStartsUnit < 1 || a.storyStartsUnit > look.end) return null;
+    const first = look.offset + a.storyStartsUnit;
+    return units[look.offset + look.end].endMs - units[first].startMs < STORY_MIN_IN_CLIP_MS ? first - 1 : null;
+  };
+
   const prompt = storyPrompt(look.lines, look.end, look.last);
   const answer = await askStory(prompt);
   const kept = (refused: string | null, extra: Partial<StoryCheck> = {}) => ({
@@ -1168,6 +1290,35 @@ export async function checkStory(
     check: { asked: true, continues: answer.continues, landsMs: null, refused, reason: answer.reason, ...extra },
   });
   const stop = gate(answer);
+  const tail = storyTail(answer);
+  if (tail !== null) {
+    const second = await askStory(prompt);
+    const tailSecond = storyTail(second);
+    if (tailSecond === null) {
+      return kept(`${stop} A second look did not agree that the story starts there.`, { secondReason: second.reason });
+    }
+    // The later of the two starts, so no line that one look called the point is cut. The clip's own
+    // start is the window's start here: the range was accepted already.
+    const clipContext = { units, currentStart: look.offset, currentEnd: look.offset + look.end };
+    const cut = evaluateBoundaryChoice(clipContext, { startUnit: look.offset, endUnit: Math.max(tail, tailSecond) }, limits, null);
+    if (!("range" in cut) || cut.range.startMs !== range.startMs || endingQuestion(clipContext, cut.endUnit)) {
+      const why = "refused" in cut ? cut.refused : "the start moved, or the clip would end on a question.";
+      return kept(`${stop} The clip cannot end before the story starts: ${why}`, { secondReason: second.reason });
+    }
+    return {
+      range: { startMs: range.startMs, endMs: cut.range.endMs },
+      check: {
+        asked: true,
+        continues: true,
+        landsMs: null,
+        refused: null,
+        reason: answer.reason,
+        secondReason: second.reason,
+        outcome: "cut",
+        movedMs: cut.range.endMs - range.endMs,
+      },
+    };
+  }
   if (stop !== null) return kept(stop === "" ? null : stop, answer.landsUnit === -1 && answer.continues ? { outcome: "unresolved" } : {});
 
   const second = await askStory(prompt);

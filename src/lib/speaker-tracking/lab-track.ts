@@ -33,7 +33,7 @@ export type LabTrack = {
   filledFrames: number;
   /** Frames without a lone face whose position came from the preacher's person box. */
   bodyFilledFrames: number;
-  /** Fix S: stretches of OFF_CROP_MIN_S or more where the preacher is outside the crop. Center lock only. */
+  /** Fix S: stretches of OFF_CROP_MIN_S or more where the preacher is outside the crop, or (fix AC) nobody is in the frame. Center lock only. */
   offCrop?: { start: number; end: number }[];
   /** Codex's tracking record; only the "codex" motion builds one. */
   record?: TrackingRecord;
@@ -179,6 +179,12 @@ function centerLockXs(frames: FaceObservations["frames"], width: number, cropW: 
  * them is inside the crop. A frame with no evidence ends a stretch. The guesses of the lab rules
  * (bridges and edge fills) are not evidence. `frames` and `people` are in source pixels, `xs` in
  * tracking pixels.
+ *
+ * Fix AC (lab sermon 1q clip 4, 2026-10-26): the preacher walked out of the camera's own frame at the
+ * right edge, nobody was in the picture for half a second, and the video dissolved to a second camera.
+ * Jake: "the preacher walks out of the frame for too long around 7-9 second mark." With no face and no
+ * person seen, those frames had no evidence and the check noted nothing. A frame where the person
+ * detector ran and saw nobody, with no face seen, is an empty frame, and an empty frame is off the crop.
  */
 export const OFF_CROP_MIN_S = 0.5;
 /** A person sample this recent stands in for a frame; the observer samples every 0.1 s. */
@@ -200,7 +206,10 @@ function offCropStretches(
     if (f.faces.length === 1) return !inside(f.faces[0].box);
     while (s + 1 < samples.length && samples[s + 1].t <= f.t + 1e-6) s += 1;
     const sample = s >= 0 && f.t - samples[s].t <= PEOPLE_SAMPLE_S ? samples[s] : null;
-    return Boolean(sample?.people.length) && !sample!.people.some((p) => inside(p.box));
+    if (!sample) return false;
+    // Fix AC: nobody in the frame at all, and no face, is an empty frame.
+    if (sample.people.length === 0) return f.faces.length === 0;
+    return !sample.people.some((p) => inside(p.box));
   });
   const stretches: { start: number; end: number }[] = [];
   for (let i = 0; i < frames.length; ) {
