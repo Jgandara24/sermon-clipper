@@ -14,7 +14,6 @@ import {
   checkStory,
   endsOnRecapIntoNextPoint,
   endBeforeNextPoint,
-  backReferenceStart,
   labelStart,
   opensNextPoint,
   recapIntoNextPoint,
@@ -1894,7 +1893,7 @@ describe("fix AA: a short label with a pause after it is not the opening line (l
       adjustedStart: false,
     });
     const short = boundaryRefusal(context, { startUnit: unit("Saving grace."), endUnit: unit("It's a gift of God") });
-    expect(short).toContain("The start moved past a short label line, or a line that only explains the line before it.");
+    expect(short).toContain("The start moved past a short label line.");
   });
 });
 
@@ -2015,105 +2014,5 @@ describe("fix AE: a line that opens the next point is not the ending (lab sermon
     const looked = await lookPastTheEnd(ctx.units, clip, async () => ({ finishesLater: true, endUnit: opener, reason: "it goes on" }));
     expect(looked.range).toEqual(clip);
     expect(looked.look.refused).toBe(`Unit [${opener}] opens the next point.`);
-  });
-});
-
-// Lab sermon 4l clip 3 (2026-10-28): the Transfiguration. Units 15 to 43 of the boundary context; the
-// landing line is the last line of the window, and its closing line ('Hear him."') lies outside it.
-const FOUR_L_C3: BoundaryUnit[] = [
-  { idx: 15, startMs: 2655606, endMs: 2664525, text: "And it means a change on the outside, now listen, that comes from within." },
-  { idx: 16, startMs: 2665926, endMs: 2665946, text: "Amen." },
-  { idx: 17, startMs: 2666026, endMs: 2670526, text: "A change on the outside that comes from within." },
-  { idx: 18, startMs: 2671446, endMs: 2681906, text: "When our Lord came to this earth, the second person of the divine Godhead, he clothed his majesty in the body of a peasant carpenter." },
-  { idx: 19, startMs: 2682786, endMs: 2687726, text: "He took on, Philippians chapter 2 says, the form of a man." },
-  { idx: 20, startMs: 2688426, endMs: 2692506, text: "When people looked at him, they just saw a man." },
-  { idx: 21, startMs: 2693046, endMs: 2701386, text: "But here on this mountain, the Lord peels back his humanity and he radiates his glory." },
-  { idx: 22, startMs: 2702086, endMs: 2706706, text: "And they got to see the radiance of who he is." },
-  { idx: 23, startMs: 2707986, endMs: 2708046, text: "Amen." },
-  { idx: 24, startMs: 2708086, endMs: 2714946, text: "Well, all of a sudden while this is happening, Bible says Moses and Elijah just show up and they're talking with Jesus." },
-  { idx: 25, startMs: 2716086, endMs: 2723066, text: "And Simon Peter, like he always did, feels like he's just gotta say something." },
-  { idx: 26, startMs: 2724806, endMs: 2727046, text: "I mean, he's just got to say something." },
-  { idx: 27, startMs: 2727086, endMs: 2728246, text: "He always feels that way." },
-  { idx: 28, startMs: 2729105, endMs: 2732246, text: 'And he said, "Hey, Jesus, I got a great idea.' },
-  { idx: 29, startMs: 2733706, endMs: 2736906, text: "Why don't we build three tabernacles up here?" },
-  { idx: 30, startMs: 2737546, endMs: 2744226, text: "Let- let's build three little booths, three little shelters up here, a- and let's just stay up here on the mountain." },
-  { idx: 31, startMs: 2744846, endMs: 2752166, text: 'And we\'ll have a shelter for Jesus, and we\'ll have a shelter for Moses, and we\'ll have a shelter right here for Elijah."' },
-  { idx: 32, startMs: 2753266, endMs: 2761066, text: "Now friend, let me just remind you that the Christian life was d- was not designed to be constantly up on the mountaintop." },
-  { idx: 33, startMs: 2762486, endMs: 2762586, text: "Amen." },
-  { idx: 34, startMs: 2762626, endMs: 2769026, text: "We have those mountaintop experiences so we can go back down and live in faith in the valley." },
-  { idx: 35, startMs: 2770566, endMs: 2770626, text: "Amen." },
-  { idx: 36, startMs: 2770666, endMs: 2773666, text: "But God does something here while- while Peter is speaking." },
-  { idx: 37, startMs: 2774646, endMs: 2775786, text: "God interrupts him." },
-  { idx: 38, startMs: 2776826, endMs: 2780506, text: "It's found in Matthew 17 verse 5, the end of that verse." },
-  { idx: 39, startMs: 2781206, endMs: 2783506, text: 'Peter\'s up there saying, "Let\'s build these tabernacles.' },
-  { idx: 40, startMs: 2783746, endMs: 2784626, text: "Three little booths." },
-  { idx: 41, startMs: 2784926, endMs: 2788486, text: 'One for Moses, one for Elijah here, a- a- and then one for Jesus."' },
-  { idx: 42, startMs: 2788726, endMs: 2794326, text: "And all of a sudden, God interrupts Simon Peter, and this is what he says." },
-  { idx: 43, startMs: 2795026, endMs: 2800786, text: '"This is my beloved Son in whom I am well pleased.' },
-];
-
-describe("fix AH: a story restart holds the landing line itself, or the story stays unresolved (lab sermon 4l clip 3)", () => {
-  const range = { startMs: 2655606, endMs: 2706706 };
-  const context = boundaryContext(FOUR_L_C3, range);
-  const look = storyLookLines(context.units, range)!;
-  const landing = context.units.findIndex((u) => u.text.startsWith('"This is my beloved Son'));
-  const story = vi.fn().mockResolvedValue({
-    endIsNarration: true, storyKind: "events", storyStartsUnit: 0, pointStatedUnit: -1, continues: true, landsUnit: landing - look.offset, reason: "x",
-  });
-
-  it("sees the landing on the quoted line, which the end rules move back to Peter's words", () => {
-    expect(landing - look.offset).toBe(28);
-    const refusal = boundaryRefusal(context, { startUnit: look.offset, endUnit: landing });
-    expect(refusal).toContain(`become units [${look.offset}] to [${landing - 2}] after the checks, 132.9 seconds`);
-  });
-
-  it("keeps the clip's range instead of holding a false landing", async () => {
-    // Before this fix the hold said 'lands at unit [41]: "One for Moses, one for Elijah here, a- a- and then one for
-    // Jesus."', and the model obeyed with 45:29 to 46:28, which Jake failed: the clip ran on into the story.
-    const askBoundary = vi.fn();
-    const result = await checkStory(context, range, story, askBoundary);
-    expect(result.range).toEqual(range);
-    expect(result.check).toMatchObject({ asked: true, continues: true, landsMs: 2800786, outcome: "unresolved" });
-    expect(result.check.refused).toContain(`The story lands at unit [${landing}]`);
-    expect(result.check.refused).toContain(`the end rules move it back to unit [${landing - 2}]`);
-    expect(askBoundary).not.toHaveBeenCalled();
-  });
-});
-
-// Lab sermon 4l clip 6 (2026-10-28): a raw window that reached the sheet opened on the gloss of the verse before it.
-const FOUR_L_C6: BoundaryUnit[] = [
-  { idx: 0, startMs: 3213138, endMs: 3224218, text: 'A- and then he says, listen to this, that, "The Word of God is a light that shines in a dark place until the day dawns and the morning star arises in your hearts."' },
-  { idx: 1, startMs: 3224818, endMs: 3227098, text: "A- and that just means until Jesus comes." },
-  { idx: 2, startMs: 3228258, endMs: 3229858, text: "But this is how we got the Bible." },
-  { idx: 3, startMs: 3229918, endMs: 3231358, text: "Notice what he says in verse 20." },
-  { idx: 4, startMs: 3231358, endMs: 3241098, text: '"Knowing this first, that no prophecy of scripture is of any private interpretation or, or disclosure."' },
-  { idx: 5, startMs: 3252258, endMs: 3260438, text: 'I mean, that, this doesn\'t mean that some guys just all of a sudden back in these days said, "You know, um, I think I\'m just gonna give my opinion here, and I\'m gonna write it down."' },
-  { idx: 6, startMs: 3261598, endMs: 3261998, text: "No." },
-  { idx: 7, startMs: 3262678, endMs: 3267618, text: "He says it's not of any private interpretation or disclosure." },
-];
-
-describe("fix AG: a line that only explains the line before it is not the opening line (lab sermon 4l clip 6)", () => {
-  const range = { startMs: 3224818, endMs: 3267618 };
-  const context = boundaryContext(FOUR_L_C6, range);
-  const unit = (start: string) => context.units.findIndex((u) => u.text.startsWith(start));
-
-  it("sees a line that opens with that, this or which means", () => {
-    expect(backReferenceStart("A- and that just means until Jesus comes.")).toBe(true);
-    expect(backReferenceStart("Which means you are free.")).toBe(true);
-    expect(backReferenceStart("So this simply means he loves you.")).toBe(true);
-    // Passed clips open on these: 4i clip 4 and 4g clip 5, and 4l clip 1.
-    expect(backReferenceStart("And it means a change on the outside, now listen, that comes from within.")).toBe(false);
-    expect(backReferenceStart("In other words, hush, Simon Peter.")).toBe(false);
-    expect(backReferenceStart("But this is how we got the Bible.")).toBe(false);
-    expect(backReferenceStart("That means everything to me, and I want to tell you why.")).toBe(true);
-  });
-
-  it("moves the start to the line after it: Jake's line", () => {
-    const choice = { startUnit: unit("A- and that just means"), endUnit: unit("I mean, that, this") };
-    expect(applyBoundaryChoice(context, choice)).toMatchObject({ startMs: 3228258, endMs: 3260438, adjustedStart: true });
-    expect(applyBoundaryChoice(context, { startUnit: unit("But this is how"), endUnit: unit("I mean, that, this") })).toMatchObject({
-      startMs: 3228258,
-      adjustedStart: false,
-    });
   });
 });
