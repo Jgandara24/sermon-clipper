@@ -11,7 +11,8 @@ import type { CameraCheckResult } from "./camera-check";
  * 2. The audio dropout check (fix Q) rejects every clip whose sound the recording lost for a second
  *    or more. It is free, so it runs before the camera check and on the reserves too.
  * 3. The camera check walks the clips in rank order and rejects any that show a slide, until the
- *    target number of first picks has passed. Later clips stay as unchecked reserves.
+ *    target number of first picks has passed. Later clips stay as unchecked reserves. A deep reserve
+ *    that moves up into the first picks gets the boundary step first (fix AF).
  * All are dependencies, so this ordering is tested without a model, ffmpeg or a database.
  */
 
@@ -79,6 +80,17 @@ export async function applyLabSelectionSteps<T extends LabClip>(
 
   if (span) keepWhere((clip) => (clip.startMs + clip.endMs) / 2 >= span.startMs && (clip.startMs + clip.endMs) / 2 <= span.endMs);
 
+  /** The clips the boundary step has seen, fixed or not. */
+  const checked = new Set<T>();
+  const withRange = (clip: T, range: { startMs: number; endMs: number }): T => {
+    if (range.startMs === clip.startMs && range.endMs === clip.endMs) return clip;
+    boundaryChanged += 1;
+    const text = deps.segments
+      .filter((s) => s.endMs > range.startMs && s.startMs < range.endMs)
+      .map((s) => s.text)
+      .join(" ");
+    return { ...clip, startMs: range.startMs, endMs: range.endMs, text };
+  };
   if (deps.boundary) {
     const boundary = deps.boundary;
     const topN = deps.boundaryTopN ?? 12;
@@ -88,14 +100,9 @@ export async function applyLabSelectionSteps<T extends LabClip>(
     const unfixed: T[] = [];
     top.forEach((clip, i) => {
       const range = ranges[i];
-      if (!range) return unfixed.push(clip);
-      if (range.startMs === clip.startMs && range.endMs === clip.endMs) return fixed.push(clip);
-      boundaryChanged += 1;
-      const text = deps.segments
-        .filter((s) => s.endMs > range.startMs && s.startMs < range.endMs)
-        .map((s) => s.text)
-        .join(" ");
-      fixed.push({ ...clip, startMs: range.startMs, endMs: range.endMs, text });
+      const seen = range ? withRange(clip, range) : clip;
+      checked.add(seen);
+      (range ? fixed : unfixed).push(seen);
     });
     // Fixed clips first, then the deep reserves, then the clips the step could not fix. Moved
     // clips can now cover the same words; the clip ahead in that order keeps them when the two share
@@ -115,17 +122,46 @@ export async function applyLabSelectionSteps<T extends LabClip>(
       return !dropout;
     });
   }
-  if (deps.cameraCheck) {
+  // Fix AF (lab sermon 4l clip 6, 2026-10-28): a deep reserve that moves up into the first picks gets
+  // the boundary step first, as the top clips did, then the same checks on its new range. Four
+  // rejections and three unfixed clips had lifted a raw window to rank 6, and it opened one line early.
+  const promote = deps.boundary;
+  const reserveInFront = promote !== null && clips.slice(0, deps.targetCount).some((clip) => !checked.has(clip));
+  if (deps.cameraCheck || reserveInFront) {
     const passed: T[] = [];
+    const unfixedReserves: T[] = [];
     let next = 0;
     while (next < clips.length && passed.length < deps.targetCount) {
-      const clip = clips[next];
-      const result = await deps.cameraCheck(clip);
-      if (result.pass) passed.push(clip);
-      else rejected.push({ title: clip.title, reason: result.reason, at: result.at });
+      let clip = clips[next];
       next += 1;
+      if (promote && !checked.has(clip)) {
+        const range = await promote(clip);
+        if (!range) {
+          unfixedReserves.push(clip);
+          continue;
+        }
+        clip = withRange(clip, range);
+        if (span && (clip.startMs < span.startMs || clip.endMs > span.endMs)) {
+          outsideSermon += 1;
+          continue;
+        }
+        const dropout = dropouts.length > 0 ? dropoutInClip(clip, dropouts) : null;
+        if (dropout) {
+          rejected.push({ title: clip.title, reason: "audio dropout", at: dropout.startMs / 1000 });
+          continue;
+        }
+        if (passed.some((other) => sharedShare(clip, other) > 0.5)) continue;
+      }
+      if (deps.cameraCheck) {
+        const result = await deps.cameraCheck(clip);
+        if (!result.pass) {
+          rejected.push({ title: clip.title, reason: result.reason, at: result.at });
+          continue;
+        }
+      }
+      passed.push(clip);
     }
-    clips = [...passed, ...clips.slice(next)];
+    clips = [...passed, ...clips.slice(next), ...unfixedReserves];
   }
 
   return { clips, rejected, boundaryChanged, outsideSermon };

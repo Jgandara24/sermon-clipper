@@ -33,6 +33,7 @@ import {
   endLookPrompt,
   EndLookSchema,
   endsInsideParallelBlock,
+  backReferenceStart,
   labelStart,
   lookPastTheEnd,
   readsVerse,
@@ -77,7 +78,7 @@ export type ReplayRow = MarkedClip & {
   detail: Record<string, unknown>;
 };
 
-const FIXES = ["U", "V", "T", "W", "X", "Y", "Z", "AA", "AB", "AC", "AD", "AE"] as const;
+const FIXES = ["U", "V", "T", "W", "X", "Y", "Z", "AA", "AB", "AC", "AD", "AE", "AG"] as const;
 type Fix = (typeof FIXES)[number];
 /** Fix X: ask the end look (fix M) again on every clip it shows lines for; a control for the look's model variance. */
 let REASK = false;
@@ -388,10 +389,11 @@ async function replayOne(
       : { ...clip, to: null, moved: false, detail: {} };
   }
   const context = boundaryContext(segments, range);
-  if (fix === "AA") {
+  if (fix === "AA" || fix === "AG") {
     const { units, currentStart, currentEnd } = context;
+    const skip = (i: number) => (fix === "AA" ? labelStart(units, i) : backReferenceStart(units[i].text));
     let start = currentStart;
-    while (start < currentEnd && labelStart(units, start)) start += 1;
+    while (start < currentEnd && skip(start)) start += 1;
     if (start === currentStart) return { ...clip, to: null, moved: false, detail: {} };
     const startMs = units[start].startMs;
     return {
@@ -399,10 +401,13 @@ async function replayOne(
       to: [startMs, range.endMs],
       moved: true,
       detail: {
-        outcome: "label start dropped",
+        outcome: fix === "AA" ? "label start dropped" : "back-reference start dropped",
         movedMs: startMs - range.startMs,
         dropped: units.slice(currentStart, start).map((u) => u.text).join(" "),
-        reason: `"${units.slice(currentStart, start).map((u) => u.text).join(" ")}" then a pause of ${((startMs - units[start - 1].endMs) / 1000).toFixed(1)} s before "${units[start].text.slice(0, 60)}"`,
+        reason:
+          fix === "AA"
+            ? `"${units.slice(currentStart, start).map((u) => u.text).join(" ")}" then a pause of ${((startMs - units[start - 1].endMs) / 1000).toFixed(1)} s before "${units[start].text.slice(0, 60)}"`
+            : `"${units.slice(currentStart, start).map((u) => u.text).join(" ")}" explains the line before it; the clip opens on "${units[start].text.slice(0, 60)}"`,
       },
     };
   }

@@ -58,12 +58,20 @@ describe("applyLabSelectionSteps", () => {
     expect(result.clips[2]).toMatchObject({ startMs: 100_000, endMs: 155_000 });
   });
 
-  it("puts deep reserves the step never saw ahead of clips it could not fix", async () => {
+  it("puts a deep reserve ahead of clips it could not fix, and gives it the boundary step once it is a first pick (fix AF)", async () => {
     const kept = [clipAt(100, 90), clipAt(300, 85), clipAt(500, 80)];
     const boundary = vi.fn().mockImplementation(async (clip: Clip) => (clip.startMs === 100_000 ? null : { startMs: clip.startMs, endMs: clip.endMs }));
     const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 6, boundary, cameraCheck: null, boundaryTopN: 2 });
-    expect(boundary).toHaveBeenCalledTimes(2);
+    expect(boundary).toHaveBeenCalledTimes(3);
     expect(result.clips.map((c) => c.title)).toEqual(["clip at 300", "clip at 500", "clip at 100"]);
+  });
+
+  it("leaves a reserve beyond the first picks unseen by the boundary step", async () => {
+    const kept = [clipAt(100, 90), clipAt(300, 85), clipAt(500, 80), clipAt(700, 75)];
+    const boundary = vi.fn().mockImplementation(async (clip: Clip) => ({ startMs: clip.startMs, endMs: clip.endMs }));
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 2, boundary, cameraCheck: null, boundaryTopN: 2 });
+    expect(boundary).toHaveBeenCalledTimes(2);
+    expect(result.clips.map((c) => c.title)).toEqual(["clip at 100", "clip at 300", "clip at 500", "clip at 700"]);
   });
 
   it("drops the lower-scored clip when two clips now overlap heavily", async () => {
@@ -104,6 +112,50 @@ describe("applyLabSelectionSteps", () => {
     expect(result.rejected).toEqual([{ title: "clip at 300", reason: "slide", at: 310 }]);
     // Stops checking once the target count has passed; the last reserve is left unchecked.
     expect(cameraCheck).toHaveBeenCalledTimes(4);
+  });
+});
+
+// Fix AF. Lab sermon 4l clip 6 (2026-10-28): four rejections and three unfixed clips lifted a deep
+// reserve to rank 6, and its raw window reached the sheet one line early. Jake: 'This video should
+// start with, "But this is how we got the Bible."'
+describe("applyLabSelectionSteps gives a reserve the boundary step when it moves up into the first picks (fix AF)", () => {
+  const fiveSecondsLater = async (clip: Clip) => ({ startMs: clip.startMs + 5_000, endMs: clip.endMs });
+
+  it("runs the step on the reserve that replaces a rejected first pick, then the camera check on its new range", async () => {
+    const kept = [clipAt(100, 90), clipAt(300, 85), clipAt(500, 80), clipAt(700, 75)];
+    const boundary = vi.fn().mockImplementation(fiveSecondsLater);
+    const cameraCheck = vi
+      .fn()
+      .mockImplementation(async (clip: Clip) => (clip.startMs === 305_000 ? { pass: false, reason: "slide", at: 310 } : { pass: true }));
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 2, boundary, cameraCheck, boundaryTopN: 2 });
+    expect(boundary.mock.calls.map(([clip]) => clip.title)).toEqual(["clip at 100", "clip at 300", "clip at 500"]);
+    expect(result.clips.map((c) => [c.title, c.startMs])).toEqual([["clip at 100", 105_000], ["clip at 500", 505_000], ["clip at 700", 700_000]]);
+    expect(result.clips[1].text).toBe(SEGMENTS.filter((s) => s.endMs > 505_000 && s.startMs < 555_000).map((s) => s.text).join(" "));
+    expect(cameraCheck.mock.calls.map(([clip]) => clip.startMs)).toEqual([105_000, 305_000, 505_000]);
+    expect(result.rejected).toEqual([{ title: "clip at 300", reason: "slide", at: 310 }]);
+    expect(result.boundaryChanged).toBe(3);
+  });
+
+  it("puts a reserve the step cannot fix behind every other clip and moves on to the next reserve", async () => {
+    const kept = [clipAt(100, 90), clipAt(300, 85), clipAt(500, 80), clipAt(700, 75)];
+    const boundary = vi.fn().mockImplementation(async (clip: Clip) => (clip.startMs === 500_000 ? null : fiveSecondsLater(clip)));
+    const cameraCheck = vi
+      .fn()
+      .mockImplementation(async (clip: Clip) => (clip.startMs === 305_000 ? { pass: false, reason: "slide", at: 310 } : { pass: true }));
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 2, boundary, cameraCheck, boundaryTopN: 2 });
+    expect(result.clips.map((c) => [c.title, c.startMs])).toEqual([["clip at 100", 105_000], ["clip at 700", 705_000], ["clip at 500", 500_000]]);
+  });
+
+  it("drops a promoted reserve whose new range covers a first pick ahead of it, with no camera check", async () => {
+    const kept = [clipAt(100, 90), clipAt(300, 85), clipAt(140, 80)];
+    const boundary = vi.fn().mockImplementation(async (clip: Clip) => {
+      if (clip.startMs === 100_000) return { startMs: 100_000, endMs: 150_000 };
+      if (clip.startMs === 140_000) return { startMs: 105_000, endMs: 160_000 };
+      return { startMs: clip.startMs, endMs: clip.endMs };
+    });
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 3, boundary, cameraCheck: null, boundaryTopN: 2 });
+    expect(boundary).toHaveBeenCalledTimes(3);
+    expect(result.clips.map((c) => c.title)).toEqual(["clip at 100", "clip at 300"]);
   });
 });
 

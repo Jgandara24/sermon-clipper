@@ -414,6 +414,17 @@ export function labelStart(units: BoundaryUnit[], startUnit: number): boolean {
   return words.length > 0 && words.length <= LABEL_START_MAX_WORDS && next.startMs - unit.endMs >= LABEL_START_GAP_MS;
 }
 
+// Fix AG (lab sermon 4l clip 6, 2026-10-28): the clip opened on 'A- and that just means until Jesus
+// comes.', the gloss on the verse before it. Jake: 'shouldn't start because it's more connected to the
+// video before'. Over the 365 marked clips only that clip opens with "that means", "this means" or
+// "which means"; "it means" and "in other words" open three passed clips, so they stay.
+const BACK_REFERENCE_START = /^\W*(?:(?:a-|and|so|but|now|yeah|okay|see|uh|um)\W+)*(?:that|this|which)(?:'s| is)? (?:just |simply )?means\b/i;
+
+/** True when the line opens by explaining the line before it ("A- and that just means until Jesus comes."). */
+export function backReferenceStart(text: string): boolean {
+  return BACK_REFERENCE_START.test(text);
+}
+
 // Fix AD (lab sermon 3m clip 2, 2026-10-26): the model twice chose the right start, "And I wanna preach
 // on this subject tonight: almost.", 37.1 s after the candidate's start; fix Z's 35 s hook window refused
 // it both times, and the clip then started on the sumo-wrestle joke, the applause call, "You can be
@@ -704,9 +715,10 @@ function evaluateBoundaryChoice(
   if (startUnit > endUnit) {
     return { refused: `${asked} are all the Scripture reading. Start where the preacher explains or applies it.` };
   }
-  // Fix AA: a short label with a pause after it is not the opening line.
+  // Fix AA: a short label with a pause after it is not the opening line. Fix AG: nor is a line that
+  // only explains the line before it.
   let adjustedStart = false;
-  while (startUnit < endUnit && labelStart(units, startUnit)) {
+  while (startUnit < endUnit && (labelStart(units, startUnit) || backReferenceStart(units[startUnit].text))) {
     adjustedStart = true;
     startUnit += 1;
   }
@@ -839,7 +851,7 @@ function evaluateBoundaryChoice(
   }
   const steps =
     (adjustedForScripture ? " The start moved past the Scripture reading." : "") +
-    (adjustedStart ? " The start moved past a short label line." : "") +
+    (adjustedStart ? " The start moved past a short label line, or a line that only explains the line before it." : "") +
     (adjustedEnd
       ? " The end moved back because the last lines only lead into a quotation, recap the point before the next one, or open the next point."
       : "");
@@ -1352,6 +1364,15 @@ export async function checkStory(
     };
   }
   if (!("tooLongEnd" in extended) || extended.tooLongEnd === undefined) return kept(extended.refused, { landsMs });
+  // Fix AH (lab sermon 4l clip 3, 2026-10-28): the end rules can move the landing back, there off a
+  // quoted line whose closing line lay outside the window, onto Peter's words mid-story. A hold on
+  // that line told the model a false landing, so the story stays unresolved and the clip keeps its range.
+  if (extended.tooLongEnd !== unit) {
+    return kept(
+      `The story lands at unit [${unit}] ("${units[unit].text}"), but a clip cannot end on the landing line: the end rules move it back to unit [${extended.tooLongEnd}].`,
+      { landsMs, outcome: "unresolved" },
+    );
+  }
 
   // Past 90 seconds: keep the landing and start later.
   const hold: HeldEnd = {
