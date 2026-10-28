@@ -1,0 +1,66 @@
+{
+  "projectId": "89c93d00-fc12-4f30-85d8-11d1fbf1e1a6",
+  "projectName": "Lab 4l - Sunday 10-11-26 Divine Certainties - fix AA-AE",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "d44e086a-9507-4452-b270-8ad496e3d937": {
+      "rank": 1,
+      "startMs": 2804706,
+      "endMs": 2871686,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T00:58:17.404Z"
+    },
+    "da67beaa-4411-45e5-b84d-f460dfb69b5c": {
+      "rank": 2,
+      "startMs": 2375450,
+      "endMs": 2418930,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T00:59:21.049Z"
+    },
+    "1f6a916c-724c-458b-9e44-dd11f74284fa": {
+      "rank": 3,
+      "startMs": 2729105,
+      "endMs": 2788486,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should have ended with, \"We have those mountaintop experiences so we can go back down and live in faith in the valley.\"\n\nNotice the final section, \"But God does something here while- while Peter is speaking. God interrupts him. It's found in Matthew 17 verse 5, the end of that verse. Peter's up there saying, \"Let's build these tabernacles. Three little booths. One for Moses, one for Elijah here, a- a- and then one for Jesus.\" is continuing the story. There's no powerful or dramatic conlcusion statement. That's why it should have ended with, We have those mountaintop experiences so we can go back down and live in faith in the valley.\"",
+      "labeledAt": "2026-10-28T01:01:46.568Z"
+    },
+    "3a7ef1ce-5879-4f6a-a740-d791ab81b648": {
+      "rank": 4,
+      "startMs": 1686442,
+      "endMs": 1729442,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T01:02:51.515Z"
+    },
+    "3900deac-079b-415b-a8da-ef08a4b184c2": {
+      "rank": 5,
+      "startMs": 2129089,
+      "endMs": 2193370,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T01:03:32.821Z"
+    },
+    "49d461b0-5557-42e7-acaa-2b771ab04607": {
+      "rank": 6,
+      "startMs": 3224668,
+      "endMs": 3267768,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "This video should start with, \"But this is how we got the Bible.\" \n\"A- and that just means until Jesus comes. \" shouldn't start because it's more connected to the video before. \n",
+      "labeledAt": "2026-10-28T01:10:29.704Z"
+    }
+  }
+}
