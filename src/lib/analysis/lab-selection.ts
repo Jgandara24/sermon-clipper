@@ -117,11 +117,11 @@ export async function applyLabSelectionSteps<T extends LabClip>(
         .join(" ");
       fixed.push({ ...clip, startMs: range.startMs, endMs: range.endMs, text });
     });
-    // Fixed clips first, then the deep reserves, then the clips the step could not fix. Moved
-    // clips can now cover the same words; the clip ahead in that order keeps them when the two share
-    // more than half of the shorter one.
-    const byScore = (list: T[]) => [...list].sort((a, b) => b.total - a.total);
-    const ordered = [...byScore(fixed), ...byScore(clips.slice(topN)), ...byScore(unfixed)];
+    // Fixed clips first, then the deep reserves, then the clips the step could not fix. Each group
+    // keeps the order it came in: score order, or the agreement order (a re-sort by score here lost
+    // that order in lab round 8, 2026-10-30). Moved clips can now cover the same words; the clip
+    // ahead in that order keeps them when the two share more than half of the shorter one.
+    const ordered = [...fixed, ...clips.slice(topN), ...unfixed];
     clips = ordered.filter((clip, i) => !ordered.slice(0, i).some((other) => sharedShare(clip, other) > 0.5));
   }
   // A raw window the boundary step could not fix, or a deep reserve, may still cross the edge.

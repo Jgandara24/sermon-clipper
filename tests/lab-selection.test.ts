@@ -66,6 +66,14 @@ describe("applyLabSelectionSteps", () => {
     expect(result.clips.map((c) => c.title)).toEqual(["clip at 300", "clip at 500", "clip at 100"]);
   });
 
+  it("keeps the order the clips came in, not score order (agreement ranking, lab round 8, 2026-10-30)", async () => {
+    // Agreement ranking puts a moment both candidate runs found first even when its score is lower.
+    const kept = [clipAt(100, 70), clipAt(300, 90), clipAt(500, 80)];
+    const boundary = vi.fn().mockImplementation(async (clip: Clip) => ({ startMs: clip.startMs, endMs: clip.endMs - 10_000 }));
+    const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 6, boundary, cameraCheck: null });
+    expect(result.clips.map((c) => c.title)).toEqual(["clip at 100", "clip at 300", "clip at 500"]);
+  });
+
   it("drops the lower-scored clip when two clips now overlap heavily", async () => {
     const kept = [clipAt(100, 90), clipAt(140, 80)];
     const boundary = vi.fn().mockResolvedValue({ startMs: 100_000, endMs: 170_000 });
