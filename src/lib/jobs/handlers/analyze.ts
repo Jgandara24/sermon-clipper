@@ -14,7 +14,7 @@ import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidat
 import { ANALYSIS_RETAINED_CLIP_STATUS } from "@/lib/analysis/clip-status";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
-import { runLabSelection } from "@/lib/analysis/lab-selection-run";
+import { runAgreementRanking, runLabSelection } from "@/lib/analysis/lab-selection-run";
 import { analysisCallCostFact } from "@/lib/analysis/usage";
 import { resolveAndSnapshotProjectAnalysisRouting } from "@/lib/analysis/routing-store";
 import { AnalysisProviderUnavailableError, type ScoredCandidate } from "@/lib/analysis/types";
@@ -354,12 +354,26 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
   }
 
   // Complete-message selection already validated and padded these exact ranges.
-  const refined = messagePolicy ? scored : scored.map((clip) => refineBoundaries(clip, sourceDurationMs));
-  const deduped = dedupByOverlap(
-    refined.map((clip) => ({ ...clip, score: clip.total })),
-    0.5,
-  );
-  const ranked = deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
+  const rankCandidates = (clips: ScoredCandidate[]) => {
+    const refined = messagePolicy ? clips : clips.map((clip) => refineBoundaries(clip, sourceDurationMs));
+    const deduped = dedupByOverlap(refined.map((clip) => ({ ...clip, score: clip.total })), 0.5);
+    return deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
+  };
+  const scoredRanked = rankCandidates(scored);
+  // Phase 1 lab, agreement ranking: a second candidate run, and the moments both runs found come
+  // first. Off unless its lab flag is set.
+  const ranked = messagePolicy
+    ? scoredRanked
+    : await runAgreementRanking({
+        prisma,
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+        jobId: job.id,
+        ranked: scoredRanked,
+        scoreAgain: async () =>
+          rankCandidates(await provider.scoreCandidates(scoreableCandidates, { fullText: transcript.fullText, genre })),
+        usage: () => provider.lastUsage,
+      });
   // Phase 1 lab: sentence boundaries and the camera check. Off unless a lab flag is set.
   const kept = messagePolicy
     ? ranked

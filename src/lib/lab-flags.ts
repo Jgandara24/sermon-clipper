@@ -11,6 +11,7 @@ const LAB_SWITCHES = {
   sermonSpan: "LAB_SERMON_SPAN_ENABLED",
   transcriptReuse: "LAB_TRANSCRIPT_REUSE_ENABLED",
   dropoutCheck: "LAB_DROPOUT_CHECK_ENABLED",
+  agreementRanking: "LAB_AGREEMENT_RANKING_ENABLED",
 } as const;
 
 export function labStepEnabled(step: keyof typeof LAB_SWITCHES): boolean {

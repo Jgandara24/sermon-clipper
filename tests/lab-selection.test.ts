@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { applyLabSelectionSteps } from "@/lib/analysis/lab-selection";
+import { applyLabSelectionSteps, orderByAgreement } from "@/lib/analysis/lab-selection";
 import { MAX_CANDIDATE_MS } from "@/lib/jobs/handlers/analyze";
 
 type Clip = { startMs: number; endMs: number; text: string; total: number; title: string };
@@ -183,5 +183,32 @@ describe("applyLabSelectionSteps keeps only the sermon (fix J)", () => {
     const result = await applyLabSelectionSteps(kept, { segments: SEGMENTS, targetCount: 6, boundary: null, cameraCheck: null, sermonSpan: null });
     expect(result.clips).toBe(kept);
     expect(result.outsideSermon).toBe(0);
+  });
+});
+
+describe("orderByAgreement puts the moments a second candidate run also found first (agreement ranking, 2026-10-29)", () => {
+  it("keeps score order inside each group and reports the agreed clips", () => {
+    const ranked = [clipAt(100, 90), clipAt(300, 85), clipAt(500, 80), clipAt(700, 75)];
+    // The second run found the 300 clip ten seconds later and the 700 clip exactly.
+    const second = [{ startMs: 310_000, endMs: 365_000 }, { startMs: 700_000, endMs: 755_000 }];
+    const { clips, agreed } = orderByAgreement(ranked, second);
+    expect(clips.map((clip) => clip.title)).toEqual(["clip at 300", "clip at 700", "clip at 100", "clip at 500"]);
+    expect(agreed).toEqual([ranked[1], ranked[3]]);
+  });
+
+  it("counts a moment as the same only when the clips share more than half of the longer one", () => {
+    const ranked = [clipAt(100, 90), clipAt(300, 85)];
+    // 28 of 55 seconds in common: the same moment. 27 of 55: not.
+    expect(orderByAgreement(ranked, [{ startMs: 327_000, endMs: 382_000 }]).agreed).toEqual([ranked[1]]);
+    expect(orderByAgreement(ranked, [{ startMs: 328_000, endMs: 383_000 }]).agreed).toEqual([]);
+    // A 20-second window inside the 55-second clip is not the same moment (lab 4l clip 3).
+    expect(orderByAgreement(ranked, [{ startMs: 310_000, endMs: 330_000 }]).agreed).toEqual([]);
+  });
+
+  it("leaves the order alone when the second run found none of the moments", () => {
+    const ranked = [clipAt(100, 90), clipAt(300, 85)];
+    const { clips, agreed } = orderByAgreement(ranked, [{ startMs: 900_000, endMs: 955_000 }]);
+    expect(clips).toEqual(ranked);
+    expect(agreed).toEqual([]);
   });
 });
