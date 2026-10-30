@@ -23,11 +23,65 @@ import {
 import { checkClipCamera } from "./camera-check-run";
 import { snapClipEnd } from "./end-silence";
 import { scoringModel } from "./claude-provider";
-import { applyLabSelectionSteps } from "./lab-selection";
+import { applyLabSelectionSteps, orderByAgreement } from "./lab-selection";
 import { findSermonSpan, SermonSpanSchema, type SermonSpan } from "./sermon-span";
+import type { AnalysisUsage } from "./usage";
 
 type LabClip = { startMs: number; endMs: number; text: string; total: number; title: string };
 type Segment = { idx: number; startMs: number; endMs: number; text: string };
+
+/**
+ * Lab only. Agreement ranking: asks for the candidates a second time and puts the moments both
+ * runs found first (orderByAgreement). Fails open: on any error the first run's order stands.
+ * Records what it did as one operational event; the second run's tokens go there, not to cost
+ * facts, like the other lab steps.
+ */
+export async function runAgreementRanking<T extends LabClip>(params: {
+  prisma: PrismaClient;
+  workspaceId: string;
+  projectId: string;
+  jobId: string;
+  ranked: T[];
+  /** The second candidate run, ranked the same way as the first. */
+  scoreAgain: () => Promise<{ startMs: number; endMs: number; title: string; total: number }[]>;
+  usage: () => AnalysisUsage | null | undefined;
+}): Promise<T[]> {
+  if (!labStepEnabled("agreementRanking")) return params.ranked;
+  const startedAt = Date.now();
+  let second: { startMs: number; endMs: number; title: string; total: number }[] | null = null;
+  let error: string | null = null;
+  try {
+    second = await params.scoreAgain();
+  } catch (caught) {
+    error = String(caught);
+  }
+  const ordered = second ? orderByAgreement(params.ranked, second) : { clips: params.ranked, agreed: [] as T[] };
+  const usage = params.usage();
+  await recordOperationalEventSafely(params.prisma, {
+    workspaceId: params.workspaceId,
+    category: "analysis",
+    eventType: "lab_agreement_ranking",
+    severity: "info",
+    message: second
+      ? `Agreement ranking: ${ordered.agreed.length} of ${params.ranked.length} moments found by both candidate runs come first.`
+      : "Agreement ranking: the second candidate run failed, so the first run's order stands.",
+    projectId: params.projectId,
+    jobId: params.jobId,
+    metadata: {
+      error,
+      agreed: ordered.agreed.length,
+      first: params.ranked.map((clip) => ({
+        title: clip.title, startMs: clip.startMs, endMs: clip.endMs, total: clip.total, agreed: ordered.agreed.includes(clip),
+      })),
+      second: second?.map((clip) => ({ title: clip.title, startMs: clip.startMs, endMs: clip.endMs, total: clip.total })) ?? null,
+      usage: usage
+        ? { inputTokens: usage.totalInputTokens, outputTokens: usage.totalOutputTokens, estimatedCostUsd: usage.estimatedCostUsd }
+        : null,
+      seconds: Math.round((Date.now() - startedAt) / 1000),
+    },
+  });
+  return ordered.clips;
+}
 
 /**
  * Lab only. Runs the sermon span, the boundary step (with fix M's look past the end), the audio dropout

@@ -53,6 +53,26 @@ function sharedShare(a: { startMs: number; endMs: number }, b: { startMs: number
   return shorter > 0 ? shared / shorter : 0;
 }
 
+/**
+ * Agreement ranking (2026-10-29). Lab rounds 5 and 7 ran the same code twice: all 35 sheet clips
+ * whose moment both candidate runs found passed, and all 5 fails were moments only one run found.
+ * So the candidate model runs a second time, and the moments it also found come first; each group
+ * keeps its score order. Two clips are the same moment when they share more than half of the
+ * longer one: a short window inside a long clip is not the same moment (lab 4l clip 3, a fail,
+ * held a 20-second window the other run found).
+ */
+export function orderByAgreement<T extends LabClip>(
+  ranked: T[],
+  second: { startMs: number; endMs: number }[],
+): { clips: T[]; agreed: T[] } {
+  const sameMoment = (a: { startMs: number; endMs: number }, b: { startMs: number; endMs: number }) => {
+    const shared = Math.max(0, Math.min(a.endMs, b.endMs) - Math.max(a.startMs, b.startMs));
+    return shared / Math.max(a.endMs - a.startMs, b.endMs - b.startMs) > 0.5;
+  };
+  const agreed = ranked.filter((clip) => second.some((other) => sameMoment(clip, other)));
+  return { clips: [...agreed, ...ranked.filter((clip) => !agreed.includes(clip))], agreed };
+}
+
 async function inBatches<A, B>(items: A[], size: number, run: (item: A) => Promise<B>): Promise<B[]> {
   const out: B[] = [];
   for (let i = 0; i < items.length; i += size) out.push(...(await Promise.all(items.slice(i, i + size).map(run))));
