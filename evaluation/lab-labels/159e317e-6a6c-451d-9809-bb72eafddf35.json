@@ -1,0 +1,35 @@
+{
+  "projectId": "159e317e-6a6c-451d-9809-bb72eafddf35",
+  "projectName": "Lab 1s - Normal Sunday - fix AF-AH",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "3852e5a3-74e6-4081-adaf-35c9ed23d308": {
+      "rank": 2,
+      "startMs": 4401880,
+      "endMs": 4438120,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T03:35:25.725Z"
+    },
+    "c009128d-198e-4f14-a19c-8931e1c4cf25": {
+      "rank": 3,
+      "startMs": 3353812,
+      "endMs": 3411672,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T03:35:43.160Z"
+    },
+    "269b09bf-9627-48cc-8cfc-e3810b4db7f0": {
+      "rank": 5,
+      "startMs": 2478024,
+      "endMs": 2514524,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T03:36:33.660Z"
+    }
+  }
+}

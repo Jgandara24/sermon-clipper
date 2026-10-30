@@ -1,0 +1,64 @@
+{
+  "projectId": "120c0c87-0062-487a-9987-5d988836255a",
+  "projectName": "Lab 4n - Sunday 10-11-26 Divine Certainties - repeat AA-AE",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "33494a59-b8c9-4a9f-84ef-39ff1274cf1a": {
+      "rank": 1,
+      "startMs": 2133709,
+      "endMs": 2193370,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:22:46.165Z"
+    },
+    "d2afd2b7-5558-4d34-8700-61ae05332684": {
+      "rank": 2,
+      "startMs": 2428090,
+      "endMs": 2471190,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:23:20.620Z"
+    },
+    "bebe0f9d-a398-400a-a959-a85eec1c4f7c": {
+      "rank": 3,
+      "startMs": 2891446,
+      "endMs": 2917286,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:23:41.285Z"
+    },
+    "7b74d359-50fc-466f-82c4-3f062fba2870": {
+      "rank": 4,
+      "startMs": 2982398,
+      "endMs": 3031498,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:24:32.770Z"
+    },
+    "71321443-acad-41a7-932c-c0e6afbf7ee5": {
+      "rank": 5,
+      "startMs": 1978390,
+      "endMs": 2008230,
+      "verdict": "fail",
+      "failedTests": [
+        4
+      ],
+      "note": "It really doesn't make a point.",
+      "labeledAt": "2026-10-30T03:25:45.347Z"
+    },
+    "1f2e1633-6261-41cf-a54d-f1b7387233c2": {
+      "rank": 6,
+      "startMs": 3397946,
+      "endMs": 3435726,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:27:46.924Z"
+    }
+  }
+}
