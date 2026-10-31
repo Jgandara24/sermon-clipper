@@ -572,7 +572,7 @@ describe("analysis routing readiness", () => {
   });
 
   it("never returns fail, because /api/health is the Railway health check", async () => {
-    // railway.json health-checks /api/health, and that route answers 503 on a failing readiness
+    // .railway/railway.ts health-checks /api/health, and that route answers 503 on a failing readiness
     // status. A "fail" here would take the whole web service down — login, existing clips, the
     // billing page — for a fault that only stops new ANALYZE jobs on the worker. Prices are
     // effective-dated, so an end-dated price with no successor would arm that outage on a
