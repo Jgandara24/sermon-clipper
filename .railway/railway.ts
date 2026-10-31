@@ -19,8 +19,8 @@ export default defineRailway(() => {
     preDeploy: "npm run db:migrate:deploy",
     healthcheck: "/api/health",
     healthcheckTimeout: 300,
-    // `migrate` dropped these two from railway.json; written by hand.
-    deploy: { restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 10 },
+    // No restart policy here: railway.json's ON_FAILURE x10 is Railway's default, which Railway
+    // does not store, so declaring it leaves a change in every plan (RAILWAY_IAC_MIGRATION_PLAN.md).
     replicas: { "us-west2": 1 },
     domains: ["app.pulpitengine.com"],
   });
@@ -38,7 +38,8 @@ export default defineRailway(() => {
   const worker = service("worker", {
     source,
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile.worker", buildEnvironment: "V3" },
-    deploy: { restartPolicyType: "ON_FAILURE", restartPolicyMaxRetries: 10, requiredMountPath: "/models" },
+    // Restart policy left to Railway's default (ON_FAILURE x10), as for the web. No
+    // requiredMountPath: Railway keeps it only for databases. The volume mount below is stored.
     volumeMounts: { "/models": models },
     replicas: { "us-west2": 1 },
   });
