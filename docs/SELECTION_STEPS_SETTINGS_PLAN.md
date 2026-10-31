@@ -1,6 +1,6 @@
 # Plan: production settings for the lab steps
 
-Date: 2026-10-31. Status: Jake accepted the five decisions in section 5 on 2026-10-31, and the code was built the same day on branch `claude/selection-steps-settings` from `main` (section 7 lists where the build differs from the plan). This is item 2 of section 9 in [PHASE1_LAB_RESULT.md](PHASE1_LAB_RESULT.md).
+Date: 2026-10-31. Status: Jake accepted the five decisions in section 5 on 2026-10-31, and the code was built the same day on branch `claude/selection-steps-settings` from `main`, draft pull request #124 (section 7 lists where the build differs from the plan). This is item 2 of section 9 in [PHASE1_LAB_RESULT.md](PHASE1_LAB_RESULT.md).
 
 ## 1. What is true today
 
