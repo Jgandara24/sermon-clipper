@@ -1,16 +1,18 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { labTrackingPython } from "@/lib/lab-flags";
+import { detectorScriptPath } from "@/lib/analysis/selection-steps";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import { buildLabTrack, type LabTrack, type ObservationFile } from "./lab-track";
 
-const OBSERVE_SCRIPT = path.resolve("scripts/lab/tracking/observe-faces.py");
+const OBSERVE_SCRIPT = detectorScriptPath("observeFaces");
 
 /**
- * Lab only: runs the YuNet face observer over one clip range of a local source file, then builds
- * the lab-v1 speaker track. The render seeks to `range.startMs`, so command times count from there.
+ * Speaker tracking: runs the YuNet face observer over one clip range of a local source file, then
+ * builds the lab-v1 speaker track. The render seeks to `range.startMs`, so command times count from
+ * there. `python` is the detector Python (DETECTOR_PYTHON), resolved by the caller once per job.
  */
 export async function computeLabSpeakerTrack(params: {
+  python: string;
   sourceFilePath: string;
   range: { startMs: number; endMs: number };
   workDir: string;
@@ -18,7 +20,7 @@ export async function computeLabSpeakerTrack(params: {
   const out = path.join(params.workDir, "speaker-observations.json");
   const seekSeconds = Number((params.range.startMs / 1000).toFixed(3));
   await execFileWithTimeout(
-    labTrackingPython(),
+    params.python,
     [
       OBSERVE_SCRIPT,
       "--source", params.sourceFilePath,

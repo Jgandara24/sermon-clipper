@@ -4,7 +4,6 @@ import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { PrismaClient } from "@prisma/client";
-import { labStepEnabled } from "@/lib/lab-flags";
 import { recordOperationalEventSafely } from "@/lib/observability/operational-events";
 import { getStorageProvider } from "@/lib/storage";
 import { findAudioDropouts, type AudioDropout } from "./audio-dropout";
@@ -24,6 +23,7 @@ import { checkClipCamera } from "./camera-check-run";
 import { snapClipEnd } from "./end-silence";
 import { scoringModel } from "./claude-provider";
 import { applyLabSelectionSteps, orderByAgreement } from "./lab-selection";
+import type { ResolvedSelectionSteps, SelectionStepDegradation } from "./selection-steps";
 import { findSermonSpan, SermonSpanSchema, type SermonSpan } from "./sermon-span";
 import type { AnalysisUsage } from "./usage";
 
@@ -31,22 +31,24 @@ type LabClip = { startMs: number; endMs: number; text: string; total: number; ti
 type Segment = { idx: number; startMs: number; endMs: number; text: string };
 
 /**
- * Lab only. Agreement ranking: asks for the candidates a second time and puts the moments both
- * runs found first (orderByAgreement). Fails open: on any error the first run's order stands.
- * Records what it did as one operational event; the second run's tokens go there, not to cost
- * facts, like the other lab steps.
+ * Agreement ranking: asks for the candidates a second time and puts the moments both runs found
+ * first (orderByAgreement). Fails open: on any error the first run's order stands, and the step
+ * is reported as degraded. Records what it did as one operational event; the second run's tokens
+ * go there, not to cost facts, like the other selection steps.
  */
 export async function runAgreementRanking<T extends LabClip>(params: {
   prisma: PrismaClient;
   workspaceId: string;
   projectId: string;
   jobId: string;
+  /** The selection steps resolved for this job (src/lib/analysis/selection-steps.ts). */
+  steps: ResolvedSelectionSteps;
   ranked: T[];
   /** The second candidate run, ranked the same way as the first. */
   scoreAgain: () => Promise<{ startMs: number; endMs: number; title: string; total: number }[]>;
   usage: () => AnalysisUsage | null | undefined;
-}): Promise<T[]> {
-  if (!labStepEnabled("agreementRanking")) return params.ranked;
+}): Promise<{ clips: T[]; degraded: SelectionStepDegradation[] }> {
+  if (!params.steps.agreementRanking.on) return { clips: params.ranked, degraded: [] };
   const startedAt = Date.now();
   let second: { startMs: number; endMs: number; title: string; total: number }[] | null = null;
   let error: string | null = null;
@@ -68,6 +70,7 @@ export async function runAgreementRanking<T extends LabClip>(params: {
     projectId: params.projectId,
     jobId: params.jobId,
     metadata: {
+      steps: params.steps,
       error,
       agreed: ordered.agreed.length,
       first: params.ranked.map((clip) => ({
@@ -80,30 +83,38 @@ export async function runAgreementRanking<T extends LabClip>(params: {
       seconds: Math.round((Date.now() - startedAt) / 1000),
     },
   });
-  return ordered.clips;
+  return {
+    clips: ordered.clips,
+    degraded: second ? [] : [{ step: "agreementRanking", detail: error ?? "the second candidate run failed" }],
+  };
 }
 
 /**
- * Lab only. Runs the sermon span, the boundary step (with fix M's look past the end), the audio dropout
- * check (fix Q) and the camera check (whichever flags are on) on ANALYZE's
- * ranked clips and records what each did as one operational event. Not cost-metered: the lab
- * records token counts in the event instead.
+ * Runs the sermon span, the boundary step (with fix M's look past the end), the audio dropout
+ * check (fix Q) and the camera check, whichever steps are on, on ANALYZE's ranked clips and
+ * records what each did as one operational event. Not cost-metered: the token counts go in the
+ * event instead. A fail-open step that failed for every clip it tried comes back as degraded, so
+ * the job can raise one alert for it.
  */
 export async function runLabSelection<T extends LabClip>(params: {
   prisma: PrismaClient;
   workspaceId: string;
   projectId: string;
   jobId: string;
+  /** The selection steps resolved for this job (src/lib/analysis/selection-steps.ts). */
+  steps: ResolvedSelectionSteps;
+  /** The detector Python; present whenever the camera check is on. */
+  detectorPython: string | undefined;
   sourceStorageKey: string | null;
   ranked: T[];
   segments: Segment[];
   targetCount: number;
-}): Promise<T[]> {
-  const boundaryOn = labStepEnabled("boundaryStep");
-  const cameraOn = labStepEnabled("cameraCheck") && Boolean(params.sourceStorageKey);
-  const spanOn = labStepEnabled("sermonSpan");
-  const dropoutOn = labStepEnabled("dropoutCheck") && Boolean(params.sourceStorageKey);
-  if (!boundaryOn && !cameraOn && !spanOn && !dropoutOn) return params.ranked;
+}): Promise<{ clips: T[]; degraded: SelectionStepDegradation[] }> {
+  const boundaryOn = params.steps.boundaryStep.on;
+  const cameraOn = params.steps.cameraCheck.on && Boolean(params.sourceStorageKey) && Boolean(params.detectorPython);
+  const spanOn = params.steps.sermonSpan.on;
+  const dropoutOn = params.steps.dropoutCheck.on && Boolean(params.sourceStorageKey);
+  if (!boundaryOn && !cameraOn && !spanOn && !dropoutOn) return { clips: params.ranked, degraded: [] };
 
   const startedAt = Date.now();
   const workDir = await mkdtemp(path.join(os.tmpdir(), "lab-selection-"));
@@ -290,6 +301,7 @@ export async function runLabSelection<T extends LabClip>(params: {
       ? async (clip: T) => {
           try {
             const { result, usage: used } = await checkClipCamera({
+              python: params.detectorPython!,
               sourceFilePath: sourceFilePath!,
               startMs: clip.startMs,
               endMs: clip.endMs,
@@ -322,15 +334,29 @@ export async function runLabSelection<T extends LabClip>(params: {
       audioDropouts,
     });
 
+    // Degraded: a fail-open step that failed for every clip it tried, or a camera check that could
+    // check no clip at all. Single failures stay inside the per-clip logs below.
+    const degraded: SelectionStepDegradation[] = [];
+    if (spanOn && spanLog?.error) degraded.push({ step: "sermonSpan", detail: spanLog.error });
+    if (dropoutOn && dropoutLog?.error) degraded.push({ step: "dropoutCheck", detail: dropoutLog.error });
+    if (boundaryOn && boundaryLog.length > 0 && boundaryLog.every((entry) => entry.error)) {
+      degraded.push({ step: "boundaryStep", detail: boundaryLog[0].error ?? "every boundary call failed" });
+    }
+    if (cameraOn && cameraLog.length > 0 && cameraLog.every((entry) => entry.result === "unchecked")) {
+      degraded.push({ step: "cameraCheck", detail: cameraLog[0].error ?? "no clip could be checked" });
+    }
+
     await recordOperationalEventSafely(params.prisma, {
       workspaceId: params.workspaceId,
       category: "analysis",
       eventType: "lab_selection_steps",
       severity: "info",
-      message: `Lab steps: ${result.outsideSermon} clips outside the sermon, ${result.boundaryChanged} clips moved to sentence boundaries, ${result.rejected.length} rejected by the audio and camera checks.`,
+      message: `Selection steps: ${result.outsideSermon} clips outside the sermon, ${result.boundaryChanged} clips moved to sentence boundaries, ${result.rejected.length} rejected by the audio and camera checks.`,
       projectId: params.projectId,
       jobId: params.jobId,
       metadata: {
+        steps: params.steps,
+        degraded: degraded.map((entry) => entry.step),
         spanOn,
         boundaryOn,
         cameraOn,
@@ -353,7 +379,7 @@ export async function runLabSelection<T extends LabClip>(params: {
         seconds: Math.round((Date.now() - startedAt) / 1000),
       },
     });
-    return result.clips;
+    return { clips: result.clips, degraded };
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }

@@ -198,6 +198,24 @@ const fieldSchemas = {
   // it on (docs/DEPLOYMENT.md).
   SOURCE_RETENTION_DELETION_ENABLED: exactTrue,
 
+  // Selection steps (docs/SELECTION_STEPS_SETTINGS_PLAN.md): the Phase 1 lab steps, each behind
+  // two gates. These seven say the environment can run a step; `Workspace.settings.selectionSteps`
+  // says a church gets it; src/lib/analysis/selection-steps.ts joins the two once per job. All
+  // exactTrue and all default false, so a deploy with none of them set changes nothing. The
+  // names describe the step, not the lab.
+  ANALYSIS_SERMON_SPAN_ENABLED: exactTrue,
+  ANALYSIS_BOUNDARY_STEP_ENABLED: exactTrue,
+  ANALYSIS_DROPOUT_CHECK_ENABLED: exactTrue,
+  ANALYSIS_CAMERA_CHECK_ENABLED: exactTrue,
+  ANALYSIS_AGREEMENT_RANKING_ENABLED: exactTrue,
+  EXPORT_PHRASE_CAPTIONS_ENABLED: exactTrue,
+  EXPORT_SPEAKER_TRACKING_ENABLED: exactTrue,
+  // The Python with OpenCV and the YuNet model that the camera check and speaker tracking run
+  // (scripts/lab/tracking/). No default on purpose: when it is absent or cannot import OpenCV,
+  // both steps count as off with the reason `no-detector`, and the worker records one
+  // selection_steps_unavailable event at boot instead of failing one clip at a time.
+  DETECTOR_PYTHON: optionalString,
+
   // Observability
   SENTRY_DSN: optionalString,
   ALERTS_THROTTLE_MS: numberOrFallback(30 * 60 * 1000),
@@ -320,6 +338,11 @@ export function ytDlpProxyUrl(): string | undefined {
 /** Tallest video a URL import may download. 1080 unless `YTDLP_MAX_HEIGHT` says otherwise. */
 export function ytDlpMaxHeight(): number {
   return env.YTDLP_MAX_HEIGHT;
+}
+
+/** The detector Python for the camera check and speaker tracking, or undefined. Empty means absent. */
+export function detectorPython(): string | undefined {
+  return env.DETECTOR_PYTHON || undefined;
 }
 
 /**

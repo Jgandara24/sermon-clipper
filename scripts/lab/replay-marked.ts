@@ -49,6 +49,7 @@ import {
 import { checkClipCamera, checkClipEmptyFrames } from "@/lib/analysis/camera-check-run";
 import { scoringModel } from "@/lib/analysis/claude-provider";
 import { snapClipEnd } from "@/lib/analysis/end-silence";
+import { detectorPython } from "@/lib/env";
 import { assertLabEnvironment, formatClock, LabEnvironmentError, readArgs } from "./lab-guard";
 
 type LabelFile = {
@@ -154,6 +155,12 @@ async function main() {
   const out = typeof args.get("out") === "string" ? (args.get("out") as string) : path.join(os.tmpdir(), `lab-replay-${fix}-${Date.now()}.json`);
 
   assertLabEnvironment({ requireAnthropicKey: fix === "U" || fix === "AB" || fix === "X" || fix === "Y" || fix === "Z" });
+  // Fixes Y and AC run the detector Python. `npm run lab:replay` sets DETECTOR_PYTHON to the lab's
+  // unless the shell already has one.
+  const python = detectorPython();
+  if ((fix === "Y" || fix === "AC") && !python) {
+    throw new LabEnvironmentError(`Fix ${fix} runs the detector Python, and DETECTOR_PYTHON is not set. Nothing was replayed.`);
+  }
 
   const prisma = new PrismaClient();
   const usage = { input: 0, output: 0, calls: 0 };
@@ -215,7 +222,7 @@ async function main() {
         const { segments, span, source } = projects.get(clip.projectId)!;
         const sermonSegments = span ? segments.filter((s) => s.startMs >= span.startMs && s.endMs <= span.endMs) : segments;
         try {
-          const row = await replayOne(fix, clip, sermonSegments, usage, source);
+          const row = await replayOne(fix, clip, sermonSegments, usage, source, python);
           rows.push(row);
           const mark = row.moved ? "MOVED" : "same ";
           console.log(
@@ -330,11 +337,14 @@ async function replayOne(
   segments: BoundaryUnit[],
   usage: { input: number; output: number; calls: number },
   source: string | null,
+  python: string | undefined,
 ): Promise<ReplayRow> {
   const range = { startMs: clip.startMs, endMs: clip.endMs };
   if (fix === "Y") {
     if (!source) return { ...clip, to: null, moved: false, detail: { error: "no source file on disk" } };
+    if (!python) return { ...clip, to: null, moved: false, detail: { error: "DETECTOR_PYTHON is not set" } };
     const { result, usage: used } = await checkClipCamera({
+      python,
       sourceFilePath: source,
       startMs: range.startMs,
       endMs: range.endMs,
@@ -359,7 +369,9 @@ async function replayOne(
   }
   if (fix === "AC") {
     if (!source) return { ...clip, to: null, moved: false, detail: { error: "no source file on disk" } };
+    if (!python) return { ...clip, to: null, moved: false, detail: { error: "DETECTOR_PYTHON is not set" } };
     const checked = await checkClipEmptyFrames({
+      python,
       sourceFilePath: source,
       startMs: range.startMs,
       endMs: range.endMs,

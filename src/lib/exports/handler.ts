@@ -5,11 +5,11 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Prisma, RenderQcStatus, type ExportJob, type PrismaClient } from "@prisma/client";
+import { resolveJobSelectionSteps, selectionStepUnavailableEvent } from "@/lib/analysis/selection-steps";
 import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
-import { env } from "@/lib/env";
-import { labStepEnabled } from "@/lib/lab-flags";
+import { detectorPython, env } from "@/lib/env";
 import { computeLabSpeakerTrack } from "@/lib/speaker-tracking/lab-observe";
 import type { LabTrack } from "@/lib/speaker-tracking/lab-track";
 import type { EditorState } from "@/lib/editor/types";
@@ -140,6 +140,7 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       project: {
         include: {
           sourceVideo: { include: { transcript: { include: { segments: { orderBy: { idx: "asc" } } } } } },
+          workspace: { select: { settings: true } },
         },
       },
     },
@@ -199,6 +200,17 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
       })
     : null;
 
+  // The selection steps (docs/SELECTION_STEPS_SETTINGS_PLAN.md), resolved once for this job from
+  // the environment gate, this workspace's gate and the detector Python. Both export steps are
+  // off until an operator sets both gates.
+  const resolution = await resolveJobSelectionSteps({
+    environment: env,
+    workspaceSettings: clip.project.workspace.settings,
+    configuredPython: detectorPython(),
+  });
+  const selectionSteps = resolution.steps;
+  const detector = resolution.detectorPython;
+
   // Every render decision the document implies, derived in one pure place. The parity gate drives
   // the same function with the same document, so what it checks is what this job renders.
   const planInput = {
@@ -211,11 +223,11 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     brandTemplate,
     processingConfig: clip.project.processingConfig,
     source: { id: sourceVideo.id, durationMs: sourceVideo.durationS ? Math.round(sourceVideo.durationS.toNumber() * 1000) : null },
-    captionGrouping: labStepEnabled("phraseCaptions") ? ("phrases" as const) : undefined,
+    captionGrouping: selectionSteps.phraseCaptions.on ? ("phrases" as const) : undefined,
   };
   const plan = buildExportRenderPlan(planInput);
   const { range, cropPixels, assContent } = plan;
-  // Lab phrase captions are rebuilt once the source is on disk, without quiet congregation responses.
+  // Phrase captions are rebuilt once the source is on disk, without quiet congregation responses.
   let captionPlan = plan;
   if (rangeInput && (rangeInput.sourceVideoId !== sourceVideo.id || rangeInput.editVersion !== job.editVersion ||
     rangeInput.startMs !== BigInt(range.startMs) || rangeInput.endMs !== BigInt(range.endMs))) {
@@ -315,21 +327,23 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
         details: costDetails,
       });
 
-      // Phase 1 lab: follow the preacher instead of the fixed center crop. A person's manual
+      // Speaker tracking: follow the preacher instead of the fixed center crop. A person's manual
       // crop always wins. If tracking fails, the clip still renders with the fixed crop.
       let speakerTrack: LabTrack | undefined;
-      if (labStepEnabled("speakerTracking") && state.layout.mode !== "manual") {
+      const trackingWanted = state.layout.mode !== "manual";
+      if (trackingWanted && selectionSteps.speakerTracking.on && detector) {
         try {
-          speakerTrack = await computeLabSpeakerTrack({ sourceFilePath, range, workDir });
+          speakerTrack = await computeLabSpeakerTrack({ python: detector, sourceFilePath, range, workDir });
           await recordOperationalEventSafely(prisma, {
             workspaceId: job.workspaceId,
             category: "export",
             eventType: "lab_speaker_tracking",
             severity: "info",
-            message: `Lab speaker tracking follows the preacher ${speakerTrack.followingPercent}% of the clip.`,
+            message: `Speaker tracking follows the preacher ${speakerTrack.followingPercent}% of the clip.`,
             metadata: {
               exportJobId: job.id,
               clipId: clip.id,
+              steps: selectionSteps,
               followingPercent: speakerTrack.followingPercent,
               holds: speakerTrack.holds,
               shots: speakerTrack.shots,
@@ -345,13 +359,22 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
             category: "export",
             eventType: "lab_speaker_tracking_failed",
             severity: "warning",
-            message: "Lab speaker tracking failed; the clip renders with the fixed crop.",
-            metadata: { exportJobId: job.id, clipId: clip.id, detail: error instanceof Error ? error.message : String(error) },
+            message: "Speaker tracking failed; the clip renders with the fixed crop.",
+            metadata: { exportJobId: job.id, clipId: clip.id, steps: selectionSteps, detail: error instanceof Error ? error.message : String(error) },
           });
         }
+      } else if (trackingWanted && resolution.detectorProblem !== null && selectionSteps.speakerTracking.reason === "no-detector") {
+        // On in both gates and unable to run, for a render that would have tracked: one error event,
+        // not a failed render. A manual crop never asks for the detector, so it never misses it.
+        await recordOperationalEventSafely(prisma, {
+          workspaceId: job.workspaceId,
+          clipId: job.clipId,
+          exportJobId: job.id,
+          ...selectionStepUnavailableEvent({ step: "speakerTracking", consequence: "the clip renders with the fixed crop", steps: selectionSteps }),
+        });
       }
 
-      // Phase 1 lab, fix G1: leave the congregation's quiet "Amen." out of the captions. If the
+      // Phrase captions, fix G1: leave the congregation's quiet "Amen." out of the captions. If the
       // measurement fails, the clip renders with every word, as before.
       if (planInput.captionGrouping === "phrases") {
         try {
@@ -363,8 +386,8 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
             category: "export",
             eventType: "lab_caption_cleanup",
             severity: "info",
-            message: `Lab captions: ${plan.captionLineCount} lines before the congregation check, ${captionPlan.captionLineCount} after.`,
-            metadata: { exportJobId: job.id, clipId: clip.id, measuredWords: captionWordLevels.size, linesBefore: plan.captionLineCount, linesAfter: captionPlan.captionLineCount },
+            message: `Phrase captions: ${plan.captionLineCount} lines before the congregation check, ${captionPlan.captionLineCount} after.`,
+            metadata: { exportJobId: job.id, clipId: clip.id, steps: selectionSteps, measuredWords: captionWordLevels.size, linesBefore: plan.captionLineCount, linesAfter: captionPlan.captionLineCount },
           });
         } catch (error) {
           await recordOperationalEventSafely(prisma, {
@@ -372,8 +395,8 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
             category: "export",
             eventType: "lab_caption_cleanup_failed",
             severity: "warning",
-            message: "Lab caption loudness check failed; the clip renders with every word.",
-            metadata: { exportJobId: job.id, clipId: clip.id, detail: error instanceof Error ? error.message : String(error) },
+            message: "The phrase captions' loudness check failed; the clip renders with every word.",
+            metadata: { exportJobId: job.id, clipId: clip.id, steps: selectionSteps, detail: error instanceof Error ? error.message : String(error) },
           });
         }
       }

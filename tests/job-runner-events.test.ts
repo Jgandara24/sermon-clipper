@@ -31,6 +31,17 @@ describe("successEventMetadata", () => {
     expect(metadata).not.toHaveProperty("candidateLimit");
   });
 
+  it("drops the selection steps snapshot from the church-visible event copy, and keeps the rest", () => {
+    // The snapshot's reasons (environment, workspace, no-detector) describe the operator's settings
+    // and the worker's runtime; the job row keeps it for staff (docs/SELECTION_STEPS_SETTINGS_PLAN.md).
+    const metadata = successEventMetadata("ANALYZE", 1, {
+      keptCount: 6,
+      selectionSteps: { sermonSpan: { on: false, reason: "environment" } },
+    });
+    expect(metadata).toEqual({ type: "ANALYZE", attempt: 1, keptCount: 6 });
+    expect(metadata).not.toHaveProperty("selectionSteps");
+  });
+
   it("handles handlers that return no metadata", () => {
     expect(successEventMetadata("PROBE", 1, undefined)).toEqual({ type: "PROBE", attempt: 1 });
   });

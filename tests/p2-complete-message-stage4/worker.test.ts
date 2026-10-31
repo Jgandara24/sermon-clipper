@@ -6,7 +6,7 @@ vi.mock("node:fs/promises", () => ({
   mkdtemp: vi.fn(async () => "/unused-synthetic-directory"), rm: vi.fn(),
   stat: vi.fn(async () => ({ size: 100 })),
 }));
-vi.mock("@/lib/env", () => ({ env: {} }));
+vi.mock("@/lib/env", () => ({ env: {}, detectorPython: () => undefined }));
 vi.mock("@/lib/cost/record", () => ({ recordProcessingCostFactSafely: vi.fn() }));
 vi.mock("@/lib/observability/operational-events", () => ({ recordOperationalEventSafely: vi.fn() }));
 vi.mock("@/lib/export/render", () => ({ renderClipExport: vi.fn(async () => {}) }));
@@ -46,7 +46,7 @@ function setup(enabled = true) {
     exportFullSourceFallback: { findUnique: vi.fn(async () => null) },
     generatedClip: { findUniqueOrThrow: vi.fn(async () => ({
       projectId: "synthetic-project", startMs: 0, endMs: 5000,
-      project: { sourceVideo: source, processingConfig: f.processingConfig },
+      project: { sourceVideo: source, processingConfig: f.processingConfig, workspace: { settings: {} } },
     })) },
     clipEdit: { findUnique: vi.fn(async () => ({ editorState: f.state })), findFirst: vi.fn() },
     exportJob: { update: vi.fn() }, exportedFile: { create: vi.fn(async () => ({ id: "synthetic-file" })) },

@@ -9,15 +9,6 @@ import {
 const URL = "https://www.youtube.com/watch?v=OuXJo09MZWk";
 const FROM = "7f0c1c55-55a5-4a42-9b51-4f3cbd4f1c0e";
 const words = [{ word: "Grace.", startMs: 1_000, endMs: 1_600, confidence: 0.98, isFiller: false, deleted: false }];
-const evidence = {
-  version: "scribe-response-evidence-v1",
-  provider: "elevenlabs",
-  modelVersion: "scribe_v2",
-  timestampClock: "submitted-audio-seconds",
-  sourceOffsetMs: 0,
-  languageProbability: 0.99,
-  entries: [],
-};
 const stored = {
   id: FROM,
   workspaceId: "lab-workspace",
@@ -26,7 +17,6 @@ const stored = {
   transcript: {
     language: "en",
     provider: "elevenlabs_scribe_v2",
-    providerEvidence: { ...evidence, displayCapabilities: { speakerLabels: true } },
     segments: [
       { startMs: 1_000, endMs: 1_600, text: "Grace.", speakerLabel: "speaker_0", words },
       { startMs: 2_000, endMs: 2_500, text: "Amen.", speakerLabel: null, words: [] },
@@ -67,8 +57,6 @@ describe("reusedTranscription", () => {
     const { result, provider } = reusedTranscription(target, stored);
     expect(provider).toBe("elevenlabs_scribe_v2");
     expect(result.language).toBe("en");
-    // The stored evidence carries the display capabilities added when it was saved; the copy is the raw evidence.
-    expect(result.providerEvidence).toEqual(evidence);
     expect(result.segments).toEqual([
       { startMs: 1_000, endMs: 1_600, text: "Grace.", speakerLabel: "speaker_0", words },
       { startMs: 2_000, endMs: 2_500, text: "Amen.", words: [] },

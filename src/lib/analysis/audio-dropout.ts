@@ -2,7 +2,7 @@ import { ffmpegPath } from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 
 /**
- * Phase 1 lab only (LAB_DROPOUT_CHECK_ENABLED, docs/PHASE1_LAB_PLAN.md). Fix Q (lab sermon 4f clip 2,
+ * The dropoutCheck selection step (ANALYSIS_DROPOUT_CHECK_ENABLED, docs/PHASE1_LAB_PLAN.md). Fix Q (lab sermon 4f clip 2,
  * 2026-10-21): the livestream lost its sound for 3.5 seconds at 51:56.5, and the clip played it. The
  * recording holds digital silence there (-91 dB); the speech around it measures about -31 dB. Jake:
  * "we can't allows that to be posted." The five lab services hold one such gap in 5.6 hours, so a

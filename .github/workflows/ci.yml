@@ -14,6 +14,15 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
+      # The unit suite has one real-ffmpeg case (tests/audio-dropout.test.ts, the lab's audio
+      # dropout check), so verify needs ffmpeg like the e2e job does. Same retries and cap.
+      - name: Install ffmpeg
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo -E apt-get update -o Acquire::Retries=3
+          sudo -E apt-get install -y -o Acquire::Retries=3 ffmpeg
       - run: npm ci
       - run: npm run verify
 
