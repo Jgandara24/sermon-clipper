@@ -96,24 +96,29 @@ CHANNEL_IMPORT_DAILY_LIMIT=10
 
 ## Railway Service Configuration
 
-The repo carries per-service config-as-code (Railway's schema has no multi-service file):
+Both services are declared in `.railway/railway.ts` (Railway Infrastructure as Code; the migration
+from the old config files is in docs/RAILWAY_IAC_MIGRATION_PLAN.md). A push does not apply it:
+change the file in a pull request, run `railway config plan`, and run `railway config apply` after
+the merge. `railway config plan --detailed-exit-code` exits 0 when Railway matches the file.
 
-- **Web** — `railway.json`: Nixpacks build, `npm run start`, migrations applied once per release
+- **Web** — Nixpacks build, `npm run start`, migrations applied once per release
   via `preDeployCommand: npm run db:migrate:deploy`, deploy-time healthcheck on `/api/health`
   (new deploys receive no traffic until it passes), restart on failure.
   The web runs Node 24, the same as CI and `Dockerfile.worker`. `package.json` `engines.node`
   (`24.x`) and `.nvmrc` pin it. Nixpacks reads the `NIXPACKS_NODE_VERSION` service variable
   before either file, so that variable must be absent or `24`. Without any of them, Nixpacks
   falls back to Node 18.
-- **Worker** — `railway.worker.json`: builds `Dockerfile.worker` (ffmpeg + the optional
+- **Worker** — builds `Dockerfile.worker` (ffmpeg + the optional
   whisper.cpp fallback) and restarts on failure. The current Railway template keeps
   `requiredMountPath: /models` so the local fallback stays ready and does not download its model
   on every deploy.
 
 Human actions in the Railway dashboard (once per environment):
 
-1. Create two services from this repo. In each service's settings set **Config-as-code file
-   path**: web → `railway.json`, worker → `railway.worker.json`.
+1. Create two services from this repo, named `web` and `worker`, then run `railway config apply`
+   from a checkout linked to the environment. Leave each service's **Railway Config File** setting
+   empty, and keep no `railway.json` or `railway.toml` in the repository root: Railway reads a
+   root `railway.json` for every service whose setting is empty.
 2. The current Railway template requires a persistent volume mounted at `/models` to keep the
    optional local fallback ready. Set `WHISPER_MODEL_PATH=/models/ggml-base.en.bin` if you want that
    fallback. The image entrypoint downloads the model to the
@@ -275,7 +280,7 @@ catches a deploy whose keys do not match the active route, and a price window th
 successor row — both would otherwise fail every ANALYZE job at run time.
 
 The check reports **degraded**, never failed, and this is deliberate. Railway health-checks
-`/api/health` (`railway.json`), and that route answers 503 on a failing readiness status. A
+`/api/health` (`.railway/railway.ts`), and that route answers 503 on a failing readiness status. A
 failing severity here would take the whole web service down — login, existing clips, and the
 billing page included — for a fault that only stops new ANALYZE jobs on the worker, which has no
 health check at all. Because prices are effective-dated rows, an end-dated price with no

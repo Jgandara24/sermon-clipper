@@ -433,7 +433,7 @@ export async function checkWorkerHeartbeatReadiness(
  * route fails every ANALYZE job closed. This DB-backed check audits the active policy's
  * stages against installed adapters, configured keys, and current prices.
  *
- * It never returns "fail". `railway.json` health-checks `/api/health`, which answers 503 on a
+ * It never returns "fail". `.railway/railway.ts` health-checks `/api/health`, which answers 503 on a
  * failing readiness status, so a "fail" here would take the whole web service down — login,
  * existing clips, and the billing page included — for a fault that only stops new ANALYZE jobs
  * on the worker. Prices are effective-dated rows, so an end-dated price with no successor would

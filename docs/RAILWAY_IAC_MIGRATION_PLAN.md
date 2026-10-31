@@ -1,6 +1,6 @@
 # Plan: move railway.json and railway.worker.json to `.railway/railway.ts`
 
-Date: 2026-10-31. Status: in progress. The file is on `main` (pull request #126) and was applied on 2026-10-31 with both config files still in place; the plan now shows no changes. Both services still read their config files. Section 7 has what the apply showed; section 5 is the corrected order.
+Date: 2026-10-31. Status: in progress. The file is on `main` and applied; the plan shows no changes. Section 5 is the corrected order, sections 7 and 8 what the apply and the first worker cutover showed.
 
 ## 1. Why this has a deadline
 
@@ -74,8 +74,8 @@ Plan: 0 to add, 4 to change, 0 to destroy
 3. **Merge the file.** Done: pull request #126, `85dc57b`. A push does not apply IaC.
 4. **Apply first, with the config files still read.** Done on 2026-10-31 (section 7). The files override the dashboard while Railway reads them, so the apply changed no build: both redeploys matched the builds before it. This fills the service settings before any service stops reading its file, so no deploy ever runs on empty settings.
 5. **Plan shows no changes.** Done after removing the restart policy and `requiredMountPath` from the file (section 7): "Your Railway configuration is already up to date." Re-run `railway config plan --detailed-exit-code` before each next step; exit 0 means no changes.
-6. **Worker: clear its config file setting by hand.** `railway config migrate cutover` cannot do it (section 7). In the worker's Settings, clear the Railway Config File field (`/railway.worker.json`), or send the same `serviceInstanceUpdate` with `railwayConfigFile: ""` that the cutover sends. The next worker deploy reads the service settings. Check the build log for `Dockerfile.worker`, the ffmpeg and whisper-cli stages, the volume mount and `[worker] polling`. Rollback: set the field back to `/railway.worker.json` and redeploy.
-7. **Web: delete `railway.json` in a pull request.** The web's config file setting is empty; Railway reads `railway.json` from the repository root by default, so removing the file is the cutover. The merge deploy reads the service settings. Check `nodejs_24`, the pre-deploy migration step, the healthcheck and the commit on `/api/health`. Rollback: revert the pull request.
+6. **Web: delete `railway.json` in a pull request.** Do this first (section 8). The web's config file setting is empty, and Railway reads `railway.json` from the repository root by default, so removing the file is the web's cutover. The merge deploy reads the service settings. Check `nodejs_24`, the pre-deploy migration step, the healthcheck and the commit on `/api/health`. Rollback: revert the pull request.
+7. **Worker: clear its config file setting by hand, after step 6.** `railway config migrate cutover` cannot do it (section 7). Clear the Railway Config File field (`/railway.worker.json`) in the worker's Settings, or send the `serviceInstanceUpdate` with `railwayConfigFile: ""` that the cutover sends, then redeploy the worker. Check the build log for `Dockerfile.worker`, the ffmpeg and whisper-cli stages, the volume mount and `[worker] polling`, and that the deployment lists no config file. Rollback: set the field back to `/railway.worker.json`.
 8. **Remove `railway.worker.json`** and the DEPLOYMENT.md text about both files, after steps 6 and 7.
 
 Do steps 6 and 7 before **2026-11-24**, a week ahead of the cutoff.
@@ -93,3 +93,9 @@ Do steps 6 and 7 before **2026-11-24**, a week ahead of the cutoff.
 - **Two kinds of field never stick.** After each apply, the plan still showed the restart policy (`ON_FAILURE`, 10 retries) on both services and `requiredMountPath: "/models"` on the worker, although Railway answered "applied". Railway's `environment.config`, which the plan compares against, holds neither. The service instances report `ON_FAILURE` and 10 retries for the web, the worker and the never-configured Postgres alike, so that is most likely Railway's default, which it does not store; the CLI does not treat it as a default and plans it again forever. The CLI compiles `requiredMountPath` only for databases (`src/iac/compiler.rs`, `database_deploy`). The file now leaves both out, and the plan shows no changes.
 - **What the worker loses:** only the `requiredMountPath` guard, which fails a deploy when no volume is mounted at `/models`. The volume mount itself is stored and declared.
 - **Docs gap.** Railway's docs say plans are blocked for services still managed by `railway.json` or `railway.toml`. Ours were not, most likely because of the same detection limit. A later CLI or server change could start blocking them until steps 6 and 7 are done.
+
+## 8. The failed worker cutover, 2026-10-31 22:42 UTC
+
+The first try cleared the worker's config file setting before `railway.json` was gone. Railway then read the repository-root `railway.json`, which is the web's file, for the worker too. Deployment `d09ff42f` built from `Dockerfile.worker` but took the web's `npm run start` and its pre-deploy `prisma migrate deploy`, which failed ("Could not find Prisma Schema": the worker image has no `prisma/` folder). The setting went straight back to `/railway.worker.json`. The failed deploy never replaced the running worker (`d1737fc1`), and the worker heartbeat stayed recent.
+
+The lesson: an empty config file setting does not mean "no config file". Railway reads a root `railway.json` or `railway.toml` for every service of the repository whose setting is empty. So `railway.json` goes first (step 6), and the worker's setting is cleared after it (step 7).

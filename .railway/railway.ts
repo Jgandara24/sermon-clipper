@@ -1,5 +1,5 @@
 // DRAFT, not applied. docs/RAILWAY_IAC_MIGRATION_PLAN.md says how this file goes live.
-// Railway reads railway.json and railway.worker.json until 2026-12-01; this file replaces both.
+// This file replaced railway.json (deleted) and railway.worker.json; see the plan's section 8.
 // `railway config migrate` generated the web service; it did not find railway.worker.json, so
 // the worker is written by hand from railway.worker.json and the live deployment manifest.
 import { defineRailway, github, project, service, volume } from "railway/iac";
@@ -11,7 +11,7 @@ export const partial = "sermon-clipper";
 export default defineRailway(() => {
   const source = github("Jgandara24/sermon-clipper", { branch: "main", checkSuites: false });
 
-  // From railway.json.
+  // From the former railway.json.
   const web = service("web", {
     source,
     build: { builder: "NIXPACKS", buildCommand: "npm run build", buildEnvironment: "V3" },
@@ -19,7 +19,7 @@ export default defineRailway(() => {
     preDeploy: "npm run db:migrate:deploy",
     healthcheck: "/api/health",
     healthcheckTimeout: 300,
-    // No restart policy here: railway.json's ON_FAILURE x10 is Railway's default, which Railway
+    // No restart policy here: the former railway.json's ON_FAILURE x10 is Railway's default, which Railway
     // does not store, so declaring it leaves a change in every plan (RAILWAY_IAC_MIGRATION_PLAN.md).
     replicas: { "us-west2": 1 },
     domains: ["app.pulpitengine.com"],
