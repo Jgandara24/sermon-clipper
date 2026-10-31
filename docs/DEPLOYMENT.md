@@ -101,6 +101,10 @@ The repo carries per-service config-as-code (Railway's schema has no multi-servi
 - **Web** — `railway.json`: Nixpacks build, `npm run start`, migrations applied once per release
   via `preDeployCommand: npm run db:migrate:deploy`, deploy-time healthcheck on `/api/health`
   (new deploys receive no traffic until it passes), restart on failure.
+  The web runs Node 24, the same as CI and `Dockerfile.worker`. `package.json` `engines.node`
+  (`24.x`) and `.nvmrc` pin it. Nixpacks reads the `NIXPACKS_NODE_VERSION` service variable
+  before either file, so that variable must be absent or `24`. Without any of them, Nixpacks
+  falls back to Node 18.
 - **Worker** — `railway.worker.json`: builds `Dockerfile.worker` (ffmpeg + the optional
   whisper.cpp fallback) and restarts on failure. The current Railway template keeps
   `requiredMountPath: /models` so the local fallback stays ready and does not download its model
