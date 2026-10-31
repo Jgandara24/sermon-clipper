@@ -62,7 +62,7 @@
     "@aws-sdk/lib-storage": "^3.1081.0",
     "@aws-sdk/s3-request-presigner": "^3.1081.0",
     "@prisma/client": "^6.19.3",
-    "@sentry/nextjs": "^10.66.0",
+    "@sentry/nextjs": "^10.75.2",
     "@sentry/node": "^10.66.0",
     "fontkit": "2.0.4",
     "lucide-react": "^1.23.0",
