@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { labTrackingPython } from "@/lib/lab-flags";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import {
   cameraCheckPrompt,
@@ -19,10 +18,11 @@ import {
   type CameraSample,
   type SceneChange,
 } from "./camera-check";
+import { detectorScriptPath } from "./selection-steps";
 
-const SAMPLE_SCRIPT = path.resolve("scripts/lab/tracking/camera-sample.py");
+const SAMPLE_SCRIPT = detectorScriptPath("cameraSample");
 /** Fix AC: the person detector, on the faceless sample frames of the longer runs. */
-const PEOPLE_SCRIPT = path.resolve("scripts/lab/tracking/observe-people.py");
+const PEOPLE_SCRIPT = detectorScriptPath("observePeople");
 /** Cheap and fast; the question is "slide or camera view". */
 const CAMERA_CHECK_MODEL = "claude-haiku-4-5";
 /** One request carries every faceless moment of a clip; cap it so a slide-heavy clip stays cheap. */
@@ -30,13 +30,14 @@ const MAX_FRAMES_PER_REQUEST = 12;
 
 export type CameraCheckUsage = { inputTokens: number; outputTokens: number; frames: number; sceneFrames: number };
 
-type ClipParams = { sourceFilePath: string; startMs: number; endMs: number; workDir: string };
+/** `python` is the detector Python (DETECTOR_PYTHON), resolved by the caller once per job. */
+type ClipParams = { python: string; sourceFilePath: string; startMs: number; endMs: number; workDir: string };
 
 /** Samples one clip of a local source file: face counts at 4 a second, and scene changes (fix Y). */
 async function sampleClip(params: ClipParams): Promise<{ samples: CameraSample[]; sceneChanges: SceneChange[] }> {
   const outDir = path.join(params.workDir, `camera-${params.startMs}-${params.endMs}`);
   const { stdout } = await execFileWithTimeout(
-    labTrackingPython(),
+    params.python,
     [
       SAMPLE_SCRIPT,
       "--source", params.sourceFilePath,
@@ -51,7 +52,7 @@ async function sampleClip(params: ClipParams): Promise<{ samples: CameraSample[]
 }
 
 /** Fix AC: how many people the detector sees in each faceless frame of the longer no-face runs, by image path. */
-async function detectPeople(samples: CameraSample[]): Promise<Map<string, number>> {
+async function detectPeople(python: string, samples: CameraSample[]): Promise<Map<string, number>> {
   const images = new Set<string>();
   for (const run of runsToDetectPeople(samples)) {
     for (const sample of samples) {
@@ -60,7 +61,7 @@ async function detectPeople(samples: CameraSample[]): Promise<Map<string, number
   }
   const seen = new Map<string, number>();
   if (images.size === 0) return seen;
-  const { stdout } = await execFileWithTimeout(labTrackingPython(), [PEOPLE_SCRIPT, "--images", ...images], {
+  const { stdout } = await execFileWithTimeout(python, [PEOPLE_SCRIPT, "--images", ...images], {
     maxBuffer: 1024 * 1024 * 8,
     timeoutMs: envTimeoutMs("LAB_CAMERA_CHECK_TIMEOUT_MS", 5 * 60_000),
   });
@@ -72,13 +73,13 @@ async function detectPeople(samples: CameraSample[]): Promise<Map<string, number
 /** Fix AC on its own: the empty stretches of one clip, without the vision model (the lab's replay gate). */
 export async function checkClipEmptyFrames(params: ClipParams): Promise<{ result: CameraCheckResult; runs: { start: number; end: number }[]; samples: number; framesChecked: number }> {
   const { samples } = await sampleClip(params);
-  const seen = await detectPeople(samples);
+  const seen = await detectPeople(params.python, samples);
   const runs = emptyRuns(samples, (image) => seen.get(image));
   return { result: decideEmptyFrames(runs), runs, samples: samples.length, framesChecked: seen.size };
 }
 
 /**
- * Lab only. Samples one clip of a local source file and asks the vision model about faceless frames
+ * The camera check. Samples one clip of a local source file and asks the vision model about faceless frames
  * and scene changes (fix Y). When no slide is found, the person detector reads the longer faceless
  * runs, and an empty stretch rejects the clip as off-screen (fix AC).
  */
@@ -117,6 +118,6 @@ export async function checkClipCamera(params: ClipParams): Promise<{ result: Cam
   const decided = decideCameraCheck(shown, labels);
   if (!decided.pass) return { result: decided, usage };
   // Fix AC: no slide, so the faceless frames may still be empty.
-  const seen = await detectPeople(samples);
+  const seen = await detectPeople(params.python, samples);
   return { result: decideEmptyFrames(emptyRuns(samples, (image) => seen.get(image))), usage };
 }

@@ -1,7 +1,7 @@
 import { captionLineId, type CaptionLine, type CaptionWord } from "./caption-lines";
 
 /**
- * Phase 1 lab captions: one whole phrase per line (lab only, LAB_PHRASE_CAPTIONS_ENABLED).
+ * Phrase captions: one whole phrase per line (the phraseCaptions selection step, EXPORT_PHRASE_CAPTIONS_ENABLED).
  *
  * Jake, Codex session 2026-10-06: "Do you notice how i want the caption lines segments to be well
  * represented of an actually thought / phrase and not split in half? Correct Example: "not to

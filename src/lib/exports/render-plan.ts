@@ -65,9 +65,9 @@ export type ExportRenderPlanInput = {
   outputWidth: number;
   outputHeight: number;
   brandTemplate: ExportRenderBrandTemplate | null;
-  /** Lab only (LAB_PHRASE_CAPTIONS_ENABLED): one whole phrase per line, in capital letters, without punctuation. */
+  /** The phraseCaptions selection step (EXPORT_PHRASE_CAPTIONS_ENABLED): one whole phrase per line, in capital letters, without punctuation. */
   captionGrouping?: "phrases";
-  /** Lab only, with phrases: each word's loudness in dB, so a quiet congregation response is left out. */
+  /** With phrases: each word's loudness in dB, so a quiet congregation response is left out. */
   captionWordLevels?: ReadonlyMap<string, number>;
 };
 
