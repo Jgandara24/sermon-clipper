@@ -4,7 +4,11 @@ import type {
   ProcessingCostFactInput,
   ProcessingCostOutcome,
 } from "@/lib/cost/types";
-import { ytDlpPath as resolveYtDlpPath, ytDlpProxyUrl as resolveYtDlpProxyUrl } from "@/lib/env";
+import {
+  ytDlpMaxHeight as resolveYtDlpMaxHeight,
+  ytDlpPath as resolveYtDlpPath,
+  ytDlpProxyUrl as resolveYtDlpProxyUrl,
+} from "@/lib/env";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import { redactProxySecrets } from "@/lib/media/proxy-secret";
 
@@ -213,13 +217,14 @@ export async function downloadYtDlpVideo(
   const proxy = proxyDescriptor();
   await mkdir(path.dirname(destPath), { recursive: true });
   const ytDlpPath = resolveYtDlpPath();
+  const maxHeight = resolveYtDlpMaxHeight();
   try {
     await execFile(
       ytDlpPath,
       [
         ...baseArgs(),
         "-f",
-        "bv*[height<=1080]+ba/b[height<=1080]",
+        `bv*[height<=${maxHeight}]+ba/b[height<=${maxHeight}]`,
         "--merge-output-format",
         "mp4",
         "--max-filesize",

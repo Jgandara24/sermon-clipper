@@ -9,10 +9,12 @@ import {
   SourceOrigin,
   WorkspaceRole,
 } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { REANALYSIS_BLOCKED } from "@/lib/analysis/reanalysis-policy";
+import { applySelectionStepsChange, SELECTION_STEPS } from "@/lib/analysis/selection-steps";
 import { createAnalyzeJobHandler, runAnalyzeJob } from "@/lib/jobs/handlers/analyze";
 import { JobFailureError } from "@/lib/jobs/types";
+import { updateWorkspaceSettings } from "@/lib/workspace-settings";
 
 /**
  * CHARTER TESTS — these record what ANALYZE does *today*, defects included. P0.8 changed the
@@ -179,6 +181,11 @@ describe("ANALYZE charter — candidate pool", () => {
     expect(clips.length).toBeLessThanOrEqual(18);
     expect(metadata.candidateLimit).toBe(18);
     expect(metadata.keptCount).toBe(clips.length);
+    // Every selection step is off until an operator opens both gates
+    // (docs/SELECTION_STEPS_SETTINGS_PLAN.md), and the job says so, with the reason.
+    expect(metadata.selectionSteps).toEqual(
+      Object.fromEntries(SELECTION_STEPS.map((step) => [step, { on: false, reason: "environment" }])),
+    );
   });
 
   it("honors a lower snapshotted candidate limit", async () => {
@@ -793,5 +800,66 @@ describe("ANALYZE cost-fact recording", () => {
         where: { workspaceId, projectId, eventType: "processing_cost_fact" },
       }),
     ).resolves.toBe(1);
+  });
+});
+
+describe("ANALYZE selection steps", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("runs a step only when both gates agree, records the snapshot, and reports a step that failed as degraded", async () => {
+    const workspaceId = await seedWorkspace();
+    // The workspace gate, as `npm run set:selection-steps` writes it: two steps on for this church.
+    await updateWorkspaceSettings(prisma, workspaceId, (current) =>
+      applySelectionStepsChange(current, { on: ["sermonSpan", "boundaryStep"], off: [] }),
+    );
+    // The environment gate opens the sermon span only, so the boundary step stays off by environment.
+    vi.stubEnv("ANALYSIS_SERMON_SPAN_ENABLED", "true");
+    // No model key: the sermon span's one call fails, the step fails open, and the job reports it.
+    vi.stubEnv("ANTHROPIC_API_KEY", undefined);
+
+    const { projectId, clips, metadata } = await analyzeProject({
+      workspaceId,
+      segmentCount: 400,
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
+    });
+
+    // Fail-open: the church still gets its clips.
+    expect(clips.length).toBeGreaterThan(0);
+    const steps = metadata.selectionSteps as Record<string, { on: boolean; reason: string | null }>;
+    expect(steps.sermonSpan).toEqual({ on: true, reason: null });
+    expect(steps.boundaryStep).toEqual({ on: false, reason: "environment" });
+    expect(steps.dropoutCheck).toEqual({ on: false, reason: "environment" });
+
+    const events = await prisma.operationalEvent.findMany({ where: { projectId }, orderBy: { createdAt: "asc" } });
+    const ran = events.find((event) => event.eventType === "lab_selection_steps");
+    expect(ran?.metadata).toMatchObject({ spanOn: true, boundaryOn: false, degraded: ["sermonSpan"] });
+    expect((ran?.metadata as { steps: unknown }).steps).toEqual(steps);
+    const degraded = events.filter((event) => event.eventType === "selection_steps_degraded");
+    expect(degraded).toHaveLength(1);
+    expect(degraded[0].severity).toBe("error");
+    expect(degraded[0].metadata).toMatchObject({ degraded: [{ step: "sermonSpan" }] });
+    expect(events.some((event) => event.eventType === "selection_steps_unavailable")).toBe(false);
+  });
+
+  it("records every step off, with the workspace as the reason, when only the environment gate is open", async () => {
+    const workspaceId = await seedWorkspace();
+    vi.stubEnv("ANALYSIS_SERMON_SPAN_ENABLED", "true");
+    vi.stubEnv("ANALYSIS_BOUNDARY_STEP_ENABLED", "true");
+
+    const { projectId, metadata } = await analyzeProject({
+      workspaceId,
+      segmentCount: 400,
+      sermonDate: new Date("2027-03-03T00:00:00.000Z"),
+    });
+
+    const steps = metadata.selectionSteps as Record<string, { on: boolean; reason: string | null }>;
+    expect(steps.sermonSpan).toEqual({ on: false, reason: "workspace" });
+    expect(steps.boundaryStep).toEqual({ on: false, reason: "workspace" });
+    expect(steps.agreementRanking).toEqual({ on: false, reason: "environment" });
+    const events = await prisma.operationalEvent.findMany({ where: { projectId } });
+    expect(events.map((event) => event.eventType)).not.toContain("lab_selection_steps");
+    expect(events.map((event) => event.eventType)).not.toContain("selection_steps_degraded");
   });
 });

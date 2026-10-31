@@ -1,0 +1,64 @@
+{
+  "projectId": "1f5ea19d-125c-4567-a91d-6730ea87fef7",
+  "projectName": "Lab 2r - Wednesday Night - agreement order",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "e85c63a8-f2f5-47ca-8b50-b95a7b36f72d": {
+      "rank": 1,
+      "startMs": 1324072,
+      "endMs": 1381112,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:31:41.749Z"
+    },
+    "25f474f5-a443-4464-a59d-e1a38a125800": {
+      "rank": 2,
+      "startMs": 1757324,
+      "endMs": 1792364,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:32:00.912Z"
+    },
+    "8b81cdf9-6c49-4b12-8884-7f8b030b02c5": {
+      "rank": 3,
+      "startMs": 1239832,
+      "endMs": 1304512,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:33:05.579Z"
+    },
+    "3595ec26-3673-49fa-a285-c0742b2873c1": {
+      "rank": 4,
+      "startMs": 785496,
+      "endMs": 817536,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:33:17.521Z"
+    },
+    "9a097f50-9d31-4c97-882d-da21eab31580": {
+      "rank": 5,
+      "startMs": 1973032,
+      "endMs": 2002932,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:33:52.187Z"
+    },
+    "dff74aa9-073e-44f3-aa4d-749927f8b331": {
+      "rank": 6,
+      "startMs": 1132232,
+      "endMs": 1204532,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should have ended with the second to last line: \"And that man was killed that day for the gospel of Jesus Christ.\"\nThe current last line: \"Now hear what's amazing.\" is the start of a brand new section. It shouldn't be the last line.\n",
+      "labeledAt": "2026-10-31T03:37:09.062Z"
+    }
+  }
+}

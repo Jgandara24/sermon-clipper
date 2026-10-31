@@ -1,0 +1,62 @@
+{
+  "projectId": "c42e9af3-68ae-40ee-96f1-02235b660c0d",
+  "projectName": "Lab 2 - Wednesday Night",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "05c18c5d-fa8f-42d5-915e-f3f270ca4df2": {
+      "rank": 2,
+      "startMs": 1757324,
+      "endMs": 1796944,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T17:46:02.513Z"
+    },
+    "4ead490c-db91-46f2-a14b-e3ae839bfb80": {
+      "rank": 3,
+      "startMs": 1319922,
+      "endMs": 1361022,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-18T17:46:31.695Z"
+    },
+    "efc720e0-8c38-4d0b-8822-5faad1010ccf": {
+      "rank": 4,
+      "startMs": 1973032,
+      "endMs": 2002932,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "When the preacher moves from side to side, it loses track of him. You'd be able to track his body and shoulder and keep him center-locked when he moves from side to side or turns. ",
+      "labeledAt": "2026-10-18T17:47:04.946Z"
+    },
+    "5fb5e327-c0f3-4db1-a398-fec58ad942ba": {
+      "rank": 5,
+      "startMs": 2585288,
+      "endMs": 2634768,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "The content is great, but again, when he moves from side to side, the tracking fails and doesn't keep him center locked. And when it retracts him, it snaps back too quickly. ",
+      "labeledAt": "2026-10-18T17:47:56.000Z"
+    },
+    "294aef06-03f2-4b66-a1f8-01deb3869c9d": {
+      "rank": 6,
+      "startMs": 570092,
+      "endMs": 617852,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "When he turns to this side around the 8- to 12-second mark, the camera doesn't track him until it catches his face, at which point it snaps back too quickly, making for a bad clip, but the content is good. ",
+      "labeledAt": "2026-10-18T17:48:52.634Z"
+    },
+    "264a194c-73e3-4c3f-8909-59b4682e02d0": {
+      "rank": 1,
+      "startMs": 680892,
+      "endMs": 723572,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "The content is great, but when the pastor turns to the side, the camera loses him. We need to be able to track his body and shoulders, probably too. ",
+      "labeledAt": "2026-10-18T21:08:38.212Z"
+    }
+  }
+}

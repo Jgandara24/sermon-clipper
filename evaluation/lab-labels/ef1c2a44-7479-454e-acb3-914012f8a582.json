@@ -1,0 +1,64 @@
+{
+  "projectId": "ef1c2a44-7479-454e-acb3-914012f8a582",
+  "projectName": "Lab 1j - Normal Sunday - fix K + 90 s rule (1g transcript)",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "0a4b01e8-32bd-4343-a904-88270884274d": {
+      "rank": 1,
+      "startMs": 4457320,
+      "endMs": 4508340,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T03:16:57.585Z"
+    },
+    "e39aac19-85b6-4246-a8ac-04b042169744": {
+      "rank": 2,
+      "startMs": 4251040,
+      "endMs": 4284740,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T03:17:21.720Z"
+    },
+    "29142918-98ef-40b4-b70c-16d6023e1906": {
+      "rank": 3,
+      "startMs": 2764940,
+      "endMs": 2835420,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T03:18:08.341Z"
+    },
+    "cf967712-770a-4831-812d-78c8d9afc033": {
+      "rank": 4,
+      "startMs": 3499292,
+      "endMs": 3537532,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "It should end with, \" Amen. He is the devil.\"",
+      "labeledAt": "2026-10-21T03:19:25.521Z"
+    },
+    "ff8ca79e-1725-41fc-a4ed-940acacaf06e": {
+      "rank": 5,
+      "startMs": 3138036,
+      "endMs": 3210716,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T03:20:10.488Z"
+    },
+    "fff15a1f-486e-4138-bba5-a8f7af7c299f": {
+      "rank": 6,
+      "startMs": 3665588,
+      "endMs": 3707888,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-21T03:20:40.978Z"
+    }
+  }
+}

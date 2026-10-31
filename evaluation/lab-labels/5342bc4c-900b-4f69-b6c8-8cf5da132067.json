@@ -1,0 +1,62 @@
+{
+  "projectId": "5342bc4c-900b-4f69-b6c8-8cf5da132067",
+  "projectName": "Lab 5l - Bible Conference Herb Reavis - repeat AA-AE",
+  "sourceUrl": "https://www.youtube.com/watch?v=mhLBojrgy_s",
+  "judge": "jake",
+  "clips": {
+    "5bbaa994-e8bb-4ede-a973-023a159830ea": {
+      "rank": 1,
+      "startMs": 3484472,
+      "endMs": 3548292,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:27:58.147Z"
+    },
+    "63ae7560-392b-4bf2-82cc-815937848695": {
+      "rank": 2,
+      "startMs": 1712816,
+      "endMs": 1774596,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:28:11.730Z"
+    },
+    "13547aab-dd33-4e7a-af4b-26b1339555b8": {
+      "rank": 3,
+      "startMs": 2451036,
+      "endMs": 2487176,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:28:28.169Z"
+    },
+    "40475c88-cb52-4e7d-bd19-f75409ffbc17": {
+      "rank": 4,
+      "startMs": 2522896,
+      "endMs": 2574212,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:28:33.886Z"
+    },
+    "d0cee2c1-dc6a-4a9a-9850-fc4d30503ece": {
+      "rank": 5,
+      "startMs": 3037648,
+      "endMs": 3103168,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "The preacher is on a good run, and it stop abrupt.",
+      "labeledAt": "2026-10-30T03:29:46.492Z"
+    },
+    "308e7eb0-9e6c-44c0-8b0d-736f7c6ced48": {
+      "rank": 6,
+      "startMs": 2948748,
+      "endMs": 3011908,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:29:56.487Z"
+    }
+  }
+}

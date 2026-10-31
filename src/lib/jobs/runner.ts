@@ -144,6 +144,13 @@ export async function runOnePendingJob(): Promise<boolean> {
 }
 
 /**
+ * Result metadata keys that stay off the church-facing event copy: the candidate ceiling (below)
+ * and the selection steps snapshot, whose reasons (`environment`, `workspace`, `no-detector`)
+ * describe the operator's settings and the worker's runtime. Both stay on the job row for staff.
+ */
+const CHURCH_HIDDEN_RESULT_KEYS = new Set(["candidateLimit", "selectionSteps"]);
+
+/**
  * Success events are workspace-scoped, and workspace-scoped events feed the church-facing
  * /app/settings/operations page. The frozen candidate rule keeps the internal ceiling — which
  * can be a hidden per-church override — off every church-facing surface, so the event copy of
@@ -156,7 +163,7 @@ export function successEventMetadata(
   resultMetadata: JobSuccessMetadata | undefined,
 ): JobSuccessMetadata {
   const safeMetadata = Object.fromEntries(
-    Object.entries(resultMetadata ?? {}).filter(([key]) => key !== "candidateLimit"),
+    Object.entries(resultMetadata ?? {}).filter(([key]) => !CHURCH_HIDDEN_RESULT_KEYS.has(key)),
   );
   return { type, attempt, ...safeMetadata };
 }

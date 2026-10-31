@@ -145,6 +145,9 @@ const fieldSchemas = {
   CAPTION_FONT_DIR: optionalString,
   YTDLP_PATH: optionalString,
   YTDLP_PROXY_URL: optionalString,
+  // Tallest video yt-dlp may pick for a URL import. 1080 is the production behavior; the lab
+  // sets 720 so three sermons fit on a laptop disk. Any other value is a deliberate choice.
+  YTDLP_MAX_HEIGHT: positiveInt(1080),
   YTDLP_PROXY_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   RAILWAY_EGRESS_PRICE_PER_GB_USD: optionalNonNegativeNumber,
   // Provider selection is explicit policy, validated in src/lib/transcription/policy.ts so the
@@ -194,6 +197,24 @@ const fieldSchemas = {
   // production mileage. Run at least one complete report-only cycle in production before turning
   // it on (docs/DEPLOYMENT.md).
   SOURCE_RETENTION_DELETION_ENABLED: exactTrue,
+
+  // Selection steps (docs/SELECTION_STEPS_SETTINGS_PLAN.md): the Phase 1 lab steps, each behind
+  // two gates. These seven say the environment can run a step; `Workspace.settings.selectionSteps`
+  // says a church gets it; src/lib/analysis/selection-steps.ts joins the two once per job. All
+  // exactTrue and all default false, so a deploy with none of them set changes nothing. The
+  // names describe the step, not the lab.
+  ANALYSIS_SERMON_SPAN_ENABLED: exactTrue,
+  ANALYSIS_BOUNDARY_STEP_ENABLED: exactTrue,
+  ANALYSIS_DROPOUT_CHECK_ENABLED: exactTrue,
+  ANALYSIS_CAMERA_CHECK_ENABLED: exactTrue,
+  ANALYSIS_AGREEMENT_RANKING_ENABLED: exactTrue,
+  EXPORT_PHRASE_CAPTIONS_ENABLED: exactTrue,
+  EXPORT_SPEAKER_TRACKING_ENABLED: exactTrue,
+  // The Python with OpenCV and the YuNet model that the camera check and speaker tracking run
+  // (scripts/lab/tracking/). No default on purpose: when it is absent or cannot import OpenCV,
+  // both steps count as off with the reason `no-detector`, and the worker records one
+  // selection_steps_unavailable event at boot instead of failing one clip at a time.
+  DETECTOR_PYTHON: optionalString,
 
   // Observability
   SENTRY_DSN: optionalString,
@@ -312,6 +333,16 @@ export function ytDlpPath(): string {
  */
 export function ytDlpProxyUrl(): string | undefined {
   return env.YTDLP_PROXY_URL || undefined;
+}
+
+/** Tallest video a URL import may download. 1080 unless `YTDLP_MAX_HEIGHT` says otherwise. */
+export function ytDlpMaxHeight(): number {
+  return env.YTDLP_MAX_HEIGHT;
+}
+
+/** The detector Python for the camera check and speaker tracking, or undefined. Empty means absent. */
+export function detectorPython(): string | undefined {
+  return env.DETECTOR_PYTHON || undefined;
 }
 
 /**

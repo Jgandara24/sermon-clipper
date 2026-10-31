@@ -1,0 +1,62 @@
+{
+  "projectId": "eef6b994-175e-4e63-8dfc-8ecc761d73b5",
+  "projectName": "Lab 2j - Wednesday Night - fix R + S",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "374ca0da-e090-40d6-a3f0-1e9fa3973eb6": {
+      "rank": 1,
+      "startMs": 1244412,
+      "endMs": 1318712,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:30:03.626Z"
+    },
+    "58d013af-0731-454e-93b8-304cb38964a6": {
+      "rank": 2,
+      "startMs": 2572708,
+      "endMs": 2611748,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:30:30.701Z"
+    },
+    "8d22e497-8720-4f74-966e-cb0067fb79df": {
+      "rank": 3,
+      "startMs": 1745924,
+      "endMs": 1790604,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:30:59.068Z"
+    },
+    "9ee661e1-583f-4946-8777-7ea3dd134c95": {
+      "rank": 4,
+      "startMs": 378011,
+      "endMs": 433472,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:31:14.135Z"
+    },
+    "6ccf883f-4138-406a-b041-a46d5c3824ea": {
+      "rank": 5,
+      "startMs": 1306032,
+      "endMs": 1381112,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:32:15.201Z"
+    },
+    "eb297475-afe9-48b3-88e1-22f57b4b2c69": {
+      "rank": 6,
+      "startMs": 2324768,
+      "endMs": 2384228,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:32:52.386Z"
+    }
+  }
+}

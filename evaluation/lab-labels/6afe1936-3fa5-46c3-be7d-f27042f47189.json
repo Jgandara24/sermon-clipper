@@ -1,0 +1,66 @@
+{
+  "projectId": "6afe1936-3fa5-46c3-be7d-f27042f47189",
+  "projectName": "Lab 1n - Normal Sunday - fix R + S",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "2a367960-0ff0-4b35-bf99-0920b6234778": {
+      "rank": 1,
+      "startMs": 4593360,
+      "endMs": 4656640,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:25:28.373Z"
+    },
+    "8369aad3-69c3-4c63-b794-1c44b1a1fc5a": {
+      "rank": 2,
+      "startMs": 4104120,
+      "endMs": 4143760,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "It's okay, but it would be better if it ended on, \" Jesus can heal you today. Hallelujah.\"",
+      "labeledAt": "2026-10-25T01:26:54.242Z"
+    },
+    "521b3cb4-89d9-4665-a7f0-e24fc0b47c7b": {
+      "rank": 3,
+      "startMs": 4401880,
+      "endMs": 4438120,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:27:23.542Z"
+    },
+    "a02e931b-42ec-4ffe-a4e8-0db8d7497b33": {
+      "rank": 4,
+      "startMs": 2478024,
+      "endMs": 2514524,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:27:48.327Z"
+    },
+    "4fc59ca3-4d0a-4adf-b947-74600a0c8ef6": {
+      "rank": 5,
+      "startMs": 3223136,
+      "endMs": 3265556,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T01:28:19.650Z"
+    },
+    "143ac12e-cb6e-467d-957d-3e44e11b8234": {
+      "rank": 6,
+      "startMs": 2311284,
+      "endMs": 2366284,
+      "verdict": "fail",
+      "failedTests": [
+        4
+      ],
+      "note": "It stops in the middle of the story. ",
+      "labeledAt": "2026-10-25T01:29:14.493Z"
+    }
+  }
+}

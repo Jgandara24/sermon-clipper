@@ -1,0 +1,64 @@
+{
+  "projectId": "78cce137-dec0-4c82-8a83-c8829442561e",
+  "projectName": "Lab 3e - Revival - whole ends + sermon only + caps captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=JIIo4_gc_44",
+  "judge": "jake",
+  "clips": {
+    "7f163b69-96f5-44e9-a094-4ec96be193e9": {
+      "rank": 1,
+      "startMs": 3724726,
+      "endMs": 3760946,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "the last word \"cost\" isn't finished. sounds like it's cut off right when he is about to finish the word itself",
+      "labeledAt": "2026-10-20T23:25:16.238Z"
+    },
+    "7072ff47-2c91-41de-9c77-9b8510192ea6": {
+      "rank": 2,
+      "startMs": 2355106,
+      "endMs": 2405786,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:25:48.992Z"
+    },
+    "b98d9150-3433-450e-9168-c64b34571afe": {
+      "rank": 3,
+      "startMs": 3118206,
+      "endMs": 3155546,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:26:05.143Z"
+    },
+    "a0a98b7e-2d3f-4205-a885-99a5df704c63": {
+      "rank": 4,
+      "startMs": 3477130,
+      "endMs": 3513290,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:26:28.216Z"
+    },
+    "ddbf67aa-1d18-4804-a222-e243354ef6e1": {
+      "rank": 5,
+      "startMs": 1790950,
+      "endMs": 1824530,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:26:45.748Z"
+    },
+    "c2c75965-7493-431d-a9d8-f3233a805fff": {
+      "rank": 6,
+      "startMs": 2500706,
+      "endMs": 2553986,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:27:47.452Z"
+    }
+  }
+}

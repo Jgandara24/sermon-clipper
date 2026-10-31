@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 // Stop the real handler at its external boundaries. No database or provider client loads here.
-vi.mock("@/lib/env", () => ({ env: { CANDIDATE_LIMIT_DEFAULT: 18, CANDIDATE_LIMIT_MAXIMUM: 18, AUTOMATIC_SCHEDULE_ARMING_ENABLED: false } }));
+vi.mock("@/lib/env", () => ({ env: { CANDIDATE_LIMIT_DEFAULT: 18, CANDIDATE_LIMIT_MAXIMUM: 18, AUTOMATIC_SCHEDULE_ARMING_ENABLED: false }, detectorPython: () => undefined }));
 vi.mock("@/lib/analysis", () => ({ getAnalysisProvider: vi.fn(() => { throw new Error("Unexpected provider lookup."); }) }));
 vi.mock("@/lib/analysis/routing-store", () => ({ resolveAndSnapshotProjectAnalysisRouting: vi.fn() }));
 vi.mock("@/lib/cost/record", () => ({ recordProcessingCostFactSafely: vi.fn() }));
@@ -40,6 +40,7 @@ function setup(enabled: boolean | undefined = true) {
   const processingConfig = enabled === undefined ? {} : { completeMessagePolicy: { ...setting, enabled } };
   const project = {
     id: "project-local", workspaceId: "workspace-local", sourceVideoId: "source-local", processingConfig,
+    workspace: { settings: {} },
     sermonDate: null, expiresAt: null,
     sourceVideo: { id: "source-local", durationS: { toNumber: () => f.source.sourceDurationMs / 1000 }, transcriptRevision: 7, transcript: storedTranscript },
   };
