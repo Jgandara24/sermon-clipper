@@ -1,0 +1,74 @@
+{
+  "projectId": "443f4ad9-008f-4104-a260-a365f1911632",
+  "projectName": "Lab 1 - Normal Sunday - Surviving and Thriving",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "6904f132-c0d9-4dbf-84b5-c783fd8a879e": {
+      "rank": 1,
+      "startMs": 491918,
+      "endMs": 548878,
+      "verdict": "fail",
+      "failedTests": [
+        2
+      ],
+      "note": "",
+      "labeledAt": "2026-10-18T03:05:07.742Z"
+    },
+    "1e0c9d9d-f5a5-490a-98ad-4f6c9165de0e": {
+      "rank": 2,
+      "startMs": 622037,
+      "endMs": 679638,
+      "verdict": "fail",
+      "failedTests": [
+        2
+      ],
+      "note": "",
+      "labeledAt": "2026-10-18T03:05:16.090Z"
+    },
+    "bc69f871-f12c-47d8-b1bc-bcbd5101a2b0": {
+      "rank": 3,
+      "startMs": 214050,
+      "endMs": 274030,
+      "verdict": "fail",
+      "failedTests": [
+        2
+      ],
+      "note": "",
+      "labeledAt": "2026-10-18T03:05:23.652Z"
+    },
+    "084cf646-02e1-457f-943f-5e29cbcf0ba3": {
+      "rank": 4,
+      "startMs": 68230,
+      "endMs": 128050,
+      "verdict": "fail",
+      "failedTests": [
+        2
+      ],
+      "note": "",
+      "labeledAt": "2026-10-18T03:05:29.956Z"
+    },
+    "7aa1c9a2-84f7-4ee8-85b3-2924f727cf1a": {
+      "rank": 5,
+      "startMs": 679878,
+      "endMs": 703658,
+      "verdict": "fail",
+      "failedTests": [
+        2
+      ],
+      "note": "",
+      "labeledAt": "2026-10-18T03:05:37.345Z"
+    },
+    "3d52e45c-b279-4547-beff-7a6e2f282e7d": {
+      "rank": 6,
+      "startMs": 357390,
+      "endMs": 415778,
+      "verdict": "fail",
+      "failedTests": [
+        2
+      ],
+      "note": "",
+      "labeledAt": "2026-10-18T03:05:46.048Z"
+    }
+  }
+}

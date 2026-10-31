@@ -1,0 +1,66 @@
+{
+  "projectId": "abfb2ed1-28ea-42b4-bfd6-6f672ab95888",
+  "projectName": "Lab 2l - Wednesday Night - fix W + X + Y",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "f8e62a8e-a48d-4047-a8ec-60dd0adea10b": {
+      "rank": 1,
+      "startMs": 1244412,
+      "endMs": 1304512,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:19:11.226Z"
+    },
+    "c6ce866f-4c57-458f-a7cf-778c4c6b33e5": {
+      "rank": 2,
+      "startMs": 1745924,
+      "endMs": 1790604,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "should have started with, \" Listen to me, church. Never give up on anybody.\"",
+      "labeledAt": "2026-10-26T04:19:48.598Z"
+    },
+    "f8152123-5974-42e9-b8f2-3fcce260e9f5": {
+      "rank": 3,
+      "startMs": 2572708,
+      "endMs": 2611748,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:20:00.229Z"
+    },
+    "1bb681d6-e5de-4de8-90d4-1a3173c8f5d3": {
+      "rank": 4,
+      "startMs": 2324768,
+      "endMs": 2384228,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:20:14.824Z"
+    },
+    "becade57-33b1-4017-bebd-54de871e3b99": {
+      "rank": 5,
+      "startMs": 1306032,
+      "endMs": 1381112,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:20:31.411Z"
+    },
+    "1e1db549-3cd1-4ba1-83f0-7aec8ea5ba23": {
+      "rank": 6,
+      "startMs": 348000,
+      "endMs": 433472,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "should have started with, \"Now, I just wanna give you some hope tonight because that there's somebody in your life you've given up on.\"",
+      "labeledAt": "2026-10-26T04:22:27.850Z"
+    }
+  }
+}

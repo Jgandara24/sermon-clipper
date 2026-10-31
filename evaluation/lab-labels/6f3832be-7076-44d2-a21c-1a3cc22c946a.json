@@ -1,0 +1,62 @@
+{
+  "projectId": "6f3832be-7076-44d2-a21c-1a3cc22c946a",
+  "projectName": "Lab 3c - Revival - whole sentences + questions + phrase captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=JIIo4_gc_44",
+  "judge": "jake",
+  "clips": {
+    "bfb7650b-3f47-4909-aa7c-e168ed6c0ed1": {
+      "rank": 1,
+      "startMs": 3120166,
+      "endMs": 3155546,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:45:14.491Z"
+    },
+    "7454e3f7-e9e7-4c5f-92e0-4cbdbffb8492": {
+      "rank": 2,
+      "startMs": 2269286,
+      "endMs": 2305586,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:46:22.928Z"
+    },
+    "d6c74a57-0722-4781-857e-83392e27f014": {
+      "rank": 3,
+      "startMs": 2550706,
+      "endMs": 2572330,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:46:48.762Z"
+    },
+    "9e7bfe94-a1be-4986-86fc-86ecd6aeaf16": {
+      "rank": 4,
+      "startMs": 2811090,
+      "endMs": 2865870,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:48:31.520Z"
+    },
+    "13b59213-01a0-466f-b2b4-d7694f670f06": {
+      "rank": 5,
+      "startMs": 2035422,
+      "endMs": 2068282,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:49:32.520Z"
+    },
+    "faf229a1-c586-4193-8bb5-61c78c1ba01e": {
+      "rank": 6,
+      "startMs": 2683730,
+      "endMs": 2713610,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-19T03:50:08.117Z"
+    }
+  }
+}

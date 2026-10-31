@@ -238,8 +238,10 @@ describe("scoreCandidates", () => {
     await new ClaudeAnalysisProvider().scoreCandidates(many, CONTEXT);
 
     const stageBPrompt = streamMock.mock.calls[1][0].messages[0].content as string;
-    expect(stageBPrompt).toContain("[24]");
-    expect(stageBPrompt).not.toContain("[25]");
+    expect(stageBPrompt.match(/^\[\d+\] /gm)).toHaveLength(25);
+    // Spread across the recording, not the first 25 in time (tests/stage-a-survivors.test.ts).
+    expect(stageBPrompt).toContain("[0]");
+    expect(stageBPrompt).toContain("[29]");
   });
 
   it("throws when Stage A output is truncated at the token cap", async () => {

@@ -1,0 +1,62 @@
+{
+  "projectId": "2a9db6a0-e5f2-45e5-b13d-d88e375240ed",
+  "projectName": "Lab 2n - Wednesday Night - fix AA-AE",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "1b416b7a-306a-4269-b348-8bd7720800c0": {
+      "rank": 1,
+      "startMs": 1239832,
+      "endMs": 1304512,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T00:50:52.731Z"
+    },
+    "dd82bbd4-4eaa-44af-9e1b-4c9353a7dce2": {
+      "rank": 2,
+      "startMs": 1757324,
+      "endMs": 1790604,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T00:51:18.648Z"
+    },
+    "2c9df323-d97f-4273-b47e-9f80032d7885": {
+      "rank": 3,
+      "startMs": 693872,
+      "endMs": 723572,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T00:51:52.066Z"
+    },
+    "cbaa1169-ae4c-4f8d-96b3-2697b3027e3f": {
+      "rank": 4,
+      "startMs": 1330712,
+      "endMs": 1381112,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T00:52:23.316Z"
+    },
+    "077bab8d-58b8-490f-994e-b52a2df4b6c7": {
+      "rank": 5,
+      "startMs": 2632588,
+      "endMs": 2662828,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T00:52:46.054Z"
+    },
+    "bd9c0656-dbad-41d9-aeab-5388b70d7d10": {
+      "rank": 6,
+      "startMs": 378011,
+      "endMs": 433472,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-28T00:53:21.989Z"
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "projectId": "6655c5ce-49af-45ca-a6bd-8b4d064eeed1",
+  "projectName": "Lab 3l - Revival - fix W + X + Y",
+  "sourceUrl": "https://www.youtube.com/watch?v=JIIo4_gc_44",
+  "judge": "jake",
+  "clips": {
+    "e6c5ad92-461a-4513-a774-5b3c59b8aeb0": {
+      "rank": 1,
+      "startMs": 3338110,
+      "endMs": 3363130,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:22:48.080Z"
+    },
+    "a7c79f21-ecbe-4334-a278-ab9f2923824a": {
+      "rank": 2,
+      "startMs": 3637010,
+      "endMs": 3710406,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "should have ended with, \"Today's the day of salvation.\"",
+      "labeledAt": "2026-10-26T04:23:40.471Z"
+    },
+    "73848774-6d67-4282-9b57-4f6a5382754b": {
+      "rank": 3,
+      "startMs": 2355106,
+      "endMs": 2405786,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:23:59.943Z"
+    },
+    "9bc16f65-d294-44de-9366-3dc3132c20a8": {
+      "rank": 4,
+      "startMs": 2203046,
+      "endMs": 2276486,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:24:47.766Z"
+    },
+    "6caf7ed7-43ac-4e27-86e3-95ca22178f6f": {
+      "rank": 5,
+      "startMs": 1788450,
+      "endMs": 1824530,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:25:02.717Z"
+    },
+    "2f1d8adc-2cee-40c9-b9e1-8963673e1c78": {
+      "rank": 6,
+      "startMs": 2951926,
+      "endMs": 2989766,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-26T04:25:12.484Z"
+    }
+  }
+}

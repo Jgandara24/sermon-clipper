@@ -1,0 +1,71 @@
+{
+  "projectId": "c5a84f71-6062-4328-85c7-5e6509f7cf94",
+  "projectName": "Lab 1b - Normal Sunday - picker fix (spread + reject service parts)",
+  "sourceUrl": "https://www.youtube.com/watch?v=OuXJo09MZWk",
+  "judge": "jake",
+  "clips": {
+    "5fe66e1a-a110-4154-834d-96f9e6e9ad4a": {
+      "rank": 1,
+      "startMs": 2290098,
+      "endMs": 2349898,
+      "verdict": "fail",
+      "failedTests": [
+        4
+      ],
+      "note": "",
+      "labeledAt": "2026-10-18T04:14:38.504Z"
+    },
+    "ba27a980-4495-4c0f-b47d-8fa8c7dc8388": {
+      "rank": 2,
+      "startMs": 4304734,
+      "endMs": 4328594,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Ends at the wrong time. should have kept going I think.",
+      "labeledAt": "2026-10-18T03:25:38.681Z"
+    },
+    "d72662f4-7879-4aea-95ce-262f32827e2b": {
+      "rank": 3,
+      "startMs": 4493174,
+      "endMs": 4556354,
+      "verdict": "fail",
+      "failedTests": [
+        1,
+        4
+      ],
+      "note": "Stops at the wrong time.\n",
+      "labeledAt": "2026-10-18T03:28:32.036Z"
+    },
+    "ad277b88-4690-4ea2-998b-076b3f7e4f42": {
+      "rank": 4,
+      "startMs": 1935554,
+      "endMs": 1997174,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "video Shouldn't start by reading a verse",
+      "labeledAt": "2026-10-18T03:29:03.724Z"
+    },
+    "b8fac745-b65c-4ac4-b9fc-ca3e2846c164": {
+      "rank": 5,
+      "startMs": 2899194,
+      "endMs": 2956690,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "Preach goes off the screen for too long. ",
+      "labeledAt": "2026-10-18T04:21:01.527Z"
+    },
+    "70d52b0c-abf1-4d11-9a7c-b2d14efa446d": {
+      "rank": 6,
+      "startMs": 1899974,
+      "endMs": 1955794,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "preaching is off the screen for too long.",
+      "labeledAt": "2026-10-18T04:21:23.643Z"
+    }
+  }
+}

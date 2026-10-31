@@ -1,0 +1,62 @@
+{
+  "projectId": "9e05432c-813f-4b30-8eee-596673e22f9b",
+  "projectName": "Lab 3k - Revival - fix T + U + V",
+  "sourceUrl": "https://www.youtube.com/watch?v=JIIo4_gc_44",
+  "judge": "jake",
+  "clips": {
+    "dfc960b2-c21d-4666-ad1f-b4b1affe497d": {
+      "rank": 1,
+      "startMs": 1920542,
+      "endMs": 1940182,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:17:35.996Z"
+    },
+    "1d710237-099b-4ddc-8ba4-fa2306730be6": {
+      "rank": 2,
+      "startMs": 3661566,
+      "endMs": 3701246,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:18:05.263Z"
+    },
+    "50d99abc-9fc0-4cb9-9d01-3dd09a08afe1": {
+      "rank": 3,
+      "startMs": 2893530,
+      "endMs": 2944266,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:18:14.929Z"
+    },
+    "25e8fb18-502f-4333-8420-11211fe12e05": {
+      "rank": 4,
+      "startMs": 2340206,
+      "endMs": 2405786,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:18:53.297Z"
+    },
+    "9b6724f8-0ddf-47b9-9795-d7349038b1f7": {
+      "rank": 5,
+      "startMs": 2407166,
+      "endMs": 2495086,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:19:21.850Z"
+    },
+    "b044db84-dc17-4ad3-9e88-c5ed60969a7f": {
+      "rank": 6,
+      "startMs": 3729806,
+      "endMs": 3764126,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-25T23:19:37.249Z"
+    }
+  }
+}

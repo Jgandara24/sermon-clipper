@@ -1,0 +1,64 @@
+{
+  "projectId": "8dd92e36-f64d-451e-84c9-d2d44f89db11",
+  "projectName": "Lab 3p - Revival - repeat AA-AE",
+  "sourceUrl": "https://www.youtube.com/watch?v=JIIo4_gc_44",
+  "judge": "jake",
+  "clips": {
+    "ae64f914-fb9b-423a-9c54-ebd3e66106eb": {
+      "rank": 1,
+      "startMs": 1920542,
+      "endMs": 1940182,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:19:22.384Z"
+    },
+    "bf02fc01-a107-4457-a2b5-3fa4cd53ecdb": {
+      "rank": 2,
+      "startMs": 2891350,
+      "endMs": 2944266,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:19:32.726Z"
+    },
+    "cdc889fc-0f6d-4ee7-ad1e-d8715b009d93": {
+      "rank": 3,
+      "startMs": 3471870,
+      "endMs": 3512590,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:19:42.422Z"
+    },
+    "2e8ca7bf-41a7-4b65-8a83-3d109844e5ac": {
+      "rank": 4,
+      "startMs": 3637010,
+      "endMs": 3710406,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:20:09.640Z"
+    },
+    "1f56cb10-56e6-496c-9523-bed171a5fac2": {
+      "rank": 5,
+      "startMs": 1788450,
+      "endMs": 1824530,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-30T03:20:32.806Z"
+    },
+    "075cea79-362e-4f35-8b0a-87a926c873a4": {
+      "rank": 6,
+      "startMs": 2160362,
+      "endMs": 2192826,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Doesn't exactly flow nicely. ",
+      "labeledAt": "2026-10-30T03:21:39.752Z"
+    }
+  }
+}

@@ -13,6 +13,7 @@ import { readCandidateLimit, readTargetClipCount } from "@/lib/analysis/candidat
 import { ANALYSIS_RETAINED_CLIP_STATUS } from "@/lib/analysis/clip-status";
 import { buildCandidateWindows, dedupByOverlap, refineBoundaries } from "@/lib/analysis/chunking";
 import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
+import { runAgreementRanking, runLabSelection } from "@/lib/analysis/lab-selection-run";
 import { analysisCallCostFact } from "@/lib/analysis/usage";
 import { resolveAndSnapshotProjectAnalysisRouting } from "@/lib/analysis/routing-store";
 import { AnalysisProviderUnavailableError, type ScoredCandidate } from "@/lib/analysis/types";
@@ -40,7 +41,8 @@ import { settleTranscriptionFallbackHold } from "@/lib/transcription/fallback-ho
 import { resolveTranscriptionProviderPolicy } from "@/lib/transcription/policy";
 
 const MIN_CANDIDATE_MS = 20_000;
-const MAX_CANDIDATE_MS = 90_000;
+// Jake, 2026-10-18: "keep the clips under 60 seconds." Was 90_000; refineBoundaries adds 0.3 s.
+export const MAX_CANDIDATE_MS = 59_000;
 
 function readGenre(processingConfig: unknown): string {
   if (processingConfig && typeof processingConfig === "object" && "genre" in processingConfig) {
@@ -307,12 +309,35 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     );
   }
 
-  const refined = scored.map((clip) => refineBoundaries(clip, sourceDurationMs));
-  const deduped = dedupByOverlap(
-    refined.map((clip) => ({ ...clip, score: clip.total })),
-    0.5,
-  );
-  const kept = deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
+  const rankCandidates = (clips: ScoredCandidate[]) => {
+    const refined = clips.map((clip) => refineBoundaries(clip, sourceDurationMs));
+    const deduped = dedupByOverlap(refined.map((clip) => ({ ...clip, score: clip.total })), 0.5);
+    return deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
+  };
+  const scoredRanked = rankCandidates(scored);
+  // Phase 1 lab, agreement ranking: a second candidate run, and the moments both runs found come
+  // first. Off unless its lab flag is set.
+  const ranked = await runAgreementRanking({
+    prisma,
+    workspaceId: project.workspaceId,
+    projectId: project.id,
+    jobId: job.id,
+    ranked: scoredRanked,
+    scoreAgain: async () =>
+      rankCandidates(await provider.scoreCandidates(scoreableCandidates, { fullText: transcript.fullText, genre })),
+    usage: () => provider.lastUsage,
+  });
+  // Phase 1 lab: sentence boundaries and the camera check. Off unless a lab flag is set.
+  const kept = await runLabSelection({
+    prisma,
+    workspaceId: project.workspaceId,
+    projectId: project.id,
+    jobId: job.id,
+    sourceStorageKey: project.sourceVideo?.storageKey ?? null,
+    ranked,
+    segments,
+    targetCount: targetClipCount,
+  });
 
   await prisma.$transaction(async (tx) => {
     // The binding check. The early one saved the cost of analysis; this one closes the window

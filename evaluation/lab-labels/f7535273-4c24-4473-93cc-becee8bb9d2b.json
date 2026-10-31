@@ -1,0 +1,62 @@
+{
+  "projectId": "f7535273-4c24-4473-93cc-becee8bb9d2b",
+  "projectName": "Lab 2e - Wednesday Night - whole ends + sermon only + caps captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "876a44a7-c464-4929-b526-2cb0d92a49f3": {
+      "rank": 1,
+      "startMs": 1213312,
+      "endMs": 1268172,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:11:47.419Z"
+    },
+    "6160d4c9-212f-4a46-858f-8c40a7f2fa93": {
+      "rank": 2,
+      "startMs": 378011,
+      "endMs": 433472,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:12:36.514Z"
+    },
+    "795cae7b-bfcc-4fcb-8c50-32431a0b0094": {
+      "rank": 3,
+      "startMs": 1757324,
+      "endMs": 1796944,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:13:05.947Z"
+    },
+    "f337488a-aa31-466c-a421-1c09c2c39665": {
+      "rank": 4,
+      "startMs": 693872,
+      "endMs": 723572,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "As the pastor moves, the stability of the focus is still very shaky. Make it much better. ",
+      "labeledAt": "2026-10-20T23:14:09.266Z"
+    },
+    "9b98d20f-2640-4ee8-9d9a-3cc5940430ab": {
+      "rank": 5,
+      "startMs": 780316,
+      "endMs": 817536,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:14:50.835Z"
+    },
+    "0a36a442-f3be-4cde-8f3c-7f698769aa37": {
+      "rank": 6,
+      "startMs": 1330712,
+      "endMs": 1381112,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T23:15:32.025Z"
+    }
+  }
+}

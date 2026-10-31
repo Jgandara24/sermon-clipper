@@ -1,0 +1,62 @@
+{
+  "projectId": "9bd4fbec-852b-46aa-9c4d-29529e8042ac",
+  "projectName": "Lab 3m - Revival - fix Z",
+  "sourceUrl": "https://www.youtube.com/watch?v=JIIo4_gc_44",
+  "judge": "jake",
+  "clips": {
+    "68dc5397-3bff-4a84-ad89-1381b2e174ab": {
+      "rank": 1,
+      "startMs": 3661566,
+      "endMs": 3706886,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:11:54.123Z"
+    },
+    "9bde7ef7-29e7-4ee4-8ea0-63774164f9df": {
+      "rank": 2,
+      "startMs": 1890542,
+      "endMs": 1940182,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "two different segments together. A joke and then an applause and total subject change into readinga scripture then some commentary. Not a great clisp",
+      "labeledAt": "2026-10-27T02:13:09.800Z"
+    },
+    "a6deaffc-4f41-4447-8ad5-b21e38500b13": {
+      "rank": 3,
+      "startMs": 2340206,
+      "endMs": 2405786,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:13:50.249Z"
+    },
+    "2ded5a9e-d50e-45fa-bdf5-5cdfe3095e89": {
+      "rank": 4,
+      "startMs": 2407166,
+      "endMs": 2495086,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:13:58.951Z"
+    },
+    "31d93baf-7436-4f4a-adc4-b47bca711164": {
+      "rank": 5,
+      "startMs": 3347630,
+      "endMs": 3363130,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:14:19.063Z"
+    },
+    "d38424b2-9fa2-4b2b-8776-ac752585389f": {
+      "rank": 6,
+      "startMs": 2951926,
+      "endMs": 2989766,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-27T02:14:30.404Z"
+    }
+  }
+}

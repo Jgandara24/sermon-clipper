@@ -1,0 +1,64 @@
+{
+  "projectId": "658caed5-df16-4825-b3db-9ac371faa63d",
+  "projectName": "Lab 4p - Sunday 10-11-26 Divine Certainties - agreement order",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "b9f83d4c-f9e8-481e-8554-f1414a59c2c2": {
+      "rank": 1,
+      "startMs": 3363806,
+      "endMs": 3437266,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:38:41.352Z"
+    },
+    "132f7da0-db56-40f0-8938-16e7f3d1076b": {
+      "rank": 2,
+      "startMs": 2375450,
+      "endMs": 2418930,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:38:45.733Z"
+    },
+    "4c35d1ba-d870-4362-8c69-9c329bf89fb1": {
+      "rank": 3,
+      "startMs": 1686442,
+      "endMs": 1729442,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:38:50.965Z"
+    },
+    "af72c0dc-6502-4582-9c36-d71fef52c435": {
+      "rank": 4,
+      "startMs": 2853626,
+      "endMs": 2909146,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:38:58.371Z"
+    },
+    "b7d1bd63-920b-4064-beb6-e8482484158e": {
+      "rank": 5,
+      "startMs": 2729105,
+      "endMs": 2788486,
+      "verdict": "fail",
+      "failedTests": [
+        4
+      ],
+      "note": "There's no powerful conclusion statement. Every video needs to start with a catchy hook-style phrase and a powerful mic-drop-style ending statement. ",
+      "labeledAt": "2026-10-31T03:40:14.677Z"
+    },
+    "197cff91-9809-4d3d-b481-c096ea595de4": {
+      "rank": 6,
+      "startMs": 2082190,
+      "endMs": 2133469,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-31T03:40:34.436Z"
+    }
+  }
+}

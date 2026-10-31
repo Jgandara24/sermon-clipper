@@ -1,0 +1,68 @@
+{
+  "projectId": "8047b866-b687-4eb4-abbd-6c917952c637",
+  "projectName": "Lab 4b - Sunday 10-11-26 Divine Certainties - calm tracking + clean captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "a2732491-e7f3-4316-b604-026499a5d431": {
+      "rank": 1,
+      "startMs": 3363766,
+      "endMs": 3401986,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "Should have probably ended at \"And everywhere God speaks, it is absolute truth. Amen.\"\n\nThe current last line \"What God says about creation is absolutely true.\" doesn't really contribute to a closing statement, it sounds more like something he is starting to say.",
+      "labeledAt": "2026-10-20T01:59:06.106Z"
+    },
+    "1698d1c8-60d1-44cd-95e7-d15ad3ab4f22": {
+      "rank": 2,
+      "startMs": 2375450,
+      "endMs": 2421030,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T02:00:05.137Z"
+    },
+    "6732585b-6110-4869-ba66-d317e4eedde6": {
+      "rank": 3,
+      "startMs": 2853626,
+      "endMs": 2895806,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T02:00:51.627Z"
+    },
+    "bcd155ed-2c83-4ad4-a6d5-009ee361090a": {
+      "rank": 4,
+      "startMs": 2133709,
+      "endMs": 2183610,
+      "verdict": "fail",
+      "failedTests": [
+        1
+      ],
+      "note": "It cuts him off. and it seems like he wasn't finished making his final point.",
+      "labeledAt": "2026-10-20T02:01:55.419Z"
+    },
+    "1834afcf-9e42-4144-a258-07ed05b3880f": {
+      "rank": 5,
+      "startMs": 3555106,
+      "endMs": 3598126,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T02:02:28.674Z"
+    },
+    "b2cf0d1a-4afb-4298-ba70-71668b64c8c3": {
+      "rank": 6,
+      "startMs": 465672,
+      "endMs": 494372,
+      "verdict": "fail",
+      "failedTests": [
+        2
+      ],
+      "note": "",
+      "labeledAt": "2026-10-20T02:02:39.040Z"
+    }
+  }
+}

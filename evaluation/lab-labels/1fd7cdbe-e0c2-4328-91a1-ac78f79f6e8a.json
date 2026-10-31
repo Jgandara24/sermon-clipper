@@ -1,0 +1,62 @@
+{
+  "projectId": "1fd7cdbe-e0c2-4328-91a1-ac78f79f6e8a",
+  "projectName": "Lab 4f - Sunday 10-11-26 Divine Certainties - fix N",
+  "sourceUrl": "https://www.youtube.com/watch?v=kPqj6n4qNR0",
+  "judge": "jake",
+  "clips": {
+    "8c735210-f165-43b6-9478-954e75e69433": {
+      "rank": 1,
+      "startMs": 2133709,
+      "endMs": 2193370,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:36:25.954Z"
+    },
+    "9596374b-2ecf-4d94-8a5d-b5f1e4153c98": {
+      "rank": 2,
+      "startMs": 3108058,
+      "endMs": 3153898,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "The clip was great, but from seconds 8-11 there was no audio. I'm not sure if that is something our system did or if thats with the originall video. but we can't allows that to be posted.",
+      "labeledAt": "2026-10-22T02:39:45.365Z"
+    },
+    "2855b08c-fa87-4160-a76d-189f97c4b535": {
+      "rank": 3,
+      "startMs": 2439470,
+      "endMs": 2471190,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:40:47.778Z"
+    },
+    "b952d56b-e297-4fdc-8696-268b459430da": {
+      "rank": 4,
+      "startMs": 2891446,
+      "endMs": 2917286,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:41:09.066Z"
+    },
+    "65f77220-4845-49f0-a1fd-92fb26101b5a": {
+      "rank": 5,
+      "startMs": 2981578,
+      "endMs": 3033738,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:42:06.921Z"
+    },
+    "6e78d160-429c-400c-b3c3-0c1864d54d5b": {
+      "rank": 6,
+      "startMs": 3392046,
+      "endMs": 3437266,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-22T02:43:11.473Z"
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "projectId": "45e1f9d9-4498-40c5-bc8f-6d98979ebceb",
+  "projectName": "Lab 2d - Wednesday Night - calm tracking + clean captions",
+  "sourceUrl": "https://www.youtube.com/watch?v=5cVMudHn2iw",
+  "judge": "jake",
+  "clips": {
+    "7439f732-a839-47d5-9de7-6ec59c363f63": {
+      "rank": 1,
+      "startMs": 1324072,
+      "endMs": 1381112,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:42:15.802Z"
+    },
+    "62daefb8-ea9d-464c-907c-ee62ac09508e": {
+      "rank": 2,
+      "startMs": 1757324,
+      "endMs": 1796944,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:43:03.569Z"
+    },
+    "5c5e94f4-cdd1-4683-915d-9613b92627c1": {
+      "rank": 3,
+      "startMs": 2618248,
+      "endMs": 2662828,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:43:58.203Z"
+    },
+    "26860ec6-988c-4253-8962-ea98f241b8cd": {
+      "rank": 4,
+      "startMs": 693872,
+      "endMs": 723572,
+      "verdict": "fail",
+      "failedTests": [],
+      "note": "As the preach moves and the clips change angles, the focus is still shaky and unstable. ",
+      "labeledAt": "2026-10-20T01:44:57.244Z"
+    },
+    "d2449986-d165-464a-89f0-c694b13581b4": {
+      "rank": 5,
+      "startMs": 378011,
+      "endMs": 433492,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:45:57.435Z"
+    },
+    "e8336cc1-8210-49ed-a993-67bf4bf5f248": {
+      "rank": 6,
+      "startMs": 780316,
+      "endMs": 818856,
+      "verdict": "pass",
+      "failedTests": [],
+      "note": "",
+      "labeledAt": "2026-10-20T01:48:08.995Z"
+    }
+  }
+}
