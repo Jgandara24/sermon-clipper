@@ -4,8 +4,8 @@
  * and always off in production. The other lab steps became the selection steps in
  * src/lib/analysis/selection-steps.ts, with settings production can read.
  *
- * Kept out of env.ts on purpose: many tests replace that module wholesale, and a lab switch must
- * read as off there rather than throw.
+ * Kept out of env.ts on purpose: it is a lab switch, not a setting. Production must never read
+ * it, and the guard below is the whole point.
  */
 const LAB_SWITCHES = {
   transcriptReuse: "LAB_TRANSCRIPT_REUSE_ENABLED",

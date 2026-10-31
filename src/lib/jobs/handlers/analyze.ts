@@ -16,7 +16,7 @@ import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { runAgreementRanking, runLabSelection } from "@/lib/analysis/lab-selection-run";
 import { analysisCallCostFact } from "@/lib/analysis/usage";
 import { resolveAndSnapshotProjectAnalysisRouting } from "@/lib/analysis/routing-store";
-import { availableDetectorPython, resolveSelectionSteps } from "@/lib/analysis/selection-steps";
+import { resolveJobSelectionSteps, selectionStepUnavailableEvent } from "@/lib/analysis/selection-steps";
 import { AnalysisProviderUnavailableError, type ScoredCandidate } from "@/lib/analysis/types";
 import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement, type RuntimeMeasurement } from "@/lib/cost/runtime";
@@ -321,24 +321,19 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
   // The selection steps (docs/SELECTION_STEPS_SETTINGS_PLAN.md), resolved once for this job from
   // the environment gate, this workspace's gate and the detector Python, and recorded with the
   // job the way its routing snapshot is. Every step is off until an operator sets both gates.
-  const detector = availableDetectorPython(detectorPython());
-  const selectionSteps = resolveSelectionSteps({
+  const resolution = await resolveJobSelectionSteps({
     environment: env,
     workspaceSettings: project.workspace.settings,
-    detectorPython: detector,
+    configuredPython: detectorPython(),
   });
-  if (selectionSteps.cameraCheck.reason === "no-detector") {
+  const selectionSteps = resolution.steps;
+  if (resolution.detectorProblem !== null && selectionSteps.cameraCheck.reason === "no-detector") {
     // On in both gates and unable to run: one error event per job, not one failed clip at a time.
     await recordOperationalEventSafely(prisma, {
       workspaceId: project.workspaceId,
-      category: "analysis",
-      eventType: "selection_steps_unavailable",
-      severity: "error",
-      message:
-        "The camera check is on for this workspace, but the worker has no working detector Python (DETECTOR_PYTHON), so ANALYZE ran without it.",
       projectId: project.id,
       jobId: job.id,
-      metadata: { steps: selectionSteps, detectorPython: env.DETECTOR_PYTHON ?? null },
+      ...selectionStepUnavailableEvent({ step: "cameraCheck", consequence: "ANALYZE ran without it", steps: selectionSteps }),
     });
   }
   // Agreement ranking: a second candidate run, and the moments both runs found come first.
@@ -360,7 +355,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     projectId: project.id,
     jobId: job.id,
     steps: selectionSteps,
-    detectorPython: detector,
+    detectorPython: resolution.detectorPython,
     sourceStorageKey: project.sourceVideo?.storageKey ?? null,
     ranked: agreement.clips,
     segments,

@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { detectorScriptPath } from "@/lib/analysis/selection-steps";
 import { envTimeoutMs, execFileWithTimeout } from "@/lib/media/child-process";
 import { buildLabTrack, type LabTrack, type ObservationFile } from "./lab-track";
 
-const OBSERVE_SCRIPT = path.resolve("scripts/lab/tracking/observe-faces.py");
+const OBSERVE_SCRIPT = detectorScriptPath("observeFaces");
 
 /**
  * Speaker tracking: runs the YuNet face observer over one clip range of a local source file, then

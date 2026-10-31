@@ -57,6 +57,9 @@ async function main() {
   if (both.length > 0) {
     throw new Error(`${both.join(", ")} cannot be both --on and --off. Nothing was changed.`);
   }
+  if (show && (on.length > 0 || off.length > 0)) {
+    throw new Error("--show reads the gate and changes nothing, so it cannot go with --on or --off. Nothing was changed.");
+  }
 
   const prisma = new PrismaClient();
   try {

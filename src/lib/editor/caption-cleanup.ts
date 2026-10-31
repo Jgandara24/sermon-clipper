@@ -1,7 +1,7 @@
 import type { CaptionWord } from "./caption-lines";
 
 /**
- * Phase 1 lab caption cleanup, before phrase grouping (lab only, LAB_PHRASE_CAPTIONS_ENABLED).
+ * Caption cleanup, before phrase grouping (the phraseCaptions selection step, EXPORT_PHRASE_CAPTIONS_ENABLED).
  * Jake, 2026-10-18:
  * 1. "Sometimes a background audience or congregation words will get transcribed. Ex: somone might
  *    shout, "Amen", and it get's transcribed. We don't want that."

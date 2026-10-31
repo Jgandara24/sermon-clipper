@@ -9,19 +9,12 @@ import {
   notificationsFromName,
   operationsAlertFromEmail,
 } from "@/lib/env";
+import { SELECTION_STEP_VARIABLES as STEP_VARIABLES } from "@/lib/analysis/selection-steps";
 
 const originalEnv = { ...process.env };
 
-/** The environment gate of each selection step (docs/SELECTION_STEPS_SETTINGS_PLAN.md). */
-const SELECTION_STEP_VARIABLES = [
-  "ANALYSIS_SERMON_SPAN_ENABLED",
-  "ANALYSIS_BOUNDARY_STEP_ENABLED",
-  "ANALYSIS_DROPOUT_CHECK_ENABLED",
-  "ANALYSIS_CAMERA_CHECK_ENABLED",
-  "ANALYSIS_AGREEMENT_RANKING_ENABLED",
-  "EXPORT_PHRASE_CAPTIONS_ENABLED",
-  "EXPORT_SPEAKER_TRACKING_ENABLED",
-] as const;
+/** The environment gate of each selection step, from the resolver, so a new step is covered here too. */
+const SELECTION_STEP_VARIABLES = Object.values(STEP_VARIABLES);
 
 beforeEach(() => {
   process.env = { ...originalEnv };

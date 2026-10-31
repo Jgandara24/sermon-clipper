@@ -4,7 +4,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Prisma, RenderQcStatus, type ExportJob, type PrismaClient } from "@prisma/client";
-import { availableDetectorPython, resolveSelectionSteps } from "@/lib/analysis/selection-steps";
+import { resolveJobSelectionSteps, selectionStepUnavailableEvent } from "@/lib/analysis/selection-steps";
 import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
@@ -174,26 +174,13 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
   // The selection steps (docs/SELECTION_STEPS_SETTINGS_PLAN.md), resolved once for this job from
   // the environment gate, this workspace's gate and the detector Python. Both export steps are
   // off until an operator sets both gates.
-  const detector = availableDetectorPython(detectorPython());
-  const selectionSteps = resolveSelectionSteps({
+  const resolution = await resolveJobSelectionSteps({
     environment: env,
     workspaceSettings: clip.project.workspace.settings,
-    detectorPython: detector,
+    configuredPython: detectorPython(),
   });
-  if (selectionSteps.speakerTracking.reason === "no-detector") {
-    // On in both gates and unable to run: one error event per job, not a failed render.
-    await recordOperationalEventSafely(prisma, {
-      workspaceId: job.workspaceId,
-      category: "export",
-      eventType: "selection_steps_unavailable",
-      severity: "error",
-      message:
-        "Speaker tracking is on for this workspace, but the worker has no working detector Python (DETECTOR_PYTHON), so the clip renders with the fixed crop.",
-      clipId: job.clipId,
-      exportJobId: job.id,
-      metadata: { steps: selectionSteps, detectorPython: env.DETECTOR_PYTHON ?? null },
-    });
-  }
+  const selectionSteps = resolution.steps;
+  const detector = resolution.detectorPython;
 
   // Every render decision the document implies, derived in one pure place. The parity gate drives
   // the same function with the same document, so what it checks is what this job renders.
@@ -257,7 +244,8 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
     // Speaker tracking: follow the preacher instead of the fixed center crop. A person's manual
     // crop always wins. If tracking fails, the clip still renders with the fixed crop.
     let speakerTrack: LabTrack | undefined;
-    if (selectionSteps.speakerTracking.on && detector && state.layout.mode !== "manual") {
+    const trackingWanted = state.layout.mode !== "manual";
+    if (trackingWanted && selectionSteps.speakerTracking.on && detector) {
       try {
         speakerTrack = await computeLabSpeakerTrack({ python: detector, sourceFilePath, range, workDir });
         await recordOperationalEventSafely(prisma, {
@@ -289,6 +277,15 @@ export async function runExportJob(prisma: PrismaClient, job: ExportJob): Promis
           metadata: { exportJobId: job.id, clipId: clip.id, steps: selectionSteps, detail: error instanceof Error ? error.message : String(error) },
         });
       }
+    } else if (trackingWanted && resolution.detectorProblem !== null && selectionSteps.speakerTracking.reason === "no-detector") {
+      // On in both gates and unable to run, for a render that would have tracked: one error event,
+      // not a failed render. A manual crop never asks for the detector, so it never misses it.
+      await recordOperationalEventSafely(prisma, {
+        workspaceId: job.workspaceId,
+        clipId: job.clipId,
+        exportJobId: job.id,
+        ...selectionStepUnavailableEvent({ step: "speakerTracking", consequence: "the clip renders with the fixed crop", steps: selectionSteps }),
+      });
     }
 
     // Phrase captions, fix G1: leave the congregation's quiet "Amen." out of the captions. If the

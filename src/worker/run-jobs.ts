@@ -271,23 +271,25 @@ try {
 // The detector Python for the camera check and speaker tracking (docs/SELECTION_STEPS_SETTINGS_PLAN.md).
 // A missing or broken runtime is one error event at boot, not one failed clip at a time; both
 // steps count as off until it runs. Not a readiness failure: a church's sermons still process.
-const detectorRuntime = checkDetectorRuntime({ environment: env, detectorPython: detectorPython() });
-if (detectorRuntime.status === "missing" || detectorRuntime.status === "broken") {
-  console.error(`[worker] ${detectorRuntime.message}`);
-  void recordOperationalEventSafely(prisma, {
-    category: "worker",
-    eventType: "selection_steps_unavailable",
-    severity: "error",
-    message: detectorRuntime.message,
-    metadata: {
-      status: detectorRuntime.status,
-      steps: detectorRuntime.steps,
-      detectorPython: detectorRuntime.detectorPython,
-    },
-  });
-} else if (detectorRuntime.status === "ok") {
-  console.log(`[worker] ${detectorRuntime.message}`);
-}
+// The probe runs in the background and does not delay the first poll.
+void checkDetectorRuntime({ environment: env, detectorPython: detectorPython() }).then((detectorRuntime) => {
+  if (detectorRuntime.status === "missing" || detectorRuntime.status === "broken") {
+    console.error(`[worker] ${detectorRuntime.message}`);
+    void recordOperationalEventSafely(prisma, {
+      category: "worker",
+      eventType: "selection_steps_unavailable",
+      severity: "error",
+      message: detectorRuntime.message,
+      metadata: {
+        status: detectorRuntime.status,
+        steps: detectorRuntime.steps,
+        detectorPython: detectorRuntime.detectorPython,
+      },
+    });
+  } else if (detectorRuntime.status === "ok") {
+    console.log(`[worker] ${detectorRuntime.message}`);
+  }
+});
 
 console.log(`[worker] polling for processing jobs every ${POLL_INTERVAL_MS}ms`);
 // Sentry (errors only) when SENTRY_DSN is set; also captures unhandled rejections by default.

@@ -1,5 +1,10 @@
-import { spawnSync } from "node:child_process";
+import { execFile as execFileCallback } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { promisify } from "node:util";
 import type { Env } from "@/lib/env";
+
+const execFile = promisify(execFileCallback);
 
 /**
  * The selection steps (docs/SELECTION_STEPS_SETTINGS_PLAN.md): the Phase 1 lab steps that run on
@@ -7,7 +12,8 @@ import type { Env } from "@/lib/env";
  * environment gate, one `*_ENABLED` variable per step in src/lib/env.ts, says the environment
  * can run it. The workspace gate, `Workspace.settings.selectionSteps`, says this church gets it.
  * Both default to off, so a deploy changes nothing until an operator sets both. Two steps also
- * need the detector Python (`DETECTOR_PYTHON`, OpenCV and YuNet); without it they count as off.
+ * need the detector: the Python at `DETECTOR_PYTHON` (OpenCV and YuNet) and the scripts in
+ * scripts/lab/tracking/. Without them, those two count as off.
  *
  * Nothing here reads NODE_ENV. That special case is what kept the lab steps unreachable in
  * production, and it is gone on purpose. The fail-open and fail-closed behaviour inside each
@@ -126,25 +132,130 @@ export function selectionStepsOn(steps: ResolvedSelectionSteps): SelectionStep[]
   return SELECTION_STEPS.filter((step) => steps[step].on);
 }
 
-export type PythonImportsOpenCv = (python: string) => boolean;
-
-/** Runs `import cv2` under the given Python. Thirty seconds is generous for an import. */
-export function defaultPythonImportsOpenCv(python: string): boolean {
-  const result = spawnSync(python, ["-c", "import cv2"], { stdio: "ignore", timeout: 30_000 });
-  return result.status === 0;
+function gatesAgree(step: SelectionStep, environment: SelectionStepsEnvironment, workspace: SelectionStepsSettings): boolean {
+  return environment[SELECTION_STEP_VARIABLES[step]] === true && workspace[step];
 }
 
+/** The detector scripts the two steps run, relative to the worker's working directory. */
+export const DETECTOR_SCRIPTS = {
+  cameraSample: "scripts/lab/tracking/camera-sample.py",
+  observePeople: "scripts/lab/tracking/observe-people.py",
+  observeFaces: "scripts/lab/tracking/observe-faces.py",
+} as const;
+
+export type DetectorScript = keyof typeof DETECTOR_SCRIPTS;
+
+/** One detector script's absolute path. The worker needs the scripts as well as the Python. */
+export function detectorScriptPath(script: DetectorScript, root: string = process.cwd()): string {
+  return path.resolve(root, DETECTOR_SCRIPTS[script]);
+}
+
+/** Why the detector cannot run, as a clause for a message ("... is missing"); null when it can. */
+export type DetectorProbe = (python: string) => Promise<string | null>;
+
+const PROBE_TIMEOUT_MS = 30_000;
+
 /**
- * The detector Python for one job: the configured path when it is set and imports OpenCV, else
- * undefined, so the resolver turns the detector steps off with the reason `no-detector`. A
- * missing or broken runtime is one alert, not one failed clip at a time.
+ * The default probe: every detector script is present, and `import cv2` succeeds under the given
+ * Python. Thirty seconds is generous for an import. The answer names the cause, because "cannot
+ * import OpenCV" is the wrong alert for a path that does not exist or an image without the scripts.
  */
-export function availableDetectorPython(
-  configured: string | undefined,
-  pythonImportsOpenCv: PythonImportsOpenCv = defaultPythonImportsOpenCv,
-): string | undefined {
-  if (!configured) return undefined;
-  return pythonImportsOpenCv(configured) ? configured : undefined;
+export async function defaultDetectorProbe(python: string, root: string = process.cwd()): Promise<string | null> {
+  for (const script of Object.keys(DETECTOR_SCRIPTS) as DetectorScript[]) {
+    const scriptPath = detectorScriptPath(script, root);
+    if (!existsSync(scriptPath)) return `the detector script ${scriptPath} is missing`;
+  }
+  try {
+    await execFile(python, ["-c", "import cv2"], { timeout: PROBE_TIMEOUT_MS, killSignal: "SIGKILL" });
+    return null;
+  } catch (error) {
+    const failure = error as { code?: string | number; killed?: boolean; stderr?: string };
+    if (failure.killed) return `${python} did not finish "import cv2" within ${PROBE_TIMEOUT_MS / 1000} seconds`;
+    if (typeof failure.code === "string") return `${python} did not start (${failure.code})`;
+    const lastLine = (failure.stderr ?? "").trim().split("\n").pop() ?? "";
+    return `${python} cannot import OpenCV${lastLine ? ` (${lastLine})` : ""}`;
+  }
+}
+
+export type JobSelectionSteps = {
+  steps: ResolvedSelectionSteps;
+  /** The detector steps both gates turned on for this workspace. */
+  detectorSteps: SelectionStep[];
+  /** The detector Python the detector steps run with; undefined when none is on or it cannot run. */
+  detectorPython: string | undefined;
+  /** Why a detector step both gates turned on counts as off; null when none is on or it runs. */
+  detectorProblem: string | null;
+};
+
+/**
+ * The steps for one job. Resolves both gates, and probes the detector Python only when both gates
+ * turned a detector step on: a job that runs no detector step starts no Python. When the probe
+ * fails, the detector steps resolve as off with the reason `no-detector` and the problem comes
+ * back for the job's one selection_steps_unavailable event, so a missing or broken runtime is one
+ * alert and not one failed clip at a time. The cause goes to the worker log here, because the
+ * job's event belongs to the workspace and must not carry a server path.
+ */
+export async function resolveJobSelectionSteps(
+  input: { environment: SelectionStepsEnvironment; workspaceSettings: unknown; configuredPython: string | undefined },
+  probe: DetectorProbe = defaultDetectorProbe,
+): Promise<JobSelectionSteps> {
+  const workspace = parseSelectionStepsSettings(input.workspaceSettings);
+  const detectorSteps = DETECTOR_STEPS.filter((step) => gatesAgree(step, input.environment, workspace));
+  let detectorPython: string | undefined;
+  let detectorProblem: string | null = null;
+  if (detectorSteps.length > 0) {
+    const configured = input.configuredPython || undefined;
+    if (!configured) {
+      detectorProblem = "DETECTOR_PYTHON is not set";
+    } else {
+      const problem = await probe(configured);
+      if (problem === null) detectorPython = configured;
+      else detectorProblem = problem;
+    }
+  }
+  if (detectorProblem !== null) {
+    console.error(`[worker] selection steps: ${detectorSteps.join(" and ")} count as off because ${detectorProblem}.`);
+  }
+  return {
+    steps: resolveSelectionSteps({
+      environment: input.environment,
+      workspaceSettings: input.workspaceSettings,
+      detectorPython,
+    }),
+    detectorSteps,
+    detectorPython,
+    detectorProblem,
+  };
+}
+
+const STEP_LABELS: Record<SelectionStep, string> = {
+  sermonSpan: "The sermon span",
+  boundaryStep: "The boundary step",
+  dropoutCheck: "The dropout check",
+  cameraCheck: "The camera check",
+  agreementRanking: "Agreement ranking",
+  phraseCaptions: "Phrase captions",
+  speakerTracking: "Speaker tracking",
+};
+
+/**
+ * The one selection_steps_unavailable event a job records when a detector step both gates turned
+ * on cannot run. Category `worker`, like the boot check's event, so one missing runtime is one
+ * alert per throttle window and not one per job type. No cause and no path: the event belongs to
+ * the workspace, the church's operations page shows it, and the worker log has the detail.
+ */
+export function selectionStepUnavailableEvent(input: {
+  step: SelectionStep;
+  consequence: string;
+  steps: ResolvedSelectionSteps;
+}) {
+  return {
+    category: "worker" as const,
+    eventType: "selection_steps_unavailable",
+    severity: "error" as const,
+    message: `${STEP_LABELS[input.step]} is on for this workspace, but the worker cannot run the detector, so ${input.consequence}.`,
+    metadata: { step: input.step, steps: input.steps },
+  };
 }
 
 export type DetectorRuntimeCheck = {
@@ -158,16 +269,17 @@ export type DetectorRuntimeCheck = {
 
 /**
  * The worker's boot check. When the environment gate turns on a detector step and the Python is
- * absent (`missing`) or cannot import OpenCV (`broken`), the worker records one
- * selection_steps_unavailable event with severity error, so a missing runtime is one alert at
- * boot instead of a surprise on the first sermon.
+ * absent (`missing`) or the probe fails (`broken`: no scripts, no such path, no OpenCV), the
+ * worker records one selection_steps_unavailable event with severity error and the cause, so a
+ * missing runtime is one alert at boot instead of a surprise on the first sermon. The boot event
+ * has no workspace, so it never reaches a church's operations page and may name the path.
  */
-export function checkDetectorRuntime(
+export async function checkDetectorRuntime(
   input: { environment: SelectionStepsEnvironment; detectorPython: string | undefined },
-  pythonImportsOpenCv: PythonImportsOpenCv = defaultPythonImportsOpenCv,
-): DetectorRuntimeCheck {
+  probe: DetectorProbe = defaultDetectorProbe,
+): Promise<DetectorRuntimeCheck> {
   const steps = DETECTOR_STEPS.filter((step) => input.environment[SELECTION_STEP_VARIABLES[step]] === true);
-  const detectorPython = input.detectorPython ?? null;
+  const detectorPython = input.detectorPython || null;
   const named = steps.join(" and ");
   if (steps.length === 0) {
     return { status: "not-needed", steps, detectorPython, message: "No selection step needs the detector Python." };
@@ -180,13 +292,19 @@ export function checkDetectorRuntime(
       message: `DETECTOR_PYTHON is not set, so ${named} count as off until it is.`,
     };
   }
-  if (!pythonImportsOpenCv(detectorPython)) {
+  const problem = await probe(detectorPython);
+  if (problem !== null) {
     return {
       status: "broken",
       steps,
       detectorPython,
-      message: `The detector Python at ${detectorPython} cannot import OpenCV, so ${named} count as off until it can.`,
+      message: `The detector cannot run: ${problem}. ${named} count as off until it does.`,
     };
   }
-  return { status: "ok", steps, detectorPython, message: `The detector Python at ${detectorPython} imports OpenCV.` };
+  return {
+    status: "ok",
+    steps,
+    detectorPython,
+    message: `The detector Python at ${detectorPython} runs: the scripts are present and it imports OpenCV.`,
+  };
 }

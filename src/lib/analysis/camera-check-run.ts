@@ -18,10 +18,11 @@ import {
   type CameraSample,
   type SceneChange,
 } from "./camera-check";
+import { detectorScriptPath } from "./selection-steps";
 
-const SAMPLE_SCRIPT = path.resolve("scripts/lab/tracking/camera-sample.py");
+const SAMPLE_SCRIPT = detectorScriptPath("cameraSample");
 /** Fix AC: the person detector, on the faceless sample frames of the longer runs. */
-const PEOPLE_SCRIPT = path.resolve("scripts/lab/tracking/observe-people.py");
+const PEOPLE_SCRIPT = detectorScriptPath("observePeople");
 /** Cheap and fast; the question is "slide or camera view". */
 const CAMERA_CHECK_MODEL = "claude-haiku-4-5";
 /** One request carries every faceless moment of a clip; cap it so a slide-heavy clip stays cheap. */

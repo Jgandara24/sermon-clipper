@@ -1,13 +1,20 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
   applySelectionStepsChange,
-  availableDetectorPython,
   checkDetectorRuntime,
+  DETECTOR_SCRIPTS,
+  defaultDetectorProbe,
+  detectorScriptPath,
   parseSelectionStepsSettings,
+  resolveJobSelectionSteps,
   resolveSelectionSteps,
   SELECTION_STEP_VARIABLES,
   SELECTION_STEPS,
   selectionStepsOn,
+  selectionStepUnavailableEvent,
   type SelectionStep,
   type SelectionStepsEnvironment,
 } from "@/lib/analysis/selection-steps";
@@ -32,6 +39,7 @@ const EVERY_STEP_ON = workspaceWith(Object.fromEntries(SELECTION_STEPS.map((step
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("resolveSelectionSteps", () => {
@@ -192,37 +200,140 @@ describe("applySelectionStepsChange", () => {
   });
 });
 
-describe("availableDetectorPython", () => {
-  it("is undefined when DETECTOR_PYTHON is absent, without running anything", () => {
-    const probe = vi.fn(() => true);
-    expect(availableDetectorPython(undefined, probe)).toBeUndefined();
-    expect(availableDetectorPython("", probe)).toBeUndefined();
+describe("resolveJobSelectionSteps", () => {
+  it("starts no Python when no detector step passed both gates, even with DETECTOR_PYTHON set", async () => {
+    const probe = vi.fn(async () => null);
+    const job = await resolveJobSelectionSteps(
+      {
+        environment: EVERY_VARIABLE_ON,
+        workspaceSettings: workspaceWith({ sermonSpan: true, boundaryStep: true }),
+        configuredPython: PYTHON,
+      },
+      probe,
+    );
     expect(probe).not.toHaveBeenCalled();
+    expect(job.detectorSteps).toEqual([]);
+    expect(job.detectorPython).toBeUndefined();
+    expect(job.detectorProblem).toBeNull();
+    expect(job.steps.sermonSpan).toEqual({ on: true, reason: null });
+    expect(job.steps.cameraCheck).toEqual({ on: false, reason: "workspace" });
   });
 
-  it("is the path when that Python imports OpenCV", () => {
-    const probe = vi.fn((python: string) => python === PYTHON);
-    expect(availableDetectorPython(PYTHON, probe)).toBe(PYTHON);
+  it("probes once and hands the detector steps the path when it runs", async () => {
+    const probe = vi.fn(async () => null);
+    const job = await resolveJobSelectionSteps(
+      { environment: EVERY_VARIABLE_ON, workspaceSettings: EVERY_STEP_ON, configuredPython: PYTHON },
+      probe,
+    );
+    expect(probe).toHaveBeenCalledTimes(1);
     expect(probe).toHaveBeenCalledWith(PYTHON);
+    expect(job.detectorSteps).toEqual(["cameraCheck", "speakerTracking"]);
+    expect(job.detectorPython).toBe(PYTHON);
+    expect(job.detectorProblem).toBeNull();
+    expect(selectionStepsOn(job.steps)).toEqual([...SELECTION_STEPS]);
   });
 
-  it("is undefined when that Python cannot import OpenCV, so the detector steps count as off", () => {
-    const probe = vi.fn(() => false);
-    expect(availableDetectorPython(PYTHON, probe)).toBeUndefined();
+  it("names a missing DETECTOR_PYTHON as the problem: the detector steps go off, the others stay on", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const probe = vi.fn(async () => null);
+    const job = await resolveJobSelectionSteps(
+      { environment: EVERY_VARIABLE_ON, workspaceSettings: EVERY_STEP_ON, configuredPython: undefined },
+      probe,
+    );
+    expect(probe).not.toHaveBeenCalled();
+    expect(job.detectorProblem).toBe("DETECTOR_PYTHON is not set");
+    expect(job.detectorPython).toBeUndefined();
+    expect(job.steps.cameraCheck).toEqual({ on: false, reason: "no-detector" });
+    expect(job.steps.speakerTracking).toEqual({ on: false, reason: "no-detector" });
+    expect(job.steps.sermonSpan).toEqual({ on: true, reason: null });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("DETECTOR_PYTHON is not set"));
+  });
+
+  it("treats an empty DETECTOR_PYTHON as unset", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const probe = vi.fn(async () => null);
+    const job = await resolveJobSelectionSteps(
+      { environment: EVERY_VARIABLE_ON, workspaceSettings: EVERY_STEP_ON, configuredPython: "" },
+      probe,
+    );
+    expect(probe).not.toHaveBeenCalled();
+    expect(job.detectorProblem).toBe("DETECTOR_PYTHON is not set");
+  });
+
+  it("treats a Python the probe rejects as off, with the probe's cause, so a broken runtime is one alert", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const cause = `${PYTHON} cannot import OpenCV (ModuleNotFoundError: No module named 'cv2')`;
+    const job = await resolveJobSelectionSteps(
+      { environment: EVERY_VARIABLE_ON, workspaceSettings: EVERY_STEP_ON, configuredPython: PYTHON },
+      async () => cause,
+    );
+    expect(job.detectorProblem).toBe(cause);
+    expect(job.detectorPython).toBeUndefined();
+    expect(job.steps.cameraCheck).toEqual({ on: false, reason: "no-detector" });
+    expect(job.steps.speakerTracking).toEqual({ on: false, reason: "no-detector" });
+    expect(job.steps.agreementRanking).toEqual({ on: true, reason: null });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining(cause));
+  });
+});
+
+describe("selectionStepUnavailableEvent", () => {
+  it("is an error under the worker category, names the step and the consequence, and carries no path", () => {
     const steps = resolveSelectionSteps({
       environment: EVERY_VARIABLE_ON,
       workspaceSettings: EVERY_STEP_ON,
-      detectorPython: availableDetectorPython(PYTHON, probe),
+      detectorPython: undefined,
     });
-    expect(steps.cameraCheck).toEqual({ on: false, reason: "no-detector" });
-    expect(steps.speakerTracking).toEqual({ on: false, reason: "no-detector" });
+    const event = selectionStepUnavailableEvent({ step: "cameraCheck", consequence: "ANALYZE ran without it", steps });
+    expect(event).toMatchObject({ category: "worker", eventType: "selection_steps_unavailable", severity: "error" });
+    expect(event.message).toBe(
+      "The camera check is on for this workspace, but the worker cannot run the detector, so ANALYZE ran without it.",
+    );
+    expect(event.metadata).toEqual({ step: "cameraCheck", steps });
+  });
+});
+
+describe("detectorScriptPath", () => {
+  it("resolves the three scripts under the working directory, which the worker image must carry", () => {
+    expect(detectorScriptPath("cameraSample", "/app")).toBe("/app/scripts/lab/tracking/camera-sample.py");
+    expect(detectorScriptPath("observePeople", "/app")).toBe("/app/scripts/lab/tracking/observe-people.py");
+    expect(detectorScriptPath("observeFaces", "/app")).toBe("/app/scripts/lab/tracking/observe-faces.py");
+    for (const script of Object.values(DETECTOR_SCRIPTS)) expect(existsSync(path.resolve(script))).toBe(true);
+  });
+});
+
+describe("defaultDetectorProbe", () => {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "detector-probe-"));
+  afterAll(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("names a missing detector script before it starts any Python", async () => {
+    const problem = await defaultDetectorProbe(path.join(tmp, "no-such-python"), tmp);
+    expect(problem).toBe(`the detector script ${path.join(tmp, "scripts/lab/tracking/camera-sample.py")} is missing`);
+  });
+
+  it("names a Python that does not start", async () => {
+    const python = path.join(tmp, "no-such-python");
+    await expect(defaultDetectorProbe(python)).resolves.toBe(`${python} did not start (ENOENT)`);
+  });
+
+  it("names a Python that cannot import OpenCV, with the interpreter's last line", async () => {
+    // node has no cv2 either: `node -c "import cv2"` exits non-zero with a message on stderr.
+    const problem = await defaultDetectorProbe(process.execPath);
+    expect(problem).toContain(`${process.execPath} cannot import OpenCV (`);
+  });
+
+  it("is null when the scripts are present and the import succeeds", async () => {
+    const python = path.join(tmp, "python");
+    writeFileSync(python, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    await expect(defaultDetectorProbe(python)).resolves.toBeNull();
   });
 });
 
 describe("checkDetectorRuntime", () => {
-  it("has nothing to check when no detector step is on in the environment, even without a Python", () => {
-    const probe = vi.fn(() => true);
-    const check = checkDetectorRuntime(
+  it("has nothing to check when no detector step is on in the environment, even without a Python", async () => {
+    const probe = vi.fn(async () => null);
+    const check = await checkDetectorRuntime(
       { environment: { ANALYSIS_BOUNDARY_STEP_ENABLED: true }, detectorPython: undefined },
       probe,
     );
@@ -231,10 +342,10 @@ describe("checkDetectorRuntime", () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
-  it("reports a missing Python when a detector step is on and DETECTOR_PYTHON is absent", () => {
-    const check = checkDetectorRuntime(
+  it("reports a missing Python when a detector step is on and DETECTOR_PYTHON is absent", async () => {
+    const check = await checkDetectorRuntime(
       { environment: { ANALYSIS_CAMERA_CHECK_ENABLED: true }, detectorPython: undefined },
-      () => true,
+      async () => null,
     );
     expect(check.status).toBe("missing");
     expect(check.steps).toEqual(["cameraCheck"]);
@@ -243,24 +354,25 @@ describe("checkDetectorRuntime", () => {
     expect(check.message).toContain("cameraCheck");
   });
 
-  it("reports a broken Python when it cannot import OpenCV", () => {
-    const check = checkDetectorRuntime(
+  it("reports a broken runtime with the probe's cause", async () => {
+    const check = await checkDetectorRuntime(
       {
         environment: { ANALYSIS_CAMERA_CHECK_ENABLED: true, EXPORT_SPEAKER_TRACKING_ENABLED: true },
         detectorPython: PYTHON,
       },
-      () => false,
+      async () => "the detector script /app/scripts/lab/tracking/camera-sample.py is missing",
     );
     expect(check.status).toBe("broken");
     expect(check.steps).toEqual(["cameraCheck", "speakerTracking"]);
-    expect(check.message).toContain(PYTHON);
+    expect(check.detectorPython).toBe(PYTHON);
+    expect(check.message).toContain("camera-sample.py is missing");
     expect(check.message).toContain("cameraCheck and speakerTracking");
   });
 
-  it("reports ok when the Python imports OpenCV", () => {
-    const check = checkDetectorRuntime(
+  it("reports ok when the probe passes", async () => {
+    const check = await checkDetectorRuntime(
       { environment: { EXPORT_SPEAKER_TRACKING_ENABLED: true }, detectorPython: PYTHON },
-      (python) => python === PYTHON,
+      async (python) => (python === PYTHON ? null : "wrong path"),
     );
     expect(check.status).toBe("ok");
     expect(check.detectorPython).toBe(PYTHON);

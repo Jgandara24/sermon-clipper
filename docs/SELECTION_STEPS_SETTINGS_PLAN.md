@@ -140,9 +140,22 @@ About 300 lines of code and tests, one session, plus one Linux run through CI. N
 The build follows sections 2 to 4. These are the places where it differs, and why.
 
 - **The workspace reader lives with the resolver.** `parseSelectionStepsSettings` is in `src/lib/analysis/selection-steps.ts`, not `src/lib/workspace-settings.ts`, so the resolver can take the raw `Workspace.settings` without a circular import. The operator script imports it from there.
-- **A broken detector counts as off, not only a missing one.** `availableDetectorPython` runs `import cv2` under `DETECTOR_PYTHON` once per job and hands the resolver the path only when that works. The worker's boot check, `checkDetectorRuntime`, runs the same probe and records `selection_steps_unavailable` with status `missing` or `broken`.
+- **A broken detector counts as off, not only a missing one.** `resolveJobSelectionSteps` probes `DETECTOR_PYTHON` once per job, and only when both gates turned a detector step on: the three scripts in `scripts/lab/tracking/` must exist and `import cv2` must succeed. It hands the resolver the path only when that works. The worker's boot check, `checkDetectorRuntime`, runs the same probe and records `selection_steps_unavailable` with status `missing` or `broken` and the cause.
 - **Degraded is computed by the steps and recorded by the job.** `runAgreementRanking` and `runLabSelection` return `{ clips, degraded }`. ANALYZE records one `selection_steps_degraded` event when the list is not empty. A step is degraded when the sermon span or the dropout scan failed (one call per project), when the boundary step failed for every clip it tried, or when the camera check could check no clip. One failed clip among others stays a line in the step's own event.
 - **Where the snapshot goes.** ANALYZE stores the resolved steps in its job metadata as `selectionSteps` and on the `lab_selection_steps` and `lab_agreement_ranking` events. EXPORT writes no event on success, so the snapshot rides on the four lab events it already writes: `lab_speaker_tracking`, `lab_speaker_tracking_failed`, `lab_caption_cleanup` and `lab_caption_cleanup_failed`.
 - **`npm run lab:replay` sets `DETECTOR_PYTHON` too.** Fixes Y and AC run the detector, and the replay script refuses to start them without the path.
 - **Two timeouts keep their lab names.** `LAB_CAMERA_CHECK_TIMEOUT_MS` and `LAB_TRACKING_TIMEOUT_MS` are unchanged; renaming them was not in the plan.
 - **The operator script accepts `--on` and `--off` together,** and refuses a step named in both. `--off` stores `false` rather than deleting the key, so a later `--show` says what was decided.
+
+## 8. Review fixes before the merge, 2026-10-31
+
+A fresh code review of pull request #124 found these, and the branch fixed them before the merge.
+
+- **The probe checks the scripts, not only OpenCV.** `Dockerfile.worker` copies no `scripts/lab/tracking/`, so a Python with OpenCV alone would have passed the probe and then every camera check would have failed on a missing script, fail-closed, to zero clips. `defaultDetectorProbe` now refuses a working directory without the three scripts.
+- **The probe runs only when a detector step is on in both gates,** and it no longer blocks the event loop. A job that runs no detector step starts no Python.
+- **The job's `selection_steps_unavailable` event is category `worker`,** like the boot event, so one missing runtime is one alert per throttle window instead of three. It carries the step and the snapshot, not the server path; the worker log has the cause. EXPORT records it only for a render that would have tracked, not for a manual crop.
+- **The church-facing success event drops `selectionSteps`,** as it drops `candidateLimit`. The job row keeps it.
+- **`--show` refuses `--on` and `--off`,** instead of printing the old state and changing nothing.
+- **Comments in four files name the new variables** instead of the retired `LAB_*` names.
+
+Two findings stay as they are, on purpose: a camera or dropout check that is on but has no source file (retention deleted it) is skipped and the `lab_selection_steps` event says so with `cameraOn: false`; and `runLabSelection` keeps its own `detectorPython` parameter next to the resolved steps.

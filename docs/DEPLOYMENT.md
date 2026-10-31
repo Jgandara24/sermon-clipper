@@ -951,9 +951,11 @@ does.
 | `EXPORT_SPEAKER_TRACKING_ENABLED` | Speaker tracking: a crop that follows the preacher | open: the fixed crop |
 
 `DETECTOR_PYTHON` is the Python with OpenCV and the YuNet model that the camera check and speaker
-tracking run (`scripts/lab/tracking/`). It has no default. When it is absent or cannot import
-OpenCV, both steps count as off, and the worker records one `selection_steps_unavailable` event
-with severity `error` at boot, and again on each job that asked for them. The worker image does
+tracking run (`scripts/lab/tracking/`). It has no default. The worker probes it at boot and on
+each job that asks for a detector step: the three scripts under `scripts/lab/tracking/` must be
+present in the working directory, and `import cv2` must succeed. When the path is absent or the
+probe fails, both steps count as off, and the worker records one `selection_steps_unavailable`
+event with severity `error` at boot, and again on each job that asked for them. The worker image does
 not carry this runtime yet (docs/PHASE1_LAB_RESULT.md, section 9, item 3). Until it does, leave
 `DETECTOR_PYTHON` unset and the two variables above it off.
 
@@ -973,7 +975,8 @@ metadata as `selectionSteps`: one entry per step with `on` and, when off, the re
 (`environment`, `workspace` or `no-detector`). The same object rides on the `lab_selection_steps`
 and `lab_agreement_ranking` events, and on the export's `lab_speaker_tracking` and
 `lab_caption_cleanup` events. The event names keep their `lab_` prefix because the lab's replay
-tool reads them.
+tool reads them. The church-facing operations page does not show the snapshot: the job's
+success event drops it, as it drops the candidate ceiling, and the job row keeps it for staff.
 
 **Alerts.** A single clip that a step could not handle stays a `warning`, as before: one clip
 with a fixed crop is not an incident. Two events carry severity `error`, so they email the
@@ -983,7 +986,10 @@ operator (one per `category:eventType` per `ALERTS_THROTTLE_MS`):
   check could check no clip at all. The church still got clips, but not the ones the settings
   promised. At most once per ANALYZE job.
 - `selection_steps_unavailable`: a step is on in both gates and cannot run, which today means a
-  missing or broken `DETECTOR_PYTHON`. Recorded at worker boot and on each job that hits it.
+  missing or broken `DETECTOR_PYTHON`. Always category `worker`, so one missing runtime is one
+  alert per throttle window. Recorded at worker boot with the cause and the path, and on each job
+  that hits it without them: a job's event belongs to the workspace and the church sees it on the
+  operations page. The worker log has the cause.
 
 **Rollout order** (docs/SELECTION_STEPS_SETTINGS_PLAN.md, section 4):
 
