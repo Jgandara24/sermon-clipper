@@ -1,10 +1,11 @@
+import { checkDetectorRuntime } from "@/lib/analysis/selection-steps";
 import { runOnePendingExportJob } from "@/lib/exports/runner";
 import { recoverStaleExportJobs } from "@/lib/exports/queue";
 import { coordinateScheduledRenders } from "@/lib/review/render-coordinator";
 import { applyStaleFailureSideEffects, recoverStaleProcessingJobs } from "@/lib/jobs/queue";
 import { runOnePendingJob } from "@/lib/jobs/runner";
 import { jobHandlers } from "@/lib/jobs/handlers";
-import { env } from "@/lib/env";
+import { detectorPython, env } from "@/lib/env";
 import { defaultCostRollupRange, rollupProcessingCosts } from "@/lib/cost/rollup";
 import {
   publishDueScheduledPosts,
@@ -265,6 +266,27 @@ try {
 } catch (error) {
   console.error("[worker] runtime readiness failed", error instanceof Error ? error.message : error);
   process.exit(1);
+}
+
+// The detector Python for the camera check and speaker tracking (docs/SELECTION_STEPS_SETTINGS_PLAN.md).
+// A missing or broken runtime is one error event at boot, not one failed clip at a time; both
+// steps count as off until it runs. Not a readiness failure: a church's sermons still process.
+const detectorRuntime = checkDetectorRuntime({ environment: env, detectorPython: detectorPython() });
+if (detectorRuntime.status === "missing" || detectorRuntime.status === "broken") {
+  console.error(`[worker] ${detectorRuntime.message}`);
+  void recordOperationalEventSafely(prisma, {
+    category: "worker",
+    eventType: "selection_steps_unavailable",
+    severity: "error",
+    message: detectorRuntime.message,
+    metadata: {
+      status: detectorRuntime.status,
+      steps: detectorRuntime.steps,
+      detectorPython: detectorRuntime.detectorPython,
+    },
+  });
+} else if (detectorRuntime.status === "ok") {
+  console.log(`[worker] ${detectorRuntime.message}`);
 }
 
 console.log(`[worker] polling for processing jobs every ${POLL_INTERVAL_MS}ms`);

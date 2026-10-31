@@ -16,11 +16,12 @@ import { filterSermonCandidates } from "@/lib/analysis/sermon-boundary";
 import { runAgreementRanking, runLabSelection } from "@/lib/analysis/lab-selection-run";
 import { analysisCallCostFact } from "@/lib/analysis/usage";
 import { resolveAndSnapshotProjectAnalysisRouting } from "@/lib/analysis/routing-store";
+import { availableDetectorPython, resolveSelectionSteps } from "@/lib/analysis/selection-steps";
 import { AnalysisProviderUnavailableError, type ScoredCandidate } from "@/lib/analysis/types";
 import { recordProcessingCostFactSafely } from "@/lib/cost/record";
 import { finishRuntimeMeasurement, startRuntimeMeasurement, type RuntimeMeasurement } from "@/lib/cost/runtime";
 import type { ProcessingCostOutcome } from "@/lib/cost/types";
-import { env } from "@/lib/env";
+import { detectorPython, env } from "@/lib/env";
 import { JobFailureError, type JobHandler } from "@/lib/jobs/types";
 import {
   recordOperationalEvent,
@@ -124,6 +125,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       sourceVideo: {
         include: { transcript: { include: { segments: { orderBy: { idx: "asc" } } } } },
       },
+      workspace: { select: { settings: true } },
     },
   });
 
@@ -315,29 +317,72 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
     return deduped.sort((a, b) => b.total - a.total).slice(0, candidateLimit);
   };
   const scoredRanked = rankCandidates(scored);
-  // Phase 1 lab, agreement ranking: a second candidate run, and the moments both runs found come
-  // first. Off unless its lab flag is set.
-  const ranked = await runAgreementRanking({
+
+  // The selection steps (docs/SELECTION_STEPS_SETTINGS_PLAN.md), resolved once for this job from
+  // the environment gate, this workspace's gate and the detector Python, and recorded with the
+  // job the way its routing snapshot is. Every step is off until an operator sets both gates.
+  const detector = availableDetectorPython(detectorPython());
+  const selectionSteps = resolveSelectionSteps({
+    environment: env,
+    workspaceSettings: project.workspace.settings,
+    detectorPython: detector,
+  });
+  if (selectionSteps.cameraCheck.reason === "no-detector") {
+    // On in both gates and unable to run: one error event per job, not one failed clip at a time.
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: project.workspaceId,
+      category: "analysis",
+      eventType: "selection_steps_unavailable",
+      severity: "error",
+      message:
+        "The camera check is on for this workspace, but the worker has no working detector Python (DETECTOR_PYTHON), so ANALYZE ran without it.",
+      projectId: project.id,
+      jobId: job.id,
+      metadata: { steps: selectionSteps, detectorPython: env.DETECTOR_PYTHON ?? null },
+    });
+  }
+  // Agreement ranking: a second candidate run, and the moments both runs found come first.
+  const agreement = await runAgreementRanking({
     prisma,
     workspaceId: project.workspaceId,
     projectId: project.id,
     jobId: job.id,
+    steps: selectionSteps,
     ranked: scoredRanked,
     scoreAgain: async () =>
       rankCandidates(await provider.scoreCandidates(scoreableCandidates, { fullText: transcript.fullText, genre })),
     usage: () => provider.lastUsage,
   });
-  // Phase 1 lab: sentence boundaries and the camera check. Off unless a lab flag is set.
-  const kept = await runLabSelection({
+  // The sermon span, sentence boundaries, and the audio and camera checks.
+  const selectionRun = await runLabSelection({
     prisma,
     workspaceId: project.workspaceId,
     projectId: project.id,
     jobId: job.id,
+    steps: selectionSteps,
+    detectorPython: detector,
     sourceStorageKey: project.sourceVideo?.storageKey ?? null,
-    ranked,
+    ranked: agreement.clips,
     segments,
     targetCount: targetClipCount,
   });
+  const kept = selectionRun.clips;
+  const degraded = [...agreement.degraded, ...selectionRun.degraded];
+  if (degraded.length > 0) {
+    // A fail-open step failed for every clip of this project: the church still gets clips, but
+    // not the ones the settings promised. One error event per job; a single failed clip stays a
+    // line in the step's own event.
+    await recordOperationalEventSafely(prisma, {
+      workspaceId: project.workspaceId,
+      category: "analysis",
+      eventType: "selection_steps_degraded",
+      severity: "error",
+      message: `Selection steps degraded: ${degraded.map((entry) => entry.step).join(", ")} failed for every clip of this project, so its clips went out without them.`,
+      projectId: project.id,
+      jobId: job.id,
+      metadata: { degraded, steps: selectionSteps },
+    });
+  }
 
   await prisma.$transaction(async (tx) => {
     // The binding check. The early one saved the cost of analysis; this one closes the window
@@ -686,6 +731,7 @@ export function createAnalyzeJobHandler(dependencies: AnalyzeJobDependencies = {
       targetClipCount,
       genre,
       scheduledRendersEnqueued: scheduledRenders?.slotsBound ?? 0,
+      selectionSteps,
     },
   };
   };

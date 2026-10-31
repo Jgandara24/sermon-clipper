@@ -129,6 +129,7 @@ Which service consumes which variables:
 | `NODE_ENV`, `DATABASE_URL`, `STORAGE_PROVIDER` + `STORAGE_S3_*` | ✅ | ✅ |
 | `TRANSCRIPTION_PRIMARY_PROVIDER`, `TRANSCRIPTION_FALLBACK_PROVIDER`, `ELEVENLABS_API_KEY`, `WHISPER_MODEL_PATH`, `ANTHROPIC_API_KEY` | ✅ (web readiness reporting only) | ✅ (worker job-time enforcement) |
 | `ANALYSIS_ALLOW_HEURISTIC` (emergency only) | — | ✅ |
+| `ANALYSIS_*_ENABLED`, `EXPORT_*_ENABLED`, `DETECTOR_PYTHON` (selection steps, see below) | — | ✅ |
 | `NEXT_PUBLIC_APP_URL`, `MEDIA_URL_SECRET`, `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | ✅ | — |
 | `RESEND_API_KEY`, `AUTH_EMAIL_*`, `NOTIFICATIONS_*`, `TWILIO_*` | ✅ | — |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` | ✅ | — |
@@ -925,6 +926,81 @@ Do not hand-edit the generated transcript search vector. The Wave 1 migration de
 Prisma's invalid `transcripts_search_vector_idx` drop and generated-column default rewrite. Roll
 application code back if necessary, but leave the additive schema in place. Remove an index only
 through a new forward migration.
+
+## Selection Steps
+
+The selection steps are the Phase 1 lab steps that pick and cut clips (docs/PHASE1_LAB_RESULT.md,
+section 4; the settings design is docs/SELECTION_STEPS_SETTINGS_PLAN.md). Five run in ANALYZE:
+the sermon span, the boundary step, the audio dropout check, the camera check and the agreement
+ranking. Two run in EXPORT: phrase captions and speaker tracking.
+
+A step runs only when two gates agree. Both default to off, so a deploy changes nothing until an
+operator sets both. Nothing reads `NODE_ENV`: production resolves the gates the same way the lab
+does.
+
+**The environment gate** is one worker variable per step. Only the exact string `true` opens it.
+
+| Variable | Step | Fails |
+| --- | --- | --- |
+| `ANALYSIS_SERMON_SPAN_ENABLED` | Sermon span: drops clips outside the sermon | open |
+| `ANALYSIS_BOUNDARY_STEP_ENABLED` | Boundary step: moves each top clip to whole sentences | open |
+| `ANALYSIS_DROPOUT_CHECK_ENABLED` | Audio dropout check: rejects a clip whose sound the recording lost | open (the scan); a found dropout rejects the clip |
+| `ANALYSIS_CAMERA_CHECK_ENABLED` | Camera check: rejects a clip that shows a slide or an empty stage | closed: a clip nobody could check is not a first pick |
+| `ANALYSIS_AGREEMENT_RANKING_ENABLED` | Agreement ranking: a second candidate run; moments both runs found come first | open |
+| `EXPORT_PHRASE_CAPTIONS_ENABLED` | Phrase captions: one phrase per line, capital letters, no punctuation | open (the loudness check) |
+| `EXPORT_SPEAKER_TRACKING_ENABLED` | Speaker tracking: a crop that follows the preacher | open: the fixed crop |
+
+`DETECTOR_PYTHON` is the Python with OpenCV and the YuNet model that the camera check and speaker
+tracking run (`scripts/lab/tracking/`). It has no default. When it is absent or cannot import
+OpenCV, both steps count as off, and the worker records one `selection_steps_unavailable` event
+with severity `error` at boot, and again on each job that asked for them. The worker image does
+not carry this runtime yet (docs/PHASE1_LAB_RESULT.md, section 9, item 3). Until it does, leave
+`DETECTOR_PYTHON` unset and the two variables above it off.
+
+**The workspace gate** is the `selectionSteps` key in `Workspace.settings`. An operator sets it:
+
+```sh
+npm run set:selection-steps -- --workspace <id> --show
+npm run set:selection-steps -- --workspace <id> --on sermonSpan,boundaryStep,dropoutCheck,agreementRanking,phraseCaptions
+npm run set:selection-steps -- --workspace <id> --off phraseCaptions
+```
+
+A missing key or a missing step means off, and only the boolean `true` means on. Phrase captions
+sit here on purpose: capital letters without punctuation are a change a church sees.
+
+**What each job records.** ANALYZE resolves the steps once and stores the result in its job
+metadata as `selectionSteps`: one entry per step with `on` and, when off, the reason
+(`environment`, `workspace` or `no-detector`). The same object rides on the `lab_selection_steps`
+and `lab_agreement_ranking` events, and on the export's `lab_speaker_tracking` and
+`lab_caption_cleanup` events. The event names keep their `lab_` prefix because the lab's replay
+tool reads them.
+
+**Alerts.** A single clip that a step could not handle stays a `warning`, as before: one clip
+with a fixed crop is not an incident. Two events carry severity `error`, so they email the
+operator (one per `category:eventType` per `ALERTS_THROTTLE_MS`):
+
+- `selection_steps_degraded`: a fail-open step failed for every clip of one project, or the camera
+  check could check no clip at all. The church still got clips, but not the ones the settings
+  promised. At most once per ANALYZE job.
+- `selection_steps_unavailable`: a step is on in both gates and cannot run, which today means a
+  missing or broken `DETECTOR_PYTHON`. Recorded at worker boot and on each job that hits it.
+
+**Rollout order** (docs/SELECTION_STEPS_SETTINGS_PLAN.md, section 4):
+
+1. Deploy with every variable absent. Nothing changes.
+2. Set the five `ANALYSIS_*_ENABLED` variables and `EXPORT_PHRASE_CAPTIONS_ENABLED` to `true` on
+   the worker service. Still nothing changes, because no workspace has the key.
+3. Turn the steps on for one workspace with `set:selection-steps`.
+4. Run the five lab sermons through production for that workspace. Compare the clips with lab
+   round 9, with Jake's marks as the regression set; `npm run lab:replay` replays stored
+   candidates against them.
+5. Widen to the next church only after that comparison.
+6. The camera check and speaker tracking wait for the detector runtime in the worker image.
+
+The lab keeps working: `npm run lab:worker` sets the seven variables and `DETECTOR_PYTHON`, and
+the lab workspace needs its workspace gate set once with `set:selection-steps` against the lab
+database. The lab's own switch, `LAB_TRANSCRIPT_REUSE_ENABLED`, stays in `src/lib/lab-flags.ts`
+and is always off in production.
 
 ## Rollback
 

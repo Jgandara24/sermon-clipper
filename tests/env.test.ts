@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   authEmailFrom,
+  detectorPython,
   env,
   envTimeoutMs,
   ffmpegPath,
@@ -10,6 +11,17 @@ import {
 } from "@/lib/env";
 
 const originalEnv = { ...process.env };
+
+/** The environment gate of each selection step (docs/SELECTION_STEPS_SETTINGS_PLAN.md). */
+const SELECTION_STEP_VARIABLES = [
+  "ANALYSIS_SERMON_SPAN_ENABLED",
+  "ANALYSIS_BOUNDARY_STEP_ENABLED",
+  "ANALYSIS_DROPOUT_CHECK_ENABLED",
+  "ANALYSIS_CAMERA_CHECK_ENABLED",
+  "ANALYSIS_AGREEMENT_RANKING_ENABLED",
+  "EXPORT_PHRASE_CAPTIONS_ENABLED",
+  "EXPORT_SPEAKER_TRACKING_ENABLED",
+] as const;
 
 beforeEach(() => {
   process.env = { ...originalEnv };
@@ -36,6 +48,8 @@ beforeEach(() => {
   delete process.env.YTDLP_PROXY_PRICE_PER_GB_USD;
   delete process.env.RAILWAY_EGRESS_PRICE_PER_GB_USD;
   delete process.env.ENV_TEST_TIMEOUT_MS;
+  for (const name of SELECTION_STEP_VARIABLES) delete process.env[name];
+  delete process.env.DETECTOR_PYTHON;
 });
 
 afterEach(() => {
@@ -83,6 +97,27 @@ describe("env accessor", () => {
 
     process.env.AUTOMATIC_PUBLISHING_ENABLED = "true";
     expect(env.AUTOMATIC_PUBLISHING_ENABLED).toBe(true);
+  });
+
+  it("turns each selection step's environment gate on only for the exact value true", () => {
+    for (const name of SELECTION_STEP_VARIABLES) {
+      expect(env[name]).toBe(false);
+      for (const value of ["false", "TRUE", "1", " true ", "yes"]) {
+        process.env[name] = value;
+        expect(env[name]).toBe(false);
+      }
+      process.env[name] = "true";
+      expect(env[name]).toBe(true);
+    }
+  });
+
+  it("has no default for the detector Python, and reads an empty value as absent", () => {
+    expect(env.DETECTOR_PYTHON).toBeUndefined();
+    expect(detectorPython()).toBeUndefined();
+    process.env.DETECTOR_PYTHON = "";
+    expect(detectorPython()).toBeUndefined();
+    process.env.DETECTOR_PYTHON = "/opt/detector/bin/python";
+    expect(detectorPython()).toBe("/opt/detector/bin/python");
   });
 
   it("re-reads process.env on every access (no memoization)", () => {
