@@ -2,6 +2,9 @@
   "name": "sermon-clipper",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "audit:caption-faces": "bash scripts/compare-caption-faces.sh",
     "audit:event-exposure": "tsx scripts/audit-event-exposure.ts",
