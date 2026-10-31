@@ -1,5 +1,5 @@
 import { labStepEnabled } from "@/lib/lab-flags";
-import type { TranscriptionProviderEvidence, TranscriptionResult, TranscriptWord } from "./types";
+import type { TranscriptionResult, TranscriptWord } from "./types";
 
 /**
  * Phase 1 lab only (LAB_TRANSCRIPT_REUSE_ENABLED, docs/PHASE1_LAB_PLAN.md). Every lab round sends
@@ -31,7 +31,6 @@ type StoredSource = Source & {
   transcript: {
     language: string;
     provider: string;
-    providerEvidence: unknown;
     segments: { startMs: number; endMs: number; text: string; speakerLabel: string | null; words: unknown }[];
   } | null;
 };
@@ -51,14 +50,10 @@ export function reusedTranscription(target: Source, from: StoredSource): { resul
       `The two downloads differ in length by more than ${MAX_DURATION_DIFFERENCE_S} second, so the timings would not match.`,
     );
   }
-  // Saving adds displayCapabilities to the evidence; the transcribe step adds it again.
-  const stored = from.transcript.providerEvidence as (TranscriptionProviderEvidence & { displayCapabilities?: unknown }) | null;
-  const providerEvidence = stored ? (({ displayCapabilities: _, ...evidence }) => evidence)(stored) : undefined;
   return {
     provider: from.transcript.provider,
     result: {
       language: from.transcript.language,
-      ...(providerEvidence ? { providerEvidence } : {}),
       segments: from.transcript.segments.map((segment) => ({
         startMs: segment.startMs,
         endMs: segment.endMs,
