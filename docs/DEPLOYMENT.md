@@ -109,9 +109,10 @@ the merge. `railway config plan --detailed-exit-code` exits 0 when Railway match
   before either file, so that variable must be absent or `24`. Without any of them, Nixpacks
   falls back to Node 18.
 - **Worker** — builds `Dockerfile.worker` (ffmpeg + the optional
-  whisper.cpp fallback) and restarts on failure. The current Railway template keeps
-  `requiredMountPath: /models` so the local fallback stays ready and does not download its model
-  on every deploy.
+  whisper.cpp fallback) and restarts on failure (Railway's default). `.railway/railway.ts` mounts
+  the existing `worker-volume` at `/models`, so the local fallback keeps its model across deploys.
+  Railway keeps `requiredMountPath` only for databases, so nothing fails a worker deploy when the
+  volume is missing: the entrypoint then downloads the model again on boot.
 
 Human actions in the Railway dashboard (once per environment):
 

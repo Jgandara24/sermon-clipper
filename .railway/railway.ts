@@ -1,7 +1,8 @@
 // DRAFT, not applied. docs/RAILWAY_IAC_MIGRATION_PLAN.md says how this file goes live.
-// This file replaced railway.json (deleted) and railway.worker.json; see the plan's section 8.
-// `railway config migrate` generated the web service; it did not find railway.worker.json, so
-// the worker is written by hand from railway.worker.json and the live deployment manifest.
+// Railway Infrastructure as Code for both services. It replaced railway.json and
+// railway.worker.json (both deleted, 2026-10-31; docs/RAILWAY_IAC_MIGRATION_PLAN.md).
+// A push does not apply it: change it in a pull request, `railway config plan`, then
+// `railway config apply`.
 import { defineRailway, github, project, service, volume } from "railway/iac";
 
 // One partial owns both app services and the worker's volume. Postgres and its volume stay
@@ -34,7 +35,7 @@ export default defineRailway(() => {
     alerts: { usage: { "80": {}, "95": {}, "100": {} } },
   });
 
-  // From railway.worker.json.
+  // From the former railway.worker.json.
   const worker = service("worker", {
     source,
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile.worker", buildEnvironment: "V3" },
